@@ -1,0 +1,276 @@
+<article class="panel panel--wide" aria-labelledby="queue-heading">
+  <div class="panel__header">
+    <div>
+      <p class="eyebrow eyebrow--small">{{ isMemberMode() ? 'Signups' : 'Queue' }}</p>
+      <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Ready room' }}</h2>
+    </div>
+    <div class="button-cluster">
+      @if (canManageAnyLinkshell()) {
+        <button type="button" class="action-button" (click)="openCreateForm()">Create event</button>
+      }
+    </div>
+  </div>
+
+  @if (isCreateOpen) {
+    <form class="create-form" (ngSubmit)="submitCreateForm()">
+      <div class="create-form__header">
+        <div>
+          <strong>{{ editingEventId ? 'Edit event' : 'Create event' }}</strong>
+          <p>
+            @if (editingEventId) {
+              Update a queued event directly from the Activity.
+            } @else {
+              Stage a new signup card directly from the Activity.
+            }
+          </p>
+        </div>
+        <button type="button" class="action-button action-button--secondary" (click)="closeCreateForm()">Close</button>
+      </div>
+
+      <div class="create-form__grid">
+        <label>
+          <span>Linkshell</span>
+          <select [(ngModel)]="createModel.linkshellId" name="linkshellId" required>
+            @for (linkshell of activity.overview()?.linkshells ?? []; track linkshell.id) {
+              <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          <span>Event name</span>
+          <input [(ngModel)]="createModel.eventName" name="eventName" required />
+        </label>
+
+        <label>
+          <span>Event type</span>
+          <input [(ngModel)]="createModel.eventType" name="eventType" />
+        </label>
+
+        <label>
+          <span>Location</span>
+          <input [(ngModel)]="createModel.eventLocation" name="eventLocation" />
+        </label>
+
+        <label>
+          <span>Start</span>
+          <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local" />
+        </label>
+
+        <label>
+          <span>End</span>
+          <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local" />
+        </label>
+
+        <label>
+          <span>Duration (hours)</span>
+          <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25" />
+        </label>
+
+        <label>
+          <span>DKP/hour</span>
+          <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
+        </label>
+      </div>
+
+      <label class="create-form__full">
+        <span>Details</span>
+        <textarea [(ngModel)]="createModel.details" name="details" rows="3"></textarea>
+      </label>
+
+      <div class="create-form__jobs">
+        <div class="panel__header">
+          <h3>Minimal Party Setup (Optional)</h3>
+          <button type="button" class="action-button action-button--secondary" (click)="addJobRow()">Add job</button>
+        </div>
+
+        @for (job of createModel.jobs; track $index) {
+          <div class="job-editor">
+            <label>
+              <span>Role</span>
+              <select [(ngModel)]="job.jobType" [name]="'jobType' + $index">
+                <option value="">Select role</option>
+                @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
+                  <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Main job</span>
+              <select [(ngModel)]="job.jobName" [name]="'jobName' + $index">
+                <option value="">Select main job</option>
+                @for (jobOption of mainJobOptions; track jobOption) {
+                  <option [value]="jobOption">{{ jobOption }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Sub job</span>
+              <select [(ngModel)]="job.subJobName" [name]="'subJobName' + $index">
+                <option value="">Select sub job</option>
+                @for (jobOption of subJobOptions; track jobOption) {
+                  <option [value]="jobOption">{{ jobOption }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>Quantity</span>
+              <input [(ngModel)]="job.quantity" [name]="'jobQuantity' + $index" type="number" />
+            </label>
+            <label class="job-editor__details">
+              <span>Details</span>
+              <input [(ngModel)]="job.details" [name]="'jobDetails' + $index" />
+            </label>
+            <button type="button" class="action-button action-button--secondary" (click)="removeJobRow($index)">Remove</button>
+          </div>
+        }
+      </div>
+
+      <div class="create-form__actions">
+        <button type="submit" class="action-button" [disabled]="isSubmittingCreate">
+          @if (isSubmittingCreate) {
+            {{ editingEventId ? 'Saving...' : 'Creating...' }}
+          } @else {
+            {{ editingEventId ? 'Save event' : 'Create event' }}
+          }
+        </button>
+      </div>
+    </form>
+  }
+
+  @if ((activity.overview()?.linkshells?.length ?? 0) === 0) {
+    <div class="empty-state">
+      <strong>No linkshell yet</strong>
+      <p>
+        This Discord-linked user does not belong to a linkshell yet, so event tools are
+        locked until one exists.
+      </p>
+    </div>
+  } @else if (queuedEvents().length > 0) {
+    @if (isMemberMode()) {
+      <p class="notice">
+        Member mode is active. You can browse queued runs and sign up, while leader and officer controls stay tucked away.
+      </p>
+    }
+    <div class="queue-list">
+      @for (event of queuedEvents(); track event.id) {
+        <article class="queue-card">
+          <div class="queue-card__header">
+            <div>
+              <strong>{{ event.name || 'Untitled event' }}</strong>
+              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
+              @if (activity.formatDateTime(event.startTime); as scheduledStart) {
+                <p>Starts {{ scheduledStart }}</p>
+              }
+              @if (activity.formatDateTime(event.endTime); as scheduledEnd) {
+                <p>Ends {{ scheduledEnd }}</p>
+              }
+            </div>
+            <div class="queue-card__meta">
+              <span>{{ event.participantCount }} participants</span>
+              <span>{{ event.requestedSlots }} slots</span>
+            </div>
+          </div>
+
+          <ul class="job-tags">
+            @for (job of event.jobs; track job.id) {
+              <li>
+                {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                <span>{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
+              </li>
+            }
+          </ul>
+
+          @if (event.currentParticipation) {
+            <div class="event-action-bar">
+              <div class="event-action-copy">
+                <strong>Signed up</strong>
+                <span>
+                  {{ event.currentParticipation.characterName || activity.overview()?.appUser?.characterName || activity.overview()?.appUser?.userName }}
+                  as {{ event.currentParticipation.jobName || 'Job' }}/{{ event.currentParticipation.subJobName || 'Sub' }}
+                </span>
+              </div>
+              <div class="button-cluster">
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyEventId() === event.id"
+                  (click)="activity.unsignFromEvent(event.id)">
+                  {{ activity.busyEventId() === event.id ? 'Updating...' : 'Unsign' }}
+                </button>
+                @if (canManageLinkshell(event.linkshellId)) {
+                  <button
+                    type="button"
+                    class="action-button"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="activity.startEvent(event.id)">
+                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="openEditEventForm(event)">
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="confirmCancelEvent(event.id, event.name)">
+                    Cancel
+                  </button>
+                }
+              </div>
+            </div>
+          } @else {
+            <div class="event-action-grid">
+              @if (canManageLinkshell(event.linkshellId)) {
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyEventId() === event.id"
+                  (click)="activity.startEvent(event.id)">
+                  {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
+                </button>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyEventId() === event.id"
+                  (click)="openEditEventForm(event)">
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyEventId() === event.id"
+                  (click)="confirmCancelEvent(event.id, event.name)">
+                  Cancel
+                </button>
+              }
+              @for (job of event.jobs; track job.id) {
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyEventId() === event.id"
+                  (click)="activity.signUpForEvent(event.id, job.id)">
+                  Join {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                </button>
+              }
+            </div>
+          }
+        </article>
+      }
+    </div>
+  } @else {
+    <p class="notice">
+      @if (isMemberMode()) {
+        No queued events are posted yet. When a leader or officer stages the next run, it will appear here for signup.
+      } @else if (canManageAnyLinkshell()) {
+        No queued events are waiting for launch. Create one directly from this Activity, then move it into Live Operations when your party is ready.
+      } @else {
+        No queued events are visible yet. Join a linkshell with officer or leader access to manage the queue, or wait for a leader to post one.
+      }
+    </p>
+  }
+</article>

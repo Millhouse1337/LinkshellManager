@@ -1,0 +1,1040 @@
+<aside class="dashboard__sidebar">
+  <article class="panel" aria-labelledby="profile-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Profile</p>
+        <h2 id="profile-heading">
+          @if (needsProfileSetup()) {
+            Complete setup
+          } @else {
+            Operator profile
+          }
+        </h2>
+      </div>
+      @if (needsProfileSetup()) {
+        <span class="status-pill">Setup needed</span>
+      } @else {
+        <span class="pill">Ready</span>
+      }
+    </div>
+
+    <p class="notice">
+      @if (needsProfileSetup()) {
+        Set your character name and preferred IANA time zone so invites, rosters, and event timing render correctly.
+      } @else {
+        These settings drive your linkshell roster name and event time conversions across the website and Discord Activity.
+      }
+    </p>
+
+    <form class="create-form create-form--compact" (ngSubmit)="submitProfile()">
+      <div class="create-form__grid">
+        <label>
+          <span>Character name</span>
+          <input
+            [(ngModel)]="profileModel.characterName"
+            name="profileCharacterName"
+            placeholder="Enter your in-game name"
+            required />
+        </label>
+        <label>
+          <span>Time zone (IANA)</span>
+          <select [(ngModel)]="profileModel.timeZone" name="profileTimeZone">
+            @for (timeZone of timeZoneOptions; track timeZone) {
+              <option [ngValue]="timeZone">{{ timeZone }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div class="create-form__actions">
+        <button type="submit" class="action-button" [disabled]="activity.busyProfileSave()">
+          {{ activity.busyProfileSave() ? 'Saving...' : 'Save profile' }}
+        </button>
+      </div>
+    </form>
+  </article>
+
+  @if (!isMemberMode() || needsProfileSetup() || (activity.overview()?.linkshells?.length ?? 0) === 0) {
+  <article class="panel" aria-labelledby="next-steps-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Onboarding</p>
+        <h2 id="next-steps-heading">Next steps</h2>
+      </div>
+      <span class="pill">
+        {{
+          (needsProfileSetup() ? 0 : 1) +
+          ((activity.overview()?.linkshells?.length ?? 0) > 0 ? 1 : 0) +
+          (((activity.overview()?.activeEvents?.length ?? 0) + (activity.overview()?.recentHistory?.length ?? 0)) > 0 ? 1 : 0)
+        }}/3
+      </span>
+    </div>
+
+    <ul class="checklist">
+      <li [class.checklist__item--done]="!needsProfileSetup()">
+        <span class="checklist__marker">{{ needsProfileSetup() ? '1' : 'Done' }}</span>
+        <div>
+          <strong>Finish your operator profile</strong>
+          <span>Set your character name and time zone so roster and event timing are accurate.</span>
+        </div>
+      </li>
+      <li [class.checklist__item--done]="(activity.overview()?.linkshells?.length ?? 0) > 0">
+        <span class="checklist__marker">{{ (activity.overview()?.linkshells?.length ?? 0) > 0 ? 'Done' : '2' }}</span>
+        <div>
+          <strong>Create or join a linkshell</strong>
+          <span>Linkshell membership unlocks invites, roster controls, and event management.</span>
+        </div>
+      </li>
+      <li [class.checklist__item--done]="((activity.overview()?.activeEvents?.length ?? 0) + (activity.overview()?.recentHistory?.length ?? 0)) > 0">
+        <span class="checklist__marker">{{ ((activity.overview()?.activeEvents?.length ?? 0) + (activity.overview()?.recentHistory?.length ?? 0)) > 0 ? 'Done' : '3' }}</span>
+        <div>
+          <strong>Run your first event</strong>
+          <span>Create a queued event, launch it live, and archive it to populate history.</span>
+        </div>
+      </li>
+    </ul>
+  </article>
+  }
+
+  <article class="panel" aria-labelledby="linkshell-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Linkshell</p>
+        <h2 id="linkshell-heading">{{ isMemberMode() ? 'Membership' : 'Roster' }}</h2>
+      </div>
+      <div class="button-cluster">
+        <span class="pill">{{ activity.overview()?.stats?.linkshellCount ?? 0 }}</span>
+        @if (canCreateLinkshell()) {
+        <button type="button" class="action-button action-button--secondary" (click)="openCreateLinkshellForm()">Create</button>
+        }
+      </div>
+    </div>
+
+    @if (isCreateLinkshellOpen) {
+      <form class="create-form create-form--compact" (ngSubmit)="submitCreateLinkshellForm()">
+        <div class="create-form__header">
+          <div>
+            <strong>{{ editingLinkshellId ? 'Edit linkshell' : 'Create linkshell' }}</strong>
+            <p>
+              @if (editingLinkshellId) {
+                Update the selected linkshell without leaving the Activity.
+              } @else {
+                Bootstrap the current Discord-linked app user with a primary linkshell.
+              }
+            </p>
+          </div>
+          <button type="button" class="action-button action-button--secondary" (click)="closeCreateLinkshellForm()">Close</button>
+        </div>
+
+        <div class="create-form__grid">
+          <label>
+            <span>Linkshell name</span>
+            <input [(ngModel)]="createLinkshellModel.name" name="linkshellName" required />
+          </label>
+          <label>
+            <span>Details</span>
+            <input [(ngModel)]="createLinkshellModel.details" name="linkshellDetails" />
+          </label>
+        </div>
+
+        <div class="create-form__actions">
+          <button type="submit" class="action-button" [disabled]="isSubmittingLinkshell">
+            @if (isSubmittingLinkshell) {
+              {{ editingLinkshellId ? 'Saving...' : 'Creating...' }}
+            } @else {
+              {{ editingLinkshellId ? 'Save linkshell' : 'Create linkshell' }}
+            }
+          </button>
+        </div>
+      </form>
+    }
+
+    @if (selectedLinkshell(); as selectedLinkshell) {
+      @if (linkshellMemberships().length > 1) {
+        <div class="invite-section">
+          <h3>Memberships</h3>
+          <ul class="compact-list compact-list--dense">
+            @for (linkshell of linkshellMemberships(); track linkshell.id) {
+              <li>
+                <div>
+                  <strong>{{ linkshell.name }}</strong>
+                  <span>{{ linkshell.rank || 'Member' }} | {{ linkshell.memberCount }} members</span>
+                </div>
+                <div class="button-cluster">
+                  @if (selectedLinkshellId === linkshell.id) {
+                    <span class="pill">Viewing</span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      (click)="selectLinkshell(linkshell.id)">
+                      View
+                    </button>
+                  }
+                  @if (primaryLinkshellId() === linkshell.id) {
+                    <span class="pill">Primary</span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyLinkshellId() === linkshell.id"
+                      (click)="activity.setPrimaryLinkshell(linkshell.id)">
+                      {{ activity.busyLinkshellId() === linkshell.id ? 'Updating...' : 'Set primary' }}
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyLinkshellId() === linkshell.id"
+                    (click)="confirmLeaveLinkshell(linkshell.id, linkshell.name)">
+                    {{ activity.busyLinkshellId() === linkshell.id ? 'Updating...' : 'Leave' }}
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      <div class="summary-card">
+        <p class="summary-card__label">Selected linkshell</p>
+        <strong>{{ selectedLinkshell.name }}</strong>
+        <p>{{ selectedLinkshell.memberCount }} members</p>
+        @if (selectedLinkshell.details) {
+          <p class="muted">{{ selectedLinkshell.details }}</p>
+        }
+        @if (primaryLinkshellActiveEventCount() > 0) {
+          <p class="notice">This linkshell still has {{ primaryLinkshellActiveEventCount() }} queued/live event(s).</p>
+        }
+        <div class="button-cluster">
+          @if (canManageLinkshell(selectedLinkshell.id)) {
+            <button type="button" class="action-button action-button--secondary" (click)="openEditLinkshellForm()">Edit</button>
+            <button
+              type="button"
+              class="action-button action-button--secondary"
+              [disabled]="activity.busyLinkshellId() === selectedLinkshell.id || !canDeletePrimaryLinkshell()"
+              [title]="deletePrimaryLinkshellHint()"
+              (click)="confirmDeleteLinkshell(selectedLinkshell.id, selectedLinkshell.name)">
+              {{ activity.busyLinkshellId() === selectedLinkshell.id ? 'Updating...' : 'Delete' }}
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="action-button action-button--secondary"
+              [disabled]="activity.busyLinkshellId() === selectedLinkshell.id"
+              (click)="confirmLeaveLinkshell(selectedLinkshell.id, selectedLinkshell.name)">
+              {{ activity.busyLinkshellId() === selectedLinkshell.id ? 'Updating...' : 'Leave linkshell' }}
+            </button>
+          }
+        </div>
+        @if (canManageLinkshell(selectedLinkshell.id)) {
+          <p class="muted">{{ deletePrimaryLinkshellHint() }}</p>
+        }
+      </div>
+
+      @if (canManageMembers()) {
+        <p class="notice">Leaders can transfer ownership, promote officers, demote officers, and remove members from this roster.</p>
+      } @else if (canManageLinkshell(selectedLinkshell.id)) {
+        <p class="notice">Officers can manage invites and events, but only the leader can change roster roles.</p>
+      } @else {
+        <p class="notice">Member mode keeps this panel focused on your current linkshell and roster visibility.</p>
+      }
+
+      <div class="invite-section">
+        <div class="panel__header">
+          <h3>Members</h3>
+          <span class="pill">{{ filteredSelectedLinkshellMembers().length }}</span>
+        </div>
+        <div class="roster-tools">
+          <input
+            [(ngModel)]="memberSearchTerm"
+            name="memberSearchTerm"
+            placeholder="Search roster" />
+          @if (!isMemberMode()) {
+          <div class="filter-row">
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'all'"
+              (click)="memberRoleFilter = 'all'">
+              All
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'leader'"
+              (click)="memberRoleFilter = 'leader'">
+              Leaders
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'officer'"
+              (click)="memberRoleFilter = 'officer'">
+              Officers
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'member'"
+              (click)="memberRoleFilter = 'member'">
+              Members
+            </button>
+          </div>
+          }
+        </div>
+      </div>
+
+      <ul class="compact-list">
+        @for (member of filteredSelectedLinkshellMembers(); track member.id) {
+          <li>
+            <div>
+              <strong>{{ member.characterName }}</strong>
+              <div class="member-meta">
+                <span class="{{ roleBadgeClass(member.rank) }}">{{ member.rank || 'Member' }}</span>
+                <span>{{ member.status || 'Active' }}</span>
+              </div>
+            </div>
+            <div class="button-cluster button-cluster--stacked">
+              <span>{{ member.linkshellDkp ?? 0 }} DKP</span>
+              @if (canManageMembers() && member.appUserId && member.appUserId !== appUserId()) {
+                <div class="button-cluster">
+                  @if ((member.rank ?? '').toLowerCase() === 'member') {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyMemberId() === member.id"
+                      (click)="promoteMemberToOfficer(selectedLinkshell.id, member.id, member.characterName)">
+                      {{ activity.busyMemberId() === member.id ? 'Updating...' : 'Promote' }}
+                    </button>
+                  } @else if ((member.rank ?? '').toLowerCase() === 'officer') {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyMemberId() === member.id"
+                      (click)="demoteMemberToMember(selectedLinkshell.id, member.id, member.characterName)">
+                      {{ activity.busyMemberId() === member.id ? 'Updating...' : 'Demote' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="action-button"
+                      [disabled]="activity.busyMemberId() === member.id"
+                      (click)="transferLeadership(selectedLinkshell.id, member.id, member.characterName)">
+                      {{ activity.busyMemberId() === member.id ? 'Updating...' : 'Make leader' }}
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyMemberId() === member.id"
+                    (click)="activity.removeLinkshellMember(selectedLinkshell.id, member.id)">
+                    {{ activity.busyMemberId() === member.id ? 'Removing...' : 'Remove' }}
+                  </button>
+                </div>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+      @if (filteredSelectedLinkshellMembers().length === 0) {
+        <p class="notice">No roster members matched the current search/filter.</p>
+      }
+    } @else if (activity.overview()) {
+      <p class="notice">No linkshell membership has been selected yet.</p>
+      @if (canRequestLinkshellAccess()) {
+        <div class="invite-section">
+          <h3>Request to join a linkshell</h3>
+          @if (activity.linkshellSearchBusy()) {
+            <p class="notice">Loading available linkshells...</p>
+          } @else if (activity.linkshellSearchResults().length > 0) {
+            <div class="invite-search">
+              <select
+                [(ngModel)]="selectedJoinLinkshellId"
+                name="selectedJoinLinkshellId">
+                @for (linkshell of activity.linkshellSearchResults(); track linkshell.id) {
+                  <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+                }
+              </select>
+              <button type="button" class="action-button" (click)="requestJoinSelectedLinkshell()">Request join</button>
+            </div>
+
+            @if (selectedJoinLinkshell(); as selectedLinkshell) {
+              <div class="summary-card">
+                <p class="summary-card__label">Selected linkshell</p>
+                <strong>{{ selectedLinkshell.name }}</strong>
+                <p>{{ selectedLinkshell.memberCount }} members</p>
+                @if (selectedLinkshell.details) {
+                  <p class="muted">{{ selectedLinkshell.details }}</p>
+                }
+              </div>
+            }
+          } @else {
+            <p class="notice">No joinable linkshells are available right now.</p>
+          }
+        </div>
+      }
+    } @else {
+      <p class="notice">Linkshell data will appear after the current user is resolved.</p>
+    }
+  </article>
+
+  <article class="panel" aria-labelledby="participants-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Discord</p>
+        <h2 id="participants-heading">Connected party</h2>
+      </div>
+      <span class="pill">{{ activity.participants().length }}</span>
+    </div>
+
+    @if (activity.participants().length > 0) {
+      <ul class="participants">
+        @for (participant of activity.participants(); track participant.id) {
+          <li>
+            <strong>{{ participant.global_name || participant.username }}</strong>
+            <span>{{ participant.username }}</span>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="notice">Participant presence appears after the embedded client is ready inside Discord.</p>
+    }
+  </article>
+
+  <article class="panel" aria-labelledby="invites-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Membership</p>
+        <h2 id="invites-heading">Invites</h2>
+      </div>
+      <span class="pill">{{ (activity.overview()?.pendingInvites?.length ?? 0) + (activity.overview()?.sentInvites?.length ?? 0) }}</span>
+    </div>
+
+    @if (activity.overview()?.pendingInvites?.length) {
+      <div class="invite-section">
+        <h3>Incoming</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (invite of activity.overview()?.pendingInvites ?? []; track invite.id) {
+            <li>
+              <div>
+                <strong>{{ invite.linkshellName }}</strong>
+                <span>Invite for {{ invite.appUserDisplayName }}</span>
+              </div>
+              <div class="button-cluster">
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyInviteId() === invite.id"
+                  (click)="activity.acceptInvite(invite.id)">
+                  {{ activity.busyInviteId() === invite.id ? 'Updating...' : 'Accept' }}
+                </button>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyInviteId() === invite.id"
+                  (click)="activity.declineInvite(invite.id)">
+                  Decline
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (activity.overview()?.incomingJoinRequests?.length) {
+      <div class="invite-section">
+        <h3>Join requests</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (request of activity.overview()?.incomingJoinRequests ?? []; track request.id) {
+            <li>
+              <div>
+                <strong>{{ request.appUserDisplayName }}</strong>
+                <span>Requested access to {{ request.linkshellName }}</span>
+              </div>
+              <div class="button-cluster">
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyInviteId() === request.id"
+                  (click)="activity.approveJoinRequest(request.id)">
+                  {{ activity.busyInviteId() === request.id ? 'Updating...' : 'Approve' }}
+                </button>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyInviteId() === request.id"
+                  (click)="activity.declineJoinRequest(request.id)">
+                  Decline
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <div class="invite-section">
+      <h3>Invite players</h3>
+      @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0)) {
+        <div class="invite-search">
+          <select
+            [ngModel]="inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0"
+            (ngModelChange)="onInviteLinkshellChange($event)"
+            name="inviteLinkshellId">
+            @for (linkshell of activity.overview()?.linkshells ?? []; track linkshell.id) {
+              <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+            }
+          </select>
+          <input
+            [(ngModel)]="inviteSearchTerm"
+            name="inviteSearchTerm"
+            placeholder="Search by character or username" />
+          <button type="button" class="action-button" (click)="runInviteSearch()">
+            {{ activity.inviteSearchBusy() ? 'Searching...' : 'Search' }}
+          </button>
+        </div>
+
+        @if (activity.participantInviteBusy() || connectedInviteCandidates().length > 0 || activity.participants().length > 0) {
+          <div class="invite-section">
+            <h3>Connected now</h3>
+            @if (activity.participantInviteBusy()) {
+              <p class="notice">Matching current Discord participants to linked app users...</p>
+            } @else if (connectedInviteCandidates().length > 0) {
+              <ul class="compact-list compact-list--dense">
+                @for (candidate of connectedInviteCandidates(); track candidate.appUserId) {
+                  <li>
+                    <div>
+                      <strong>{{ candidate.displayName }}</strong>
+                      <span>
+                        {{ candidate.userName || 'No username' }}
+                        @if (candidate.primaryLinkshellName) {
+                          <span> | primary: {{ candidate.primaryLinkshellName }}</span>
+                        }
+                      </span>
+                    </div>
+                    <div class="button-cluster">
+                      <button type="button" class="action-button" (click)="sendInvite(candidate.appUserId)">Invite</button>
+                    </div>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="notice">No connected participants are eligible for a quick invite right now.</p>
+            }
+          </div>
+        }
+
+        @if (activity.inviteSearchResults().length > 0) {
+          <ul class="compact-list compact-list--dense">
+            @for (result of activity.inviteSearchResults(); track result.id) {
+              <li>
+                <div>
+                  <strong>{{ result.displayName }}</strong>
+                  <span>
+                    {{ result.userName || 'No username' }}
+                    @if (result.primaryLinkshellName) {
+                      <span> | primary: {{ result.primaryLinkshellName }}</span>
+                    }
+                  </span>
+                </div>
+                <div class="button-cluster">
+                  <button type="button" class="action-button" (click)="sendInvite(result.id)">Invite</button>
+                </div>
+              </li>
+            }
+          </ul>
+        } @else if (inviteSearchTerm.trim().length >= 2 && !activity.inviteSearchBusy()) {
+          <p class="notice">No eligible players matched this search.</p>
+        }
+      } @else if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+        <p class="notice">
+          @if (isMemberMode()) {
+            Invite controls are limited to leaders and officers. You can still accept incoming invites above.
+          } @else {
+            Only linkshell leaders or officers can send invites.
+          }
+        </p>
+      } @else {
+        <p class="notice">Create or join a linkshell before sending invites.</p>
+      }
+    </div>
+
+    @if (!isMemberMode() && activity.overview()?.sentInvites?.length) {
+      <div class="invite-section">
+        <h3>Sent</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (invite of activity.overview()?.sentInvites ?? []; track invite.id) {
+            <li>
+              <div>
+                <strong>{{ invite.appUserDisplayName }}</strong>
+                <span>{{ invite.linkshellName }}</span>
+              </div>
+              <div class="button-cluster">
+                <span>{{ invite.status }}</span>
+                @if (canManageLinkshell(invite.linkshellId)) {
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyInviteId() === invite.id"
+                    (click)="activity.revokeInvite(invite.id)">
+                    {{ activity.busyInviteId() === invite.id ? 'Updating...' : 'Revoke' }}
+                  </button>
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (activity.overview()?.outgoingJoinRequests?.length) {
+      <div class="invite-section">
+        <h3>Your join requests</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (request of activity.overview()?.outgoingJoinRequests ?? []; track request.id) {
+            <li>
+              <div>
+                <strong>{{ request.linkshellName }}</strong>
+                <span>Awaiting review</span>
+              </div>
+              <div class="button-cluster">
+                <span>{{ request.status }}</span>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </article>
+
+  <article class="panel" aria-labelledby="auctions-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Auction</p>
+        <h2 id="auctions-heading">Auction board</h2>
+      </div>
+      <div class="button-cluster">
+        <span class="pill">{{ auctions().length }}</span>
+        @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
+          <button type="button" class="action-button action-button--secondary" (click)="openCreateAuctionForm()">Create</button>
+        }
+      </div>
+    </div>
+
+    @if (isAuctionFormOpen) {
+      <form class="create-form create-form--compact" (ngSubmit)="submitAuctionForm()">
+        <div class="create-form__header">
+          <div>
+            <strong>{{ editingAuctionId ? 'Edit auction' : 'Create auction' }}</strong>
+            <p>Schedule the window, add item rows, and manually start it when you are ready.</p>
+          </div>
+          <button type="button" class="action-button action-button--secondary" (click)="closeAuctionForm()">Close</button>
+        </div>
+
+        <div class="create-form__grid">
+          <label>
+            <span>Title</span>
+            <input [(ngModel)]="auctionFormModel.title" name="auctionTitle" required />
+          </label>
+          <label>
+            <span>Start time</span>
+            <input [(ngModel)]="auctionFormModel.startTimeLocal" name="auctionStartTime" type="datetime-local" required />
+          </label>
+          <label>
+            <span>End time</span>
+            <input [(ngModel)]="auctionFormModel.endTimeLocal" name="auctionEndTime" type="datetime-local" required />
+          </label>
+        </div>
+
+        <div class="invite-section">
+          <div class="panel__header">
+            <h3>Items</h3>
+            <button type="button" class="action-button action-button--secondary" (click)="addAuctionFormItem()">Add item</button>
+          </div>
+
+          @for (item of auctionFormModel.items; track $index) {
+            <div class="create-form create-form--compact">
+              <div class="create-form__grid">
+                <label>
+                  <span>Item name</span>
+                  <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
+                </label>
+                <label>
+                  <span>Item type</span>
+                  <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index" />
+                </label>
+                <label>
+                  <span>Starting DKP</span>
+                  <input [(ngModel)]="item.startingBidDkp" [name]="'auctionItemBid' + $index" type="number" min="0" />
+                </label>
+                <label>
+                  <span>Notes</span>
+                  <input [(ngModel)]="item.notes" [name]="'auctionItemNotes' + $index" />
+                </label>
+              </div>
+              @if (auctionFormModel.items.length > 1) {
+                <div class="create-form__actions">
+                  <button type="button" class="action-button action-button--secondary" (click)="removeAuctionFormItem($index)">Remove row</button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="create-form__actions">
+          <button type="submit" class="action-button" [disabled]="isSubmittingAuction">
+            {{ isSubmittingAuction ? (editingAuctionId ? 'Saving...' : 'Creating...') : (editingAuctionId ? 'Save auction' : 'Create auction') }}
+          </button>
+        </div>
+      </form>
+    }
+
+    @if (!selectedLinkshell()) {
+      <p class="notice">Select or join a linkshell before working with auctions.</p>
+    } @else if (activity.auctionsBusy()) {
+      <p class="notice">Loading auctions...</p>
+    } @else if (auctions().length > 0) {
+      <ul class="compact-list">
+        @for (auction of auctions(); track auction.id) {
+            <li>
+              <div>
+                <strong>{{ auction.title || 'Untitled auction' }}</strong>
+                <span>{{ auctionTimeWindowLabel(auction) }}</span>
+                <span>Timer {{ auctionTimerLabel(auction) }}</span>
+                <span>Created by {{ auction.createdBy || 'Unknown' }}</span>
+                <span>Status: {{ auction.status }}</span>
+              </div>
+            <div class="button-cluster button-cluster--stacked">
+              <span>{{ auction.items.length }} items</span>
+              @if (auction.canEdit) {
+                <button type="button" class="action-button action-button--secondary" (click)="openEditAuctionForm(auction)">Edit</button>
+              }
+              @if (auction.canStart) {
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyAuctionId() === auction.id"
+                  (click)="startAuction(auction.id)">
+                  {{ activity.busyAuctionId() === auction.id ? 'Starting...' : 'Start auction' }}
+                </button>
+              }
+              @if (auction.canClose) {
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyAuctionId() === auction.id"
+                  (click)="closeAuction(auction.id, auction.title)">
+                  {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close auction' }}
+                </button>
+              }
+            </div>
+          </li>
+          @for (item of auction.items; track item.id) {
+            <li class="compact-list__child">
+              <div>
+                <strong>{{ item.itemName || 'Item' }}</strong>
+                <span>{{ item.itemType || 'Unspecified' }} | Start {{ item.startingBidDkp ?? 0 }} DKP</span>
+                <span>Highest {{ item.currentHighestBid ?? 0 }} by {{ item.currentHighestBidder || 'No bids' }}</span>
+                @if (item.notes) {
+                  <span>{{ item.notes }}</span>
+                }
+              </div>
+              <div class="button-cluster button-cluster--stacked">
+                <span>{{ item.bidCount }} bids</span>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  (click)="toggleAuctionBids(item.id)">
+                  {{ expandedAuctionBidItems[item.id] ? 'Hide bids' : 'View bids' }}
+                </button>
+              </div>
+            </li>
+            @if (expandedAuctionBidItems[item.id]) {
+              <li class="compact-list__child">
+                <div class="invite-section">
+                  @if (auction.status === 'Live') {
+                    <div class="invite-search">
+                      <input
+                        [ngModel]="getAuctionBidDraft(item.id)"
+                        (ngModelChange)="auctionBidDrafts[item.id] = $event"
+                        [name]="'auctionBidDraft' + item.id"
+                        type="number"
+                        min="1"
+                        placeholder="Bid amount" />
+                      <button
+                        type="button"
+                        class="action-button"
+                        [disabled]="activity.busyAuctionItemId() === item.id"
+                        (click)="submitAuctionBid(item.id)">
+                        {{ activity.busyAuctionItemId() === item.id ? 'Bidding...' : 'Make bid' }}
+                      </button>
+                    </div>
+                  }
+
+                  @if (auctionBids(item.id).length > 0) {
+                    <ul class="compact-list compact-list--dense">
+                      @for (bid of auctionBids(item.id); track bid.id) {
+                        <li>
+                          <div>
+                            <strong>{{ bid.characterName }}</strong>
+                            <span>{{ activity.formatDateTime(bid.createdAt) || 'Unknown time' }}</span>
+                          </div>
+                          <div class="compact-list__meta">
+                            <span>{{ bid.bidAmount }} DKP</span>
+                          </div>
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <p class="notice">No bids yet.</p>
+                  }
+                </div>
+              </li>
+            }
+          }
+        }
+      </ul>
+    } @else {
+      <p class="notice">No auctions exist on this linkshell yet.</p>
+    }
+
+    <div class="invite-section">
+      <div class="panel__header">
+        <h3>Auction history</h3>
+        <span class="pill">{{ auctionHistory().length }}</span>
+      </div>
+
+      @if (activity.auctionHistoryBusy()) {
+        <p class="notice">Loading auction history...</p>
+      } @else if (auctionHistory().length > 0) {
+        <ul class="compact-list compact-list--dense">
+          @for (history of auctionHistory(); track history.id) {
+            <li>
+              <div>
+                <strong>{{ history.title || 'Auction history' }}</strong>
+                <span>{{ auctionTimeWindowLabel(history) }}</span>
+                <span>Closed {{ activity.formatDateTime(history.closedAt) || 'Unknown time' }}</span>
+              </div>
+              <div class="compact-list__meta">
+                <span>{{ history.items.length }} items</span>
+              </div>
+            </li>
+            @for (item of history.items; track item.id) {
+              <li class="compact-list__child">
+                <div>
+                  <strong>{{ item.itemName || 'Item' }}</strong>
+                  <span>{{ item.currentHighestBidder || 'No winner' }} | {{ item.currentHighestBid ?? item.startingBidDkp ?? 0 }} DKP</span>
+                  <span>Status: {{ item.status || 'Pending' }}</span>
+                </div>
+                <div class="button-cluster">
+                  @if ((item.status || 'Pending') === 'Pending' || (item.status || '') === 'Closed') {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyAuctionItemId() === item.id"
+                      (click)="markAuctionHistoryItemReceived(item.id)">
+                      {{ activity.busyAuctionItemId() === item.id ? 'Updating...' : 'Mark received' }}
+                    </button>
+                  } @else if ((item.status || '').toLowerCase() === 'received') {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyAuctionItemId() === item.id"
+                      (click)="undoAuctionHistoryItem(item.id)">
+                      {{ activity.busyAuctionItemId() === item.id ? 'Updating...' : 'Undo' }}
+                    </button>
+                  }
+                </div>
+              </li>
+            }
+          }
+        </ul>
+      } @else {
+        <p class="notice">Closed auctions will appear here after they are archived.</p>
+      }
+    </div>
+  </article>
+
+  <article class="panel" aria-labelledby="history-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">History</p>
+        <h2 id="history-heading">Event history</h2>
+      </div>
+      <span class="pill">{{ historyList().length }}</span>
+    </div>
+
+    @if (activity.historyBusy()) {
+      <p class="notice">Loading event history...</p>
+    } @else if (historyList().length) {
+      <ul class="compact-list">
+        @for (history of historyList(); track history.id) {
+          <li>
+            <div>
+              <strong>{{ history.name || 'Completed event' }}</strong>
+              <span>{{ history.type || 'Event' }} | {{ history.location || 'Unknown location' }}</span>
+              @if (activity.formatDateTime(history.endTime); as completedAt) {
+                <span>Completed {{ completedAt }}</span>
+              }
+            </div>
+            <div class="button-cluster button-cluster--stacked">
+              <span>{{ history.participantCount }} participants</span>
+              <span>{{ history.duration ?? 0 }}h</span>
+              <button
+                type="button"
+                class="action-button action-button--secondary"
+                (click)="openHistoryDetail(history.id)">
+                Details
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+
+      @if (historyDetail(); as historyDetail) {
+        <div class="invite-section">
+          <div class="panel__header">
+            <div>
+              <h3>{{ historyDetail.name || 'History details' }}</h3>
+              <p class="notice">{{ historyDetail.type || 'Event' }} | {{ historyDetail.location || 'Unknown location' }}</p>
+            </div>
+            <button
+              type="button"
+              class="action-button action-button--secondary"
+              (click)="closeHistoryDetail()">
+              Close
+            </button>
+          </div>
+
+          <div class="summary-card">
+            @if (activity.formatDateTime(historyDetail.startTime); as startedAt) {
+              <p><strong>Started:</strong> {{ startedAt }}</p>
+            }
+            @if (activity.formatDateTime(historyDetail.endTime); as endedAt) {
+              <p><strong>Ended:</strong> {{ endedAt }}</p>
+            }
+            <p><strong>Duration:</strong> {{ historyDetail.duration ?? 0 }}h</p>
+            <p><strong>DKP/hour:</strong> {{ historyDetail.dkpPerHour ?? 0 }}</p>
+            @if (historyDetail.details) {
+              <p class="muted">{{ historyDetail.details }}</p>
+            }
+          </div>
+
+          <ul class="compact-list compact-list--dense">
+            @for (participant of historyDetail.participants; track participant.id) {
+              <li>
+                <div>
+                  <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
+                  <span>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</span>
+                </div>
+                <div class="compact-list__meta">
+                  <span>{{ participant.duration ?? 0 }}h</span>
+                  <span>{{ participant.eventDkp ?? 0 }} DKP</span>
+                  @if (participant.isVerified === true) {
+                    <span>Verified</span>
+                  } @else if (participant.isVerified === false) {
+                    <span>Denied</span>
+                  } @else {
+                    <span>Not reviewed</span>
+                  }
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    } @else {
+      <p class="notice">Completed events will show up here after a run is archived.</p>
+    }
+  </article>
+
+  <article class="panel" aria-labelledby="dkp-history-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Ledger</p>
+        <h2 id="dkp-history-heading">DKP history</h2>
+      </div>
+      <span class="pill">{{ dkpHistory()?.entries?.length ?? 0 }}</span>
+    </div>
+
+    @if (!selectedLinkshell()) {
+      <p class="notice">Select or join a linkshell to inspect per-member DKP history.</p>
+    } @else if (activity.dkpHistoryBusy()) {
+      <p class="notice">Loading DKP history...</p>
+    } @else if (dkpHistory(); as dkpHistory) {
+      @if (dkpHistory.members.length > 0) {
+        <div class="invite-section">
+          <label>
+            <span>Member</span>
+            <select
+              [ngModel]="selectedDkpHistoryAppUserId"
+              (ngModelChange)="onDkpHistoryMemberChange($event)"
+              name="selectedDkpHistoryAppUserId">
+              @for (member of dkpHistory.members; track member.appUserId) {
+                <option [ngValue]="member.appUserId">
+                  {{ member.characterName }} ({{ member.currentBalance }} DKP)
+                </option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <div class="summary-card">
+          <p class="summary-card__label">Selected member</p>
+          <strong>{{ dkpHistory.selectedMemberName || 'Unknown member' }}</strong>
+          <p>{{ dkpHistory.currentBalance }} current DKP</p>
+          @if (dkpHistory.linkshellName) {
+            <p class="muted">{{ dkpHistory.linkshellName }}</p>
+          }
+        </div>
+      }
+
+      @if (dkpHistory.entries.length > 0) {
+        <ul class="compact-list compact-list--dense">
+          @for (entry of dkpHistory.entries; track entry.id) {
+            <li>
+              <div>
+                <strong>
+                  @if (entry.entryType === 'LootSpent') {
+                    Loot spent
+                  } @else {
+                    Event earned
+                  }
+                </strong>
+                <span>{{ activity.formatDateTime(entry.occurredAt) || 'Unknown time' }}</span>
+                <span>
+                  {{ entry.eventName || 'Unknown event' }}
+                  @if (entry.eventType || entry.eventLocation) {
+                    <span> | {{ entry.eventType || 'Event' }} | {{ entry.eventLocation || 'Unknown location' }}</span>
+                  }
+                </span>
+                @if (entry.itemName) {
+                  <span>Item: {{ entry.itemName }}</span>
+                }
+                @if (entry.details) {
+                  <span>{{ entry.details }}</span>
+                }
+                @if (entry.eventStartTime || entry.eventEndTime) {
+                  <span>
+                    {{ activity.formatDateTime(entry.eventStartTime) || 'Unknown start' }}
+                    -
+                    {{ activity.formatDateTime(entry.eventEndTime) || 'Unknown end' }}
+                  </span>
+                }
+              </div>
+              <div class="button-cluster button-cluster--stacked">
+                <span [class.text-success]="entry.amount >= 0" [class.text-danger]="entry.amount < 0">
+                  {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }} DKP
+                </span>
+                <span>Balance {{ entry.runningBalance }}</span>
+              </div>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="notice">No DKP ledger entries exist for this member yet.</p>
+      }
+    }
+  </article>
+</aside>
