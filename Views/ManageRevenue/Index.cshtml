@@ -1,0 +1,56 @@
+﻿@model IEnumerable<LinkshellManager.Models.Income>
+
+@{
+    ViewData["Title"] = "Manage Revenue";
+    var linkshells = ViewBag.Linkshells as List<LinkshellManager.Models.Linkshell>;
+    var totalIncome = Model.Sum(income => income.Value ?? 0);
+}
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Manage Revenue</h2>
+
+    <form method="get" asp-action="Index">
+        <div class="form-group mt-3 mb-3">
+            <label for="linkshellName">Filter by Linkshell</label>
+            <select id="linkshellName" name="linkshellName" class="form-control" onchange="this.form.submit()">
+                <option value="">All Linkshells</option>
+                @foreach (var linkshell in linkshells)
+                {
+                    <option value="@linkshell.LinkshellName">@linkshell.LinkshellName</option>
+                }
+            </select>
+        </div>
+    </form>
+
+    <table class="mt-5 table">
+        <thead>
+            <tr>
+                <th>Linkshell Name</th>
+                <th>Method of Income</th>
+                <th>Details</th>
+                <th>Value</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var income in Model)
+            {
+                <tr>
+                    <td>@income.Linkshell?.LinkshellName</td>
+                    <td>@income.MethodOfIncome</td>
+                    <td>@income.Details</td>
+                    <td>@income.Value</td>
+                    <td>
+                        <a asp-action="Edit" asp-route-id="@income.Id" class="btn btn-primary">Edit</a>
+                        <a asp-action="Delete" asp-route-id="@income.Id" class="btn btn-danger">Delete</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" class="text-right"><strong>Total Income:</strong></td>
+                <td><strong>@totalIncome</strong></td>
+            </tr>
+        </tfoot>
+    </table>
+</div>

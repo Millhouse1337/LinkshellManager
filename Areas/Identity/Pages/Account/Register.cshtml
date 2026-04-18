@@ -1,0 +1,37 @@
+@page
+@model LinkshellManagerDiscordApp.Areas.Identity.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "Register";
+    var discordLoginHref = $"/auth/discord/login?returnUrl={Uri.EscapeDataString(Model.ReturnUrl ?? "/")}";
+    var loginHref = string.IsNullOrWhiteSpace(Model.ReturnUrl)
+        ? "/Identity/Account/Login"
+        : $"/Identity/Account/Login?returnUrl={Uri.EscapeDataString(Model.ReturnUrl)}";
+}
+
+<div class="row justify-content-center">
+    <div class="col-xl-6 col-lg-7">
+        <div class="card card-shell shadow-sm">
+            <div class="card-body p-4">
+                <span class="badge rounded-pill text-bg-primary mb-3">First-time setup</span>
+                <h1 class="h3 mb-3">Create account with Discord</h1>
+                <p class="text-muted mb-4">
+                    New accounts are created from your Discord identity so the website and Discord
+                    Activity always resolve to the same app user.
+                </p>
+                <p class="small text-muted mb-4">
+                    If this is your first visit, use the Discord button below and the app will create your account automatically.
+                </p>
+
+                @if (TempData["Error"] is string errorMessage)
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-primary" href="@discordLoginHref">Continue with Discord</a>
+                    <a class="btn btn-outline-light" href="@loginHref">Already have access?</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

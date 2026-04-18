@@ -1,0 +1,25 @@
+﻿@model IEnumerable<LinkshellManager.ViewModels.RuleViewModel>
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Rules</h2>
+
+    <table class="my-5 table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var rule in Model)
+            {
+                <tr>
+                    <td>@rule.RuleTitle</td>
+                    <td>@rule.RuleDetails</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="d-flex justify-content-end mt-3">
+        <a asp-action="Create" class="btn btn-primary">Create New Rule</a>
+    </div>
+</div>

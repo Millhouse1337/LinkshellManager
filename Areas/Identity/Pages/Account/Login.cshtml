@@ -1,0 +1,28 @@
+@page
+@model LinkshellManagerDiscordApp.Areas.Identity.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Sign in";
+    var discordLoginHref = $"/auth/discord/login?returnUrl={Uri.EscapeDataString(Model.ReturnUrl ?? "/")}";
+}
+
+<div class="row justify-content-center">
+    <div class="col-xl-6 col-lg-7">
+        <div class="card card-shell shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">Sign in with Discord</h1>
+                <p class="text-muted mb-4">
+                    Website access and the embedded Discord Activity both use the same Discord-linked app account.
+                </p>
+
+                @if (TempData["Error"] is string errorMessage)
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-primary" href="@discordLoginHref">Continue with Discord</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

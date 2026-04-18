@@ -1,0 +1,58 @@
+﻿@model LinkshellManager.ViewModels.ManageItemViewModel
+
+@{
+    ViewData["Title"] = "Add Item";
+}
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Add Item</h2>
+
+    <form asp-action="AddItem" method="post">
+        <div class="form-group">
+            <label asp-for="Item.LinkshellId" class="control-label">Linkshell</label>
+            <select asp-for="Item.LinkshellId" class="form-control" id="linkshell-select" required>
+                <option value="@Model.LinkshellId">Select Linkshell</option>
+                @foreach (var linkshell in Model.Linkshells)
+                {
+                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId ? "selected" : null)">
+                        @linkshell.LinkshellName
+                    </option>
+                }
+            </select>
+            <span asp-validation-for="Item.LinkshellId" class="text-danger"></span>
+        </div>
+        <input type="hidden" asp-for="Item.LinkshellName" id="LinkshellName" />
+        <div class="form-group mt-3">
+            <label asp-for="Item.ItemName" class="control-label">Item Name</label>
+            <input asp-for="Item.ItemName" class="form-control" />
+            <span asp-validation-for="Item.ItemName" class="text-danger"></span>
+        </div>
+        <div class="form-group mt-3">
+            <label asp-for="Item.ItemType" class="control-label">Item Type</label>
+            <input asp-for="Item.ItemType" class="form-control" />
+            <span asp-validation-for="Item.ItemType" class="text-danger"></span>
+        </div>
+        <div class="form-group mt-3">
+            <label asp-for="Item.Quantity" class="control-label"></label>
+            <input asp-for="Item.Quantity" class="form-control" />
+            <span asp-validation-for="Item.Quantity" class="text-danger"></span>
+        </div>
+        <div class="form-group mt-3">
+            <label asp-for="Item.Notes" class="control-label"></label>
+            <input asp-for="Item.Notes" class="form-control" />
+            <span asp-validation-for="Item.Notes" class="text-danger"></span>
+        </div>
+        <div class="d-flex justify-content-end mt-3">
+            <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+    </form>
+</div>
+@section Scripts {
+    <script>
+        function updateLinkshellName() {
+            var select = document.querySelector('select[asp-for="Item.LinkshellId"]');
+            var selectedOption = select.options[select.selectedIndex];
+            var linkshellName = selectedOption.getAttribute('data-name');
+            document.getElementById('LinkshellName').value = linkshellName;
+        }
+    </script>
+}

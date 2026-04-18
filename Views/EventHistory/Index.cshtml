@@ -1,0 +1,49 @@
+@model IEnumerable<EventHistory>
+@{
+    ViewData["Title"] = "Event history";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Event history</h1>
+        <p class="text-muted mb-0">Completed events for your current primary linkshell.</p>
+    </div>
+    <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+</div>
+
+<div class="card card-shell shadow-sm">
+    <div class="card-body">
+        @if (!Model.Any())
+        {
+            <p class="text-muted mb-0">No completed events yet.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Location</th>
+                            <th>End time</th>
+                            <th class="text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var history in Model)
+                    {
+                        <tr>
+                            <td>@history.EventName</td>
+                            <td>@history.EventType</td>
+                            <td>@history.EventLocation</td>
+                            <td>@(history.EndTime?.ToString("g") ?? history.TimeStamp?.ToString("g") ?? "Unknown")</td>
+                            <td class="text-end"><a class="btn btn-outline-light btn-sm" asp-action="Details" asp-route-id="@history.Id">Details</a></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

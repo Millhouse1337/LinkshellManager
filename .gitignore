@@ -1,0 +1,15 @@
+.vs/
+bin/
+obj/
+
+discord-activity/node_modules/
+discord-activity/.angular/
+
+wwwroot/discord-activity/browser/
+wwwroot/discord-activity/3rdpartylicenses.txt
+wwwroot/discord-activity/prerendered-routes.json
+
+tmp-run*.err
+tmp-run*.out
+
+*.user

@@ -1,0 +1,167 @@
+@model LinkshellManagerDiscordApp.ViewModels.AuctionViewModel
+
+@{
+    ViewData["Title"] = "Create Auction";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Create auction</h1>
+        <p class="text-muted mb-0">Set the title, timer, and auction items for a new linkshell auction.</p>
+    </div>
+    <a class="btn btn-outline-light" asp-action="Index">Back to auctions</a>
+</div>
+
+<div class="card card-shell shadow-sm">
+    <div class="card-body p-4">
+        <form asp-action="Create" method="post" id="auctionForm">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label asp-for="LinkshellId" class="form-label">Linkshell</label>
+                    <select asp-for="LinkshellId" class="form-select">
+                        @foreach (var linkshell in Model.Linkshells)
+                        {
+                            <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Auction.AuctionTitle" class="form-label">Auction title</label>
+                    <input asp-for="Auction.AuctionTitle" class="form-control" />
+                    <span asp-validation-for="Auction.AuctionTitle" class="text-danger"></span>
+                </div>
+                <div class="col-md-2">
+                    <label asp-for="Auction.StartTime" class="form-label">Start time</label>
+                    <input asp-for="Auction.StartTime" type="datetime-local" class="form-control" />
+                    <span asp-validation-for="Auction.StartTime" class="text-danger"></span>
+                </div>
+                <div class="col-md-2">
+                    <label asp-for="Auction.EndTime" class="form-label">End time</label>
+                    <input asp-for="Auction.EndTime" type="datetime-local" class="form-control" />
+                    <span asp-validation-for="Auction.EndTime" class="text-danger"></span>
+                </div>
+            </div>
+
+            <hr class="my-4" />
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h2 class="h5 mb-1">Auction items</h2>
+                    <p class="text-muted mb-0">Add at least one item with its opening bid.</p>
+                </div>
+                <button type="button" class="btn btn-outline-light btn-sm" id="addAuctionItemButton">Add item</button>
+            </div>
+
+            <div id="auctionItems">
+                @for (var i = 0; i < Model.AuctionItems.Count; i++)
+                {
+                    <div class="row g-3 align-items-end auction-item-row mb-3" data-index="@i">
+                        <input asp-for="AuctionItems[i].Id" type="hidden" />
+                        <div class="col-md-5">
+                            <label asp-for="AuctionItems[i].ItemName" class="form-label">Item name</label>
+                            <input asp-for="AuctionItems[i].ItemName" class="form-control" />
+                            <span asp-validation-for="AuctionItems[i].ItemName" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-3">
+                            <label asp-for="AuctionItems[i].ItemType" class="form-label">Item type</label>
+                            <input asp-for="AuctionItems[i].ItemType" class="form-control" />
+                        </div>
+                        <div class="col-md-2">
+                            <label asp-for="AuctionItems[i].StartingBidDkp" class="form-label">Starting bid</label>
+                            <input asp-for="AuctionItems[i].StartingBidDkp" class="form-control" />
+                            <span asp-validation-for="AuctionItems[i].StartingBidDkp" class="text-danger"></span>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-outline-danger w-100 remove-auction-item">Remove</button>
+                        </div>
+                        <div class="col-12">
+                            <label asp-for="AuctionItems[i].Notes" class="form-label">Notes</label>
+                            <input asp-for="AuctionItems[i].Notes" class="form-control" />
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-success">Create auction</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const itemsContainer = document.getElementById('auctionItems');
+            const addItemButton = document.getElementById('addAuctionItemButton');
+
+            const renumberRows = () => {
+                const rows = itemsContainer.querySelectorAll('.auction-item-row');
+                rows.forEach((row, index) => {
+                    row.dataset.index = index;
+                    row.querySelectorAll('input, label, span').forEach((element) => {
+                        ['name', 'id', 'for'].forEach((attribute) => {
+                            const value = element.getAttribute(attribute);
+                            if (!value) {
+                                return;
+                            }
+
+                            element.setAttribute(
+                                attribute,
+                                value
+                                    .replace(/AuctionItems\[\d+\]/g, `AuctionItems[${index}]`)
+                                    .replace(/AuctionItems_\d+__/g, `AuctionItems_${index}__`)
+                            );
+                        });
+                    });
+                });
+            };
+
+            addItemButton.addEventListener('click', () => {
+                const index = itemsContainer.querySelectorAll('.auction-item-row').length;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'row g-3 align-items-end auction-item-row mb-3';
+                wrapper.dataset.index = index;
+                wrapper.innerHTML = `
+                    <input type="hidden" name="AuctionItems[${index}].Id" value="0" />
+                    <div class="col-md-5">
+                        <label class="form-label" for="AuctionItems_${index}__ItemName">Item name</label>
+                        <input class="form-control" id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="AuctionItems_${index}__ItemType">Item type</label>
+                        <input class="form-control" id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="AuctionItems_${index}__StartingBidDkp">Starting bid</label>
+                        <input class="form-control" id="AuctionItems_${index}__StartingBidDkp" name="AuctionItems[${index}].StartingBidDkp" type="number" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-outline-danger w-100 remove-auction-item">Remove</button>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="AuctionItems_${index}__Notes">Notes</label>
+                        <input class="form-control" id="AuctionItems_${index}__Notes" name="AuctionItems[${index}].Notes" />
+                    </div>`;
+
+                itemsContainer.appendChild(wrapper);
+            });
+
+            itemsContainer.addEventListener('click', (event) => {
+                const trigger = event.target.closest('.remove-auction-item');
+                if (!trigger) {
+                    return;
+                }
+
+                const rows = itemsContainer.querySelectorAll('.auction-item-row');
+                if (rows.length <= 1) {
+                    return;
+                }
+
+                trigger.closest('.auction-item-row')?.remove();
+                renumberRows();
+            });
+        })();
+    </script>
+}

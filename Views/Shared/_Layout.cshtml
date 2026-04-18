@@ -1,0 +1,168 @@
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<AppUser> SignInManager
+@inject UserManager<AppUser> UserManager
+
+@{
+    var isSignedIn = SignInManager.IsSignedIn(User);
+    AppUser? currentUser = isSignedIn ? await UserManager.GetUserAsync(User) : null;
+    var pageTitle = ViewData["Title"]?.ToString() ?? "LinkshellManager";
+    var profileImage = currentUser?.ProfileImage is { Length: > 0 }
+        ? $"data:image/png;base64,{Convert.ToBase64String(currentUser.ProfileImage)}"
+        : null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@pageTitle - LinkshellManager</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            background: linear-gradient(180deg, #09111d 0%, #0f2033 100%);
+            color: #e8eef6;
+            min-height: 100vh;
+        }
+
+        .navbar, .footer-shell, .card-shell {
+            background: rgba(10, 19, 33, 0.88);
+            border: 1px solid rgba(115, 164, 223, 0.18);
+            backdrop-filter: blur(14px);
+        }
+
+        .navbar .nav-link,
+        .navbar .navbar-brand,
+        .navbar-text,
+        a {
+            color: #dbe9f8;
+        }
+
+        .navbar .nav-link:hover,
+        .navbar .navbar-brand:hover,
+        a:hover {
+            color: #9cc8ff;
+        }
+
+        .main-shell {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(12, 22, 39, 0.9);
+            border-color: rgba(115, 164, 223, 0.15);
+            color: #e8eef6;
+        }
+
+        .table {
+            color: #e8eef6;
+        }
+
+        .table thead th {
+            color: #a9c7e8;
+            border-bottom-color: rgba(115, 164, 223, 0.2);
+        }
+
+        .table td,
+        .table th {
+            border-color: rgba(115, 164, 223, 0.12);
+        }
+
+        .form-control,
+        .form-select,
+        textarea {
+            background-color: rgba(3, 10, 20, 0.75);
+            border-color: rgba(115, 164, 223, 0.25);
+            color: #f3f7fb;
+        }
+
+        .form-control:focus,
+        .form-select:focus,
+        textarea:focus {
+            background-color: rgba(3, 10, 20, 0.9);
+            color: #f3f7fb;
+            border-color: #5aa6ff;
+            box-shadow: 0 0 0 0.2rem rgba(90, 166, 255, 0.2);
+        }
+
+        .text-muted {
+            color: #9bb5cf !important;
+        }
+
+        .badge-soft {
+            background: rgba(90, 166, 255, 0.16);
+            color: #b5d6ff;
+        }
+
+        .profile-thumb {
+            width: 32px;
+            height: 32px;
+            object-fit: cover;
+            border-radius: 999px;
+            border: 1px solid rgba(115, 164, 223, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <header class="navbar navbar-expand-lg shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-semibold" asp-controller="Dashboard" asp-action="Index">LinkshellManager</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#appNav" aria-controls="appNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="appNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    @if (isSignedIn)
+                    {
+                        <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Linkshell" asp-action="Index">Linkshells</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Event" asp-action="Index">Events</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Auction" asp-action="Index">Auctions</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="AuctionHistory" asp-action="Index">Auction History</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="EventHistory" asp-action="Index">History</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="DkpHistory" asp-action="Index">DKP History</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/discord-activity">Discord Activity</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Account" asp-action="Profile">Profile</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Account" asp-action="Settings">Settings</a></li>
+                    }
+                </ul>
+                <div class="d-flex align-items-center gap-3">
+                    @if (isSignedIn && currentUser is not null)
+                    {
+                        @await Component.InvokeAsync("LinkshellDropdown")
+                        <span class="navbar-text d-flex align-items-center gap-2">
+                            @if (profileImage is not null)
+                            {
+                                <img class="profile-thumb" src="@profileImage" alt="Profile" />
+                            }
+                            <span>@(currentUser.CharacterName ?? currentUser.UserName ?? "User")</span>
+                        </span>
+                        <a class="btn btn-outline-light btn-sm" asp-controller="Account" asp-action="Logout">Sign out</a>
+                    }
+                    else
+                    {
+                        <a class="btn btn-primary btn-sm" asp-controller="Account" asp-action="Login">Continue with Discord</a>
+                    }
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-shell">
+        <div class="container-fluid px-4">
+            @RenderBody()
+        </div>
+    </main>
+
+    <footer class="footer-shell mt-auto py-3">
+        <div class="container-fluid px-4 text-muted small">
+            Same-origin MVC shell for Linkshells and Events. Discord Activity remains mounted at <code>/discord-activity</code>.
+        </div>
+    </footer>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <partial name="_ValidationScriptsPartial" />
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

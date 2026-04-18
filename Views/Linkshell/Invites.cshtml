@@ -1,0 +1,56 @@
+﻿@model LinkshellManager.ViewModels.InvitesViewModel
+
+@{
+    ViewData["Title"] = "Invites";
+}
+
+<div class="container">
+    <div class="pagetitle d-flex justify-content-center py-4">
+        <h2>Invites</h2>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h3>Pending Invites</h3>
+                        @if (Model.Invites.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Linkshell Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var invite in Model.Invites)
+                                    {
+                                        <tr>
+                                            <td>@invite.Linkshell.LinkshellName</td>
+                                            <td>
+                                                <form asp-action="AcceptInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-primary">Accept</button>
+                                                </form>
+                                                <form asp-action="DeclineInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-danger">Decline</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No pending invites.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

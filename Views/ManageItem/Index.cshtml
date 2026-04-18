@@ -1,0 +1,51 @@
+﻿@model IEnumerable<LinkshellManager.Models.Item>
+
+@{
+    ViewData["Title"] = "Manage Items";
+    var linkshells = ViewBag.Linkshells as List<LinkshellManager.Models.Linkshell>;
+}
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Manage Items</h2>
+
+    <form method="get" asp-action="Index">
+        <div class="form-group mt-3 mb-3">
+            <label for="linkshellName">Filter by Linkshell</label>
+            <select id="linkshellName" name="linkshellName" class="form-control" onchange="this.form.submit()">
+                <option value="">All Linkshells</option>
+                @foreach (var linkshell in linkshells)
+                {
+                    <option value="@linkshell.LinkshellName">@linkshell.LinkshellName</option>
+                }
+            </select>
+        </div>
+    </form>
+
+    <table class="mt-5 table">
+        <thead>
+            <tr>
+                <th>Item Name</th>
+                <th>Item Type</th>
+                <th>Amount</th>
+                <th>Linkshell Name</th>
+                <th>Notes</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.ItemName</td>
+                    <td>@item.ItemType</td>
+                    <td>@item.Quantity</td>
+                    <td>@item.LinkshellName</td>
+                    <td>@item.Notes</td>
+                    <td>
+                        <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-primary">Edit</a>
+                        <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-danger">Delete</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

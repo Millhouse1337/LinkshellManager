@@ -1,0 +1,154 @@
+﻿@model LinkshellManager.ViewModels.ContactViewModel
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<LinkshellManager.Models.AppUser> UserManager
+
+@{
+    ViewData["Title"] = "Messages";
+}
+<div class="container mt-5" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="text-center">Messages</h2>
+
+    <h3 class="my-3">Received Messages</h3>
+    @if (Model.ReceivedMessages.Any())
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Sender</th>
+                    <th>Message</th>
+                    <th>Time</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var message in Model.ReceivedMessages.GroupBy(m => m.CharacterNameSender).Select(g =>
+               g.OrderByDescending(m => m.TimeStamp).First()))
+                {
+                    <tr>
+                        <td>@message.CharacterNameSender</td>
+                        <td>@message.MessageDetails</td>
+                        <td>@message.TimeStamp?.ToString("g")</td>
+                        <td>
+                            <button class="btn btn-primary"
+                                onclick="openReplyModal('@message.CharacterNameSender')">Reply</button>
+                            <button class="btn btn-secondary"
+                                onclick="viewDialogue('@message.CharacterNameSender', '@ViewBag.CharacterNameSender')">View</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p>No received messages found.</p>
+    }
+
+    <h3 class="pt-3 mt-5">Sent Messages</h3>
+    @if (Model.SentMessages.Any())
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Receiver</th>
+                    <th>Message</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var message in Model.SentMessages.GroupBy(m => m.CharacterNameReceiver).Select(g =>
+               g.OrderByDescending(m => m.TimeStamp).First()))
+                {
+                    <tr>
+                        <td>@message.CharacterNameReceiver</td>
+                        <td>@message.MessageDetails</td>
+                        <td>@message.TimeStamp?.ToString("g")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p>No sent messages found.</p>
+    }
+</div>
+<!-- Reply Modal -->
+<div class="modal fade" id="replyModal" tabindex="-1" role="dialog" aria-labelledby="replyModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="replyModalLabel">Reply to Message</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="replyForm" asp-action="SendMessage" method="post">
+                    <input type="hidden" name="AppUserId" value="@ViewBag.AppUserId" />
+                    <input type="hidden" name="CharacterNameSender" value="@ViewBag.CharacterNameSender" />
+                    <div class="form-group">
+                        <label asp-for="ReceiverCharacterName" class="control-label"></label>
+                        <input asp-for="ReceiverCharacterName" class="form-control" readonly />
+                        <span asp-validation-for="ReceiverCharacterName" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="MessageDetails" class="control-label"></label>
+                        <textarea asp-for="MessageDetails" class="form-control"></textarea>
+                        <span asp-validation-for="MessageDetails" class="text-danger"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dialogue Modal -->
+<div class="modal fade" id="dialogueModal" tabindex="-1" role="dialog" aria-labelledby="dialogueModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dialogueModalLabel">Dialogue</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="dialogueContent">
+                <!-- Dialogue content will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function openReplyModal(senderName) {
+            $('#replyModal').modal('show');
+            $('[name="ReceiverCharacterName"]').val(senderName);
+        }
+
+        async function viewDialogue(senderName, receiverName) {
+            try {
+                const response = await fetch('@Url.Action("GetDialogue", "Contact")' + `?senderName=${senderName}&receiverName=${receiverName}`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                let dialogueContent = '';
+                data.forEach(function (message) {
+                    dialogueContent += '<div class="message">';
+                    dialogueContent += '<strong>' + message.characterNameSender + ':</strong> ' + message.messageDetails;
+                    dialogueContent += '<br /><small class="text-muted">' + new Date(message.timeStamp).toLocaleString() + '</small>';
+                    dialogueContent += '</div><hr />';
+                });
+                document.getElementById('dialogueContent').innerHTML = dialogueContent;
+                $('#dialogueModal').modal('show');
+            } catch (error) {
+                console.error('Error loading dialogue:', error);
+            }
+        }
+    </script>
+}

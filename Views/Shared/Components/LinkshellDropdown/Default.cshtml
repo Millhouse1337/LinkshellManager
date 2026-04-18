@@ -1,0 +1,25 @@
+@model SettingsViewModel
+
+@if (Model.Linkshells.Count > 0)
+{
+    <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="linkshell-display">Primary linkshell</label>
+        <select id="linkshell-display" class="form-select form-select-sm" style="min-width: 220px" disabled>
+            @foreach (var linkshell in Model.Linkshells)
+            {
+                if (linkshell.Id == Model.SelectedLinkshellId)
+                {
+                    <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                }
+                else
+                {
+                    <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                }
+            }
+        </select>
+    </div>
+}
+else
+{
+    <a class="btn btn-outline-light btn-sm" asp-controller="Linkshell" asp-action="Create">Create a linkshell</a>
+}

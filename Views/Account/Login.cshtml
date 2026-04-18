@@ -1,0 +1,54 @@
+﻿@using LinkshellManager.ViewModels
+@model LoginViewModel
+
+@{
+    ViewData["Title"] = "Login";
+}
+<div class="row">
+    <div class="col-md-6 offset-3">
+        <p>
+            <h4 class="text-center">Login</h4>
+        </p>
+        @if (TempData["Error"] != null)
+        {
+            <div class="col-md-12 alert alert-danger">
+                <span><b>Sorry!</b> - @TempData["Error"]</span>
+            </div>
+        }
+        <div class="row">
+            <div class="col-md-8 offset-2">
+                <form asp-action="Login">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+                    <div class="form-group">
+                        <label asp-for="EmailAddress" class="control-label"></label>
+                        <input asp-for="EmailAddress" class="form-control">
+                        <span asp-validation-for="EmailAddress" class="text-danger"></span>
+                    </div>
+                    <div class="form-group">
+                        <label asp-for="Password" class="control-label"></label>
+                        <input asp-for="Password" class="form-control" />
+                        <span asp-validation-for="Password" class="text-danger"></span>
+                    </div>
+                    <input type="hidden" id="timeZone" name="TimeZone" />
+                    <div class="form-group d-flex justify-content-end my-3">
+                        <input class="btn btn-outline-success float-right mt-2" type="submit" value="Log in" />
+                        <a class="btn btn-outline-secondary mt-2 mx-2" asp-controller="Dashboard" asp-action="Index">Cancel</a>
+                    </div>
+                    <div class="form-group text-center">
+                        <a asp-controller="Account" asp-action="ForgotPassword">Forgot your password?</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            console.log("Detected Time Zone:", timeZone); // Log the detected time zone
+            document.getElementById('timeZone').value = timeZone;
+        });
+    </script>
+}

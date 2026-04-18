@@ -1,0 +1,153 @@
+@model LinkshellManagerDiscordApp.ViewModels.DkpHistoryViewModel
+@{
+    ViewData["Title"] = "DKP history";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">DKP history</h1>
+        <p class="text-muted mb-0">Full earned and spent DKP ledger for each member of the selected linkshell.</p>
+    </div>
+    <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-4">
+        <div class="card card-shell shadow-sm h-100">
+            <div class="card-body">
+                @if (!Model.Linkshells.Any())
+                {
+                    <p class="text-muted mb-0">Join a linkshell to unlock DKP history.</p>
+                }
+                else
+                {
+                    <form method="get" class="d-grid gap-3">
+                        <div>
+                            <label class="form-label" for="linkshellId">Linkshell</label>
+                            <select class="form-select" id="linkshellId" name="linkshellId" onchange="this.form.submit()">
+                                @foreach (var linkshell in Model.Linkshells)
+                                {
+                                    @if (Model.SelectedLinkshellId == linkshell.Id)
+                                    {
+                                        <option value="@linkshell.Id" selected>@linkshell.Name</option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@linkshell.Id">@linkshell.Name</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label" for="appUserId">Member</label>
+                            <select class="form-select" id="appUserId" name="appUserId" onchange="this.form.submit()">
+                                @foreach (var member in Model.Members)
+                                {
+                                    @if (Model.SelectedAppUserId == member.AppUserId)
+                                    {
+                                        <option value="@member.AppUserId" selected>
+                                            @member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)
+                                        </option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@member.AppUserId">
+                                            @member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)
+                                        </option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    </form>
+
+                    <hr />
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Linkshell</dt>
+                        <dd class="col-sm-7">@Model.SelectedLinkshellName</dd>
+                        <dt class="col-sm-5">Member</dt>
+                        <dd class="col-sm-7">@Model.SelectedMemberName</dd>
+                        <dt class="col-sm-5">Current balance</dt>
+                        <dd class="col-sm-7">@Model.CurrentBalance.ToString("0.##") DKP</dd>
+                    </dl>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="card card-shell shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Ledger</h2>
+                    <span class="badge badge-soft">@Model.Entries.Count entries</span>
+                </div>
+
+                @if (!Model.Entries.Any())
+                {
+                    <p class="text-muted mb-0">No DKP transactions have been recorded for this member yet.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>When</th>
+                                    <th>Entry</th>
+                                    <th>Event</th>
+                                    <th>Details</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-end">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var entry in Model.Entries)
+                            {
+                                var amountClass = entry.Amount >= 0 ? "text-success" : "text-danger";
+                                <tr>
+                                    <td>@(entry.OccurredAt?.ToString("g") ?? "Unknown")</td>
+                                    <td>
+                                        @if (entry.EntryType == "LootSpent")
+                                        {
+                                            <span class="badge bg-danger">Loot spent</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">Event earned</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div>@(entry.EventName ?? "Unknown event")</div>
+                                        <div class="text-muted small">
+                                            @(entry.EventType ?? "Event") | @(entry.EventLocation ?? "Unknown location")
+                                        </div>
+                                        @if (entry.EventStartTime.HasValue || entry.EventEndTime.HasValue)
+                                        {
+                                            <div class="text-muted small">
+                                                @(entry.EventStartTime?.ToString("g") ?? "Unknown") - @(entry.EventEndTime?.ToString("g") ?? "Unknown")
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(entry.ItemName))
+                                        {
+                                            <div><strong>Item:</strong> @entry.ItemName</div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(entry.Details))
+                                        {
+                                            <div class="text-muted small">@entry.Details</div>
+                                        }
+                                    </td>
+                                    <td class="text-end @amountClass">@entry.Amount.ToString("0.##")</td>
+                                    <td class="text-end">@entry.RunningBalance.ToString("0.##")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

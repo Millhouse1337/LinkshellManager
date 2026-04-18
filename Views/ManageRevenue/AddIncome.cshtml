@@ -1,0 +1,57 @@
+﻿@model LinkshellManager.ViewModels.ManageRevenueViewModel
+@{
+    ViewData["Title"] = "Add Income";
+}
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Add Income</h2>
+
+    <form asp-action="AddIncome" method="post">
+        <div class="form-group">
+            <label asp-for="Income.LinkshellId" class="control-label">Linkshell</label>
+            <select asp-for="Income.LinkshellId" class="form-control" id="linkshell-select" required>
+                <option value="@Model.LinkshellId">Select Linkshell</option>
+                @foreach (var linkshell in Model.Linkshells)
+                {
+                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId ? "selected" : null)">
+                        @linkshell.LinkshellName
+                    </option>
+                }
+            </select>
+            <span asp-validation-for="Income.LinkshellId" class="text-danger"></span>
+        </div>
+        <input type="hidden" asp-for="Income.LinkshellName" id="LinkshellName" />
+        <div class="form-group mt-3">
+            <label asp-for="Income.MethodOfIncome" class="control-label">Method of Income</label>
+            <select asp-for="Income.MethodOfIncome" class="form-control" required>
+                <option value="">Select Method of Income</option>
+                <option value="AH Sale">AH Sale</option>
+                <option value="Mercenary Work">Mercenary Work</option>
+                <option value="Other">Other</option>
+            </select>
+            <span asp-validation-for="Income.MethodOfIncome" class="text-danger"></span>
+        </div>
+        <div class="form-group mt-3">
+            <label asp-for="Income.Details" class="control-label"></label>
+            <input asp-for="Income.Details" class="form-control" />
+            <span asp-validation-for="Income.Details" class="text-danger"></span>
+        </div>
+        <div class="form-group mt-3">
+            <label asp-for="Income.Value" class="control-label"></label>
+            <input asp-for="Income.Value" class="form-control" />
+            <span asp-validation-for="Income.Value" class="text-danger"></span>
+        </div>
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="mt-3 btn btn-primary">Add</button>
+        </div>
+    </form>
+</div>
+@section Scripts {
+    <script>
+        function updateLinkshellName() {
+            var select = document.querySelector('select[asp-for="Income.LinkshellId"]');
+            var selectedOption = select.options[select.selectedIndex];
+            var linkshellName = selectedOption.getAttribute('data-name');
+            document.getElementById('LinkshellName').value = linkshellName;
+        }
+    </script>
+}

@@ -1,0 +1,75 @@
+@model EventHistory
+@{
+    ViewData["Title"] = "History details";
+}
+
+<div class="row g-4">
+    <div class="col-xl-4">
+        <div class="card card-shell shadow-sm h-100">
+            <div class="card-body">
+                <h1 class="h4 mb-3">@Model.EventName</h1>
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Type</dt><dd class="col-sm-7">@Model.EventType</dd>
+                    <dt class="col-sm-5">Location</dt><dd class="col-sm-7">@Model.EventLocation</dd>
+                    <dt class="col-sm-5">Started</dt><dd class="col-sm-7">@(Model.StartTime?.ToString("g") ?? "Unknown")</dd>
+                    <dt class="col-sm-5">Ended</dt><dd class="col-sm-7">@(Model.EndTime?.ToString("g") ?? "Unknown")</dd>
+                    <dt class="col-sm-5">Duration</dt><dd class="col-sm-7">@((Model.Duration ?? 0).ToString("0.##")) hours</dd>
+                    <dt class="col-sm-5">DKP/hour</dt><dd class="col-sm-7">@(Model.DkpPerHour ?? 0)</dd>
+                </dl>
+                @if (!string.IsNullOrWhiteSpace(Model.Details))
+                {
+                    <hr />
+                    <p class="text-muted mb-0">@Model.Details</p>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-8">
+        <div class="card card-shell shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Participants</h2>
+                    <a class="btn btn-outline-light btn-sm" asp-action="Index">Back to history</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Character</th>
+                                <th>Job</th>
+                                <th>Duration</th>
+                                <th>DKP</th>
+                                <th>Verification</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var participant in Model.AppUserEventHistories.OrderBy(p => p.CharacterName))
+                        {
+                            <tr>
+                                <td>@participant.CharacterName</td>
+                                <td>@participant.JobName/@participant.SubJobName</td>
+                                <td>@((participant.Duration ?? 0).ToString("0.##")) h</td>
+                                <td>@((participant.EventDkp ?? 0).ToString("0.##"))</td>
+                                <td>
+                                    @if (participant.IsVerified == true)
+                                    {
+                                        <span class="badge bg-success">Verified</span>
+                                    }
+                                    else if (participant.IsVerified == false)
+                                    {
+                                        <span class="badge bg-danger">Denied</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Not reviewed</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

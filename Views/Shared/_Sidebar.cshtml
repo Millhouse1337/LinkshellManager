@@ -1,0 +1,332 @@
+﻿<!-- admin-sidebar.component.html -->
+<div class="user-sidebar-ng-if" *ngIf="isSidebarVisible">
+    <!-- ======= Sidebar Nav ======= -->
+    <aside id="sidebar" class="sidebar">
+        <ul class="sidebar-nav" id="sidebar-nav">
+
+            @* <li class="nav-heading">Linkshell Name</li> *@
+
+            <!-- Dashboard Nav -->
+            <li class="nav-item">
+                <a class="nav-link" asp-controller="Dashboard" asp-action="Index">
+                    <i class="bi bi-grid"></i>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <!-- End Dashboard Nav -->
+            <!-- Announcements Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#announcements-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-file-richtext-fill"></i><span>Announcements</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="announcements-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Announcement" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View Announcements</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Announcement" asp-action="Create">
+                            <i class="bi bi-circle"></i><span>Create Announcement</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Announcements Nav-->
+            <!-- Rules Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#rules-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-file-richtext-fill"></i><span>Rules</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="rules-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Rule" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View Rules</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Rule" asp-action="Create">
+                            <i class="bi bi-circle"></i><span>Create Rule</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Rules Nav -->
+            <!-- Missions Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#missions-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-flag-fill"></i><span>Missions</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="missions-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Rise of the Zilart</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Chains of Promathia</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Treasures of Aht Urhgan</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Missions Nav -->
+            <!-- End Game Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#end-game-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-check-circle-fill"></i><span>End Game</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="end-game-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Sky</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Sea</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>HNM</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Dynamis</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="">
+                            <i class="bi bi-circle"></i><span>Limbus</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Game Nav -->
+            <!-- Auction System Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#auction-nav" data-bs-toggle="collapse" href="#">
+                    <i class="material-icons">gavel</i><span>Linkshell Auction</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="auction-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Auction" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View Auction</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Auction" asp-action="Create">
+                            <i class="bi bi-circle"></i><span>Create Auction</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="AuctionHistory" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>Auction History</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- Auction System Nav -->
+            <!-- Event System Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#event-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-calendar-event"></i><span>Event System</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="event-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Event" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View Events</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Event" asp-action="Create">
+                            <i class="bi bi-circle"></i><span>Create Event</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="EventHistory" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>Event History</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Event System Nav -->
+            <!-- ToDs Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#tods-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-stopwatch-fill"></i><span>ToDs</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="tods-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Tod" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View ToDs</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Tod" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>Add ToD</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End ToDs Nav -->
+            <!-- Manage Team Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#manage-team-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-people"></i><span>Manage Team</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="manage-team-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="ManageTeam" asp-action="Index">
+                            <i class="bi bi-circle"></i><span> View Team</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="ManageTeam" asp-action="SearchPlayers">
+                            <i class="bi bi-circle"></i><span>Add Members</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="ManageTeam" asp-action="ViewInvites">
+                            <i class="bi bi-circle"></i><span>View Invites</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Manage Team Nav -->
+            <!-- Manage Items Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#manage-items-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-trophy"></i><span>Manage Items</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="manage-items-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="ManageItem" asp-action="Index">
+                            <i class="bi bi-circle"></i><span> View Items</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="ManageItem" asp-action="AddItem">
+                            <i class="bi bi-circle"></i><span>Add Item</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Manage Items Nav -->
+            <!-- Manage Revenue Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#revenue-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-currency-dollar"></i><span>Manage Revenue</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="revenue-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="ManageRevenue" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View Income</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="ManageRevenue" asp-action="AddIncome">
+                            <i class="bi bi-circle"></i><span>Add Income</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Manage Revenue Nav -->
+            <!-- Charts Nav -->
+            @* <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#charts-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-bar-chart"></i><span>Charts</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="charts-nav" class="nav-content collapse " data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a href="charts-chartjs.html">
+                            <i class="bi bi-circle"></i><span>Chart.js</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="charts-apexcharts.html">
+                            <i class="bi bi-circle"></i><span>ApexCharts</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="charts-echarts.html">
+                            <i class="bi bi-circle"></i><span>ECharts</span>
+                        </a>
+                    </li>
+                </ul>
+            </li> *@
+            <!-- End Charts Nav -->
+            <!-- Configurations Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#configurations-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-wrench"></i><span>Configurations</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="configurations-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Linkshell" asp-action="Index">
+                            <i class="bi bi-circle"></i><span> View Linkshells</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Linkshell" asp-action="Create">
+                            <i class="bi bi-circle"></i><span>Create Linkshell</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Linkshell" asp-action="Customize">
+                            <i class="bi bi-circle"></i><span>Customize Linkshell</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Configurations Nav -->
+
+            <li class="nav-heading">Pages</li>
+
+            <!-- Profile Page Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" asp-controller="Account" asp-action="Profile">
+                    <i class="bi bi-person"></i>
+                    <span>Profile</span>
+                </a>
+            </li>
+            <!-- End Profile Page Nav -->
+            <!-- F.A.Q Page Nav -->
+            @* <li class="nav-item">
+                <a class="nav-link collapsed" href="pages-faq.html">
+                    <i class="bi bi-question-circle"></i>
+                    <span>F.A.Q</span>
+                </a>
+            </li> *@
+            <!-- End F.A.Q Page Nav -->
+            <!-- Contact Page Nav -->
+            <li class="nav-item">
+                <a class="nav-link collapsed" data-bs-target="#contact-nav" data-bs-toggle="collapse" href="#">
+                    <i class="bi bi-envelope"></i><span>Messages</span><i class="bi bi-chevron-down ms-auto"></i>
+                </a>
+                <ul id="contact-nav" class="nav-content collapse" data-bs-parent="#sidebar-nav">
+                    <li>
+                        <a asp-controller="Contact" asp-action="Index">
+                            <i class="bi bi-circle"></i><span>View Messages</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a asp-controller="Contact" asp-action="SendMessage">
+                            <i class="bi bi-circle"></i><span>Send New Message</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+            <!-- End Contact Page Nav -->
+
+        </ul>
+    </aside>
+    <!-- ======= End Sidebar Nav ======= -->
+</div>

@@ -1,0 +1,57 @@
+@model Linkshell
+@{
+    ViewData["Title"] = "Linkshell details";
+}
+
+<div class="row g-4">
+    <div class="col-xl-4">
+        <div class="card card-shell shadow-sm h-100">
+            <div class="card-body">
+                <h1 class="h3 mb-2">@Model.LinkshellName</h1>
+                <p class="text-muted">@Model.Details</p>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Status</dt>
+                    <dd class="col-sm-8">@(Model.Status ?? "Active")</dd>
+                    <dt class="col-sm-4">Members</dt>
+                    <dd class="col-sm-8">@Model.AppUserLinkshells.Count</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-8">
+        <div class="card card-shell shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Roster</h2>
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-outline-light btn-sm" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
+                        <a class="btn btn-outline-danger btn-sm" asp-action="Delete" asp-route-id="@Model.Id">Delete</a>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Character</th>
+                                <th>Rank</th>
+                                <th>Status</th>
+                                <th class="text-end">DKP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var member in Model.AppUserLinkshells.OrderBy(m => m.CharacterName))
+                        {
+                            <tr>
+                                <td>@(member.CharacterName ?? member.AppUser?.UserName ?? "Unknown")</td>
+                                <td>@(member.Rank ?? "Member")</td>
+                                <td>@(member.Status ?? "Active")</td>
+                                <td class="text-end">@((member.LinkshellDkp ?? 0).ToString("0.##"))</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

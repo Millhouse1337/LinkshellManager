@@ -1,0 +1,68 @@
+﻿@model LinkshellManager.ViewModels.ManageTeamViewModel
+
+@{
+    ViewData["Title"] = "Player Search";
+}
+
+<div class="container">
+    <div class="pagetitle d-flex justify-content-center py-4">
+        <h2>Player Search</h2>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-body pt-3">
+                        <form asp-action="SearchPlayers" method="post">
+                            <div class="input-group mb-3">
+                                <input type="text" class="form-control" placeholder="Search players" name="searchTerm" value="@Model.SearchTerm">
+                                <button class="btn btn-primary" type="submit">Search</button>
+                            </div>
+                        </form>
+
+                        <h3>Search Results</h3>
+                        @if (Model.Players != null && Model.Players.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Player Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var player in Model.Players)
+                                    {
+                                        <tr>
+                                            <td>@player.CharacterName</td>
+                                            <td>
+                                                <form asp-action="SendInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="userId" value="@player.Id" />
+                                                    <div class="input-group mb-3">
+                                                        <select class="form-select" name="linkshellId">
+                                                            @foreach (var linkshell in Model.Linkshells)
+                                                            {
+                                                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                                                            }
+                                                        </select>
+                                                        <button type="submit" class="btn btn-success">Send Invite</button>
+                                                    </div>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No players found.</p>
+                        }
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

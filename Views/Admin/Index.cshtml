@@ -1,0 +1,60 @@
+﻿@using LinkshellManager.ViewModels
+@model AdminViewModel
+@{
+    // This is the setup for the Admin Dashboard view
+}
+
+<div class="container-fluid">
+    <h1 class="display-4 text-center mt-3 mb-5">Admin Dashboard</h1>
+
+    @section Scripts {
+        <script>
+            // This script handles the click event of the export button
+            document.getElementById('exportButton').addEventListener('click', function () {
+                var group = document.getElementById('group').value;
+                var dateFrom = document.getElementById('dateFrom').value;
+                var dateTo = document.getElementById('dateTo').value;
+
+                // Call the export function
+                window.location.href = '/Admin/ExportToExcel?group=' + encodeURIComponent(group) + '&startDate=' + encodeURIComponent(dateFrom) + '&endDate=' + encodeURIComponent(dateTo);
+            });
+        </script>
+    }
+
+    <!-- This is the table that displays the user data -->
+    <div class="row">
+        <div class="col-md-12">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light d-none">
+                <div class="collapse navbar-collapse d-flex justify-content-end" id="bs-example-navbar-collapse-1">
+                    <form class="form-inline d-flex">
+                        <input class="form-control mr-sm-2" type="text" />
+                        <button class="btn btn-primary my-2 my-sm-0 m-2" type="submit">
+                            Search
+                        </button>
+                    </form>
+                </div>
+            </nav>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <!-- This loop generates a table row for each user in the model -->
+                    @foreach (var user in Model.Users)
+                    {
+                        <tr>
+                            <td>@user.UserName</td>
+                            <td>
+                                <a class="btn btn-primary" href="@Url.Action("Index", "Dashboard", new { id = user.Id })">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

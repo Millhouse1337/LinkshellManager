@@ -1,0 +1,160 @@
+﻿@model LinkshellManager.ViewModels.ManageTeamViewModel
+
+@{
+    ViewData["Title"] = "Manage Team";
+}
+
+<div class="container">
+    <div class="pagetitle d-flex justify-content-center py-4">
+        <h2>Manage Team</h2>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-body">
+                        <form asp-action="Index" method="get">
+                            <div class="input-group d-flex justify-content-center mt-3 mb-3">
+                                <div class="mb-3">
+                                    <label for="linkshellSelect" class="form-label mb-3">Select Linkshell</label>
+                                    <select id="linkshellSelect" class="form-select" asp-for="SelectedLinkshellId" asp-items="@(new SelectList(Model.Linkshells, "Id", "LinkshellName"))" onchange="this.form.submit()"></select>
+                                </div>
+                            </div>
+                        </form>
+
+                        @if (!string.IsNullOrEmpty(ViewData["Message"] as string))
+                        {
+                            <p>@ViewData["Message"]</p>
+                        }
+                        else
+                        {
+                            <h3>Members</h3>
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Character Name</th>
+                                        <th>Rank</th>
+                                        <th>Status</th>
+                                        <th>DKP</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var member in Model.Members)
+                                    {
+                                        <tr>
+                                            <td>@member.CharacterName</td>
+                                            <td>@member.Rank</td>
+                                            <td>@member.Status</td>
+                                            <td>@member.LinkshellDkp</td>
+                                            <td>
+                                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modifyRankStatusModal" data-id="@member.Id" data-rank="@member.Rank" data-status="@member.Status">Modify Rank/Status</button>
+                                                <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#dkpAuditModal" data-id="@member.Id" data-dkp="@member.LinkshellDkp">DKP Audit</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Modify Rank/Status Modal -->
+<div class="modal fade" id="modifyRankStatusModal" tabindex="-1" aria-labelledby="modifyRankStatusModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="ModifyRankStatus" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modifyRankStatusModalLabel">Modify Rank/Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="modifyRankStatusId" name="Id" />
+                    <div class="mb-3">
+                        <label for="modifyRank" class="form-label">Rank</label>
+                        <input type="text" class="form-control" id="modifyRank" name="Rank" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="modifyStatus" class="form-label">Status</label>
+                        <input type="text" class="form-control" id="modifyStatus" name="Status" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- DKP Audit Modal -->
+<div class="modal fade" id="dkpAuditModal" tabindex="-1" aria-labelledby="dkpAuditModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="DkpAudit" method="post">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dkpAuditModalLabel">DKP Audit</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="dkpAuditId" name="Id" />
+                    <div class="mb-3">
+                        <label for="dkpValue" class="form-label">DKP</label>
+                        <input type="number" class="form-control" id="dkpValue" name="LinkshellDkp" />
+                    </div>
+                    <div class="mb-3">
+                        <label for="dkpReason" class="form-label">Reason</label>
+                        <textarea class="form-control" id="dkpReason" name="Details"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var modifyRankStatusModal = document.getElementById('modifyRankStatusModal');
+            modifyRankStatusModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var id = button.getAttribute('data-id');
+                var rank = button.getAttribute('data-rank');
+                var status = button.getAttribute('data-status');
+
+                var modalIdInput = modifyRankStatusModal.querySelector('#modifyRankStatusId');
+                var modalRankInput = modifyRankStatusModal.querySelector('#modifyRank');
+                var modalStatusInput = modifyRankStatusModal.querySelector('#modifyStatus');
+
+                modalIdInput.value = id;
+                modalRankInput.value = rank;
+                modalStatusInput.value = status;
+            });
+
+            var dkpAuditModal = document.getElementById('dkpAuditModal');
+            dkpAuditModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var id = button.getAttribute('data-id');
+                var dkp = button.getAttribute('data-dkp');
+
+                var modalIdInput = dkpAuditModal.querySelector('#dkpAuditId');
+                var modalDkpInput = dkpAuditModal.querySelector('#dkpValue');
+                var modalReasonInput = dkpAuditModal.querySelector('#dkpReason');
+
+                modalIdInput.value = id;
+                modalDkpInput.value = dkp;
+                modalReasonInput.value = '';
+            });
+        });
+    </script>
+}

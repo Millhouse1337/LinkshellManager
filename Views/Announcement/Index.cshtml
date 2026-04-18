@@ -1,0 +1,25 @@
+﻿@model IEnumerable<LinkshellManager.ViewModels.AnnouncementViewModel>
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Announcements</h2>
+
+    <table class="mt-5 table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var announcement in Model)
+            {
+                <tr>
+                    <td>@announcement.AnnouncementTitle</td>
+                    <td>@announcement.AnnouncementDetails</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="d-flex justify-content-end mt-3">
+        <a asp-action="Create" class="btn btn-primary">Create New Announcement</a>
+    </div>
+</div>

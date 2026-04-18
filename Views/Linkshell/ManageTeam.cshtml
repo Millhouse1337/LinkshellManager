@@ -1,0 +1,144 @@
+﻿@model LinkshellManager.ViewModels.ManageTeamViewModel
+
+@{
+    ViewData["Title"] = "Manage Team";
+}
+
+<div class="container">
+    <div class="pagetitle d-flex justify-content-center py-4">
+        <h2>Manage Team</h2>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-body">
+                        <form asp-action="ManageTeam" method="get">
+                            <div class="input-group mb-3">
+                                <input type="text" class="form-control" placeholder="Search players" name="searchTerm" value="@Model.SearchTerm">
+                                <button class="btn btn-primary" type="submit">Search</button>
+                            </div>
+                        </form>
+
+                        <div class="mb-3">
+                            <label for="linkshellSelect" class="form-label">Select Linkshell</label>
+                            <select id="linkshellSelect" class="form-select" asp-for="SelectedLinkshellId" asp-items="@(new SelectList(Model.Linkshells, "Id", "LinkshellName"))"></select>
+                        </div>
+
+                        <h3>Members</h3>
+                        @if (Model.Members.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Member Name</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var member in Model.Members)
+                                    {
+                                        <tr>
+                                            <td>@member.CharacterName</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No members found.</p>
+                        }
+
+                        <h3>Search Results</h3>
+                        @if (Model.Players.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Player Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var player in Model.Players)
+                                    {
+                                        <tr>
+                                            <td>@player.CharacterName</td>
+                                            <td>
+                                                <form asp-action="SendInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="userId" value="@player.Id" />
+                                                    <input type="hidden" name="linkshellId" value="@Model.SelectedLinkshellId" />
+                                                    <button type="submit" class="btn btn-success">Send Invite</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No players found.</p>
+                        }
+
+                        <h3>Pending Invites</h3>
+                        @if (Model.PendingInvites.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Player Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var invite in Model.PendingInvites)
+                                    {
+                                        <tr>
+                                            <td>@invite.AppUser.CharacterName</td>
+                                            <td>
+                                                <form asp-action="AcceptInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-primary">Accept</button>
+                                                </form>
+                                                <form asp-action="DeclineInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-danger">Decline</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No pending invites.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const linkshellSelect = document.getElementById('linkshellSelect');
+        const linkshellIdInputs = document.querySelectorAll('input[name="linkshellId"]');
+
+        linkshellSelect.addEventListener('change', function () {
+            const selectedLinkshellId = linkshellSelect.value;
+            linkshellIdInputs.forEach(input => {
+                input.value = selectedLinkshellId;
+            });
+        });
+
+        // Initialize the hidden inputs with the selected linkshell ID on page load
+        const selectedLinkshellId = linkshellSelect.value;
+        linkshellIdInputs.forEach(input => {
+            input.value = selectedLinkshellId;
+        });
+    });
+</script>

@@ -1,0 +1,20 @@
+@model Event
+@{
+    ViewData["Title"] = "Delete event";
+}
+
+<div class="row justify-content-center">
+    <div class="col-xl-6">
+        <div class="card card-shell shadow-sm border-danger">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">Delete event</h1>
+                <p>This will remove <strong>@Model.EventName</strong> and any live signup state for it.</p>
+                <form asp-action="DeleteConfirmed" method="post" class="d-flex gap-2">
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button class="btn btn-danger" type="submit">Delete event</button>
+                    <a class="btn btn-outline-light" asp-action="Index">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

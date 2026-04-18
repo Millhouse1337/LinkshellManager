@@ -1,0 +1,92 @@
+﻿@model LinkshellManager.ViewModels.ManageTeamViewModel
+
+@{
+    ViewData["Title"] = "Manage Team";
+}
+
+<div class="container">
+    <div class="pagetitle d-flex justify-content-center py-4">
+        <h2>View Invites</h2>
+    </div>
+
+    <section class="section">
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-body">
+
+                        <h3 class="mt-4">Pending Invites</h3>
+                        @if (Model.PendingInvites != null && Model.PendingInvites.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Player Name</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var invite in Model.PendingInvites)
+                                    {
+                                        <tr>
+                                            <td>@invite.AppUser.CharacterName</td>
+                                            <td>
+                                                <form asp-action="AcceptInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-primary">Accept</button>
+                                                </form>
+                                                <form asp-action="DeclineInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-danger">Decline</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No pending invites.</p>
+                        }
+
+                        <h3 class="pt-5 mt-5">Sent Invites</h3>
+                        @if (Model.SentInvites != null && Model.SentInvites.Any())
+                        {
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Player Name</th>
+                                        <th>Linkshell</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var invite in Model.SentInvites)
+                                    {
+                                        <tr>
+                                            <td>@invite.AppUser.CharacterName</td>
+                                            <td>@invite.Linkshell.LinkshellName</td>
+                                            <td>@invite.Status</td>
+                                            <td>
+                                                <form asp-action="UndoInvite" method="post" class="d-inline">
+                                                    <input type="hidden" name="inviteId" value="@invite.Id" />
+                                                    <button type="submit" class="btn btn-warning">Undo</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        else
+                        {
+                            <p>No sent invites.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

@@ -1,0 +1,41 @@
+﻿@model IEnumerable<LinkshellManager.Models.Notification>
+
+<!-- Notification Nav -->
+<li class="nav-item dropdown">
+
+    <!-- Notification Icon -->
+    <a class="nav-link nav-icon" href="#" data-bs-toggle="dropdown">
+        <i class="bi bi-bell"></i>
+        <span class="badge bg-primary badge-number">@Model.Count()</span>
+    </a>
+    <!-- End Notification Icon -->
+    <!-- Notification Dropdown Items -->
+    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow notifications">
+        <li class="dropdown-header">
+            You have @Model.Count() new notifications
+            <a href="#"><span class="badge rounded-pill bg-primary p-2 ms-2">View all</span></a>
+        </li>
+        <li>
+            <hr class="dropdown-divider">
+        </li>
+        @foreach (var notification in Model)
+        {
+            <li class="notification-item">
+                <i class="bi bi-exclamation-circle text-warning"></i>
+                <div>
+                    <h4>@notification.NotificationDetails</h4>
+                    <p>@notification.CreatedAt.ToString("g")</p>
+                </div>
+            </li>
+            <li>
+                <hr class="dropdown-divider">
+            </li>
+        }
+        <li class="dropdown-footer">
+            <a href="#">Show all notifications</a>
+        </li>
+    </ul>
+    <!-- End Notification Dropdown Items -->
+
+</li>
+<!-- End Notification Nav -->

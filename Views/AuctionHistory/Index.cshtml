@@ -1,0 +1,97 @@
+@model List<LinkshellManagerDiscordApp.ViewModels.AuctionHistoryViewModel>
+
+@{
+    ViewData["Title"] = "Auction History";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-1">Auction history</h1>
+        <p class="text-muted mb-0">Closed auctions archived from your current primary linkshell.</p>
+    </div>
+    <a class="btn btn-outline-light" asp-controller="Auction" asp-action="Index">Back to auctions</a>
+</div>
+
+<div class="card card-shell shadow-sm">
+    <div class="card-body">
+        @if (!Model.Any())
+        {
+            <p class="text-muted mb-0">No auction history is available yet.</p>
+        }
+        else
+        {
+            @foreach (var auctionHistory in Model)
+            {
+                <section class="mb-5">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h2 class="h4 mb-1">@auctionHistory.AuctionHistory.AuctionTitle</h2>
+                            <div class="text-muted small">
+                                Created by @auctionHistory.AuctionHistory.CreatedBy
+                                <span> | Scheduled @(auctionHistory.AuctionHistory.StartTime?.ToString("g") ?? "Unknown") - @(auctionHistory.AuctionHistory.EndTime?.ToString("g") ?? "Unknown")</span>
+                                @if (auctionHistory.AuctionHistory.StartedAt.HasValue)
+                                {
+                                    <span> | Started @auctionHistory.AuctionHistory.StartedAt?.ToString("g")</span>
+                                }
+                                <span> | Closed @(auctionHistory.AuctionHistory.ClosedAt.ToString("g"))</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Type</th>
+                                    <th>Starting bid</th>
+                                    <th>Winning bid</th>
+                                    <th>Winner</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in auctionHistory.AuctionItems)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div>@item.ItemName</div>
+                                            @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                            {
+                                                <div class="text-muted small">@item.Notes</div>
+                                            }
+                                        </td>
+                                        <td>@(item.ItemType ?? "Unspecified")</td>
+                                        <td>@item.StartingBidDkp</td>
+                                        <td>@(item.EndingBidDkp ?? item.CurrentHighestBid ?? 0)</td>
+                                        <td>@(string.IsNullOrWhiteSpace(item.CurrentHighestBidder) ? "No winner" : item.CurrentHighestBidder)</td>
+                                        <td>@(item.Status ?? "Pending")</td>
+                                        <td class="text-end">
+                                            @if ((item.Status ?? "Pending") == "Pending")
+                                            {
+                                                <form asp-action="UpdateItemStatus" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="itemId" value="@item.Id" />
+                                                    <button type="submit" class="btn btn-outline-light btn-sm">Mark received</button>
+                                                </form>
+                                            }
+                                            else if ((item.Status ?? string.Empty).Equals("Received", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                <form asp-action="UndoItemStatus" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="itemId" value="@item.Id" />
+                                                    <button type="submit" class="btn btn-outline-light btn-sm">Undo</button>
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            }
+        }
+    </div>
+</div>

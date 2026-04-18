@@ -1,0 +1,33 @@
+﻿@model LinkshellManager.ViewModels.AnnouncementViewModel
+<div class="container" style="max-width: 90%; margin: 0 auto;">
+    <h2 class="my-5">Create Announcement</h2>
+
+    <div class="my-5">
+        <form asp-action="Create" method="post">
+            <div class="col-12">
+                <label asp-for="LinkshellId" class="form-label">Linkshell</label>
+                <select asp-for="LinkshellId" class="form-control" required>
+                    <option value="@Model.LinkshellId">Select Linkshell</option>
+                    @foreach (var linkshell in Model.Linkshells)
+                    {
+                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                    }
+                </select>
+                <div class="invalid-feedback">Please select a linkshell!</div>
+            </div>
+            <div class="form-group">
+                <label asp-for="AnnouncementTitle"></label>
+                <input asp-for="AnnouncementTitle" class="form-control" />
+                <span asp-validation-for="AnnouncementTitle" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="AnnouncementDetails"></label>
+                <input asp-for="AnnouncementDetails" class="form-control" />
+                <span asp-validation-for="AnnouncementDetails" class="text-danger"></span>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+                <button type="submit" class="btn btn-primary">Create</button>
+            </div>
+        </form>
+    </div>
+</div>

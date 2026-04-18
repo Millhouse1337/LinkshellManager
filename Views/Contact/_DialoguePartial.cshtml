@@ -1,0 +1,19 @@
+﻿@model List<LinkshellManager.Models.AppUserMessage>
+
+@if (Model.Any())
+{
+    <ul class="list-group">
+        @foreach (var message in Model)
+        {
+            <li class="list-group-item">
+                <strong>@message.CharacterNameSender:</strong> @message.MessageDetails
+                <br />
+                <small class="text-muted">@message.TimeStamp?.ToString("g")</small>
+            </li>
+        }
+    </ul>
+}
+else
+{
+    <p>No messages found.</p>
+}
