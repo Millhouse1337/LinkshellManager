@@ -1,79 +1,59 @@
 @{
     ViewData["Title"] = "LinkshellManager";
+    Layout = "_Layout";
 }
 
-<div class="row justify-content-center">
-    <div class="col-12 col-xxl-10">
-        <div class="card card-shell shadow-sm mb-4">
-            <div class="card-body p-4 p-lg-5">
-                <div class="row g-4 align-items-center">
-                    <div class="col-lg-8">
-                        <div class="text-uppercase small text-info mb-2" style="letter-spacing: 0.18em;">LinkshellManager</div>
-                        <h1 class="display-5 fw-semibold mb-3">Website and Discord Activity, on the same app.</h1>
-                        <p class="lead text-muted mb-4">
-                            Use Discord as the single identity for both the website and the embedded Activity, so the
-                            same account and data follow you in both places.
-                        </p>
-                        <div class="d-flex flex-wrap gap-2">
-                            <a class="btn btn-primary btn-lg" asp-controller="Account" asp-action="Login">Continue with Discord</a>
-                            <a class="btn btn-outline-info btn-lg" href="/discord-activity">Open Activity Preview</a>
-                        </div>
+<div class="auth-shell" style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 40px);padding:32px 16px">
+    <div style="max-width:960px;width:100%">
+        <div class="card fade d1" style="padding:40px;margin-bottom:24px">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:32px;align-items:center">
+                <div>
+                    <div style="font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px">LinkshellManager</div>
+                    <h1 style="font-size:36px;font-weight:600;color:var(--fg);line-height:1.15;margin:0 0 14px">Website and Discord Activity, on the same app.</h1>
+                    <p style="font-size:15px;color:var(--fg-3);margin:0 0 24px;max-width:52ch">
+                        Use Discord as the single identity for both the website and the embedded Activity, so the same
+                        account and data follow you in both places.
+                    </p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                        <a class="btn primary" asp-controller="Account" asp-action="Login">Continue with Discord</a>
+                        <a class="btn ghost" href="/discord-activity">Open Activity Preview</a>
                     </div>
-                    <div class="col-lg-4">
-                        <div class="card bg-transparent border-light-subtle">
-                            <div class="card-body">
-                                <div class="text-muted small text-uppercase mb-2">Quick access</div>
-                                <div class="d-grid gap-2">
-                                    <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Dashboard</a>
-                                    <a class="btn btn-outline-light" asp-controller="Linkshell" asp-action="Index">Linkshells</a>
-                                    <a class="btn btn-outline-light" asp-controller="Event" asp-action="Index">Events</a>
-                                    <a class="btn btn-outline-light" asp-controller="Auction" asp-action="Index">Auctions</a>
-                                    <a class="btn btn-outline-light" asp-controller="EventHistory" asp-action="Index">History</a>
-                                    <a class="btn btn-outline-light" asp-controller="DkpHistory" asp-action="Index">DKP History</a>
-                                </div>
-                            </div>
-                        </div>
+                </div>
+                <div class="card" style="padding:16px;background:var(--surface-2)">
+                    <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px">Quick access</div>
+                    <div style="display:grid;gap:6px">
+                        <a class="btn ghost sm" asp-controller="Dashboard" asp-action="Index">Dashboard</a>
+                        <a class="btn ghost sm" asp-controller="Linkshell" asp-action="Index">Linkshells</a>
+                        <a class="btn ghost sm" asp-controller="Event" asp-action="Index">Events</a>
+                        <a class="btn ghost sm" asp-controller="Auction" asp-action="Index">Auctions</a>
+                        <a class="btn ghost sm" asp-controller="EventHistory" asp-action="Index">History</a>
+                        <a class="btn ghost sm" asp-controller="DkpHistory" asp-action="Index">DKP History</a>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row g-4">
-            <div class="col-lg-4">
-                <div class="card card-shell h-100 shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="text-muted small text-uppercase mb-2">Website</div>
-                        <h2 class="h4 mb-3">Full management surface</h2>
-                        <p class="text-muted mb-0">
-                            Sign in with Discord, manage linkshells, create events, review history, and configure your
-                            account profile and settings.
-                        </p>
-                    </div>
-                </div>
+        <div class="grid fade d2" style="grid-template-columns:repeat(3,1fr)">
+            <div class="card" style="padding:20px">
+                <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px">Website</div>
+                <h2 style="font-size:16px;font-weight:600;color:var(--fg);margin:0 0 8px">Full management surface</h2>
+                <p style="font-size:13px;color:var(--fg-3);margin:0">
+                    Sign in with Discord, manage linkshells, create events, review history, and configure your account.
+                </p>
             </div>
-            <div class="col-lg-4">
-                <div class="card card-shell h-100 shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="text-muted small text-uppercase mb-2">Discord Activity</div>
-                        <h2 class="h4 mb-3">Live in-channel controls</h2>
-                        <p class="text-muted mb-0">
-                            Launch inside Discord to handle event queueing, signups, attendance verification, loot, and
-                            linkshell membership without leaving the iframe.
-                        </p>
-                    </div>
-                </div>
+            <div class="card" style="padding:20px">
+                <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px">Discord Activity</div>
+                <h2 style="font-size:16px;font-weight:600;color:var(--fg);margin:0 0 8px">Live in-channel controls</h2>
+                <p style="font-size:13px;color:var(--fg-3);margin:0">
+                    Launch inside Discord for event signups, attendance verification, loot, and membership — all in the iframe.
+                </p>
             </div>
-            <div class="col-lg-4">
-                <div class="card card-shell h-100 shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="text-muted small text-uppercase mb-2">Tunnel testing</div>
-                        <h2 class="h4 mb-3">Browser-friendly root</h2>
-                        <p class="text-muted mb-0">
-                            Normal browser visits now stay on the website home page. Discord embedded launches still
-                            route directly into <code>/discord-activity</code>.
-                        </p>
-                    </div>
-                </div>
+            <div class="card" style="padding:20px">
+                <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px">Tunnel testing</div>
+                <h2 style="font-size:16px;font-weight:600;color:var(--fg);margin:0 0 8px">Browser-friendly root</h2>
+                <p style="font-size:13px;color:var(--fg-3);margin:0">
+                    Normal browser visits stay on the website home page. Discord launches route directly into <code style="font-family:var(--font-mono);font-size:12px;padding:1px 4px;background:var(--surface-2);border-radius:4px">/discord-activity</code>.
+                </p>
             </div>
         </div>
     </div>

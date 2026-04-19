@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LinkshellManager — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Surfaces */
+    --bg:        #0a0a0b;
+    --bg-elev:   #101012;
+    --surface:   #141417;
+    --surface-2: #1a1a1e;
+    --surface-3: #212126;
+
+    /* Borders */
+    --border:     rgba(255, 255, 255, 0.06);
+    --border-2:   rgba(255, 255, 255, 0.10);
+    --border-hot: rgba(255, 255, 255, 0.18);
+
+    /* Text */
+    --fg:       #fafafa;
+    --fg-1:     #e4e4e7;
+    --fg-2:     #a1a1aa;
+    --fg-3:     #71717a;
+    --fg-4:     #52525b;
+
+    /* Accent — single indigo */
+    --accent:       #818cf8;
+    --accent-hover: #a5acf9;
+    --accent-weak:  rgba(129, 140, 248, 0.12);
+
+    /* Semantic */
+    --success:      #4ade80;
+    --success-weak: rgba(74, 222, 128, 0.12);
+    --warning:      #f59e0b;
+    --warning-weak: rgba(245, 158, 11, 0.12);
+    --danger:       #f87171;
+    --danger-weak:  rgba(248, 113, 113, 0.12);
+
+    /* Categorical — for charts, member avatars, sidebar icons (functional color) */
+    --cat-1: #818cf8; /* indigo */
+    --cat-2: #4ade80; /* green */
+    --cat-3: #f59e0b; /* amber */
+    --cat-4: #f472b6; /* pink */
+    --cat-5: #60a5fa; /* blue */
+    --cat-6: #c084fc; /* purple */
+    --cat-7: #fb7185; /* rose */
+
+    /* Rarity — functional, kept restrained */
+    --r-common:   #a1a1aa;
+    --r-uncommon: #4ade80;
+    --r-rare:     #60a5fa;
+    --r-epic:     #c084fc;
+    --r-mythic:   #fb923c;
+
+    /* Type */
+    --font-sans: 'Geist', system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+    /* Shape */
+    --r-sm: 4px;
+    --r-md: 6px;
+    --r-lg: 8px;
+    --r-xl: 12px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--fg-1);
+    background: var(--bg);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; text-decoration: none; }
+  .num { font-family: var(--font-mono); font-feature-settings: "tnum"; }
+
+  /* ---------- Layout ---------- */
+  .app {
+    display: grid;
+    grid-template-columns: 248px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar {
+    position: sticky; top: 0;
+    height: 100vh;
+    border-right: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: flex; flex-direction: column;
+    padding: 12px 0;
+    overflow-y: auto;
+  }
+  .sidebar::-webkit-scrollbar { width: 6px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 14px 12px;
+  }
+  .brand-mark {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
+    display: grid; place-items: center;
+    color: #0a0a0b;
+    font-weight: 700;
+    font-size: 13px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.1) inset;
+  }
+  .brand-name {
+    font-size: 13px; font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+
+  .ls-switch {
+    margin: 4px 10px 12px;
+    padding: 8px 10px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+  }
+  .ls-switch:hover { background: var(--surface-2); }
+  .ls-avatar {
+    width: 24px; height: 24px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+  .ls-meta { min-width: 0; flex: 1; }
+  .ls-name {
+    font-size: 13px; font-weight: 500;
+    color: var(--fg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .ls-role { font-size: 11px; color: var(--fg-3); }
+  .ls-switch-icon svg { width: 12px; height: 12px; color: var(--fg-3); display: block; }
+
+  .nav-section { padding: 2px 8px; }
+  .nav-label {
+    font-size: 10px;
+    color: var(--fg-4);
+    padding: 10px 10px 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px;
+    border-radius: var(--r-sm);
+    color: var(--fg-2);
+    font-size: 13px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.12s, color 0.12s;
+  }
+  .nav-item:hover { background: var(--surface); color: var(--fg-1); }
+  .nav-item.active {
+    background: var(--surface);
+    color: var(--fg);
+  }
+  .nav-item.active::before {
+    content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px;
+    width: 2px; background: var(--accent); border-radius: 2px;
+  }
+  .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; stroke-width: 1.75; }
+  .nav-item .chev {
+    margin-left: auto;
+    color: var(--fg-4);
+    transition: transform 0.12s;
+  }
+  .nav-item.expanded .chev { transform: rotate(90deg); }
+  .nav-item .count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-3);
+  }
+  .nav-item .count.warn { color: var(--warning); }
+  .nav-item .count.accent { color: var(--accent); }
+
+  .nav-sub {
+    margin-left: 24px;
+    padding: 2px 0 4px;
+    border-left: 1px solid var(--border);
+  }
+  .nav-sub-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--fg-3);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .nav-sub-item:hover { color: var(--fg-1); background: var(--surface); }
+  .nav-sub-item::before {
+    content: ""; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--fg-4);
+    flex-shrink: 0;
+  }
+  /* Create/Add action rows get a plus glyph and indigo accent on hover */
+  .nav-sub-item.create { color: var(--fg-2); }
+  .nav-sub-item.create::before {
+    content: "+";
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    background: var(--surface-2);
+    color: var(--fg-2);
+    font-size: 11px;
+    font-weight: 600;
+    display: grid; place-items: center;
+    line-height: 1;
+  }
+  .nav-sub-item.create:hover {
+    color: var(--accent);
+  }
+  .nav-sub-item.create:hover::before {
+    background: var(--accent-weak);
+    color: var(--accent);
+  }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---------- Main ---------- */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+
+  .topbar {
+    height: 48px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10, 10, 11, 0.72);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .crumbs {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px;
+    color: var(--fg-2);
+  }
+  .crumbs .sep { color: var(--fg-4); }
+  .crumbs .here { color: var(--fg); }
+
+  .topbar-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    height: 28px; padding: 0 10px; width: 220px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    color: var(--fg-3);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .search:hover { border-color: var(--border-2); }
+  .search svg { width: 13px; height: 13px; }
+  .search kbd {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--border-2);
+    border-radius: 3px;
+    color: var(--fg-3);
+    background: var(--surface-2);
+  }
+
+  .icon-btn {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    background: transparent;
+    color: var(--fg-2);
+    cursor: pointer;
+    position: relative;
+  }
+  .icon-btn:hover { background: var(--surface); color: var(--fg); }
+  .icon-btn svg { width: 15px; height: 15px; stroke-width: 1.75; }
+  .icon-btn .dot {
+    position: absolute; top: 5px; right: 5px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--bg);
+  }
+
+  .avatar-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 8px 2px 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    cursor: pointer;
+    height: 28px;
+  }
+  .avatar-btn:hover { background: var(--surface-2); }
+  .avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    display: grid; place-items: center;
+    font-size: 10px; font-weight: 700;
+    color: white;
+  }
+  .avatar-name { font-size: 12px; color: var(--fg); font-weight: 500; }
+
+  /* ---------- Content ---------- */
+  .content { padding: 24px 28px 48px; max-width: 1440px; width: 100%; }
+
+  .page-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .page-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--fg);
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+  }
+  .page-sub {
+    font-size: 13px;
+    color: var(--fg-2);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .page-sub .live-dot {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px;
+    color: var(--fg-3);
+  }
+  .page-sub .live-dot::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+  }
+
+  .page-actions { display: flex; gap: 6px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 12px;
+    font-family: var(--font-sans);
+    font-size: 13px; font-weight: 500;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border-2);
+    background: var(--surface);
+    color: var(--fg);
+    cursor: pointer;
+    letter-spacing: -0.005em;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--border-hot); }
+  .btn svg { width: 13px; height: 13px; stroke-width: 1.75; }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0a0a0b;
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--fg-2); }
+  .btn.ghost:hover { background: var(--surface); color: var(--fg); }
+
+  /* ---------- Stat strip ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .stat {
+    padding: 14px 16px;
+    background: var(--bg-elev);
+    display: flex; align-items: flex-start; gap: 12px;
+    position: relative;
+  }
+  .stat-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .stat-icon svg { width: 16px; height: 16px; stroke-width: 2; }
+  .stat-icon.a { background: var(--accent-weak); color: var(--accent); }
+  .stat-icon.b { background: var(--success-weak); color: var(--success); }
+  .stat-icon.c { background: var(--warning-weak); color: var(--warning); }
+  .stat-icon.d { background: rgba(244, 114, 182, 0.12); color: #f472b6; }
+
+  .stat-body { min-width: 0; flex: 1; }
+  .stat-label {
+    font-size: 12px;
+    color: var(--fg-3);
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--fg);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+  .stat-delta {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--fg-3);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .stat-delta .up { color: var(--success); }
+  .stat-delta .down { color: var(--danger); }
+  .stat-delta .warn { color: var(--warning); }
+
+  /* ---------- Grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  @media (max-width: 1200px) {
+    .grid, .grid-2 { grid-template-columns: 1fr; }
+  }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  /* Cards */
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--bg-elev);
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+  .card-link {
+    font-size: 12px;
+    color: var(--fg-3);
+  }
+  .card-link:hover { color: var(--fg); }
+
+  /* Segmented */
+  .segmented {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .segmented button {
+    border: 0; background: transparent;
+    padding: 4px 10px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--fg-3);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .segmented button.active {
+    background: var(--surface-3);
+    color: var(--fg);
+  }
+
+  /* ---------- Event list with monster portraits ---------- */
+  .list { padding: 0; }
+  .row {
+    display: grid;
+    grid-template-columns: 44px 1fr auto auto;
+    gap: 14px;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+    cursor: pointer;
+  }
+  .row:last-child { border-bottom: 0; }
+  .row:hover { background: var(--surface); }
+
+  /* Monster portrait */
+  .mob {
+    width: 44px; height: 44px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background-size: cover;
+    background-position: center;
+    background-color: var(--surface-2);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .mob::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.4));
+  }
+
+  .row-main { min-width: 0; }
+  .row-title {
+    font-size: 13px; font-weight: 500;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .row-meta {
+    font-size: 12px;
+    color: var(--fg-3);
+    margin-top: 3px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .row-meta .dot { color: var(--fg-4); }
+
+  .tag {
+    display: inline-flex; align-items: center;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 3px;
+    background: var(--surface-2);
+    color: var(--fg-2);
+    border: 1px solid var(--border);
+  }
+  .tag.accent { background: var(--accent-weak); color: var(--accent); border-color: transparent; }
+  .tag.success { background: var(--success-weak); color: var(--success); border-color: transparent; }
+  .tag.warning { background: var(--warning-weak); color: var(--warning); border-color: transparent; }
+  .tag.danger { background: var(--danger-weak); color: var(--danger); border-color: transparent; }
+
+  .row-time {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg);
+  }
+  .row-time.warn { color: var(--warning); }
+  .row-time-sub { font-size: 11px; color: var(--fg-3); margin-top: 1px; font-family: var(--font-sans); }
+
+  .row-cta svg { width: 14px; height: 14px; color: var(--fg-3); }
+
+  /* ---------- Recent Activity timeline ---------- */
+  .act-list { padding: 4px 0; }
+  .act-row {
+    display: grid;
+    grid-template-columns: 64px 10px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 7px 16px;
+    font-size: 13px;
+  }
+  .act-when {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-3);
+    text-align: right;
+  }
+  .act-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fg-4);
+    justify-self: center;
+  }
+  .act-dot.live   { background: var(--success); box-shadow: 0 0 8px var(--success); }
+  .act-dot.claim  { background: var(--accent); }
+  .act-dot.kill   { background: var(--cat-5); }
+  .act-text { color: var(--fg-1); min-width: 0; }
+  .act-text strong { color: var(--fg); font-weight: 500; }
+  .act-text .live-tag {
+    font-size: 10px; color: var(--success);
+    padding: 1px 6px;
+    background: var(--success-weak);
+    border-radius: 3px;
+    margin-left: 6px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---------- ToD Tracker ---------- */
+  .tod-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tod-row:last-child { border-bottom: 0; }
+  .tod-mob {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tod-body { min-width: 0; }
+  .tod-top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .tod-name { font-size: 13px; font-weight: 500; color: var(--fg); letter-spacing: -0.01em; }
+  .tod-bar {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .tod-bar-fill {
+    height: 100%;
+    background: var(--fg-3);
+    border-radius: 2px;
+  }
+  .tod-row.open .tod-bar-fill  { background: var(--success); }
+  .tod-row.soon .tod-bar-fill  { background: var(--warning); }
+
+  .tod-status {
+    text-align: right;
+    min-width: 72px;
+  }
+  .tod-status .time {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    color: var(--fg);
+  }
+  .tod-row.open .tod-status .time { color: var(--success); }
+  .tod-row.soon .tod-status .time { color: var(--warning); }
+  .tod-status .label { font-size: 10px; color: var(--fg-3); margin-top: 1px; }
+
+  /* ---------- HNM Claim Donut ---------- */
+  .donut-body {
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+  .donut-wrap {
+    position: relative;
+    width: 160px; height: 160px;
+  }
+  .donut-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    pointer-events: none;
+  }
+  .donut-center-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--fg);
+    letter-spacing: -0.02em;
+  }
+  .donut-center-label {
+    font-size: 10px;
+    color: var(--fg-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 2px;
+  }
+  .legend { display: flex; flex-direction: column; gap: 7px; }
+  .legend-row {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--fg-1);
+  }
+  .legend-swatch { width: 8px; height: 8px; border-radius: 2px; }
+  .legend-val { font-family: var(--font-mono); color: var(--fg-3); font-size: 11px; }
+
+  /* ---------- Loot feed ---------- */
+  .loot-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .loot-row:last-child { border-bottom: 0; }
+  .loot-row:hover { background: var(--surface); }
+  .loot-mob {
+    width: 40px; height: 40px;
+    border-radius: var(--r-sm);
+    background-size: cover; background-position: center;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .loot-main { font-size: 13px; min-width: 0; }
+  .loot-item-name {
+    color: var(--fg); font-weight: 500; letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .loot-rarity-pip {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--r-common);
+    flex-shrink: 0;
+  }
+  .loot-row.uncommon .loot-item-name { color: var(--r-uncommon); }
+  .loot-row.uncommon .loot-rarity-pip { background: var(--r-uncommon); box-shadow: 0 0 4px var(--r-uncommon); }
+  .loot-row.rare     .loot-item-name { color: var(--r-rare); }
+  .loot-row.rare     .loot-rarity-pip { background: var(--r-rare); box-shadow: 0 0 4px var(--r-rare); }
+  .loot-row.epic     .loot-item-name { color: var(--r-epic); }
+  .loot-row.epic     .loot-rarity-pip { background: var(--r-epic); box-shadow: 0 0 4px var(--r-epic); }
+  .loot-row.mythic   .loot-item-name { color: var(--r-mythic); }
+  .loot-row.mythic   .loot-rarity-pip { background: var(--r-mythic); box-shadow: 0 0 5px var(--r-mythic); }
+
+  .loot-sub {
+    font-size: 12px;
+    color: var(--fg-3);
+    margin-top: 2px;
+  }
+  .loot-side { text-align: right; }
+  .loot-cost {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    color: var(--fg);
+  }
+  .loot-when { font-size: 11px; color: var(--fg-3); margin-top: 1px; }
+
+  /* ---------- Linkshell Roster ---------- */
+  .roster-head {
+    display: grid;
+    grid-template-columns: 40px 1fr 100px 90px 80px;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--fg-3);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .roster-row {
+    display: grid;
+    grid-template-columns: 40px 1fr 100px 90px 80px;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .roster-row:last-child { border-bottom: 0; }
+  .roster-row:hover { background: var(--surface); }
+  .roster-av {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 600; color: white;
+  }
+  .roster-av.a { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+  .roster-av.b { background: linear-gradient(135deg, #ec4899, #f43f5e); }
+  .roster-av.c { background: linear-gradient(135deg, #10b981, #06b6d4); }
+  .roster-av.d { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+  .roster-av.e { background: linear-gradient(135deg, #8b5cf6, #3b82f6); }
+  .roster-name { font-size: 13px; color: var(--fg); font-weight: 500; }
+  .roster-name-sub { font-size: 11px; color: var(--fg-3); }
+  .roster-rank { font-size: 12px; color: var(--fg-1); }
+  .roster-dkp { font-family: var(--font-mono); color: var(--fg); font-size: 13px; text-align: right; }
+
+  /* Entry animation */
+  .fade { animation: fade 0.35s ease both; }
+  .d1 { animation-delay: 0.04s; }
+  .d2 { animation-delay: 0.08s; }
+  .d3 { animation-delay: 0.12s; }
+  .d4 { animation-delay: 0.16s; }
+  @keyframes fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">L</div>
+      <div class="brand-name">LinkshellManager</div>
+    </div>
+
+    <div class="ls-switch">
+      <div class="ls-avatar">AP</div>
+      <div class="ls-meta">
+        <div class="ls-name">Aurora Pearl</div>
+        <div class="ls-role">Leader</div>
+      </div>
+      <div class="ls-switch-icon">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6l3 3 3-3M5 10l3-3 3 3" opacity="0.6"/></svg>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Dashboard
+      </div>
+
+      <div class="nav-item expanded">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 5h18v4H3zM3 11h18v4H3zM3 17h18v3H3z"/></svg>
+        Announcements
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="nav-sub">
+        <div class="nav-sub-item">View Announcements</div>
+        <div class="nav-sub-item create">Create Announcement</div>
+      </div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>
+        Rules
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 22V3l7 4 7-4v19"/></svg>
+        Missions
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Endgame</div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+        End Game
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14l-2 7H7z"/><path d="M6 11v9h12v-9"/></svg>
+        Linkshell Auction
+        <span class="count">7</span>
+      </div>
+
+      <div class="nav-item expanded">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+        Event System
+        <span class="count">4</span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12" style="margin-left:6px"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="nav-sub">
+        <div class="nav-sub-item">View Events</div>
+        <div class="nav-sub-item create">Create Event</div>
+        <div class="nav-sub-item">Event History</div>
+      </div>
+
+      <div class="nav-item expanded">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        ToDs
+        <span class="count warn">2</span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12" style="margin-left:6px"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+      <div class="nav-sub">
+        <div class="nav-sub-item">View ToDs</div>
+        <div class="nav-sub-item create">Add ToD</div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Management</div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
+        Manage Team
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+        Manage Items
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
+        Manage Revenue
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2.1-1.6-2-3.4-2.4.9a7 7 0 0 0-2.7-1.5L13.5 2h-3l-.3 2.8a7 7 0 0 0-2.7 1.5l-2.4-.9-2 3.4 2.1 1.6A7 7 0 0 0 5 12c0 .5 0 1 .2 1.6l-2.1 1.6 2 3.4 2.4-.9a7 7 0 0 0 2.7 1.5l.3 2.8h3l.3-2.8a7 7 0 0 0 2.7-1.5l2.4.9 2-3.4-2.1-1.6c.1-.6.2-1.1.2-1.6z"/></svg>
+        Configurations
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" width="12" height="12"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Pages</div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
+        Profile
+      </div>
+      <div class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16v12H4z"/><path d="M4 6l8 7 8-7"/></svg>
+        Messages
+        <span class="count accent">3</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="crumbs">
+        <span>Aurora Pearl</span>
+        <span class="sep">/</span>
+        <span class="here">Dashboard</span>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          Search…
+          <kbd>⌘K</kbd>
+        </div>
+        <div class="icon-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+          <span class="dot"></span>
+        </div>
+        <div class="avatar-btn">
+          <div class="avatar">NV</div>
+          <div class="avatar-name">Nivroz</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Page Head -->
+      <div class="page-head fade d1">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <div class="page-sub">
+            <span>Aurora Pearl · 142 members · 42 online</span>
+            <span class="live-dot">Live</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stat strip — reflects YOUR app metrics -->
+      <div class="stats fade d2">
+        <div class="stat">
+          <div class="stat-icon a">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-label">Total Members</div>
+            <div class="stat-value">142</div>
+            <div class="stat-delta"><span class="up">+6</span> this week</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon b">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14l-2 7H7z"/><path d="M6 11v9h12v-9"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-label">Total Items</div>
+            <div class="stat-value">387</div>
+            <div class="stat-delta"><span class="up">+12</span> from drops</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon c">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-value">18,420</div>
+            <div class="stat-delta"><span class="up">+1,240</span> last raid</div>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon d">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </div>
+          <div class="stat-body">
+            <div class="stat-label">Open Windows</div>
+            <div class="stat-value">2</div>
+            <div class="stat-delta"><span class="warn">Fafnir · Aspid</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main grid -->
+      <div class="grid">
+        <!-- Left column -->
+        <div class="col">
+          <!-- Upcoming events with monster portraits -->
+          <div class="card fade d3">
+            <div class="card-head">
+              <div class="card-title">Upcoming events</div>
+              <a class="card-link" href="#">View all</a>
+            </div>
+            <div class="list">
+              <div class="row">
+                <div class="mob" style="background-image: url('assets/Kirin.jpg');"></div>
+                <div class="row-main">
+                  <div class="row-title">Sky Farm — Kirin <span class="tag">HNM</span></div>
+                  <div class="row-meta">
+                    <span>32 signed / 18 slots</span>
+                    <span class="dot">·</span>
+                    <span>Tycho leading</span>
+                  </div>
+                </div>
+                <div class="row-time">
+                  <span class="num">21:30</span>
+                  <div class="row-time-sub">in 2h 14m</div>
+                </div>
+                <div class="row-cta">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+                </div>
+              </div>
+              <div class="row">
+                <div class="mob" style="background-image: url('assets/Fafnir.jpg');"></div>
+                <div class="row-main">
+                  <div class="row-title">Fafnir — Ground claim <span class="tag warning">Window open</span></div>
+                  <div class="row-meta">
+                    <span>14 on standby</span>
+                    <span class="dot">·</span>
+                    <span>Pops 22:00 – 23:30</span>
+                  </div>
+                </div>
+                <div class="row-time warn">
+                  <span class="num">Now</span>
+                  <div class="row-time-sub" style="color:var(--warning)">closes 1h 22m</div>
+                </div>
+                <div class="row-cta">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+                </div>
+              </div>
+              <div class="row">
+                <div class="mob" style="background-image: url('assets/Tiamat.jpg');"></div>
+                <div class="row-main">
+                  <div class="row-title">Tiamat run <span class="tag">HNM</span></div>
+                  <div class="row-meta">
+                    <span>21 signed</span>
+                    <span class="dot">·</span>
+                    <span>Pop set ready</span>
+                  </div>
+                </div>
+                <div class="row-time">
+                  <span class="num">Fri 21:00</span>
+                  <div class="row-time-sub">in 2 days</div>
+                </div>
+                <div class="row-cta">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+                </div>
+              </div>
+              <div class="row">
+                <div class="mob" style="background-image: url('assets/KingBehemoth.jpg');"></div>
+                <div class="row-main">
+                  <div class="row-title">King Behemoth <span class="tag">HNM</span></div>
+                  <div class="row-meta">
+                    <span>Draft — sign-ups not yet open</span>
+                  </div>
+                </div>
+                <div class="row-time">
+                  <span class="num">Sat 20:00</span>
+                  <div class="row-time-sub">in 3 days</div>
+                </div>
+                <div class="row-cta">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Activity timeline (your existing pattern) -->
+          <div class="card fade d4">
+            <div class="card-head">
+              <div class="card-title">Recent activity</div>
+              <a class="card-link" href="#">Full log</a>
+            </div>
+            <div class="act-list">
+              <div class="act-row">
+                <div class="act-when">0d 7h 43m</div>
+                <div class="act-dot kill"></div>
+                <div class="act-text"><strong>Fafnir</strong> defeated — No Claim</div>
+              </div>
+              <div class="act-row">
+                <div class="act-when">0d 16h 0m</div>
+                <div class="act-dot claim"></div>
+                <div class="act-text"><strong>JoL</strong> claimed by Aurora Pearl</div>
+              </div>
+              <div class="act-row">
+                <div class="act-when">0d 17h 2m</div>
+                <div class="act-dot live"></div>
+                <div class="act-text"><strong>Sky Farm</strong> in progress<span class="live-tag">LIVE</span></div>
+              </div>
+              <div class="act-row">
+                <div class="act-when">1d 2h 15m</div>
+                <div class="act-dot kill"></div>
+                <div class="act-text"><strong>Behemoth</strong> defeated — M.Body → Character1 (10 DKP)</div>
+              </div>
+              <div class="act-row">
+                <div class="act-when">1d 4h 8m</div>
+                <div class="act-dot kill"></div>
+                <div class="act-text"><strong>Adamantoise</strong> defeated — M.Body → Character2 (1 DKP)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Linkshell Roster -->
+          <div class="card fade d4">
+            <div class="card-head">
+              <div class="card-title">Linkshell roster</div>
+              <a class="card-link" href="#">Manage team</a>
+            </div>
+            <div class="roster-head">
+              <div></div>
+              <div>Character</div>
+              <div>Rank</div>
+              <div style="text-align:right">DKP</div>
+              <div>Status</div>
+            </div>
+            <div class="roster-row">
+              <div class="roster-av a">HA</div>
+              <div>
+                <div class="roster-name">Halcyn</div>
+                <div class="roster-name-sub">PLD · 75</div>
+              </div>
+              <div class="roster-rank">Leader</div>
+              <div class="roster-dkp">4,820</div>
+              <div><span class="tag success">Active</span></div>
+            </div>
+            <div class="roster-row">
+              <div class="roster-av b">MI</div>
+              <div>
+                <div class="roster-name">Mirae</div>
+                <div class="roster-name-sub">THF · 75</div>
+              </div>
+              <div class="roster-rank">Officer</div>
+              <div class="roster-dkp">4,110</div>
+              <div><span class="tag success">Active</span></div>
+            </div>
+            <div class="roster-row">
+              <div class="roster-av c">TY</div>
+              <div>
+                <div class="roster-name">Tycho</div>
+                <div class="roster-name-sub">WAR · 75</div>
+              </div>
+              <div class="roster-rank">Member</div>
+              <div class="roster-dkp">3,680</div>
+              <div><span class="tag success">Active</span></div>
+            </div>
+            <div class="roster-row">
+              <div class="roster-av d">VE</div>
+              <div>
+                <div class="roster-name">Venn</div>
+                <div class="roster-name-sub">DRG · 75</div>
+              </div>
+              <div class="roster-rank">Member</div>
+              <div class="roster-dkp">3,240</div>
+              <div><span class="tag warning">Pending</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right column -->
+        <div class="col">
+          <!-- ToD Tracker with monster portraits -->
+          <div class="card fade d3">
+            <div class="card-head">
+              <div class="card-title">ToD tracker</div>
+              <a class="card-link" href="#">All HNMs</a>
+            </div>
+            <div>
+              <div class="tod-row open">
+                <div class="tod-mob" style="background-image: url('assets/Fafnir.jpg');"></div>
+                <div class="tod-body">
+                  <div class="tod-top">
+                    <div class="tod-name">Fafnir</div>
+                    <span class="tag success">Open</span>
+                  </div>
+                  <div class="tod-bar"><div class="tod-bar-fill" style="width:100%"></div></div>
+                </div>
+                <div class="tod-status">
+                  <div class="time num">1h 22m</div>
+                  <div class="label">until close</div>
+                </div>
+              </div>
+              <div class="tod-row open">
+                <div class="tod-mob" style="background-image: url('assets/Aspidochelone.jpg');"></div>
+                <div class="tod-body">
+                  <div class="tod-top">
+                    <div class="tod-name">Aspidochelone</div>
+                    <span class="tag success">Open</span>
+                  </div>
+                  <div class="tod-bar"><div class="tod-bar-fill" style="width:92%"></div></div>
+                </div>
+                <div class="tod-status">
+                  <div class="time num">42m</div>
+                  <div class="label">until close</div>
+                </div>
+              </div>
+              <div class="tod-row soon">
+                <div class="tod-mob" style="background-image: url('assets/Nidhogg.jpg');"></div>
+                <div class="tod-body">
+                  <div class="tod-top">
+                    <div class="tod-name">Nidhogg</div>
+                    <span class="tag warning">Soon</span>
+                  </div>
+                  <div class="tod-bar"><div class="tod-bar-fill" style="width:78%"></div></div>
+                </div>
+                <div class="tod-status">
+                  <div class="time num">2h 14m</div>
+                  <div class="label">until open</div>
+                </div>
+              </div>
+              <div class="tod-row">
+                <div class="tod-mob" style="background-image: url('assets/KingBehemoth.jpg');"></div>
+                <div class="tod-body">
+                  <div class="tod-top">
+                    <div class="tod-name">King Behemoth</div>
+                    <span class="tag">Pending</span>
+                  </div>
+                  <div class="tod-bar"><div class="tod-bar-fill" style="width:42%"></div></div>
+                </div>
+                <div class="tod-status">
+                  <div class="time num">14h 30m</div>
+                  <div class="label">until open</div>
+                </div>
+              </div>
+              <div class="tod-row">
+                <div class="tod-mob" style="background-image: url('assets/Tiamat.jpg');"></div>
+                <div class="tod-body">
+                  <div class="tod-top">
+                    <div class="tod-name">Tiamat</div>
+                    <span class="tag">Pending</span>
+                  </div>
+                  <div class="tod-bar"><div class="tod-bar-fill" style="width:18%"></div></div>
+                </div>
+                <div class="tod-status">
+                  <div class="time num">2d 4h</div>
+                  <div class="label">until open</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- HNM Claim Distribution donut -->
+          <div class="card fade d4">
+            <div class="card-head">
+              <div class="card-title">HNM claims (last 30 days)</div>
+              <div class="segmented">
+                <button>7d</button>
+                <button class="active">30d</button>
+                <button>All</button>
+              </div>
+            </div>
+            <div class="donut-body">
+              <div class="donut-wrap">
+                <svg viewBox="0 0 42 42" width="160" height="160" style="transform: rotate(-90deg);">
+                  <!-- Background track -->
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--surface-2)" stroke-width="3"/>
+                  <!-- Segments: Kirin 28%, Fafnir 22%, Behemoth 18%, Tiamat 14%, Aspid 10%, Nidhogg 8% -->
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#818cf8" stroke-width="3"
+                          stroke-dasharray="28 72" stroke-dashoffset="0"/>
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#4ade80" stroke-width="3"
+                          stroke-dasharray="22 78" stroke-dashoffset="-28"/>
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#f59e0b" stroke-width="3"
+                          stroke-dasharray="18 82" stroke-dashoffset="-50"/>
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#f472b6" stroke-width="3"
+                          stroke-dasharray="14 86" stroke-dashoffset="-68"/>
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#60a5fa" stroke-width="3"
+                          stroke-dasharray="10 90" stroke-dashoffset="-82"/>
+                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="#c084fc" stroke-width="3"
+                          stroke-dasharray="8 92" stroke-dashoffset="-92"/>
+                </svg>
+                <div class="donut-center">
+                  <div class="donut-center-value">50</div>
+                  <div class="donut-center-label">Claims</div>
+                </div>
+              </div>
+              <div class="legend">
+                <div class="legend-row">
+                  <div class="legend-swatch" style="background:#818cf8"></div>
+                  <div>Kirin</div>
+                  <div class="legend-val">14 · 28%</div>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-swatch" style="background:#4ade80"></div>
+                  <div>Fafnir</div>
+                  <div class="legend-val">11 · 22%</div>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-swatch" style="background:#f59e0b"></div>
+                  <div>Behemoth</div>
+                  <div class="legend-val">9 · 18%</div>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-swatch" style="background:#f472b6"></div>
+                  <div>Tiamat</div>
+                  <div class="legend-val">7 · 14%</div>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-swatch" style="background:#60a5fa"></div>
+                  <div>Aspidochelone</div>
+                  <div class="legend-val">5 · 10%</div>
+                </div>
+                <div class="legend-row">
+                  <div class="legend-swatch" style="background:#c084fc"></div>
+                  <div>Nidhogg</div>
+                  <div class="legend-val">4 · 8%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Loot with monster thumbs -->
+          <div class="card fade d4">
+            <div class="card-head">
+              <div class="card-title">News &amp; updates</div>
+              <div class="segmented">
+                <button class="active">All</button>
+                <button>Mine</button>
+              </div>
+            </div>
+            <div class="list">
+              <div class="loot-row mythic">
+                <div class="loot-mob" style="background-image: url('assets/Fafnir.jpg');"></div>
+                <div class="loot-main">
+                  <div class="loot-item-name"><span class="loot-rarity-pip"></span>Ridill</div>
+                  <div class="loot-sub">Fafnir defeated · Tycho (WAR)</div>
+                </div>
+                <div class="loot-side">
+                  <div class="loot-cost">1,200 dkp</div>
+                  <div class="loot-when">2h ago</div>
+                </div>
+              </div>
+              <div class="loot-row epic">
+                <div class="loot-mob" style="background-image: url('assets/Kirin.jpg');"></div>
+                <div class="loot-main">
+                  <div class="loot-item-name"><span class="loot-rarity-pip"></span>Kirin's Osode</div>
+                  <div class="loot-sub">Kirin defeated · Mirae (THF)</div>
+                </div>
+                <div class="loot-side">
+                  <div class="loot-cost">980 dkp</div>
+                  <div class="loot-when">yesterday</div>
+                </div>
+              </div>
+              <div class="loot-row rare">
+                <div class="loot-mob" style="background-image: url('assets/Byakko.jpg');"></div>
+                <div class="loot-main">
+                  <div class="loot-item-name"><span class="loot-rarity-pip"></span>Byakko's Haidate</div>
+                  <div class="loot-sub">Byakko defeated · Venn (DRG)</div>
+                </div>
+                <div class="loot-side">
+                  <div class="loot-cost">640 dkp</div>
+                  <div class="loot-when">Sun</div>
+                </div>
+              </div>
+              <div class="loot-row rare">
+                <div class="loot-mob" style="background-image: url('assets/Genbu.jpg');"></div>
+                <div class="loot-main">
+                  <div class="loot-item-name"><span class="loot-rarity-pip"></span>Genbu's Shield</div>
+                  <div class="loot-sub">Genbu defeated · Halcyn (PLD)</div>
+                </div>
+                <div class="loot-side">
+                  <div class="loot-cost">520 dkp</div>
+                  <div class="loot-when">Sun</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

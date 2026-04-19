@@ -1,298 +1,262 @@
-﻿@using System.Text.Json
+@using System.Text.Json
 @model LinkshellManagerDiscordApp.ViewModels.TodManagerViewModel
 
 @{
+    ViewData["Title"] = "ToD Manager";
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
 }
 
-<main id="main" class="main">
-    <div class="pagetitle text-center mb-4">
-        <h1 class="p-3 mb-0">ToD Manager</h1>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">ToD Manager</h1>
+        <div class="page-sub">
+            <span>@selectedLinkshellName</span>
+            <span>·</span>
+            <span><span class="num">@Model.TodItems.Count</span> entries</span>
+        </div>
     </div>
 
-    <section class="row g-4">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-4 p-xl-5">
-                    <h2 class="text-center mb-4">Submit ToD</h2>
-
-                    @if (!Model.Linkshells.Any())
-                    {
-                        <div class="alert alert-warning mb-0">Join a linkshell before submitting a ToD entry.</div>
-                    }
-                    else
-                    {
-                        <form asp-action="Create" method="post" id="tod-form" novalidate>
-                            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.LinkshellId" class="col-sm-2 col-form-label">Linkshell</label>
-                                        <div class="col-sm-10">
-                                            <select asp-for="Tod.LinkshellId" class="form-select" id="linkshell-select">
-                                                @foreach (var linkshell in Model.Linkshells)
-                                                {
-                                                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.Tod.LinkshellId ? "selected" : null)">@linkshell.LinkshellName</option>
-                                                }
-                                            </select>
-                                            <span asp-validation-for="Tod.LinkshellId" class="text-danger small"></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.MonsterName" class="col-sm-2 col-form-label">Name</label>
-                                        <div class="col-sm-10">
-                                            <select asp-for="Tod.MonsterName" class="form-select" id="monster-select">
-                                                <option value="">Select Monster Name</option>
-                                                @foreach (var monster in Model.MonsterOptions)
-                                                {
-                                                    <option value="@monster" selected="@(string.Equals(monster, Model.Tod.MonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@monster</option>
-                                                }
-                                            </select>
-                                            <span asp-validation-for="Tod.MonsterName" class="text-danger small"></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.DayNumber" class="col-sm-2 col-form-label">Day Number</label>
-                                        <div class="col-sm-10">
-                                            <input asp-for="Tod.DayNumber" class="form-control" type="number" min="0" inputmode="numeric" />
-                                            <span asp-validation-for="Tod.DayNumber" class="text-danger small"></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.Claim" class="col-sm-2 col-form-label">Claim</label>
-                                        <div class="col-sm-10">
-                                            <select asp-for="Tod.Claim" class="form-select" id="claim-select">
-                                                <option value="true" selected="@(Model.Tod.Claim ? "selected" : null)">Yes</option>
-                                                <option value="false" selected="@(!Model.Tod.Claim ? "selected" : null)">No</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.Time" class="col-sm-2 col-form-label">ToD</label>
-                                        <div class="col-sm-10">
-                                            <input asp-for="Tod.Time" type="datetime-local" class="form-control" step="1" id="tod-time" value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
-                                            <span asp-validation-for="Tod.Time" class="text-danger small"></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.Cooldown" class="col-sm-2 col-form-label">Cooldown</label>
-                                        <div class="col-sm-10">
-                                            <select asp-for="Tod.Cooldown" class="form-select" id="cooldown-select">
-                                                @foreach (var cooldown in Model.CooldownOptions)
-                                                {
-                                                    <option value="@cooldown" selected="@(string.Equals(cooldown, Model.Tod.Cooldown, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@cooldown</option>
-                                                }
-                                            </select>
-                                            <span asp-validation-for="Tod.Cooldown" class="text-danger small"></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.RepopTime" class="col-sm-2 col-form-label">Repop Time</label>
-                                        <div class="col-sm-10">
-                                            <input asp-for="Tod.RepopTime" type="datetime-local" class="form-control" step="1" id="repop-time" value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="row align-items-center g-2">
-                                        <label asp-for="Tod.Interval" class="col-sm-2 col-form-label">Interval</label>
-                                        <div class="col-sm-10">
-                                            <select asp-for="Tod.Interval" class="form-select" id="interval-select">
-                                                @foreach (var interval in Model.IntervalOptions)
-                                                {
-                                                    <option value="@interval" selected="@(string.Equals(interval, Model.Tod.Interval, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@interval</option>
-                                                }
-                                            </select>
-                                            <span asp-validation-for="Tod.Interval" class="text-danger small"></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <input asp-for="NoLoot" type="hidden" id="no-loot" />
-
-                            <div id="loot-section" class="mt-5 @(Model.Tod.Claim && !Model.NoLoot ? string.Empty : "d-none")">
-                                <h3 class="text-center mb-4">Loot Details</h3>
-                                <div id="loot-rows" class="d-grid gap-3">
-                                    @for (var index = 0; index < Model.TodLootDetails.Count; index++)
-                                    {
-                                        var lootDetail = Model.TodLootDetails[index];
-                                        <div class="loot-detail-row border rounded-3 p-3 bg-light-subtle">
-                                            <div class="row g-3 align-items-center">
-                                                <div class="col-12 col-xl-4">
-                                                    <label class="form-label">Item Name</label>
-                                                    <input type="text" class="form-control" data-field="ItemName" name="TodLootDetails[@index].ItemName" value="@lootDetail.ItemName" />
-                                                </div>
-                                                <div class="col-12 col-xl-4">
-                                                    <label class="form-label">Item Winner</label>
-                                                    <select class="form-select" data-field="ItemWinner" name="TodLootDetails[@index].ItemWinner">
-                                                        <option value="">Select Item Winner</option>
-                                                        @foreach (var characterName in Model.CharacterNames)
-                                                        {
-                                                            <option value="@characterName" selected="@(string.Equals(characterName, lootDetail.ItemWinner, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@characterName</option>
-                                                        }
-                                                    </select>
-                                                </div>
-                                                <div class="col-12 col-xl-4">
-                                                    <label class="form-label">DKP Spent</label>
-                                                    <input type="number" class="form-control" data-field="WinningDkpSpent" name="TodLootDetails[@index].WinningDkpSpent" min="1" value="@lootDetail.WinningDkpSpent" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-
-                            <div id="loot-controls" class="d-flex flex-wrap justify-content-between gap-2 mt-4 @(Model.Tod.Claim ? string.Empty : "d-none")">
-                                <div class="d-flex flex-wrap gap-2">
-                                    <button type="button" class="btn btn-primary" id="add-loot-row">Add Loot</button>
-                                    <button type="button" class="btn btn-danger" id="remove-loot-row">Remove Loot</button>
-                                    <button type="button" class="btn btn-warning" id="no-loot-button">No Loot</button>
-                                </div>
-                                <button type="submit" class="btn btn-success px-4">Submit</button>
-                            </div>
-
-                            <div class="d-flex justify-content-end mt-4 @(Model.Tod.Claim ? "d-none" : string.Empty)" id="submit-only-row">
-                                <button type="submit" class="btn btn-success px-4">Submit</button>
-                            </div>
-                        </form>
-                    }
-                </div>
-            </div>
+    @if (Model.Linkshells.Any())
+    {
+        <div class="page-actions">
+            <select id="linkshell-filter" class="form-select">
+                @foreach (var linkshell in Model.Linkshells)
+                {
+                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId ? "selected" : null)">@linkshell.LinkshellName</option>
+                }
+            </select>
         </div>
+    }
+</div>
 
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-4 p-xl-5">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+@if (!Model.Linkshells.Any())
+{
+    <div class="card fade d2">
+        <div class="empty">Join a linkshell before submitting a ToD entry.</div>
+    </div>
+}
+else
+{
+    <div class="grid-2 fade d2" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); margin-top: 0;">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Submit ToD</div>
+            </div>
+            <div class="card-body">
+                <form asp-action="Create" method="post" id="tod-form" novalidate>
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="display:@(ViewData.ModelState.IsValid ? "none" : "block"); margin-bottom:14px;"></div>
+
+                    <div class="form-grid">
+                        <label asp-for="Tod.LinkshellId" class="form-grid-label">Linkshell</label>
                         <div>
-                            <h2 class="mb-1">View ToD</h2>
-                            <p class="text-muted mb-0">Showing submitted ToDs for @selectedLinkshellName.</p>
+                            <select asp-for="Tod.LinkshellId" class="form-select" id="linkshell-select">
+                                @foreach (var linkshell in Model.Linkshells)
+                                {
+                                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.Tod.LinkshellId ? "selected" : null)">@linkshell.LinkshellName</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Tod.LinkshellId" class="field-error"></span>
                         </div>
-                        @if (Model.Linkshells.Any())
-                        {
-                            <div>
-                                <label for="linkshell-filter" class="form-label small text-uppercase text-muted mb-1">Linkshell</label>
-                                <select id="linkshell-filter" class="form-select">
-                                    @foreach (var linkshell in Model.Linkshells)
-                                    {
-                                        <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId ? "selected" : null)">@linkshell.LinkshellName</option>
-                                    }
-                                </select>
-                            </div>
-                        }
+
+                        <label asp-for="Tod.MonsterName" class="form-grid-label">Monster</label>
+                        <div>
+                            <select asp-for="Tod.MonsterName" class="form-select" id="monster-select">
+                                <option value="">Select monster name</option>
+                                @foreach (var monster in Model.MonsterOptions)
+                                {
+                                    <option value="@monster" selected="@(string.Equals(monster, Model.Tod.MonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@monster</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Tod.MonsterName" class="field-error"></span>
+                        </div>
+
+                        <label asp-for="Tod.DayNumber" class="form-grid-label">Day #</label>
+                        <div>
+                            <input asp-for="Tod.DayNumber" class="form-control" type="number" min="0" inputmode="numeric" />
+                            <span asp-validation-for="Tod.DayNumber" class="field-error"></span>
+                        </div>
+
+                        <label asp-for="Tod.Claim" class="form-grid-label">Claim</label>
+                        <div>
+                            <select asp-for="Tod.Claim" class="form-select" id="claim-select">
+                                <option value="true" selected="@(Model.Tod.Claim ? "selected" : null)">Yes</option>
+                                <option value="false" selected="@(!Model.Tod.Claim ? "selected" : null)">No</option>
+                            </select>
+                        </div>
+
+                        <label asp-for="Tod.Time" class="form-grid-label">ToD</label>
+                        <div>
+                            <input asp-for="Tod.Time" type="datetime-local" class="form-control" step="1" id="tod-time" value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
+                            <span asp-validation-for="Tod.Time" class="field-error"></span>
+                        </div>
+
+                        <label asp-for="Tod.Cooldown" class="form-grid-label">Cooldown</label>
+                        <div>
+                            <select asp-for="Tod.Cooldown" class="form-select" id="cooldown-select">
+                                @foreach (var cooldown in Model.CooldownOptions)
+                                {
+                                    <option value="@cooldown" selected="@(string.Equals(cooldown, Model.Tod.Cooldown, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@cooldown</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Tod.Cooldown" class="field-error"></span>
+                        </div>
+
+                        <label asp-for="Tod.RepopTime" class="form-grid-label">Repop time</label>
+                        <div>
+                            <input asp-for="Tod.RepopTime" type="datetime-local" class="form-control" step="1" id="repop-time" value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />
+                        </div>
+
+                        <label asp-for="Tod.Interval" class="form-grid-label">Interval</label>
+                        <div>
+                            <select asp-for="Tod.Interval" class="form-select" id="interval-select">
+                                @foreach (var interval in Model.IntervalOptions)
+                                {
+                                    <option value="@interval" selected="@(string.Equals(interval, Model.Tod.Interval, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@interval</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Tod.Interval" class="field-error"></span>
+                        </div>
                     </div>
 
-                    <div class="table-responsive">
-                        <table class="table align-middle">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Day #</th>
-                                    <th>ToD</th>
-                                    <th>Cooldown</th>
-                                    <th>Repop Time</th>
-                                    <th>Interval</th>
-                                    <th>Countdown</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @if (Model.TodItems.Any())
-                                {
-                                    @foreach (var item in Model.TodItems)
-                                    {
-                                        <tr>
-                                            <td>@item.MonsterName</td>
-                                            <td>@(item.DayNumber?.ToString() ?? "-")</td>
-                                            <td>@item.TodDisplay</td>
-                                            <td>@item.Cooldown</td>
-                                            <td>@item.RepopTimeDisplay</td>
-                                            <td>@item.Interval</td>
-                                            <td>
-                                                @if (item.RepopTimeUtc.HasValue)
+                    <input asp-for="NoLoot" type="hidden" id="no-loot" />
+
+                    <div id="loot-section" class="@(Model.Tod.Claim && !Model.NoLoot ? "" : "d-none")" style="margin-top:20px">
+                        <div class="card-title" style="margin-bottom:10px">Loot details</div>
+                        <div id="loot-rows" style="display:grid;gap:10px">
+                            @for (var index = 0; index < Model.TodLootDetails.Count; index++)
+                            {
+                                var lootDetail = Model.TodLootDetails[index];
+                                <div class="loot-detail-row" style="padding:12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface)">
+                                    <div class="field-row" style="margin-bottom:0">
+                                        <div class="field">
+                                            <label class="field-label">Item name</label>
+                                            <input type="text" class="form-control" data-field="ItemName" name="TodLootDetails[@index].ItemName" value="@lootDetail.ItemName" />
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label">Item winner</label>
+                                            <select class="form-select" data-field="ItemWinner" name="TodLootDetails[@index].ItemWinner">
+                                                <option value="">Select winner</option>
+                                                @foreach (var characterName in Model.CharacterNames)
                                                 {
-                                                    <span class="countdown-timer fw-semibold" data-end-utc="@item.RepopTimeUtc.Value.ToString("O")">-</span>
+                                                    <option value="@characterName" selected="@(string.Equals(characterName, lootDetail.ItemWinner, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@characterName</option>
                                                 }
-                                                else
-                                                {
-                                                    <span>-</span>
-                                                }
-                                            </td>
-                                            <td>
-                                                <div class="d-flex flex-wrap gap-2">
-                                                    @if (item.LootCount > 0)
-                                                    {
-                                                        <button type="button" class="btn btn-outline-primary btn-sm view-loot-btn" data-id="@item.Id">View Loot</button>
-                                                    }
-                                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm('Delete this ToD entry?');">
-                                                        @Html.AntiForgeryToken()
-                                                        <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
-                                }
-                                else
-                                {
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted py-4">No ToD entries found for this linkshell yet.</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+                                            </select>
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label">DKP spent</label>
+                                            <input type="number" class="form-control" data-field="WinningDkpSpent" name="TodLootDetails[@index].WinningDkpSpent" min="1" value="@lootDetail.WinningDkpSpent" />
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
                     </div>
-                </div>
+
+                    <div id="loot-controls" class="@(Model.Tod.Claim ? "" : "d-none")" style="display:flex;justify-content:space-between;gap:8px;margin-top:16px;flex-wrap:wrap">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            <button type="button" class="btn" id="add-loot-row">+ Add loot</button>
+                            <button type="button" class="btn ghost" id="remove-loot-row">Remove</button>
+                            <button type="button" class="btn ghost" id="no-loot-button">No loot</button>
+                        </div>
+                        <button type="submit" class="btn primary">Submit ToD</button>
+                    </div>
+
+                    <div id="submit-only-row" class="@(Model.Tod.Claim ? "d-none" : "")" style="display:flex;justify-content:flex-end;margin-top:16px">
+                        <button type="submit" class="btn primary">Submit ToD</button>
+                    </div>
+                </form>
             </div>
         </div>
-    </section>
 
-    <div class="modal fade" id="viewLootModal" tabindex="-1" aria-labelledby="viewLootModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="viewLootModalLabel">Loot Details</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-responsive">
-                        <table class="table align-middle mb-0">
-                            <thead>
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Submitted ToDs</div>
+                <span class="card-link">@selectedLinkshellName</span>
+            </div>
+            @if (Model.TodItems.Any())
+            {
+                <div style="overflow-x:auto">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Day</th>
+                                <th>ToD</th>
+                                <th>Cooldown</th>
+                                <th>Repop</th>
+                                <th>Interval</th>
+                                <th>Countdown</th>
+                                <th style="text-align:right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.TodItems)
+                            {
                                 <tr>
-                                    <th>Item Name</th>
-                                    <th>Item Winner</th>
-                                    <th>DKP Spent</th>
+                                    <td><span style="color:var(--fg);font-weight:500">@item.MonsterName</span></td>
+                                    <td class="num">@(item.DayNumber?.ToString() ?? "—")</td>
+                                    <td class="num">@item.TodDisplay</td>
+                                    <td>@item.Cooldown</td>
+                                    <td class="num">@item.RepopTimeDisplay</td>
+                                    <td>@item.Interval</td>
+                                    <td>
+                                        @if (item.RepopTimeUtc.HasValue)
+                                        {
+                                            <span class="countdown-timer num" data-end-utc="@item.RepopTimeUtc.Value.ToString("O")" style="color:var(--fg)">—</span>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </td>
+                                    <td style="text-align:right">
+                                        <div style="display:inline-flex;gap:6px">
+                                            @if (item.LootCount > 0)
+                                            {
+                                                <button type="button" class="btn sm view-loot-btn" data-id="@item.Id">Loot</button>
+                                            }
+                                            <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this ToD entry?');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn sm ghost" style="color:var(--danger)">Delete</button>
+                                            </form>
+                                        </div>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody id="loot-details-table-body"></tbody>
-                        </table>
-                    </div>
+                            }
+                        </tbody>
+                    </table>
                 </div>
+            }
+            else
+            {
+                <div class="empty">No ToD entries found for this linkshell yet.</div>
+            }
+        </div>
+    </div>
+}
+
+<div class="modal fade" id="viewLootModal" tabindex="-1" aria-labelledby="viewLootModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewLootModalLabel">Loot details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <table class="themed">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Winner</th>
+                            <th style="text-align:right">DKP spent</th>
+                        </tr>
+                    </thead>
+                    <tbody id="loot-details-table-body"></tbody>
+                </table>
             </div>
         </div>
     </div>
-</main>
+</div>
 
 @section Scripts {
     <script>
@@ -336,10 +300,7 @@
             }
 
             function applyMonsterDefaults() {
-                if (!monsterSelect.value) {
-                    return;
-                }
-
+                if (!monsterSelect.value) return;
                 if (longWindowMonsters.has(monsterSelect.value)) {
                     cooldownSelect.value = '72 Hour';
                     intervalSelect.value = '1 Hour';
@@ -350,23 +311,15 @@
             }
 
             function updateRepopTime() {
-                if (!todTimeInput.value) {
-                    repopTimeInput.value = '';
-                    return;
-                }
-
+                if (!todTimeInput.value) { repopTimeInput.value = ''; return; }
                 const todTime = new Date(todTimeInput.value);
-                if (Number.isNaN(todTime.getTime())) {
-                    repopTimeInput.value = '';
-                    return;
-                }
-
+                if (Number.isNaN(todTime.getTime())) { repopTimeInput.value = ''; return; }
                 const repopTime = new Date(todTime.getTime() + (getCooldownHours() * 60 * 60 * 1000));
                 repopTimeInput.value = toDateTimeLocalValue(repopTime);
             }
 
             function buildWinnerOptions(selectedValue = '') {
-                const options = ['<option value="">Select Item Winner</option>'];
+                const options = ['<option value="">Select winner</option>'];
                 characterNames.forEach(name => {
                     const selected = name === selectedValue ? ' selected' : '';
                     options.push(`<option value="${escapeHtml(name)}"${selected}>${escapeHtml(name)}</option>`);
@@ -376,19 +329,20 @@
 
             function createLootRow(itemName = '', itemWinner = '', winningDkpSpent = '') {
                 const wrapper = document.createElement('div');
-                wrapper.className = 'loot-detail-row border rounded-3 p-3 bg-light-subtle';
+                wrapper.className = 'loot-detail-row';
+                wrapper.style.cssText = 'padding:12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface)';
                 wrapper.innerHTML = `
-                    <div class="row g-3 align-items-center">
-                        <div class="col-12 col-xl-4">
-                            <label class="form-label">Item Name</label>
+                    <div class="field-row" style="margin-bottom:0">
+                        <div class="field">
+                            <label class="field-label">Item name</label>
                             <input type="text" class="form-control" data-field="ItemName" value="${escapeHtml(itemName)}" />
                         </div>
-                        <div class="col-12 col-xl-4">
-                            <label class="form-label">Item Winner</label>
+                        <div class="field">
+                            <label class="field-label">Item winner</label>
                             <select class="form-select" data-field="ItemWinner">${buildWinnerOptions(itemWinner)}</select>
                         </div>
-                        <div class="col-12 col-xl-4">
-                            <label class="form-label">DKP Spent</label>
+                        <div class="field">
+                            <label class="field-label">DKP spent</label>
                             <input type="number" class="form-control" data-field="WinningDkpSpent" min="1" value="${escapeHtml(winningDkpSpent)}" />
                         </div>
                     </div>`;
@@ -407,32 +361,22 @@
                 if (!lootRows.querySelector('.loot-detail-row')) {
                     lootRows.appendChild(createLootRow());
                 }
-
                 reindexLootRows();
             }
 
-            function resetLootRows() {
-                lootRows.innerHTML = '';
-                ensureLootRow();
-            }
+            function resetLootRows() { lootRows.innerHTML = ''; ensureLootRow(); }
 
             function toggleLootUi() {
                 const claimIsYes = claimSelect.value === 'true';
                 lootControls.classList.toggle('d-none', !claimIsYes);
                 submitOnlyRow.classList.toggle('d-none', claimIsYes);
-
                 if (!claimIsYes) {
                     noLootInput.value = 'false';
                     lootSection.classList.add('d-none');
                     resetLootRows();
                     return;
                 }
-
-                if (noLootInput.value === 'true') {
-                    lootSection.classList.add('d-none');
-                    return;
-                }
-
+                if (noLootInput.value === 'true') { lootSection.classList.add('d-none'); return; }
                 ensureLootRow();
                 lootSection.classList.remove('d-none');
             }
@@ -451,21 +395,13 @@
                 countdownElements.forEach(element => {
                     const endUtc = element.dataset.endUtc;
                     const endTime = Date.parse(endUtc);
-                    if (Number.isNaN(endTime)) {
-                        element.textContent = '-';
-                        return;
-                    }
-
+                    if (Number.isNaN(endTime)) { element.textContent = '—'; return; }
                     const remaining = endTime - now;
                     element.textContent = remaining <= 0 ? 'Ready' : formatCountdown(remaining);
                 });
             }
 
-            monsterSelect?.addEventListener('change', () => {
-                applyMonsterDefaults();
-                updateRepopTime();
-            });
-
+            monsterSelect?.addEventListener('change', () => { applyMonsterDefaults(); updateRepopTime(); });
             todTimeInput?.addEventListener('change', updateRepopTime);
             cooldownSelect?.addEventListener('change', updateRepopTime);
             claimSelect?.addEventListener('change', toggleLootUi);
@@ -479,14 +415,10 @@
 
             removeLootRowButton?.addEventListener('click', () => {
                 const rows = lootRows.querySelectorAll('.loot-detail-row');
-                if (rows.length > 1) {
-                    rows[rows.length - 1].remove();
-                } else if (rows.length === 1) {
-                    rows[0].querySelectorAll('input, select').forEach(input => {
-                        input.value = '';
-                    });
+                if (rows.length > 1) rows[rows.length - 1].remove();
+                else if (rows.length === 1) {
+                    rows[0].querySelectorAll('input, select').forEach(input => { input.value = ''; });
                 }
-
                 reindexLootRows();
             });
 
@@ -505,31 +437,23 @@
             document.querySelectorAll('.view-loot-btn').forEach(button => {
                 button.addEventListener('click', async () => {
                     const todId = button.getAttribute('data-id');
-                    if (!todId) {
-                        return;
-                    }
-
+                    if (!todId) return;
                     const response = await fetch(`/Tod/GetLootDetails/${todId}`);
-                    if (!response.ok) {
-                        return;
-                    }
-
+                    if (!response.ok) return;
                     const lootDetails = await response.json();
                     lootDetailsTableBody.innerHTML = '';
-
                     if (!lootDetails.length) {
-                        lootDetailsTableBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No loot details found.</td></tr>';
+                        lootDetailsTableBody.innerHTML = '<tr><td colspan="3" class="empty">No loot details found.</td></tr>';
                     } else {
                         lootDetails.forEach(detail => {
                             const row = document.createElement('tr');
                             row.innerHTML = `
                                 <td>${escapeHtml(detail.itemName ?? '')}</td>
                                 <td>${escapeHtml(detail.itemWinner ?? '')}</td>
-                                <td>${escapeHtml(detail.winningDkpSpent ?? '')}</td>`;
+                                <td class="num" style="text-align:right">${escapeHtml(detail.winningDkpSpent ?? '')}</td>`;
                             lootDetailsTableBody.appendChild(row);
                         });
                     }
-
                     const modal = new bootstrap.Modal(document.getElementById('viewLootModal'));
                     modal.show();
                 });

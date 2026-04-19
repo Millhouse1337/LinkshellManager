@@ -45,6 +45,53 @@ export class ActivityHomeComponent {
   protected readonly activity = inject(DiscordActivityService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
+  protected readonly activeTab = signal<'dashboard' | 'linkshell' | 'events' | 'tods' | 'auctions' | 'dkp' | 'other'>('dashboard');
+
+  protected setActiveTab(tab: 'dashboard' | 'linkshell' | 'events' | 'tods' | 'auctions' | 'dkp' | 'other'): void {
+    this.activeTab.set(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  protected initials(value: string | null | undefined): string {
+    const name = (value ?? '').trim();
+    if (!name) return '??';
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  protected appUserRoleLabel(): string {
+    const linkshells = this.activity.overview()?.linkshells ?? [];
+    if (linkshells.length === 0) return 'Member';
+    const primaryId = this.activity.overview()?.appUser?.primaryLinkshellId;
+    const primary = linkshells.find(l => l.id === primaryId) ?? linkshells[0];
+    const rank = (primary?.rank ?? 'Member').toString();
+    return rank.charAt(0).toUpperCase() + rank.slice(1).toLowerCase();
+  }
+
+  protected primaryLinkshellName(): string {
+    return this.primaryLinkshell()?.name || this.activity.overview()?.appUser?.primaryLinkshellName || 'No linkshell';
+  }
+
+  protected primaryMemberCount(): number {
+    return this.primaryLinkshell()?.memberCount ?? 0;
+  }
+
+  protected openEventsCount(): number {
+    return this.liveEvents().length + this.queuedEvents().length;
+  }
+
+  protected openTodCount(): number {
+    return (this.activity.overview()?.recentTods ?? []).filter(tod => {
+      const repop = tod.repopTime ? new Date(tod.repopTime).getTime() : 0;
+      return repop > 0 && repop <= Date.now();
+    }).length;
+  }
+
+  protected liveAuctionCount(): number {
+    const auctions = (this.activity.overview() as any)?.auctions ?? [];
+    return auctions.filter((a: any) => a?.status === 'Live' || a?.status === 'live').length;
+  }
   protected readonly lootDrafts: Record<number, ActivityLootInput> = {};
   protected readonly quickJoinDrafts: Record<number, ActivityQuickJoinInput> = {};
   protected readonly todMonsterOptions = [...ActivityHomeComponent.todMonsterOptions];

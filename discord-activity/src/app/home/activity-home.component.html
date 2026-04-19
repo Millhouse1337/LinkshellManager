@@ -1,863 +1,756 @@
 <main class="activity-shell">
-  <section class="hero">
-    <div class="hero__copy">
-      <p class="eyebrow">Discord Activity</p>
-      <h1>{{ isMemberMode() ? 'Linkshell party view' : 'Linkshell command deck' }}</h1>
-      <p class="lede">
-        @if (isMemberMode()) {
-          A Discord-first party surface for joining runs, tracking the current roster, and staying synced with the same website-backed event model.
-        } @else {
-          A Discord-first control surface for live event signup, attendance, loot, and archive flow,
-          backed by the same ASP.NET MVC and PostgreSQL event model as the website.
-        }
-      </p>
-
-      <div class="hero__meta">
-        <div class="identity-chip">
-          <span class="identity-chip__label">Operator</span>
-          <strong>{{ appDisplayName() }}</strong>
-        </div>
-
-        <div class="identity-chip">
-          <span class="identity-chip__label">Primary linkshell</span>
-          <strong>{{ primaryLinkshell()?.name || activity.overview()?.appUser?.primaryLinkshellName || 'Not selected' }}</strong>
-        </div>
-
-        <div class="identity-chip">
-          <span class="identity-chip__label">Status</span>
-          <strong>{{ activity.status() }}</strong>
-        </div>
-      </div>
+  <!-- ===== Identity bar ===== -->
+  <div class="identity">
+    <div class="identity-left">
+      <span class="identity-ls">{{ primaryLinkshellName() }}</span>
+      @if (primaryMemberCount() > 0) {
+        <span class="identity-badge">{{ primaryMemberCount() }} members</span>
+      }
     </div>
+    <div class="identity-right">
+      <span class="identity-role">{{ appUserRoleLabel() }}</span>
+      <span class="identity-user">{{ appDisplayName() }}</span>
+      <div class="identity-av">{{ initials(appDisplayName()) }}</div>
+    </div>
+  </div>
 
-    <aside class="status-card">
-      <span class="status-card__label">Runtime</span>
-      <strong class="status-card__value">{{ activity.phase() }}</strong>
-      <p>
-        @if (activity.isStandalonePreview()) {
-          Standalone preview using the current website session.
-        } @else if (activity.isReady()) {
-          Discord client authenticated and activity data resolved.
-        } @else if (activity.error()) {
-          {{ activity.error() }}
-        } @else {
-          Waiting on the Discord embedded client.
-        }
-      </p>
+  <!-- ===== Tab bar ===== -->
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab" [class.active]="activeTab() === 'dashboard'" (click)="setActiveTab('dashboard')">Dashboard</button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'linkshell'" (click)="setActiveTab('linkshell')">Linkshell</button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'events'" (click)="setActiveTab('events')">
+      Events
+      @if (openEventsCount() > 0) {
+        <span class="tab-badge default">{{ openEventsCount() }}</span>
+      }
+    </button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'tods'" (click)="setActiveTab('tods')">
+      ToDs
+      @if (openTodCount() > 0) {
+        <span class="tab-badge warn">{{ openTodCount() }}</span>
+      }
+    </button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'auctions'" (click)="setActiveTab('auctions')">
+      Auctions
+      @if (liveAuctionCount() > 0) {
+        <span class="tab-badge live">{{ liveAuctionCount() }}</span>
+      }
+    </button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'dkp'" (click)="setActiveTab('dkp')">DKP</button>
+    <button type="button" class="tab" [class.active]="activeTab() === 'other'" (click)="setActiveTab('other')">Other</button>
+  </div>
 
-      <div class="button-cluster">
-        <button
-          type="button"
-          class="action-button action-button--secondary"
-          [disabled]="activity.busyRefresh()"
-          (click)="activity.refreshActivityData()">
-          {{ activity.busyRefresh() ? 'Refreshing...' : 'Refresh activity' }}
-        </button>
-      </div>
-
-      <dl class="runtime-list">
-        <div>
-          <dt>Guild</dt>
-          <dd>{{ activity.context()?.guildId || 'Unavailable' }}</dd>
-        </div>
-        <div>
-          <dt>Channel</dt>
-          <dd>{{ activity.context()?.channelId || 'Unavailable' }}</dd>
-        </div>
-        <div>
-          <dt>Participants</dt>
-          <dd>{{ activity.participants().length }}</dd>
-        </div>
-        <div>
-          <dt>Live events</dt>
-          <dd>{{ activity.overview()?.stats?.liveEventCount ?? 0 }}</dd>
-        </div>
-        <div>
-          <dt>Time zone</dt>
-          <dd>{{ activity.viewerTimeZone() }}</dd>
-        </div>
-      </dl>
-    </aside>
-  </section>
-
-  <section class="summary-strip">
-    <article class="summary-stat">
-      <span>Linkshells</span>
-      <strong>{{ activity.overview()?.stats?.linkshellCount ?? 0 }}</strong>
-    </article>
-    <article class="summary-stat">
-      <span>Queued</span>
-      <strong>{{ queuedEvents().length }}</strong>
-    </article>
-    <article class="summary-stat">
-      <span>Live</span>
-      <strong>{{ liveEvents().length }}</strong>
-    </article>
-    <article class="summary-stat">
-      <span>History</span>
-      <strong>{{ activity.overview()?.stats?.completedEventCount ?? 0 }}</strong>
-    </article>
-  </section>
-
-  @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-    <section class="dashboard dashboard--snapshot">
-      <div class="dashboard__main">
-        <article class="panel panel--wide" aria-labelledby="dashboard-heading">
-          <div class="panel__header">
-            <div>
-              <p class="eyebrow eyebrow--small">Dashboard</p>
-              <h2 id="dashboard-heading">Linkshell overview</h2>
-            </div>
-            <div class="button-cluster">
-              @if (dashboardLinkshells().length > 1) {
-                <select
-                  [ngModel]="selectedDashboardLinkshellId()"
-                  (ngModelChange)="onDashboardLinkshellChange($event)"
-                  name="dashboardLinkshellId">
-                  @for (linkshell of dashboardLinkshells(); track linkshell.id) {
-                    <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
-                  }
-                </select>
-              }
-              <span class="pill">{{ dashboardLinkshell.memberCount }} members</span>
-            </div>
-          </div>
-
-          <div class="summary-strip summary-strip--nested">
-            <article class="summary-stat">
-              <span>Selected linkshell</span>
-              <strong>{{ dashboardLinkshell.name }}</strong>
-            </article>
-            <article class="summary-stat">
-              <span>Members</span>
-              <strong>{{ selectedDashboardMembers().length }}</strong>
-            </article>
-            <article class="summary-stat">
-              <span>Upcoming</span>
-              <strong>{{ selectedDashboardEvents().length }}</strong>
-            </article>
-            <article class="summary-stat">
-              <span>Completed</span>
-              <strong>{{ selectedDashboardHistory().length }}</strong>
-            </article>
-          </div>
-
-          <div class="event-card__grid">
-            <section class="event-section">
-              <div class="event-section__header">
-                <h3>Upcoming events</h3>
-                <span class="pill">{{ selectedDashboardEvents().length }}</span>
-              </div>
-
-              @if (selectedDashboardEvents().length > 0) {
-                <ul class="compact-list compact-list--dense">
-                  @for (event of selectedDashboardEvents(); track event.id) {
-                    <li>
-                      <div>
-                        <strong>{{ event.name || 'Untitled event' }}</strong>
-                        <span>{{ event.type || 'Event' }}</span>
-                        @if (activity.formatDateTime(event.startTime); as startsAt) {
-                          <span>Starts {{ startsAt }}</span>
-                        }
-                      </div>
-                      <div class="compact-list__meta">
-                        <span>{{ event.participantCount }} participants</span>
-                        @if (event.commencementStartTime) {
-                          <span>Live</span>
-                        } @else {
-                          <span>Queued</span>
-                        }
-                      </div>
-                    </li>
-                  }
-                </ul>
-              } @else {
-                <p class="notice">No active events for this linkshell.</p>
-              }
-            </section>
-
-            <section class="event-section">
-              <div class="event-section__header">
-                <h3>Members</h3>
-                <span class="pill">{{ selectedDashboardMembers().length }}</span>
-              </div>
-
-              @if (selectedDashboardMembers().length > 0) {
-                <ul class="compact-list compact-list--dense">
-                  @for (member of selectedDashboardMembers(); track member.id) {
-                    <li>
-                      <div>
-                        <strong>{{ member.characterName }}</strong>
-                        <span>{{ member.rank || 'Member' }} | {{ member.status || 'Active' }}</span>
-                      </div>
-                      <div class="compact-list__meta">
-                        <span>{{ member.linkshellDkp ?? 0 }} DKP</span>
-                      </div>
-                    </li>
-                  }
-                </ul>
-              } @else {
-                <p class="notice">No members found for this linkshell yet.</p>
-              }
-            </section>
-          </div>
-
-          <section class="event-section dashboard-history">
-            <div class="event-section__header">
-              <h3>Recent event history</h3>
-              <span class="pill">{{ selectedDashboardHistory().length }}</span>
-            </div>
-
-            @if (selectedDashboardHistory().length > 0) {
-              <ul class="compact-list compact-list--dense">
-                @for (history of selectedDashboardHistory(); track history.id) {
-                  <li>
-                    <div>
-                      <strong>{{ history.name || 'Completed event' }}</strong>
-                      <span>{{ history.location || 'Unknown location' }}</span>
-                      @if (activity.formatDateTime(history.endTime); as endedAt) {
-                        <span>Ended {{ endedAt }}</span>
-                      }
-                    </div>
-                    <div class="compact-list__meta">
-                      <span>{{ history.participantCount }} participants</span>
-                      <button
-                        type="button"
-                        class="action-button action-button--secondary"
-                        (click)="activity.loadHistoryDetail(history.id)">
-                        Details
-                      </button>
-                    </div>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <p class="notice">No completed events yet.</p>
-            }
-          </section>
-        </article>
-      </div>
-    </section>
-  }
-
-  @if (activity.overview(); as overview) {
-    <section class="flash flash--guide">
-      <p>
-        @if (!overview.appUser.characterName || !overview.appUser.timeZone) {
-          Finish your profile setup first, then create or join a linkshell to unlock the full command deck.
-        } @else if (overview.linkshells.length === 0) {
-          Your profile is ready. Create your first linkshell or accept an invite to unlock event controls.
-        } @else if (isMemberMode()) {
-          Member mode is active. Use the queue to sign up for runs and the sidebar to monitor your linkshell, invites, and connected party.
-        } @else if (overview.activeEvents.length === 0 && overview.recentHistory.length === 0) {
-          Your linkshell is ready. Create a queued event to start testing signup, live ops, and history flow.
-        } @else {
-          The command deck is fully online. Use the sidebar to manage membership and the main lane to run events.
-        }
-      </p>
-    </section>
-  }
-
+  <!-- ===== Flash messages (global) ===== -->
   @if (activity.actionError()) {
-    <section class="flash flash--error">
-      <p>{{ activity.actionError() }}</p>
-    </section>
+    <section class="flash flash--error"><p>{{ activity.actionError() }}</p></section>
   }
-
   @if (activity.actionMessage()) {
-    <section class="flash flash--success">
-      <p>{{ activity.actionMessage() }}</p>
-    </section>
+    <section class="flash flash--success"><p>{{ activity.actionMessage() }}</p></section>
   }
 
-  <section class="dashboard">
-    <div class="dashboard__main">
-      <article class="panel panel--wide" aria-labelledby="tod-heading">
-        <div class="panel__header">
+  <!-- ============================================================ -->
+  <!-- ===== DASHBOARD TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'dashboard') {
+    <div class="panel-tab fade">
+      <!-- Operator profile + Next steps + Roster (from sidebar) -->
+      <app-activity-sidebar-panel [visibleSections]="['profile', 'next-steps', 'roster']" />
+
+      <!-- Linkshell overview stat strip -->
+      @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+        <div class="section-head">
           <div>
-            <p class="eyebrow eyebrow--small">ToD</p>
-            <h2 id="tod-heading">ToD tracker</h2>
+            <div class="section-label">Dashboard</div>
+            <div class="section-title">Linkshell overview</div>
           </div>
-          <div class="panel__metrics">
-            <span class="pill">{{ selectedDashboardTods().length }} tracked</span>
-            @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-              <span class="pill">{{ dashboardLinkshell.name }}</span>
+          <span class="tag default num">{{ dashboardLinkshell.memberCount }} members</span>
+        </div>
+
+        <div class="stat-strip">
+          <div class="stat-cell">
+            <div class="stat-cell-label">Linkshell</div>
+            <div class="stat-cell-value stat-cell-value--text">{{ dashboardLinkshell.name }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Members</div>
+            <div class="stat-cell-value">{{ selectedDashboardMembers().length }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming</div>
+            <div class="stat-cell-value">{{ selectedDashboardEvents().length }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Completed</div>
+            <div class="stat-cell-value">{{ selectedDashboardHistory().length }}</div>
+          </div>
+        </div>
+      }
+
+      <!-- Announcements (stub) -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Announcements</div>
+          <button type="button" class="btn sm" disabled>+ Create</button>
+        </div>
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">No announcements yet. Create one to share news with your linkshell.</div>
+        </div>
+      </div>
+
+      <!-- Rules (stub) -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Rules</div>
+          <button type="button" class="btn sm" disabled>+ Create</button>
+        </div>
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">No rules defined yet. Add rules so members know what's expected.</div>
+        </div>
+      </div>
+
+      <!-- ToD tracker (dashboard view) -->
+      @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">ToD tracker</div>
+            <div class="card-head-right">
+              <span class="tag default num">{{ selectedDashboardTods().length }} tracked</span>
+              <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+            </div>
+          </div>
+
+          @if (selectedDashboardTods().length > 0) {
+            @for (tod of selectedDashboardTods(); track tod.id) {
+              <div class="tod-entry" [class.window-open]="isTodReady(tod)">
+                <div class="tod-head">
+                  <div class="tod-head-left">
+                    <div class="tod-mob-name">{{ tod.monsterName }}</div>
+                    <span class="tag" [class.success]="tod.claim" [class.default]="!tod.claim">{{ tod.claim ? 'Claimed' : 'Unclaimed' }}</span>
+                  </div>
+                  <div class="tod-countdown num" [class.open]="isTodReady(tod)">{{ todCountdownLabel(tod) }}</div>
+                </div>
+                <div class="tod-sub">Day {{ tod.dayNumber ?? '-' }} &middot; {{ tod.cooldown || '22 Hour' }} &middot; {{ tod.interval || '10 Min' }} &middot; {{ tod.lootCount }} loot</div>
+                <div class="tod-meta-grid">
+                  <div class="tod-meta-cell">
+                    <div class="tod-meta-label">Countdown</div>
+                    <div class="tod-meta-value" [class.success-text]="isTodReady(tod)">{{ todCountdownLabel(tod) }}</div>
+                  </div>
+                  <div class="tod-meta-cell">
+                    <div class="tod-meta-label">Time of death</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTime(tod.time) || 'Unavailable' }}</div>
+                  </div>
+                  <div class="tod-meta-cell">
+                    <div class="tod-meta-label">Repop starts</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTime(tod.repopTime) || 'Unavailable' }}</div>
+                  </div>
+                </div>
+                <div class="tod-entry-actions">
+                  <button
+                    type="button"
+                    class="btn sm danger-outline"
+                    [disabled]="activity.busyTodId() === tod.id"
+                    (click)="deleteTod(tod.id, tod.monsterName)">
+                    {{ activity.busyTodId() === tod.id ? 'Deleting...' : 'Delete' }}
+                  </button>
+                </div>
+              </div>
             }
-          </div>
-        </div>
-
-        @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
-          <div class="tod-layout">
-            <section class="tod-panel tod-panel--form">
-              <div class="event-section__header">
-                <div>
-                  <h3>Log ToD</h3>
-                  <p class="muted">Use separate date and time fields for reliable entry inside the embedded client.</p>
-                </div>
-                <span class="pill">{{ selectedDashboardLinkshell()?.name || 'No linkshell' }}</span>
-              </div>
-
-              <form class="create-form create-form--compact" (ngSubmit)="submitTod()">
-                <div class="tod-field-grid">
-                  <label>
-                    <span>Monster</span>
-                    <select
-                      [(ngModel)]="todDraft.monsterName"
-                      (ngModelChange)="onTodMonsterChange($event)"
-                      name="todMonsterName">
-                      @for (monster of todMonsterOptions; track monster) {
-                        <option [value]="monster">{{ monster }}</option>
-                      }
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>Day number</span>
-                    <input [(ngModel)]="todDraft.dayNumber" name="todDayNumber" type="number" min="0" />
-                  </label>
-
-                  <label>
-                    <span>Claim</span>
-                    <select
-                      [(ngModel)]="todDraft.claim"
-                      (ngModelChange)="onTodClaimChange($event)"
-                      name="todClaim">
-                      <option [ngValue]="true">Yes</option>
-                      <option [ngValue]="false">No</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>Cooldown</span>
-                    <select
-                      [(ngModel)]="todDraft.cooldown"
-                      (ngModelChange)="updateTodRepopTime()"
-                      name="todCooldown">
-                      @for (cooldown of todCooldownOptions; track cooldown) {
-                        <option [value]="cooldown">{{ cooldown }}</option>
-                      }
-                    </select>
-                  </label>
-
-                  <label>
-                    <span>Interval</span>
-                    <select [(ngModel)]="todDraft.interval" name="todInterval">
-                      @for (interval of todIntervalOptions; track interval) {
-                        <option [value]="interval">{{ interval }}</option>
-                      }
-                    </select>
-                  </label>
-                </div>
-
-                <div class="tod-time-grid">
-                  <label>
-                    <span>ToD date</span>
-                    <input
-                      [(ngModel)]="todDateValue"
-                      (ngModelChange)="onTodDateChange($event)"
-                      name="todDate"
-                      type="date"
-                      required />
-                  </label>
-
-                  <label>
-                    <span>ToD time</span>
-                    <input
-                      [(ngModel)]="todTimeValue"
-                      (ngModelChange)="onTodTimeChange($event)"
-                      name="todTime"
-                      type="time"
-                      step="60"
-                      required />
-                  </label>
-
-                  <button type="button" class="action-button action-button--secondary tod-now-button" (click)="setTodToNow()">
-                    Now
-                  </button>
-                </div>
-
-                <div class="tod-repop-grid">
-                  <label>
-                    <span>Repop date</span>
-                    <input [ngModel]="todRepopDateValue" name="todRepopDate" type="date" readonly />
-                  </label>
-
-                  <label>
-                    <span>Repop time</span>
-                    <input [ngModel]="todRepopTimeValue" name="todRepopTime" type="time" step="60" readonly />
-                  </label>
-                </div>
-
-                <div class="tod-repop-card">
-                  <span class="tod-repop-card__label">Calculated repop</span>
-                  <strong>{{ todRepopSummary() }}</strong>
-                  <p class="muted">{{ todDraft.cooldown || '22 Hour' }} cooldown with {{ todDraft.interval || '10 Min' }} tracking interval.</p>
-                </div>
-
-                @if (todDraft.claim) {
-                  <label class="tod-toggle">
-                    <input
-                      type="checkbox"
-                      [(ngModel)]="todDraft.noLoot"
-                      (ngModelChange)="onTodNoLootChange($event)"
-                      name="todNoLoot" />
-                    <span>No loot for this claim</span>
-                  </label>
-
-                  @if (!todDraft.noLoot) {
-                    <div class="invite-section">
-                      <div class="panel__header">
-                        <h3>Optional loot</h3>
-                        <button type="button" class="action-button action-button--secondary" (click)="addTodLootRow()">Add loot row</button>
-                      </div>
-
-                      @for (loot of todDraft.lootDetails; track $index) {
-                        <div class="loot-row-editor">
-                          <input
-                            [(ngModel)]="loot.itemName"
-                            [name]="'todLootItem' + $index"
-                            placeholder="Item name" />
-                          <select [(ngModel)]="loot.itemWinner" [name]="'todLootWinner' + $index">
-                            <option value="">Select winner</option>
-                            @for (characterName of todCharacterNames(); track characterName) {
-                              <option [value]="characterName">{{ characterName }}</option>
-                            }
-                          </select>
-                          <input
-                            [(ngModel)]="loot.winningDkpSpent"
-                            [name]="'todLootDkp' + $index"
-                            type="number"
-                            min="0"
-                            placeholder="DKP spent" />
-                          <button
-                            type="button"
-                            class="action-button action-button--secondary"
-                            (click)="removeTodLootRow($index)">
-                            Remove
-                          </button>
-                        </div>
-                      }
-                    </div>
-                  }
-                }
-
-                <div class="create-form__actions">
-                  <button type="submit" class="action-button" [disabled]="activity.busyTodSave()">
-                    {{ activity.busyTodSave() ? 'Saving...' : 'Log ToD' }}
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            <section class="tod-panel tod-panel--list">
-              <div class="event-section__header">
-                <div>
-                  <h3>Tracked windows</h3>
-                  <p class="muted">Recent ToD calls for the selected linkshell.</p>
-                </div>
-                <span class="pill">{{ selectedDashboardTods().length }}</span>
-              </div>
-
-              @if (selectedDashboardTods().length > 0) {
-                <div class="tod-list">
-                  @for (tod of selectedDashboardTods(); track tod.id) {
-                    <article class="tod-window-card" [class.tod-window-card--ready]="isTodReady(tod)">
-                      <div class="tod-window-main">
-                        <div>
-                          <div class="tod-window-title">
-                            <strong>{{ tod.monsterName }}</strong>
-                            <span class="pill">{{ tod.claim ? 'Claimed' : 'Unclaimed' }}</span>
-                          </div>
-                          <div class="tod-window-stats">
-                            <span>Day {{ tod.dayNumber ?? '-' }}</span>
-                            <span>{{ tod.cooldown || '22 Hour' }}</span>
-                            <span>{{ tod.interval || '10 Min' }}</span>
-                          </div>
-                        </div>
-
-                        <div class="tod-window-actions">
-                          <span>{{ tod.lootCount }} loot</span>
-                          <button
-                            type="button"
-                            class="action-button action-button--secondary"
-                            [disabled]="activity.busyTodId() === tod.id"
-                            (click)="deleteTod(tod.id, tod.monsterName)">
-                            {{ activity.busyTodId() === tod.id ? 'Deleting...' : 'Delete' }}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div class="tod-window-times">
-                        <div>
-                          <span class="muted">Countdown</span>
-                          <span class="countdown-pill" [class.countdown-pill--ready]="isTodReady(tod)">
-                            {{ todCountdownLabel(tod) }}
-                          </span>
-                        </div>
-
-                        <div>
-                          <span class="muted">Time of death</span>
-                          <strong>{{ activity.formatDateTime(tod.time) || 'Unavailable' }}</strong>
-                        </div>
-
-                        <div>
-                          <span class="muted">Repop starts</span>
-                          <strong>{{ activity.formatDateTime(tod.repopTime) || 'Unavailable' }}</strong>
-                        </div>
-                      </div>
-
-                      @if (tod.lootDetails.length > 0) {
-                        <div class="tod-window-loot">
-                          <h4>Loot</h4>
-                          <ul class="compact-list compact-list--dense">
-                            @for (loot of tod.lootDetails; track loot.id) {
-                              <li>
-                                <div>
-                                  <strong>{{ loot.itemName || 'Loot item' }}</strong>
-                                  <span>{{ loot.itemWinner || 'Unassigned' }}</span>
-                                </div>
-                                <div class="compact-list__meta">
-                                  <span>{{ loot.winningDkpSpent ?? 0 }} DKP</span>
-                                </div>
-                              </li>
-                            }
-                          </ul>
-                        </div>
-                      }
-                    </article>
-                  }
-                </div>
-              } @else {
-                <div class="tod-empty-state">
-                  <strong>No tracked windows yet</strong>
-                  <p class="notice">Log the first Time of Death on the left and the tracker will start showing countdowns here.</p>
-                </div>
-              }
-            </section>
-          </div>
-        } @else {
-          <p class="notice">Create or join a linkshell before using the ToD tracker.</p>
-        }
-      </article>
-
-      <article class="panel panel--wide" aria-labelledby="live-ops-heading">
-        <div class="panel__header">
-          <div>
-            <p class="eyebrow eyebrow--small">{{ isMemberMode() ? 'Live run' : 'Live Operations' }}</p>
-            <h2 id="live-ops-heading">{{ isMemberMode() ? 'Current field activity' : 'Current field activity' }}</h2>
-          </div>
-          <div class="panel__metrics">
-            <span class="pill">{{ liveEvents().length }} live</span>
-            <span class="pill">{{ queuedEvents().length }} queued</span>
-          </div>
-        </div>
-
-        @if (liveEvents().length > 0) {
-          @if (isMemberMode()) {
-            <p class="notice">
-              Member mode keeps the live board focused on participation and status. Officer-only verification, loot, and archive controls stay hidden.
-            </p>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No tracked windows yet. Open the ToDs tab to log one.</div>
+            </div>
           }
-          <div class="live-stack">
-            @for (event of liveEvents(); track event.id) {
-              <article class="event-card event-card--live">
-                <div class="event-card__hero">
-                  <div>
-                    <div class="event-card__title-row">
-                      <strong>{{ event.name || 'Untitled event' }}</strong>
-                      <span class="status-pill status-pill--live">Live</span>
-                    </div>
-                    <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
-                    @if (activity.formatDateTime(event.commencementStartTime || event.startTime); as liveStart) {
-                      <p>Started {{ liveStart }}</p>
-                    }
-                    </div>
-                    <div class="event-card__meta">
-                      <span>Global timer {{ liveEventTimerLabel(event) }}</span>
-                      <span>{{ event.participantCount }} participants</span>
-                      <span>{{ event.requestedSlots }} requested slots</span>
-                      <span>{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
-                    </div>
-                </div>
+        </div>
+      }
 
-                <ul class="job-tags">
-                  @for (job of event.jobs; track job.id) {
+      <!-- Recent event history -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Recent event history</div>
+            <span class="tag default num">{{ selectedDashboardHistory().length }}</span>
+          </div>
+          @if (selectedDashboardHistory().length > 0) {
+            @for (history of selectedDashboardHistory(); track history.id) {
+              <div class="event-row">
+                <div class="event-row-head">
+                  <div class="event-name">{{ history.name || 'Completed event' }}</div>
+                  <span class="event-participants">{{ history.participantCount }} participants</span>
+                </div>
+                <div class="event-meta">
+                  {{ history.type || 'Event' }} &middot; {{ history.location || 'Unknown location' }}
+                  @if (activity.formatDateTime(history.endTime); as endedAt) {
+                    &middot; Ended {{ endedAt }}
+                  }
+                </div>
+              </div>
+            }
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No completed events yet.</div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- ===== LINKSHELL TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'linkshell') {
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">Management</div>
+          <div class="section-title">Manage Team</div>
+        </div>
+      </div>
+
+      <!-- Invites + team roster from sidebar -->
+      <app-activity-sidebar-panel [visibleSections]="['invites']" />
+
+      <!-- Manage Items stub -->
+      <div class="section-head">
+        <div>
+          <div class="section-label">Inventory</div>
+          <div class="section-title">Manage Items</div>
+        </div>
+        <button type="button" class="btn primary sm" disabled>+ Add Item</button>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Items</div>
+          <span class="tag default num">0</span>
+        </div>
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">No items tracked yet. Add items to manage loot drops and inventory.</div>
+        </div>
+      </div>
+
+      <!-- Manage Revenue stub -->
+      <div class="section-head">
+        <div>
+          <div class="section-label">Finances</div>
+          <div class="section-title">Manage Revenue</div>
+        </div>
+        <button type="button" class="btn primary sm" disabled>+ Add Income</button>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Income</div>
+          <span class="tag default num">0</span>
+        </div>
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">No income entries yet. Track revenue from sales, farming, and other sources.</div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- ===== EVENTS TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'events') {
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">Live Operations</div>
+          <div class="section-title">Current field activity</div>
+        </div>
+        <div class="section-head-right">
+          <span class="tag default">{{ liveEvents().length }} live</span>
+          <span class="tag default">{{ queuedEvents().length }} queued</span>
+        </div>
+      </div>
+
+      @if (liveEvents().length === 0) {
+        <div class="card">
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+            </div>
+            <div class="empty-state-title">No live events running</div>
+            <div class="empty-state-desc">Start a queued event or create a new one below to begin.</div>
+          </div>
+        </div>
+      } @else {
+        @for (event of liveEvents(); track event.id) {
+          <article class="event-card event-card--live">
+            <div class="event-card__hero">
+              <div>
+                <div class="event-card__title-row">
+                  <strong>{{ event.name || 'Untitled event' }}</strong>
+                  <span class="tag success">Live</span>
+                </div>
+                <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
+                @if (activity.formatDateTime(event.commencementStartTime || event.startTime); as liveStart) {
+                  <p>Started {{ liveStart }}</p>
+                }
+              </div>
+              <div class="event-card__meta">
+                <span>Global timer <span class="num">{{ liveEventTimerLabel(event) }}</span></span>
+                <span>{{ event.participantCount }} participants</span>
+                <span>{{ event.requestedSlots }} requested slots</span>
+                <span class="num">{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
+              </div>
+            </div>
+
+            <ul class="job-tags">
+              @for (job of event.jobs; track job.id) {
+                <li>
+                  {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                  <span class="num">{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
+                </li>
+              }
+            </ul>
+
+            <section class="event-section">
+              <div class="event-section__header">
+                <h3>Attendance</h3>
+                <span class="tag default num">{{ event.participants.length }}</span>
+              </div>
+
+              @if (event.participants.length > 0) {
+                <ul class="participant-list">
+                  @for (participant of event.participants; track participant.id) {
                     <li>
-                      {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
-                      <span>{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
+                      <div class="participant-list__copy">
+                        <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
+                        <span>
+                          {{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}
+                          @if (participant.isQuickJoin) { <span> | quick join</span> }
+                        </span>
+                        <div class="live-metrics">
+                          <span class="tag default">Role {{ participant.jobType || 'Unassigned' }}</span>
+                          <span class="tag default num">Timer {{ participantTimerLabel(participant, event) }}</span>
+                          <span class="tag default num">DKP {{ participantCurrentDkp(participant, event) }}</span>
+                          @if (participant.isOnBreak) { <span class="tag warning">On break</span> }
+                        </div>
+                        <div class="progress-track" aria-hidden="true">
+                          <div class="progress-fill" [style.width.%]="participantProgressPercent(participant, event)"></div>
+                        </div>
+                      </div>
+                      <div class="participant-list__actions">
+                        <span class="verification-badge"
+                          [class.verification-badge--break]="participant.isOnBreak"
+                          [class.verification-badge--approved]="!participant.isOnBreak && participant.isVerified === true"
+                          [class.verification-badge--denied]="!participant.isOnBreak && participant.isVerified === false">
+                          {{ attendanceBadgeLabel(participant) }}
+                        </span>
+                        <div class="button-cluster">
+                          @if (isCurrentParticipant(participant, event)) {
+                            <button type="button" class="btn sm" [disabled]="activity.busyEventId() === event.id"
+                              (click)="participant.isOnBreak ? activity.returnFromBreak(event.id) : activity.takeBreak(event.id)">
+                              {{ participant.isOnBreak ? 'Return' : 'Take break' }}
+                            </button>
+                          }
+                          @if (canManageLinkshell(event.linkshellId)) {
+                            @if (participant.isVerified == null) {
+                              <button type="button" class="btn sm" [disabled]="activity.busyEventId() === event.id"
+                                (click)="activity.verifyParticipant(event.id, participant.id, true)">Present</button>
+                              <button type="button" class="btn sm" [disabled]="activity.busyEventId() === event.id"
+                                (click)="activity.verifyParticipant(event.id, participant.id, false)">Absent</button>
+                            } @else {
+                              <button type="button" class="btn sm" [disabled]="activity.busyEventId() === event.id"
+                                (click)="activity.resetParticipantVerification(event.id, participant.id)">Undo</button>
+                            }
+                          }
+                        </div>
+                      </div>
                     </li>
                   }
                 </ul>
-
-                  <div class="event-card__grid">
-                    <section class="event-section">
-                      <div class="event-section__header">
-                        <h3>Attendance board</h3>
-                        <span class="pill">{{ event.participants.length }}</span>
-                      </div>
-
-                      @if (event.participants.length > 0) {
-                        <ul class="participant-list">
-                          @for (participant of event.participants; track participant.id) {
-                            <li>
-                            <div class="participant-list__copy">
-                              <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
-                              <span>
-                                {{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}
-                                @if (participant.isQuickJoin) {
-                                  <span> | quick join</span>
-                                }
-                              </span>
-                                <div class="live-metrics">
-                                  <span class="pill">Role {{ participant.jobType || 'Unassigned' }}</span>
-                                  <span class="pill">Timer {{ participantTimerLabel(participant, event) }}</span>
-                                  <span class="pill">DKP {{ participantCurrentDkp(participant, event) }}</span>
-                                  @if (participant.isOnBreak) {
-                                    <span class="pill">On break</span>
-                                  }
-                                </div>
-                                <div class="progress-track" aria-hidden="true">
-                                  <div
-                                    class="progress-fill"
-                                  [style.width.%]="participantProgressPercent(participant, event)"></div>
-                              </div>
-                              @if (participant.proctor) {
-                                <span>Checked by {{ participant.proctor }}</span>
-                              }
-                            </div>
-
-                              <div class="participant-list__actions">
-                                <span
-                                  class="verification-badge"
-                                  [class.verification-badge--break]="participant.isOnBreak"
-                                  [class.verification-badge--approved]="!participant.isOnBreak && participant.isVerified === true"
-                                  [class.verification-badge--denied]="!participant.isOnBreak && participant.isVerified === false">
-                                  {{ attendanceBadgeLabel(participant) }}
-                                </span>
-
-                                @if (hasPendingReturnVerification(participant)) {
-                                  <span class="pill">Pending return {{ pendingReturnLedgerEntries(participant).length }}</span>
-                                }
-
-                                <div class="button-cluster">
-                                  @if (isCurrentParticipant(participant, event)) {
-                                    <button
-                                      type="button"
-                                      class="action-button action-button--secondary"
-                                      [disabled]="activity.busyEventId() === event.id"
-                                      (click)="participant.isOnBreak ? activity.returnFromBreak(event.id) : activity.takeBreak(event.id)">
-                                      {{ participant.isOnBreak ? 'Return' : 'Take break' }}
-                                    </button>
-                                  }
-                                  @if (canManageLinkshell(event.linkshellId)) {
-                                    @if (participant.isVerified == null) {
-                                      <button
-                                        type="button"
-                                        class="action-button action-button--secondary"
-                                        [disabled]="activity.busyEventId() === event.id"
-                                        (click)="activity.verifyParticipant(event.id, participant.id, true)">
-                                        Present
-                                      </button>
-                                      <button
-                                        type="button"
-                                        class="action-button action-button--secondary"
-                                        [disabled]="activity.busyEventId() === event.id"
-                                        (click)="activity.verifyParticipant(event.id, participant.id, false)">
-                                        Absent
-                                      </button>
-                                    } @else {
-                                      <button
-                                        type="button"
-                                        class="action-button action-button--secondary"
-                                        [disabled]="activity.busyEventId() === event.id"
-                                        (click)="activity.resetParticipantVerification(event.id, participant.id)">
-                                        Undo
-                                      </button>
-                                    }
-                                  }
-                                </div>
-
-                                @if (participant.statusLedger.length > 0) {
-                                  <ul class="status-ledger">
-                                    @for (entry of participant.statusLedger; track entry.id) {
-                                      <li>
-                                        <div>
-                                          <strong>
-                                            @if (entry.actionType === 'BreakStart') {
-                                              Break started
-                                            } @else if (entry.actionType === 'BreakReturn') {
-                                              Returned from break
-                                            } @else {
-                                              {{ entry.actionType }}
-                                            }
-                                          </strong>
-                                          @if (activity.formatDateTime(entry.occurredAt); as entryTime) {
-                                            <span>{{ entryTime }}</span>
-                                          }
-                                          @if (entry.verifiedAt && activity.formatDateTime(entry.verifiedAt); as verifiedAt) {
-                                            <span>Verified by {{ entry.verifiedBy || 'Officer' }} at {{ verifiedAt }}</span>
-                                          } @else if (entry.requiresVerification) {
-                                            <span>Awaiting return verification</span>
-                                          }
-                                        </div>
-                                        @if (entry.actionType === 'BreakReturn' && entry.requiresVerification && !entry.verifiedAt && canManageLinkshell(event.linkshellId)) {
-                                          <button
-                                            type="button"
-                                            class="action-button action-button--secondary"
-                                            [disabled]="activity.busyEventId() === event.id"
-                                            (click)="activity.verifyReturn(event.id, entry.id)">
-                                            Verify return
-                                          </button>
-                                        }
-                                      </li>
-                                    }
-                                  </ul>
-                                }
-                              </div>
-                            </li>
-                          }
-                      </ul>
-                    } @else {
-                      <p class="notice">No participants have signed up yet.</p>
-                    }
-                  </section>
-
-                  <section class="event-section">
-                    <div class="event-section__header">
-                      <h3>Loot board</h3>
-                      <span class="pill">{{ event.loot.length }}</span>
-                    </div>
-
-                      @if (canManageLinkshell(event.linkshellId)) {
-                        <form class="loot-form" (ngSubmit)="submitLoot(event.id)">
-                          <input
-                            [(ngModel)]="getLootDraft(event.id).itemName"
-                            [name]="'lootItem' + event.id"
-                            placeholder="Item name"
-                            required />
-                          <select
-                            [(ngModel)]="getLootDraft(event.id).itemWinner"
-                            [name]="'lootWinner' + event.id">
-                            <option value="">Select event member</option>
-                            @for (participant of event.participants; track participant.id) {
-                              @if (participant.characterName) {
-                                <option [value]="participant.characterName">{{ participant.characterName }}</option>
-                              }
-                            }
-                          </select>
-                          <input
-                            [(ngModel)]="getLootDraft(event.id).winningDkpSpent"
-                            [name]="'lootDkp' + event.id"
-                            type="number"
-                          min="0"
-                          placeholder="DKP spent" />
-                        <button
-                          type="submit"
-                          class="action-button"
-                          [disabled]="activity.busyEventId() === event.id">
-                          Add loot
-                        </button>
-                      </form>
-                    }
-
-                    @if (event.loot.length > 0) {
-                      <ul class="compact-list compact-list--dense">
-                        @for (loot of event.loot; track loot.id) {
-                          <li>
-                            <div>
-                              <strong>{{ loot.itemName || 'Loot item' }}</strong>
-                              <span>{{ loot.itemWinner || 'Unassigned' }}</span>
-                            </div>
-                            <div class="compact-list__meta">
-                              <span>{{ loot.winningDkpSpent ?? 0 }} DKP</span>
-                            </div>
-                          </li>
-                        }
-                      </ul>
-                    } @else {
-                      <p class="notice">No loot entries logged yet.</p>
-                    }
-
-                    @if (canManageLinkshell(event.linkshellId)) {
-                      <div class="event-action-bar">
-                        <div class="event-action-copy">
-                          <strong>Archive event</strong>
-                          <span>Finalize attendance, award DKP, and move this run into history.</span>
-                        </div>
-                        <button
-                          type="button"
-                          class="action-button"
-                          [disabled]="activity.busyEventId() === event.id"
-                          (click)="activity.endEvent(event.id)">
-                          {{ activity.busyEventId() === event.id ? 'Updating...' : 'End event' }}
-                        </button>
-                      </div>
-                      }
-                    </section>
-                  </div>
-
-                  <section class="event-section event-section--late-join">
-                    <div class="event-section__header">
-                      <div>
-                        <h3>Late Join</h3>
-                        <p class="muted">Join the current live event with the same constrained party setup.</p>
-                      </div>
-                      <span class="pill">Live access</span>
-                    </div>
-
-                    @if (!event.currentParticipation) {
-                      <form class="late-join-form" (ngSubmit)="submitQuickJoin(event.id)">
-                        <select
-                          [(ngModel)]="getQuickJoinDraft(event.id).jobType"
-                          [name]="'quickJoinType' + event.id">
-                          <option value="">Select role</option>
-                          @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
-                            <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
-                          }
-                        </select>
-                        <select
-                          [(ngModel)]="getQuickJoinDraft(event.id).jobName"
-                          [name]="'quickJoinJob' + event.id">
-                          <option value="">Select main job</option>
-                          @for (jobOption of mainJobOptions; track jobOption) {
-                            <option [value]="jobOption">{{ jobOption }}</option>
-                          }
-                        </select>
-                        <select
-                          [(ngModel)]="getQuickJoinDraft(event.id).subJobName"
-                          [name]="'quickJoinSubJob' + event.id">
-                          <option value="">Select sub job</option>
-                          @for (jobOption of subJobOptions; track jobOption) {
-                            <option [value]="jobOption">{{ jobOption }}</option>
-                          }
-                        </select>
-                        <button
-                          type="submit"
-                          class="action-button"
-                          [disabled]="activity.busyEventId() === event.id">
-                          {{ activity.busyEventId() === event.id ? 'Updating...' : 'Late join event' }}
-                        </button>
-                      </form>
-                    } @else {
-                      <p class="notice notice--subtle">
-                        You are already attached to this live event as
-                        {{ event.currentParticipation.jobType || 'Unassigned' }} /
-                        {{ event.currentParticipation.jobName || 'Job' }} /
-                        {{ event.currentParticipation.subJobName || 'Sub' }}.
-                      </p>
-                    }
-                  </section>
-                </article>
+              } @else {
+                <p class="notice">No participants have signed up yet.</p>
               }
-            </div>
-        } @else {
-          <p class="notice">No live events are running right now. Start a queued event or create a new one below.</p>
+            </section>
+
+            <section class="event-section">
+              <div class="event-section__header">
+                <h3>Loot</h3>
+                <span class="tag default num">{{ event.loot.length }}</span>
+              </div>
+
+              @if (canManageLinkshell(event.linkshellId)) {
+                <form class="loot-form" (ngSubmit)="submitLoot(event.id)">
+                  <input [(ngModel)]="getLootDraft(event.id).itemName" [name]="'lootItem' + event.id" placeholder="Item name" required />
+                  <select [(ngModel)]="getLootDraft(event.id).itemWinner" [name]="'lootWinner' + event.id">
+                    <option value="">Select event member</option>
+                    @for (participant of event.participants; track participant.id) {
+                      @if (participant.characterName) {
+                        <option [value]="participant.characterName">{{ participant.characterName }}</option>
+                      }
+                    }
+                  </select>
+                  <input [(ngModel)]="getLootDraft(event.id).winningDkpSpent" [name]="'lootDkp' + event.id" type="number" min="0" placeholder="DKP spent" />
+                  <button type="submit" class="btn primary sm" [disabled]="activity.busyEventId() === event.id">Add loot</button>
+                </form>
+              }
+
+              @if (event.loot.length > 0) {
+                <ul class="compact-list compact-list--dense">
+                  @for (loot of event.loot; track loot.id) {
+                    <li>
+                      <div>
+                        <strong>{{ loot.itemName || 'Loot item' }}</strong>
+                        <span>{{ loot.itemWinner || 'Unassigned' }}</span>
+                      </div>
+                      <div class="compact-list__meta"><span class="num">{{ loot.winningDkpSpent ?? 0 }} DKP</span></div>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="notice">No loot entries logged yet.</p>
+              }
+
+              @if (canManageLinkshell(event.linkshellId)) {
+                <div class="event-action-bar">
+                  <div class="event-action-copy">
+                    <strong>Archive event</strong>
+                    <span>Finalize attendance, award DKP, and move this run into history.</span>
+                  </div>
+                  <button type="button" class="btn primary" [disabled]="activity.busyEventId() === event.id"
+                    (click)="activity.endEvent(event.id)">
+                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'End event' }}
+                  </button>
+                </div>
+              }
+            </section>
+
+            <section class="event-section event-section--late-join">
+              <div class="event-section__header">
+                <div>
+                  <h3>Late Join</h3>
+                  <p class="muted">Join the current live event with the same constrained party setup.</p>
+                </div>
+              </div>
+
+              @if (!event.currentParticipation) {
+                <form class="late-join-form" (ngSubmit)="submitQuickJoin(event.id)">
+                  <select [(ngModel)]="getQuickJoinDraft(event.id).jobType" [name]="'quickJoinType' + event.id">
+                    <option value="">Select role</option>
+                    @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
+                      <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
+                    }
+                  </select>
+                  <select [(ngModel)]="getQuickJoinDraft(event.id).jobName" [name]="'quickJoinJob' + event.id">
+                    <option value="">Select main job</option>
+                    @for (jobOption of mainJobOptions; track jobOption) {
+                      <option [value]="jobOption">{{ jobOption }}</option>
+                    }
+                  </select>
+                  <select [(ngModel)]="getQuickJoinDraft(event.id).subJobName" [name]="'quickJoinSubJob' + event.id">
+                    <option value="">Select sub job</option>
+                    @for (jobOption of subJobOptions; track jobOption) {
+                      <option [value]="jobOption">{{ jobOption }}</option>
+                    }
+                  </select>
+                  <button type="submit" class="btn primary sm" [disabled]="activity.busyEventId() === event.id">
+                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Late join' }}
+                  </button>
+                </form>
+              } @else {
+                <p class="notice notice--subtle">
+                  You are already attached as {{ event.currentParticipation.jobType || 'Unassigned' }} /
+                  {{ event.currentParticipation.jobName || 'Job' }} /
+                  {{ event.currentParticipation.subJobName || 'Sub' }}.
+                </p>
+              }
+            </section>
+          </article>
         }
-      </article>
+      }
 
+      <!-- Queue / Create event -->
       <app-activity-queue-panel />
-    </div>
 
-    <app-activity-sidebar-panel />
-  </section>
+      <!-- Event history from sidebar -->
+      <app-activity-sidebar-panel [visibleSections]="['history']" />
+    </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- ===== TODS TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'tods') {
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">ToD</div>
+          <div class="section-title">ToD tracker</div>
+        </div>
+        <div class="section-head-right">
+          <span class="tag default num">{{ selectedDashboardTods().length }} tracked</span>
+          @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+            <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+          }
+        </div>
+      </div>
+
+      <!-- Tracked windows -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Tracked windows</div>
+          <span class="tag default num">{{ selectedDashboardTods().length }}</span>
+        </div>
+        @if (selectedDashboardTods().length > 0) {
+          @for (tod of selectedDashboardTods(); track tod.id) {
+            <div class="tod-entry" [class.window-open]="isTodReady(tod)">
+              <div class="tod-head">
+                <div class="tod-head-left">
+                  <div class="tod-mob-name">{{ tod.monsterName }}</div>
+                  <span class="tag" [class.success]="tod.claim" [class.default]="!tod.claim">{{ tod.claim ? 'Claimed' : 'Unclaimed' }}</span>
+                </div>
+                <div class="tod-countdown num" [class.open]="isTodReady(tod)">{{ todCountdownLabel(tod) }}</div>
+              </div>
+              <div class="tod-sub">Day {{ tod.dayNumber ?? '-' }} &middot; {{ tod.cooldown || '22 Hour' }} &middot; {{ tod.interval || '10 Min' }} &middot; {{ tod.lootCount }} loot</div>
+              <div class="tod-meta-grid">
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Countdown</div>
+                  <div class="tod-meta-value" [class.success-text]="isTodReady(tod)">{{ todCountdownLabel(tod) }}</div>
+                </div>
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Time of death</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTime(tod.time) || 'Unavailable' }}</div>
+                </div>
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Repop starts</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTime(tod.repopTime) || 'Unavailable' }}</div>
+                </div>
+              </div>
+              <div class="tod-entry-actions">
+                <button type="button" class="btn sm danger-outline"
+                  [disabled]="activity.busyTodId() === tod.id"
+                  (click)="deleteTod(tod.id, tod.monsterName)">
+                  {{ activity.busyTodId() === tod.id ? 'Deleting...' : 'Delete' }}
+                </button>
+              </div>
+            </div>
+          }
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Log the first Time of Death below and the tracker will show countdowns here.</div>
+          </div>
+        }
+      </div>
+
+      <!-- Log ToD form -->
+      @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Log ToD</div>
+            @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+              <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+            }
+          </div>
+          <div class="card-body">
+            <p class="muted">Use separate date and time fields for reliable entry inside the embedded client.</p>
+            <form class="form-grid" (ngSubmit)="submitTod()">
+              <div class="form-row">
+                <label class="field">
+                  <span class="form-label">Monster</span>
+                  <select class="form-select" [(ngModel)]="todDraft.monsterName" (ngModelChange)="onTodMonsterChange($event)" name="todMonsterName">
+                    @for (monster of todMonsterOptions; track monster) { <option [value]="monster">{{ monster }}</option> }
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="form-label">Day number</span>
+                  <input class="form-input" [(ngModel)]="todDraft.dayNumber" name="todDayNumber" type="number" min="0" placeholder="0" />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span class="form-label">Claim</span>
+                  <select class="form-select" [(ngModel)]="todDraft.claim" (ngModelChange)="onTodClaimChange($event)" name="todClaim">
+                    <option [ngValue]="true">Yes</option>
+                    <option [ngValue]="false">No</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="form-label">Cooldown</span>
+                  <select class="form-select" [(ngModel)]="todDraft.cooldown" (ngModelChange)="updateTodRepopTime()" name="todCooldown">
+                    @for (cooldown of todCooldownOptions; track cooldown) { <option [value]="cooldown">{{ cooldown }}</option> }
+                  </select>
+                </label>
+              </div>
+              <label class="field">
+                <span class="form-label">Interval</span>
+                <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
+                  @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
+                </select>
+              </label>
+              <div class="form-row">
+                <label class="field">
+                  <span class="form-label">ToD date</span>
+                  <input class="form-input" [(ngModel)]="todDateValue" (ngModelChange)="onTodDateChange($event)" name="todDate" type="date" required />
+                </label>
+                <label class="field">
+                  <span class="form-label">ToD time</span>
+                  <div class="input-row">
+                    <input class="form-input" [(ngModel)]="todTimeValue" (ngModelChange)="onTodTimeChange($event)" name="todTime" type="time" step="60" required />
+                    <button type="button" class="btn sm" (click)="setTodToNow()">Now</button>
+                  </div>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span class="form-label">Repop date</span>
+                  <input class="form-input" [ngModel]="todRepopDateValue" name="todRepopDate" type="date" readonly />
+                </label>
+                <label class="field">
+                  <span class="form-label">Repop time</span>
+                  <input class="form-input" [ngModel]="todRepopTimeValue" name="todRepopTime" type="time" step="60" readonly />
+                </label>
+              </div>
+              <div class="tod-repop-card">
+                <div class="tod-repop-card__label">Calculated repop</div>
+                <strong>{{ todRepopSummary() }}</strong>
+                <p class="muted">{{ todDraft.cooldown || '22 Hour' }} cooldown with {{ todDraft.interval || '10 Min' }} tracking interval.</p>
+              </div>
+              @if (todDraft.claim) {
+                <label class="tod-toggle">
+                  <input type="checkbox" [(ngModel)]="todDraft.noLoot" (ngModelChange)="onTodNoLootChange($event)" name="todNoLoot" />
+                  <span>No loot for this claim</span>
+                </label>
+                @if (!todDraft.noLoot) {
+                  <div class="loot-rows">
+                    <div class="panel__header">
+                      <h4>Loot</h4>
+                      <button type="button" class="btn sm" (click)="addTodLootRow()">Add row</button>
+                    </div>
+                    @for (loot of todDraft.lootDetails; track $index) {
+                      <div class="loot-row-editor">
+                        <input class="form-input" [(ngModel)]="loot.itemName" [name]="'todLootItem' + $index" placeholder="Item name" />
+                        <select class="form-select" [(ngModel)]="loot.itemWinner" [name]="'todLootWinner' + $index">
+                          <option value="">Winner</option>
+                          @for (characterName of todCharacterNames(); track characterName) {
+                            <option [value]="characterName">{{ characterName }}</option>
+                          }
+                        </select>
+                        <input class="form-input" [(ngModel)]="loot.winningDkpSpent" [name]="'todLootDkp' + $index" type="number" min="0" placeholder="DKP" />
+                        <button type="button" class="btn sm danger-outline" (click)="removeTodLootRow($index)">Remove</button>
+                      </div>
+                    }
+                  </div>
+                }
+              }
+              <div class="form-actions">
+                <button type="submit" class="btn primary" [disabled]="activity.busyTodSave()">
+                  {{ activity.busyTodSave() ? 'Saving...' : 'Log ToD' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      } @else {
+        <div class="card">
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Create or join a linkshell before using the ToD tracker.</div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- ===== AUCTIONS TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'auctions') {
+    <div class="panel-tab fade">
+      <app-activity-sidebar-panel [visibleSections]="['auctions']" />
+    </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- ===== DKP TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'dkp') {
+    <div class="panel-tab fade">
+      <app-activity-sidebar-panel [visibleSections]="['dkp']" />
+    </div>
+  }
+
+  <!-- ============================================================ -->
+  <!-- ===== OTHER TAB ===== -->
+  <!-- ============================================================ -->
+  @if (activeTab() === 'other') {
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">Settings</div>
+          <div class="section-title">Other</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Configurations</div></div>
+        <div class="list-row">
+          <div class="list-row-left">
+            <div>
+              <div class="member-name">View Linkshells</div>
+              <div class="member-sub">Browse and manage your linkshells</div>
+            </div>
+          </div>
+          <span class="list-chevron">&rsaquo;</span>
+        </div>
+        <div class="list-row">
+          <div class="list-row-left">
+            <div>
+              <div class="member-name">Create Linkshell</div>
+              <div class="member-sub">Start a new linkshell</div>
+            </div>
+          </div>
+          <span class="list-chevron">&rsaquo;</span>
+        </div>
+        <div class="list-row">
+          <div class="list-row-left">
+            <div>
+              <div class="member-name">Customize Linkshell</div>
+              <div class="member-sub">Change name, type, and settings</div>
+            </div>
+          </div>
+          <span class="list-chevron">&rsaquo;</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Missions</div></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Rise of the Zilart</div></div><span class="list-chevron">&rsaquo;</span></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Chains of Promathia</div></div><span class="list-chevron">&rsaquo;</span></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Treasures of Aht Urhgan</div></div><span class="list-chevron">&rsaquo;</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">End Game</div></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Sky</div></div><span class="list-chevron">&rsaquo;</span></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Sea</div></div><span class="list-chevron">&rsaquo;</span></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">HNM</div></div><span class="list-chevron">&rsaquo;</span></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Dynamis</div></div><span class="list-chevron">&rsaquo;</span></div>
+        <div class="list-row"><div class="list-row-left"><div class="member-name">Limbus</div></div><span class="list-chevron">&rsaquo;</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Profile</div></div>
+        <div class="list-row" (click)="setActiveTab('dashboard')">
+          <div class="list-row-left">
+            <div>
+              <div class="member-name">Edit Profile</div>
+              <div class="member-sub">Character name, time zone</div>
+            </div>
+          </div>
+          <span class="list-chevron">&rsaquo;</span>
+        </div>
+        <div class="list-row">
+          <div class="list-row-left">
+            <div>
+              <div class="member-name">Messages</div>
+              <div class="member-sub">View and send messages</div>
+            </div>
+          </div>
+          <span class="list-chevron">&rsaquo;</span>
+        </div>
+      </div>
+    </div>
+  }
 </main>

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAuctionItemInput,
@@ -57,9 +57,14 @@ export class ActivitySidebarPanelComponent {
     'Pacific/Auckland'
   ] as const;
 
+  @Input() visibleSections?: readonly string[];
   protected readonly activity = inject(DiscordActivityService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
+
+  protected showSection(name: string): boolean {
+    return !this.visibleSections || this.visibleSections.includes(name);
+  }
   protected readonly profileModel = {
     characterName: '',
     timeZone: ''

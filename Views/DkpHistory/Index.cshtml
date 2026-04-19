@@ -3,27 +3,39 @@
     ViewData["Title"] = "DKP history";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head fade d1">
     <div>
-        <h1 class="h3 mb-1">DKP history</h1>
-        <p class="text-muted mb-0">Full earned and spent DKP ledger for each member of the selected linkshell.</p>
+        <h1 class="page-title">DKP History</h1>
+        <div class="page-sub">
+            <span>Earned and spent ledger</span>
+            @if (!string.IsNullOrWhiteSpace(Model.SelectedLinkshellName))
+            {
+                <span>·</span>
+                <span>@Model.SelectedLinkshellName</span>
+            }
+        </div>
     </div>
-    <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-xl-4">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
+<div class="grid fade d2">
+    <div class="col">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Filters</div>
+            </div>
+            <div style="padding:4px 16px 16px">
                 @if (!Model.Linkshells.Any())
                 {
-                    <p class="text-muted mb-0">Join a linkshell to unlock DKP history.</p>
+                    <div class="empty">Join a linkshell to unlock DKP history.</div>
                 }
                 else
                 {
-                    <form method="get" class="d-grid gap-3">
-                        <div>
-                            <label class="form-label" for="linkshellId">Linkshell</label>
+                    <form method="get">
+                        <div class="field">
+                            <label for="linkshellId">Linkshell</label>
                             <select class="form-select" id="linkshellId" name="linkshellId" onchange="this.form.submit()">
                                 @foreach (var linkshell in Model.Linkshells)
                                 {
@@ -38,116 +50,99 @@
                                 }
                             </select>
                         </div>
-                        <div>
-                            <label class="form-label" for="appUserId">Member</label>
+                        <div class="field">
+                            <label for="appUserId">Member</label>
                             <select class="form-select" id="appUserId" name="appUserId" onchange="this.form.submit()">
                                 @foreach (var member in Model.Members)
                                 {
                                     @if (Model.SelectedAppUserId == member.AppUserId)
                                     {
-                                        <option value="@member.AppUserId" selected>
-                                            @member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)
-                                        </option>
+                                        <option value="@member.AppUserId" selected>@member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)</option>
                                     }
                                     else
                                     {
-                                        <option value="@member.AppUserId">
-                                            @member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)
-                                        </option>
+                                        <option value="@member.AppUserId">@member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)</option>
                                     }
                                 }
                             </select>
                         </div>
                     </form>
 
-                    <hr />
-
-                    <dl class="row mb-0">
-                        <dt class="col-sm-5">Linkshell</dt>
-                        <dd class="col-sm-7">@Model.SelectedLinkshellName</dd>
-                        <dt class="col-sm-5">Member</dt>
-                        <dd class="col-sm-7">@Model.SelectedMemberName</dd>
-                        <dt class="col-sm-5">Current balance</dt>
-                        <dd class="col-sm-7">@Model.CurrentBalance.ToString("0.##") DKP</dd>
-                    </dl>
+                    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:grid;grid-template-columns:110px 1fr;gap:8px 12px;font-size:13px">
+                        <div style="color:var(--fg-3)">Member</div><div>@Model.SelectedMemberName</div>
+                        <div style="color:var(--fg-3)">Balance</div><div class="num" style="font-weight:600">@Model.CurrentBalance.ToString("0.##")</div>
+                    </div>
                 }
             </div>
         </div>
     </div>
 
-    <div class="col-xl-8">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 mb-0">Ledger</h2>
-                    <span class="badge badge-soft">@Model.Entries.Count entries</span>
-                </div>
-
-                @if (!Model.Entries.Any())
-                {
-                    <p class="text-muted mb-0">No DKP transactions have been recorded for this member yet.</p>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table align-middle">
-                            <thead>
-                                <tr>
-                                    <th>When</th>
-                                    <th>Entry</th>
-                                    <th>Event</th>
-                                    <th>Details</th>
-                                    <th class="text-end">Amount</th>
-                                    <th class="text-end">Balance</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var entry in Model.Entries)
-                            {
-                                var amountClass = entry.Amount >= 0 ? "text-success" : "text-danger";
-                                <tr>
-                                    <td>@(entry.OccurredAt?.ToString("g") ?? "Unknown")</td>
-                                    <td>
-                                        @if (entry.EntryType == "LootSpent")
-                                        {
-                                            <span class="badge bg-danger">Loot spent</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-success">Event earned</span>
-                                        }
-                                    </td>
-                                    <td>
-                                        <div>@(entry.EventName ?? "Unknown event")</div>
-                                        <div class="text-muted small">
-                                            @(entry.EventType ?? "Event") | @(entry.EventLocation ?? "Unknown location")
-                                        </div>
-                                        @if (entry.EventStartTime.HasValue || entry.EventEndTime.HasValue)
-                                        {
-                                            <div class="text-muted small">
-                                                @(entry.EventStartTime?.ToString("g") ?? "Unknown") - @(entry.EventEndTime?.ToString("g") ?? "Unknown")
-                                            </div>
-                                        }
-                                    </td>
-                                    <td>
-                                        @if (!string.IsNullOrWhiteSpace(entry.ItemName))
-                                        {
-                                            <div><strong>Item:</strong> @entry.ItemName</div>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(entry.Details))
-                                        {
-                                            <div class="text-muted small">@entry.Details</div>
-                                        }
-                                    </td>
-                                    <td class="text-end @amountClass">@entry.Amount.ToString("0.##")</td>
-                                    <td class="text-end">@entry.RunningBalance.ToString("0.##")</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
+    <div class="col">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Ledger <span class="tag">@Model.Entries.Count</span></div>
             </div>
+            @if (!Model.Entries.Any())
+            {
+                <div class="empty">No DKP transactions recorded for this member yet.</div>
+            }
+            else
+            {
+                <table class="table themed">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Entry</th>
+                            <th>Event</th>
+                            <th>Details</th>
+                            <th style="text-align:right">Amount</th>
+                            <th style="text-align:right">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Model.Entries)
+                        {
+                            var isSpent = entry.EntryType == "LootSpent";
+                            var amountColor = entry.Amount >= 0 ? "var(--success)" : "var(--danger)";
+                            <tr>
+                                <td style="font-size:12px;color:var(--fg-3)">@(entry.OccurredAt?.ToString("g") ?? "—")</td>
+                                <td>
+                                    @if (isSpent)
+                                    {
+                                        <span class="tag danger">Spent</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="tag success">Earned</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div style="font-weight:500">@(entry.EventName ?? "Unknown event")</div>
+                                    <div style="color:var(--fg-4);font-size:11px">
+                                        @(entry.EventType ?? "Event") · @(entry.EventLocation ?? "—")
+                                    </div>
+                                    @if (entry.EventStartTime.HasValue || entry.EventEndTime.HasValue)
+                                    {
+                                        <div style="color:var(--fg-4);font-size:11px">@(entry.EventStartTime?.ToString("g") ?? "—") → @(entry.EventEndTime?.ToString("g") ?? "—")</div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(entry.ItemName))
+                                    {
+                                        <div style="font-weight:500">@entry.ItemName</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(entry.Details))
+                                    {
+                                        <div style="color:var(--fg-4);font-size:11px">@entry.Details</div>
+                                    }
+                                </td>
+                                <td style="text-align:right;font-family:var(--font-mono);color:@amountColor">@entry.Amount.ToString("+0.##;-0.##;0")</td>
+                                <td style="text-align:right;font-family:var(--font-mono)" class="num">@entry.RunningBalance.ToString("0.##")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     </div>
 </div>

@@ -1,17 +1,55 @@
 @model DashboardViewModel
 @{
     ViewData["Title"] = "Dashboard";
+
+    string RelativeTime(DateTime? when)
+    {
+        if (!when.HasValue) return "TBD";
+        var delta = when.Value - DateTime.UtcNow;
+        var abs = delta.Duration();
+        var prefix = delta.TotalSeconds < 0 ? "" : "in ";
+        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
+        if (abs.TotalMinutes < 60)  return $"{prefix}{(int)abs.TotalMinutes}m{suffix}";
+        if (abs.TotalHours < 24)    return $"{prefix}{(int)abs.TotalHours}h{suffix}";
+        if (abs.TotalDays < 14)     return $"{prefix}{(int)abs.TotalDays}d{suffix}";
+        return when.Value.ToString("MMM d");
+    }
+
+    string RosterAvClass(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "a";
+        var h = 0;
+        foreach (var ch in name) { h = (h * 31 + ch) & 0x7fffffff; }
+        return new[] { "a", "b", "c", "d", "e" }[h % 5];
+    }
+
+    string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var ini = string.Concat(parts.Select(p => p[0])).ToUpperInvariant();
+        return ini.Length > 2 ? ini[..2] : ini;
+    }
 }
 
-<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+<div class="page-head fade d1">
     <div>
-        <h1 class="h3 mb-1">Dashboard</h1>
-        <p class="text-muted mb-0">Overview for your current linkshell, upcoming events, and recent history.</p>
+        <h1 class="page-title">Dashboard</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.SelectedLinkshellName))
+            {
+                <span>@Model.SelectedLinkshellName</span>
+                <span>·</span>
+            }
+            <span><span class="num">@Model.TotalMembers</span> members</span>
+            <span class="live-dot">Live</span>
+        </div>
     </div>
-    @if (Model.Linkshells.Count > 0)
+
+    @if (Model.Linkshells.Count > 1)
     {
-        <form method="get" asp-action="Index" class="d-flex gap-2 align-items-center">
-            <select class="form-select" name="linkshellId">
+        <form method="get" asp-action="Index" class="page-actions">
+            <select class="form-select" name="linkshellId" onchange="this.form.submit()">
                 @foreach (var linkshell in Model.Linkshells)
                 {
                     if (linkshell.Id == Model.SelectedLinkshellId)
@@ -24,163 +62,196 @@
                     }
                 }
             </select>
-            <button class="btn btn-primary" type="submit">Load</button>
+            <noscript><button class="btn" type="submit">Load</button></noscript>
         </form>
     }
 </div>
 
 @if (Model.Linkshells.Count == 0)
 {
-    <div class="card card-shell shadow-sm">
-        <div class="card-body p-4">
-            <h2 class="h5">No linkshells yet</h2>
-            <p class="text-muted mb-0">Create your first linkshell to start managing memberships and events.</p>
-            <a class="btn btn-primary" asp-controller="Linkshell" asp-action="Create">Create linkshell</a>
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No linkshells yet</div>
+            <div style="margin-bottom:12px">Create your first linkshell to start managing memberships and events.</div>
+            <a class="btn primary" asp-controller="Linkshell" asp-action="Create">Create linkshell</a>
         </div>
     </div>
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card card-shell h-100 shadow-sm"><div class="card-body"><div class="text-muted small">Selected linkshell</div><div class="fs-4 fw-semibold">@Model.SelectedLinkshellName</div></div></div>
+    <div class="stats fade d2">
+        <div class="stat">
+            <div class="stat-icon a">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
+            </div>
+            <div class="stat-body">
+                <div class="stat-label">Total Members</div>
+                <div class="stat-value">@Model.TotalMembers</div>
+                <div class="stat-delta">in @(Model.SelectedLinkshellName ?? "linkshell")</div>
+            </div>
         </div>
-        <div class="col-md-4">
-            <div class="card card-shell h-100 shadow-sm"><div class="card-body"><div class="text-muted small">Members</div><div class="fs-4 fw-semibold">@Model.TotalMembers</div></div></div>
+        <div class="stat">
+            <div class="stat-icon b">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+            </div>
+            <div class="stat-body">
+                <div class="stat-label">Upcoming Events</div>
+                <div class="stat-value">@Model.UpcomingEvents</div>
+                <div class="stat-delta">scheduled</div>
+            </div>
         </div>
-        <div class="col-md-2">
-            <div class="card card-shell h-100 shadow-sm"><div class="card-body"><div class="text-muted small">Upcoming</div><div class="fs-4 fw-semibold">@Model.UpcomingEvents</div></div></div>
+        <div class="stat">
+            <div class="stat-icon c">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </div>
+            <div class="stat-body">
+                <div class="stat-label">Completed Events</div>
+                <div class="stat-value">@Model.CompletedEvents</div>
+                <div class="stat-delta">last 10 shown</div>
+            </div>
         </div>
-        <div class="col-md-2">
-            <div class="card card-shell h-100 shadow-sm"><div class="card-body"><div class="text-muted small">Completed</div><div class="fs-4 fw-semibold">@Model.CompletedEvents</div></div></div>
+        <div class="stat">
+            <div class="stat-icon d">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14l-2 7H7z"/><path d="M6 11v9h12v-9"/></svg>
+            </div>
+            <div class="stat-body">
+                <div class="stat-label">Linkshells</div>
+                <div class="stat-value">@Model.Linkshells.Count</div>
+                <div class="stat-delta">you belong to</div>
+            </div>
         </div>
     </div>
 
-    <div class="row g-4">
-        <div class="col-xl-6">
-            <div class="card card-shell shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h5 mb-0">Upcoming events</h2>
-                        <a class="btn btn-sm btn-primary" asp-controller="Event" asp-action="Create">Create event</a>
-                    </div>
-                    @if (Model.Events.Count == 0)
-                    {
-                        <p class="text-muted mb-0">No active events for this linkshell.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Type</th>
-                                        <th>Start</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                @foreach (var evt in Model.Events)
-                                {
-                                    <tr>
-                                        <td>@evt.EventName</td>
-                                        <td>@evt.EventType</td>
-                                        <td>@(evt.StartTime?.ToString("g") ?? "TBD")</td>
-                                        <td class="text-end">
-                                            @if (evt.CommencementStartTime.HasValue)
-                                            {
-                                                <a class="btn btn-outline-light btn-sm" asp-controller="Event" asp-action="Start" asp-route-eventId="@evt.Id">Open</a>
-                                            }
-                                            else
-                                            {
-                                                <a class="btn btn-outline-light btn-sm" asp-controller="Event" asp-action="Edit" asp-route-id="@evt.Id">Manage</a>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
+    <div class="grid">
+        <div class="col">
+            <div class="card fade d3">
+                <div class="card-head">
+                    <div class="card-title">Upcoming events</div>
+                    <a class="card-link" asp-controller="Event" asp-action="Create">+ Create event</a>
                 </div>
+                @if (Model.Events.Count == 0)
+                {
+                    <div class="empty">No active events for this linkshell.</div>
+                }
+                else
+                {
+                    <div class="list">
+                        @foreach (var evt in Model.Events)
+                        {
+                            var href = evt.CommencementStartTime.HasValue
+                                ? Url.Action("Start", "Event", new { eventId = evt.Id })
+                                : Url.Action("Edit", "Event", new { id = evt.Id });
+                            var isLive = evt.CommencementStartTime.HasValue;
+                            <a class="row plain" href="@href">
+                                <div class="row-main">
+                                    <div class="row-title">
+                                        @(evt.EventName ?? "Untitled event")
+                                        @if (!string.IsNullOrWhiteSpace(evt.EventType))
+                                        {
+                                            <span class="tag">@evt.EventType</span>
+                                        }
+                                        @if (isLive)
+                                        {
+                                            <span class="tag success">Live</span>
+                                        }
+                                    </div>
+                                    <div class="row-meta">
+                                        @if (!string.IsNullOrWhiteSpace(evt.EventLocation))
+                                        {
+                                            <span>@evt.EventLocation</span>
+                                            <span class="dot">·</span>
+                                        }
+                                        <span>@(evt.StartTime?.ToString("ddd MMM d, HH:mm") ?? "Start TBD")</span>
+                                    </div>
+                                </div>
+                                <div class="row-time @(isLive ? "warn" : "")">
+                                    <span class="num">@(evt.StartTime?.ToString("HH:mm") ?? "—")</span>
+                                    <div class="row-time-sub">@RelativeTime(evt.StartTime)</div>
+                                </div>
+                                <div class="row-cta">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="card fade d4">
+                <div class="card-head">
+                    <div class="card-title">Recent event history</div>
+                    <a class="card-link" asp-controller="EventHistory" asp-action="Index">Full log</a>
+                </div>
+                @if (Model.EventHistories.Count == 0)
+                {
+                    <div class="empty">No completed events yet.</div>
+                }
+                else
+                {
+                    <div class="act-list">
+                        @foreach (var h in Model.EventHistories)
+                        {
+                            var end = h.EndTime ?? h.TimeStamp;
+                            <a class="act-row" href="@Url.Action("Details", "EventHistory", new { id = h.Id })" style="text-decoration:none">
+                                <div class="act-when">@RelativeTime(end)</div>
+                                <div class="act-dot kill"></div>
+                                <div class="act-text">
+                                    <strong>@(h.EventName ?? "Event")</strong>
+                                    @if (!string.IsNullOrWhiteSpace(h.EventLocation))
+                                    {
+                                        <span> · @h.EventLocation</span>
+                                    }
+                                </div>
+                            </a>
+                        }
+                    </div>
+                }
             </div>
         </div>
-        <div class="col-xl-6">
-            <div class="card card-shell shadow-sm h-100">
-                <div class="card-body">
-                    <h2 class="h5 mb-3">Members</h2>
-                    @if (Model.Members.Count == 0)
-                    {
-                        <p class="text-muted mb-0">No members found for this linkshell yet.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Character</th>
-                                        <th>Rank</th>
-                                        <th>Status</th>
-                                        <th class="text-end">DKP</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                @foreach (var member in Model.Members)
-                                {
-                                    <tr>
-                                        <td>@(member.CharacterName ?? member.AppUser?.UserName ?? "Unknown")</td>
-                                        <td>@(member.Rank ?? "Member")</td>
-                                        <td>@(member.Status ?? "Active")</td>
-                                        <td class="text-end">@((member.LinkshellDkp ?? 0).ToString("0.##"))</td>
-                                    </tr>
-                                }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
+
+        <div class="col">
+            <div class="card fade d3">
+                <div class="card-head">
+                    <div class="card-title">Linkshell roster</div>
+                    <a class="card-link" asp-controller="ManageTeam" asp-action="Index">Manage team</a>
                 </div>
-            </div>
-        </div>
-        <div class="col-12">
-            <div class="card card-shell shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h5 mb-0">Recent event history</h2>
-                        <a class="btn btn-outline-light btn-sm" asp-controller="EventHistory" asp-action="Index">View all</a>
+                @if (Model.Members.Count == 0)
+                {
+                    <div class="empty">No members found for this linkshell yet.</div>
+                }
+                else
+                {
+                    <div class="roster-head">
+                        <div></div>
+                        <div>Character</div>
+                        <div>Rank</div>
+                        <div style="text-align:right">DKP</div>
+                        <div>Status</div>
                     </div>
-                    @if (Model.EventHistories.Count == 0)
+                    @foreach (var m in Model.Members.Take(10))
                     {
-                        <p class="text-muted mb-0">No completed events yet.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-sm align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Location</th>
-                                        <th>Ended</th>
-                                        <th class="text-end"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                @foreach (var history in Model.EventHistories)
+                        var name = m.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
+                        var status = m.Status ?? "Active";
+                        var statusClass = status.Equals("Active", StringComparison.OrdinalIgnoreCase)
+                            ? "success"
+                            : status.Equals("Pending", StringComparison.OrdinalIgnoreCase)
+                                ? "warning"
+                                : "";
+                        <div class="roster-row">
+                            <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
+                            <div>
+                                <div class="roster-name">@name</div>
+                                @if (!string.IsNullOrWhiteSpace(m.AppUser?.UserName) && m.CharacterName != m.AppUser.UserName)
                                 {
-                                    <tr>
-                                        <td>@history.EventName</td>
-                                        <td>@history.EventLocation</td>
-                                        <td>@(history.EndTime?.ToString("g") ?? history.TimeStamp?.ToString("g") ?? "Unknown")</td>
-                                        <td class="text-end"><a class="btn btn-outline-light btn-sm" asp-controller="EventHistory" asp-action="Details" asp-route-id="@history.Id">Details</a></td>
-                                    </tr>
+                                    <div class="roster-name-sub">@m.AppUser.UserName</div>
                                 }
-                                </tbody>
-                            </table>
+                            </div>
+                            <div class="roster-rank">@(m.Rank ?? "Member")</div>
+                            <div class="roster-dkp">@((m.LinkshellDkp ?? 0).ToString("0.##"))</div>
+                            <div><span class="tag @statusClass">@status</span></div>
                         </div>
                     }
-                </div>
+                }
             </div>
         </div>
     </div>

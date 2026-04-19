@@ -10,225 +10,68 @@
     string ToLocalIso(DateTime? value) => value?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head fade d1">
     <div>
-        <h1 class="h3 mb-1">@Model.Event.EventName</h1>
-        <p class="text-muted mb-0">Live event management, attendance verification, and loot entry.</p>
+        <h1 class="page-title">@Model.Event.EventName</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.Event.EventType))
+            {
+                <span>@Model.Event.EventType</span>
+                <span>·</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Event.EventLocation))
+            {
+                <span>@Model.Event.EventLocation</span>
+                <span>·</span>
+            }
+            <span class="live-dot">Live</span>
+        </div>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-light" asp-action="Index">Back to events</a>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Back to events</a>
     </div>
 </div>
 
-<div
-    class="card card-shell shadow-sm mb-4"
-    data-live-event-dashboard
-    data-event-start-local="@ToLocalIso(Model.CommencementStartTime)"
-    data-dkp-per-hour="@(Model.Event.DkpPerHour?.ToString(CultureInfo.InvariantCulture) ?? "0")"
-    data-planned-hours="@(Model.Event.Duration?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)">
-    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-        <div>
-            <h2 class="h5 mb-1">Global Timer</h2>
-            <p class="text-muted mb-0">Starts when the event goes live and keeps the active event clock in sync.</p>
-        </div>
-        <div class="text-lg-end">
-            <div class="display-6 fw-semibold" data-live-event-timer>00:00:00</div>
-        </div>
+<div class="card fade d2"
+     data-live-event-dashboard
+     data-event-start-local="@ToLocalIso(Model.CommencementStartTime)"
+     data-dkp-per-hour="@(Model.Event.DkpPerHour?.ToString(CultureInfo.InvariantCulture) ?? "0")"
+     data-planned-hours="@(Model.Event.Duration?.ToString(CultureInfo.InvariantCulture) ?? string.Empty)"
+     style="padding:20px;margin-bottom:16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px">
+    <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3)">Global timer</div>
+        <div style="font-size:13px;color:var(--fg-3);margin-top:2px">Runs from the moment the event went live.</div>
     </div>
+    <div style="font-family:var(--font-mono);font-size:32px;font-weight:600;color:var(--fg);letter-spacing:0.02em" data-live-event-timer>00:00:00</div>
 </div>
 
-<div class="row g-4">
-    <div class="col-xl-4">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <h2 class="h5 mb-3">Event details</h2>
-                <dl class="row mb-0">
-                    <dt class="col-sm-5">Type</dt><dd class="col-sm-7">@Model.Event.EventType</dd>
-                    <dt class="col-sm-5">Location</dt><dd class="col-sm-7">@Model.Event.EventLocation</dd>
-                    <dt class="col-sm-5">Started</dt><dd class="col-sm-7">@(Model.CommencementStartTime?.ToString("g") ?? "Not started")</dd>
-                    <dt class="col-sm-5">DKP/hour</dt><dd class="col-sm-7">@(Model.Event.DkpPerHour ?? 0)</dd>
-                </dl>
-                @if (!string.IsNullOrWhiteSpace(Model.Event.Details))
-                {
-                    <hr />
-                    <p class="text-muted mb-0">@Model.Event.Details</p>
-                }
+<div class="grid fade d2">
+    <div class="col">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Event details</div>
             </div>
-        </div>
-    </div>
-    <div class="col-xl-8">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 mb-0">Participants</h2>
-                    <span class="badge badge-soft">@Model.AppUserEvents.Count connected</span>
-                </div>
-                @if (Model.AppUserEvents.Count == 0)
-                {
-                    <p class="text-muted mb-0">No participants yet.</p>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle">
-                            <thead>
-                                <tr>
-                                    <th>Character</th>
-                                    <th>Job</th>
-                                    <th>Role</th>
-                                    <th>Joined</th>
-                                    <th>Timer</th>
-                                    <th>Progress</th>
-                                    <th>DKP</th>
-                                    <th>Verified</th>
-                                    <th class="text-end">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var participant in Model.AppUserEvents)
-                            {
-                                <tr
-                                    data-live-participant
-                                    data-participant-start-local="@ToLocalIso(participant.StartTime)"
-                                    data-participant-resume-local="@ToLocalIso(participant.ResumeTime)"
-                                    data-participant-base-hours="@(participant.Duration?.ToString(CultureInfo.InvariantCulture) ?? "0")"
-                                    data-participant-on-break="@((participant.IsOnBreak == true).ToString().ToLowerInvariant())">
-                                    <td>@participant.CharacterName</td>
-                                    <td>@participant.JobName/@participant.SubJobName</td>
-                                    <td>@(participant.JobType ?? "Role")</td>
-                                    <td>@(participant.StartTime?.ToString("g") ?? "Pending")</td>
-                                    <td class="text-nowrap" data-live-participant-timer>00:00:00</td>
-                                    <td style="min-width: 180px;">
-                                        <div class="progress" style="height: 0.6rem;">
-                                            <div
-                                                class="progress-bar bg-info"
-                                                role="progressbar"
-                                                style="width: 0%;"
-                                                aria-valuemin="0"
-                                                aria-valuemax="100"
-                                                data-live-participant-progress></div>
-                                        </div>
-                                    </td>
-                                    <td class="text-nowrap" data-live-participant-dkp>0.00</td>
-                                    <td>
-                                        @if (participant.IsOnBreak == true)
-                                        {
-                                            <span class="badge bg-warning text-dark">On break</span>
-                                        }
-                                        else if (participant.IsVerified == true)
-                                        {
-                                            <span class="badge bg-success">Verified attendance</span>
-                                        }
-                                        else if (participant.IsVerified == false)
-                                        {
-                                            <span class="badge bg-danger">Attendance denied</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-secondary">Pending attendance</span>
-                                        }
-                                    </td>
-                                    <td class="text-end">
-                                        <div class="d-flex justify-content-end gap-2">
-                                            @if (participant.AppUserId == currentUserId)
-                                            {
-                                                @if (participant.IsOnBreak == true)
-                                                {
-                                                    <form asp-action="ReturnFromBreak" method="post" class="d-inline">
-                                                        @Html.AntiForgeryToken()
-                                                        <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                                                        <button class="btn btn-outline-info btn-sm" type="submit">Return</button>
-                                                    </form>
-                                                }
-                                                else
-                                                {
-                                                    <form asp-action="TakeBreak" method="post" class="d-inline">
-                                                        @Html.AntiForgeryToken()
-                                                        <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                                                        <button class="btn btn-outline-info btn-sm" type="submit">Take break</button>
-                                                    </form>
-                                                }
-                                            }
-                                            @if (participant.IsVerified is null)
-                                            {
-                                                <form asp-action="VerifyUser" method="post" class="d-inline">
-                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                                                    <input type="hidden" name="characterName" value="@participant.CharacterName" />
-                                                    <input type="hidden" name="isVerified" value="true" />
-                                                    <button class="btn btn-outline-success btn-sm" type="submit">Present</button>
-                                                </form>
-                                                <form asp-action="VerifyUser" method="post" class="d-inline">
-                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                                                    <input type="hidden" name="characterName" value="@participant.CharacterName" />
-                                                    <input type="hidden" name="isVerified" value="false" />
-                                                    <button class="btn btn-outline-danger btn-sm" type="submit">Absent</button>
-                                                </form>
-                                            }
-                                            else
-                                            {
-                                                <form asp-action="UndoVerification" method="post" class="d-inline">
-                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                                                    <input type="hidden" name="characterName" value="@participant.CharacterName" />
-                                                    <button class="btn btn-outline-warning btn-sm" type="submit">Undo</button>
-                                                </form>
-                                            }
-                                        </div>
-                                        @if (participant.StatusLedgerEntries.Count > 0)
-                                        {
-                                            <ul class="list-unstyled small text-muted mt-2 mb-0">
-                                                @foreach (var entry in participant.StatusLedgerEntries)
-                                                {
-                                                    <li class="mb-1">
-                                                        <div class="d-flex justify-content-end align-items-start gap-2">
-                                                            <div class="text-end">
-                                                                <strong class="d-block text-light">
-                                                                    @(entry.ActionType == "BreakStart" ? "Break started" :
-                                                                      entry.ActionType == "BreakReturn" ? "Returned from break" :
-                                                                      entry.ActionType)
-                                                                </strong>
-                                                                <span class="d-block">@entry.OccurredAt.ToString("g")</span>
-                                                                @if (entry.VerifiedAt.HasValue)
-                                                                {
-                                                                    <span class="d-block">Verified by @(entry.VerifiedBy ?? "Officer") at @entry.VerifiedAt.Value.ToString("g")</span>
-                                                                }
-                                                                else if (entry.RequiresVerification)
-                                                                {
-                                                                    <span class="d-block">Awaiting return verification</span>
-                                                                }
-                                                            </div>
-                                                            @if (entry.ActionType == "BreakReturn" && entry.RequiresVerification && !entry.VerifiedAt.HasValue)
-                                                            {
-                                                                <form asp-action="VerifyReturn" method="post" class="d-inline">
-                                                                    @Html.AntiForgeryToken()
-                                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                                                                    <input type="hidden" name="ledgerEntryId" value="@entry.Id" />
-                                                                    <button class="btn btn-outline-info btn-sm" type="submit">Verify return</button>
-                                                                </form>
-                                                            }
-                                                        </div>
-                                                    </li>
-                                                }
-                                            </ul>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
+            <div style="padding:4px 16px 16px;display:grid;grid-template-columns:120px 1fr;gap:8px 16px;font-size:13px">
+                <div style="color:var(--fg-3)">Type</div><div>@Model.Event.EventType</div>
+                <div style="color:var(--fg-3)">Location</div><div>@Model.Event.EventLocation</div>
+                <div style="color:var(--fg-3)">Started</div><div>@(Model.CommencementStartTime?.ToString("g") ?? "Not started")</div>
+                <div style="color:var(--fg-3)">DKP/hour</div><div class="num">@(Model.Event.DkpPerHour ?? 0)</div>
             </div>
+            @if (!string.IsNullOrWhiteSpace(Model.Event.Details))
+            {
+                <div style="padding:12px 16px;border-top:1px solid var(--border);color:var(--fg-3);font-size:13px">@Model.Event.Details</div>
+            }
         </div>
-    </div>
 
-    <div class="col-xl-6">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <h2 class="h5 mb-3">Quick join</h2>
-                <form asp-action="QuickJoin" method="post" class="row g-3">
-                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                    <div class="col-md-4">
-                        <label class="form-label">Job</label>
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Quick join</div>
+            </div>
+            <form asp-action="QuickJoin" method="post" style="padding:4px 16px 16px">
+                <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Main job</label>
                         <select class="form-select" name="jobName">
                             <option value="">Select main job</option>
                             @foreach (var jobOption in mainJobOptions)
@@ -237,8 +80,8 @@
                             }
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Sub job</label>
+                    <div class="field">
+                        <label>Sub job</label>
                         <select class="form-select" name="subJobName">
                             <option value="">Select sub job</option>
                             @foreach (var jobOption in subJobOptions)
@@ -247,31 +90,31 @@
                             }
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Type</label>
+                    <div class="field">
+                        <label>Role</label>
                         <select class="form-select" name="jobType">
-                            <option value="">Select type</option>
+                            <option value="">Select role</option>
                             @foreach (var jobTypeOption in jobTypeOptions)
                             {
                                 <option value="@jobTypeOption">@jobTypeOption</option>
                             }
                         </select>
                     </div>
-                    <div class="col-12"><button class="btn btn-outline-light" type="submit">Join active event</button></div>
-                </form>
-            </div>
+                </div>
+                <button class="btn primary" type="submit" style="margin-top:12px">Join active event</button>
+            </form>
         </div>
-    </div>
 
-    <div class="col-xl-6">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <h2 class="h5 mb-3">Loot log</h2>
-                <form asp-action="SubmitLootDetails" method="post" class="row g-3 mb-4">
-                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                    <div class="col-md-5"><label class="form-label">Item</label><input class="form-control" name="itemName" /></div>
-                    <div class="col-md-4">
-                        <label class="form-label">Winner</label>
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Loot log</div>
+            </div>
+            <form asp-action="SubmitLootDetails" method="post" style="padding:4px 16px 12px;border-bottom:1px solid var(--border)">
+                <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                <div class="form-grid">
+                    <div class="field"><label>Item</label><input class="form-control" name="itemName" /></div>
+                    <div class="field">
+                        <label>Winner</label>
                         <select class="form-select" name="itemWinner">
                             <option value="">Select event member</option>
                             @foreach (var participantName in Model.AppUserEvents
@@ -284,41 +127,194 @@
                             }
                         </select>
                     </div>
-                    <div class="col-md-3"><label class="form-label">Spent</label><input class="form-control" name="winningDkpSpent" type="number" value="0" /></div>
-                    <div class="col-12"><button class="btn btn-outline-light" type="submit">Add loot</button></div>
-                </form>
-                @if (Model.EventLootDetails.Count == 0)
-                {
-                    <p class="text-muted mb-0">No loot logged yet.</p>
-                }
-                else
-                {
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead><tr><th>Item</th><th>Winner</th><th class="text-end">Spent</th></tr></thead>
-                            <tbody>
-                            @foreach (var loot in Model.EventLootDetails)
-                            {
-                                <tr><td>@loot.ItemName</td><td>@loot.ItemWinner</td><td class="text-end">@loot.WinningDkpSpent</td></tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
+                    <div class="field"><label>DKP spent</label><input class="form-control" name="winningDkpSpent" type="number" value="0" /></div>
+                </div>
+                <button class="btn ghost sm" type="submit" style="margin-top:12px">+ Add loot</button>
+            </form>
+            @if (Model.EventLootDetails.Count == 0)
+            {
+                <div class="empty">No loot logged yet.</div>
+            }
+            else
+            {
+                <table class="table themed">
+                    <thead><tr><th>Item</th><th>Winner</th><th style="text-align:right">DKP</th></tr></thead>
+                    <tbody>
+                        @foreach (var loot in Model.EventLootDetails)
+                        {
+                            <tr>
+                                <td>@loot.ItemName</td>
+                                <td>@loot.ItemWinner</td>
+                                <td style="text-align:right" class="num">@loot.WinningDkpSpent</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     </div>
 
-    <div class="col-12">
-        <div class="card card-shell shadow-sm border-warning">
-            <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+    <div class="col">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Participants <span class="tag">@Model.AppUserEvents.Count</span></div>
+            </div>
+            @if (Model.AppUserEvents.Count == 0)
+            {
+                <div class="empty">No participants yet.</div>
+            }
+            else
+            {
+                <table class="table themed">
+                    <thead>
+                        <tr>
+                            <th>Character</th>
+                            <th>Job</th>
+                            <th>Timer</th>
+                            <th style="width:140px">Progress</th>
+                            <th style="text-align:right">DKP</th>
+                            <th>Status</th>
+                            <th style="text-align:right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var participant in Model.AppUserEvents)
+                        {
+                            <tr data-live-participant
+                                data-participant-start-local="@ToLocalIso(participant.StartTime)"
+                                data-participant-resume-local="@ToLocalIso(participant.ResumeTime)"
+                                data-participant-base-hours="@(participant.Duration?.ToString(CultureInfo.InvariantCulture) ?? "0")"
+                                data-participant-on-break="@((participant.IsOnBreak == true).ToString().ToLowerInvariant())">
+                                <td>
+                                    <div style="font-weight:500">@participant.CharacterName</div>
+                                    <div style="color:var(--fg-4);font-size:11px">@(participant.StartTime?.ToString("g") ?? "Pending")</div>
+                                </td>
+                                <td>
+                                    <div>@participant.JobName/@participant.SubJobName</div>
+                                    <div style="color:var(--fg-4);font-size:11px">@(participant.JobType ?? "Role")</div>
+                                </td>
+                                <td style="font-family:var(--font-mono);font-size:12px" data-live-participant-timer>00:00:00</td>
+                                <td>
+                                    <div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden">
+                                        <div data-live-participant-progress style="height:100%;width:0%;background:var(--accent);transition:width 0.5s"></div>
+                                    </div>
+                                </td>
+                                <td style="text-align:right;font-family:var(--font-mono)" data-live-participant-dkp>0.00</td>
+                                <td>
+                                    @if (participant.IsOnBreak == true)
+                                    {
+                                        <span class="tag warning">On break</span>
+                                    }
+                                    else if (participant.IsVerified == true)
+                                    {
+                                        <span class="tag success">Verified</span>
+                                    }
+                                    else if (participant.IsVerified == false)
+                                    {
+                                        <span class="tag danger">Denied</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="tag">Pending</span>
+                                    }
+                                </td>
+                                <td style="text-align:right">
+                                    <div style="display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap">
+                                        @if (participant.AppUserId == currentUserId)
+                                        {
+                                            @if (participant.IsOnBreak == true)
+                                            {
+                                                <form asp-action="ReturnFromBreak" method="post" style="display:inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                    <button class="btn ghost sm" type="submit">Return</button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <form asp-action="TakeBreak" method="post" style="display:inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                    <button class="btn ghost sm" type="submit">Break</button>
+                                                </form>
+                                            }
+                                        }
+                                        @if (participant.IsVerified is null)
+                                        {
+                                            <form asp-action="VerifyUser" method="post" style="display:inline">
+                                                <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                <input type="hidden" name="characterName" value="@participant.CharacterName" />
+                                                <input type="hidden" name="isVerified" value="true" />
+                                                <button class="btn ghost sm" type="submit">Present</button>
+                                            </form>
+                                            <form asp-action="VerifyUser" method="post" style="display:inline">
+                                                <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                <input type="hidden" name="characterName" value="@participant.CharacterName" />
+                                                <input type="hidden" name="isVerified" value="false" />
+                                                <button class="btn ghost sm" type="submit">Absent</button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="UndoVerification" method="post" style="display:inline">
+                                                <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                <input type="hidden" name="characterName" value="@participant.CharacterName" />
+                                                <button class="btn ghost sm" type="submit">Undo</button>
+                                            </form>
+                                        }
+                                    </div>
+                                    @if (participant.StatusLedgerEntries.Count > 0)
+                                    {
+                                        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--fg-3)">
+                                            @foreach (var entry in participant.StatusLedgerEntries)
+                                            {
+                                                <div style="display:flex;justify-content:flex-end;align-items:flex-start;gap:6px">
+                                                    <div style="text-align:right">
+                                                        <div style="color:var(--fg);font-weight:500">
+                                                            @(entry.ActionType == "BreakStart" ? "Break started" :
+                                                              entry.ActionType == "BreakReturn" ? "Returned" :
+                                                              entry.ActionType)
+                                                        </div>
+                                                        <div>@entry.OccurredAt.ToString("g")</div>
+                                                        @if (entry.VerifiedAt.HasValue)
+                                                        {
+                                                            <div>Verified by @(entry.VerifiedBy ?? "Officer")</div>
+                                                        }
+                                                        else if (entry.RequiresVerification)
+                                                        {
+                                                            <div>Awaiting verify</div>
+                                                        }
+                                                    </div>
+                                                    @if (entry.ActionType == "BreakReturn" && entry.RequiresVerification && !entry.VerifiedAt.HasValue)
+                                                    {
+                                                        <form asp-action="VerifyReturn" method="post" style="display:inline">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                            <input type="hidden" name="ledgerEntryId" value="@entry.Id" />
+                                                            <button class="btn ghost sm" type="submit">Verify</button>
+                                                        </form>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <div class="card" style="border-color:var(--warning)">
+            <div style="padding:16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px">
                 <div>
-                    <h2 class="h5 mb-1">Complete this event</h2>
-                    <p class="text-muted mb-0">This rolls the live event into event history, calculates participant DKP, and updates linkshell totals.</p>
+                    <div style="font-size:14px;font-weight:600;color:var(--fg);margin-bottom:4px">Complete this event</div>
+                    <div style="font-size:12px;color:var(--fg-3)">Roll it into event history, calculate participant DKP, and update linkshell totals.</div>
                 </div>
                 <form asp-action="EndEvent" method="post">
                     <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                    <button class="btn btn-warning" type="submit">End event</button>
+                    <button class="btn primary" type="submit" style="background:var(--warning);border-color:var(--warning);color:#000">End event</button>
                 </form>
             </div>
         </div>
@@ -329,15 +325,10 @@
     <script>
         (() => {
             const dashboard = document.querySelector('[data-live-event-dashboard]');
-            if (!dashboard) {
-                return;
-            }
+            if (!dashboard) { return; }
 
             const parseLocalDate = (value) => {
-                if (!value) {
-                    return null;
-                }
-
+                if (!value) { return null; }
                 const parsed = new Date(value);
                 return Number.isNaN(parsed.getTime()) ? null : parsed;
             };
@@ -381,18 +372,9 @@
                     const dkpCell = row.querySelector('[data-live-participant-dkp]');
                     const progressBar = row.querySelector('[data-live-participant-progress]');
 
-                    if (timerCell) {
-                        timerCell.textContent = formatElapsed(participantElapsedMs);
-                    }
-
-                    if (dkpCell) {
-                        dkpCell.textContent = participantDkp.toFixed(2);
-                    }
-
-                    if (progressBar) {
-                        progressBar.style.width = `${progress}%`;
-                        progressBar.setAttribute('aria-valuenow', progress.toFixed(0));
-                    }
+                    if (timerCell) { timerCell.textContent = formatElapsed(participantElapsedMs); }
+                    if (dkpCell) { dkpCell.textContent = participantDkp.toFixed(2); }
+                    if (progressBar) { progressBar.style.width = `${progress}%`; }
                 }
             };
 

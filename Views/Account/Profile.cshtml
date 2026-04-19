@@ -6,39 +6,43 @@
         : null;
 }
 
-<div class="row justify-content-center">
-    <div class="col-xl-8">
-        <div class="card card-shell shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h3 mb-1">Profile</h1>
-                <p class="text-muted mb-4">Manage the app-level profile tied to your Discord-linked account.</p>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Profile</h1>
+        <div class="page-sub"><span>Your Discord-linked account</span></div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    </div>
+</div>
 
-                <form asp-action="UpdateProfile" method="post" enctype="multipart/form-data" class="row g-3">
-                    <div class="col-12">
-                        @if (imageSource is not null)
-                        {
-                            <img src="@imageSource" alt="Profile image" style="width:96px;height:96px;border-radius:999px;object-fit:cover;border:1px solid rgba(115,164,223,.35)" />
-                        }
-                    </div>
-                    <div class="col-md-6">
-                        <label asp-for="CharacterName" class="form-label"></label>
-                        <input asp-for="CharacterName" class="form-control" />
-                    </div>
-                    <div class="col-md-6">
-                        <label asp-for="TimeZone" class="form-label">Time zone (IANA)</label>
-                        <input asp-for="TimeZone" class="form-control" placeholder="America/New_York" />
-                    </div>
-                    <div class="col-12">
-                        <div class="form-text text-light-emphasis">
-                            Profile image is synced automatically from your Discord avatar.
-                        </div>
-                    </div>
-                    <div class="col-12 d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">Save profile</button>
-                        <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
-                    </div>
-                </form>
+<div class="card fade d2" style="padding:20px;max-width:720px">
+    <form asp-action="UpdateProfile" method="post" enctype="multipart/form-data">
+        @if (imageSource is not null)
+        {
+            <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+                <img src="@imageSource" alt="Profile" style="width:72px;height:72px;border-radius:999px;object-fit:cover;border:1px solid var(--border)" />
+                <div>
+                    <div style="font-weight:500;color:var(--fg)">@Model.CharacterName</div>
+                    <div style="font-size:12px;color:var(--fg-3)">Profile image syncs from Discord</div>
+                </div>
+            </div>
+        }
+
+        <div class="form-grid">
+            <div class="field">
+                <label asp-for="CharacterName"></label>
+                <input asp-for="CharacterName" class="form-control" />
+            </div>
+            <div class="field">
+                <label asp-for="TimeZone">Time zone (IANA)</label>
+                <input asp-for="TimeZone" class="form-control" placeholder="America/New_York" />
             </div>
         </div>
-    </div>
+
+        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <button type="submit" class="btn primary">Save profile</button>
+            <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Cancel</a>
+        </div>
+    </form>
 </div>

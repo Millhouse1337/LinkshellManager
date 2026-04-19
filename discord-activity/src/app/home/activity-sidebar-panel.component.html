@@ -1,4 +1,5 @@
-<aside class="dashboard__sidebar">
+<ng-container>
+  @if (showSection('profile')) {
   <article class="panel" aria-labelledby="profile-heading">
     <div class="panel__header">
       <div>
@@ -53,8 +54,9 @@
       </div>
     </form>
   </article>
+  }
 
-  @if (!isMemberMode() || needsProfileSetup() || (activity.overview()?.linkshells?.length ?? 0) === 0) {
+  @if (showSection('next-steps') && (!isMemberMode() || needsProfileSetup() || (activity.overview()?.linkshells?.length ?? 0) === 0)) {
   <article class="panel" aria-labelledby="next-steps-heading">
     <div class="panel__header">
       <div>
@@ -96,6 +98,7 @@
   </article>
   }
 
+  @if (showSection('roster')) {
   <article class="panel" aria-labelledby="linkshell-heading">
     <div class="panel__header">
       <div>
@@ -377,30 +380,9 @@
       <p class="notice">Linkshell data will appear after the current user is resolved.</p>
     }
   </article>
+  }
 
-  <article class="panel" aria-labelledby="participants-heading">
-    <div class="panel__header">
-      <div>
-        <p class="eyebrow eyebrow--small">Discord</p>
-        <h2 id="participants-heading">Connected party</h2>
-      </div>
-      <span class="pill">{{ activity.participants().length }}</span>
-    </div>
-
-    @if (activity.participants().length > 0) {
-      <ul class="participants">
-        @for (participant of activity.participants(); track participant.id) {
-          <li>
-            <strong>{{ participant.global_name || participant.username }}</strong>
-            <span>{{ participant.username }}</span>
-          </li>
-        }
-      </ul>
-    } @else {
-      <p class="notice">Participant presence appears after the embedded client is ready inside Discord.</p>
-    }
-  </article>
-
+  @if (showSection('invites')) {
   <article class="panel" aria-labelledby="invites-heading">
     <div class="panel__header">
       <div>
@@ -607,7 +589,9 @@
       </div>
     }
   </article>
+  }
 
+  @if (showSection('auctions')) {
   <article class="panel" aria-labelledby="auctions-heading">
     <div class="panel__header">
       <div>
@@ -855,7 +839,9 @@
       }
     </div>
   </article>
+  }
 
+  @if (showSection('history')) {
   <article class="panel" aria-labelledby="history-heading">
     <div class="panel__header">
       <div>
@@ -948,7 +934,9 @@
       <p class="notice">Completed events will show up here after a run is archived.</p>
     }
   </article>
+  }
 
+  @if (showSection('dkp')) {
   <article class="panel" aria-labelledby="dkp-history-heading">
     <div class="panel__header">
       <div>
@@ -1037,4 +1025,5 @@
       }
     }
   </article>
-</aside>
+  }
+</ng-container>

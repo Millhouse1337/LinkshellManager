@@ -3,45 +3,46 @@
     ViewData["Title"] = "Settings";
 }
 
-<div class="row justify-content-center">
-    <div class="col-xl-8">
-        <div class="card card-shell shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h3 mb-1">Settings</h1>
-                <p class="text-muted mb-4">Choose which linkshell should be treated as your primary context for the dashboard and history pages.</p>
-
-                @if (Model.Linkshells.Count == 0)
-                {
-                    <div class="alert alert-info mb-0">
-                        You are not a member of any linkshells yet. <a asp-controller="Linkshell" asp-action="Create" class="alert-link">Create one now</a>.
-                    </div>
-                }
-                else
-                {
-                    <form asp-action="SetPrimaryLinkshell" method="post" class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label" for="SelectedLinkshellId">Primary linkshell</label>
-                            <select class="form-select" id="SelectedLinkshellId" name="SelectedLinkshellId">
-                                @foreach (var linkshell in Model.Linkshells)
-                                {
-                                    if (linkshell.Id == Model.SelectedLinkshellId)
-                                    {
-                                        <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                                    }
-                                }
-                            </select>
-                        </div>
-                        <div class="col-12 d-flex gap-2">
-                            <button type="submit" class="btn btn-primary">Save settings</button>
-                            <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
-                        </div>
-                    </form>
-                }
-            </div>
-        </div>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Settings</h1>
+        <div class="page-sub"><span>Choose your primary linkshell context</span></div>
     </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    </div>
+</div>
+
+<div class="card fade d2" style="padding:20px;max-width:720px">
+    @if (Model.Linkshells.Count == 0)
+    {
+        <div class="alert alert-warning" style="margin:0">
+            You are not a member of any linkshells yet. <a asp-controller="Linkshell" asp-action="Create" style="color:var(--accent)">Create one now</a>.
+        </div>
+    }
+    else
+    {
+        <form asp-action="SetPrimaryLinkshell" method="post">
+            <div class="field">
+                <label for="SelectedLinkshellId">Primary linkshell</label>
+                <select class="form-select" id="SelectedLinkshellId" name="SelectedLinkshellId">
+                    @foreach (var linkshell in Model.Linkshells)
+                    {
+                        if (linkshell.Id == Model.SelectedLinkshellId)
+                        {
+                            <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                        }
+                        else
+                        {
+                            <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+                <button type="submit" class="btn primary">Save settings</button>
+                <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Cancel</a>
+            </div>
+        </form>
+    }
 </div>

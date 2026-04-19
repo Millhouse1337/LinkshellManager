@@ -3,52 +3,63 @@
     ViewData["Title"] = "Linkshells";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head fade d1">
     <div>
-        <h1 class="h3 mb-1">Linkshells</h1>
-        <p class="text-muted mb-0">Manage the linkshells attached to your current app user.</p>
+        <h1 class="page-title">Linkshells</h1>
+        <div class="page-sub">
+            <span><span class="num">@Model.Count()</span> total</span>
+        </div>
     </div>
-    <a class="btn btn-primary" asp-action="Create">Create linkshell</a>
+    <div class="page-actions">
+        <a class="btn primary" asp-action="Create">+ Create linkshell</a>
+    </div>
 </div>
 
-<div class="card card-shell shadow-sm">
-    <div class="card-body">
-        @if (!Model.Any())
-        {
-            <p class="text-muted mb-0">You have not created or joined a linkshell yet.</p>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Status</th>
-                            <th>Members</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var linkshell in Model)
-                    {
-                        <tr>
-                            <td>
-                                <div class="fw-semibold">@linkshell.LinkshellName</div>
-                                <div class="small text-muted">@linkshell.Details</div>
-                            </td>
-                            <td>@(linkshell.Status ?? "Active")</td>
-                            <td>@(linkshell.TotalMembers ?? 0)</td>
-                            <td class="text-end d-flex justify-content-end gap-2">
-                                <a class="btn btn-outline-light btn-sm" asp-action="Details" asp-route-id="@linkshell.Id">Details</a>
-                                <a class="btn btn-outline-light btn-sm" asp-action="Edit" asp-route-id="@linkshell.Id">Edit</a>
-                                <a class="btn btn-outline-danger btn-sm" asp-action="Delete" asp-route-id="@linkshell.Id">Delete</a>
-                            </td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
+<div class="card fade d2">
+    @if (!Model.Any())
+    {
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No linkshells yet</div>
+            <div style="margin-bottom:12px">Create or join a linkshell to start managing memberships and events.</div>
+            <a class="btn primary" asp-action="Create">Create linkshell</a>
+        </div>
+    }
+    else
+    {
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>Linkshell</th>
+                    <th>Status</th>
+                    <th style="text-align:right">Members</th>
+                    <th style="text-align:right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var linkshell in Model)
+                {
+                    var status = linkshell.Status ?? "Active";
+                    var statusClass = status.Equals("Active", StringComparison.OrdinalIgnoreCase) ? "success" : "";
+                    <tr>
+                        <td>
+                            <div style="font-weight:500">@linkshell.LinkshellName</div>
+                            @if (!string.IsNullOrWhiteSpace(linkshell.Details))
+                            {
+                                <div style="color:var(--fg-4);font-size:11px">@linkshell.Details</div>
+                            }
+                        </td>
+                        <td><span class="tag @statusClass">@status</span></td>
+                        <td style="text-align:right" class="num">@(linkshell.TotalMembers ?? 0)</td>
+                        <td style="text-align:right">
+                            <div style="display:flex;justify-content:flex-end;gap:4px">
+                                <a class="btn ghost sm" asp-action="Details" asp-route-id="@linkshell.Id">Details</a>
+                                <a class="btn ghost sm" asp-action="Edit" asp-route-id="@linkshell.Id">Edit</a>
+                                <a class="btn ghost sm" asp-action="Delete" asp-route-id="@linkshell.Id">Delete</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 </div>

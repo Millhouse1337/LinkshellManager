@@ -1,167 +1,129 @@
 @using Microsoft.AspNetCore.Identity
+@using LinkshellManagerDiscordApp.Data
+@using Microsoft.EntityFrameworkCore
 @inject SignInManager<AppUser> SignInManager
 @inject UserManager<AppUser> UserManager
+@inject ApplicationDbContext DbContext
 
 @{
     var isSignedIn = SignInManager.IsSignedIn(User);
     AppUser? currentUser = isSignedIn ? await UserManager.GetUserAsync(User) : null;
-    var pageTitle = ViewData["Title"]?.ToString() ?? "LinkshellManager";
+    var pageTitle = ViewData["Title"]?.ToString() ?? "Dashboard";
     var profileImage = currentUser?.ProfileImage is { Length: > 0 }
         ? $"data:image/png;base64,{Convert.ToBase64String(currentUser.ProfileImage)}"
         : null;
+
+    string? activeLinkshellName = null;
+    string? activeLinkshellInitials = null;
+    string? activeRole = null;
+    if (currentUser is not null && currentUser.PrimaryLinkshellId.HasValue)
+    {
+        var ls = await DbContext.Linkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == currentUser.PrimaryLinkshellId.Value);
+        if (ls is not null)
+        {
+            activeLinkshellName = ls.LinkshellName;
+            activeLinkshellInitials = string.Concat(
+                (ls.LinkshellName ?? "LS")
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w[0]))
+                .ToUpperInvariant();
+            if (activeLinkshellInitials.Length > 2)
+            {
+                activeLinkshellInitials = activeLinkshellInitials[..2];
+            }
+
+            var membership = await DbContext.AppUserLinkshells
+                .AsNoTracking()
+                .FirstOrDefaultAsync(link =>
+                    link.AppUserId == currentUser.Id &&
+                    link.LinkshellId == currentUser.PrimaryLinkshellId.Value);
+            activeRole = membership?.Rank;
+        }
+    }
+
+    ViewData["ActiveLinkshellName"] = activeLinkshellName;
+    ViewData["ActiveLinkshellInitials"] = activeLinkshellInitials;
+    ViewData["ActiveRole"] = activeRole;
+
+    var displayName = currentUser?.CharacterName ?? currentUser?.UserName ?? "User";
+    var avatarInitials = string.Concat(
+            (displayName ?? "U")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => w[0]))
+            .ToUpperInvariant();
+    if (string.IsNullOrEmpty(avatarInitials)) { avatarInitials = "U"; }
+    if (avatarInitials.Length > 2) { avatarInitials = avatarInitials[..2]; }
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@pageTitle - LinkshellManager</title>
+    <title>@pageTitle · LinkshellManager</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <style>
-        body {
-            background: linear-gradient(180deg, #09111d 0%, #0f2033 100%);
-            color: #e8eef6;
-            min-height: 100vh;
-        }
-
-        .navbar, .footer-shell, .card-shell {
-            background: rgba(10, 19, 33, 0.88);
-            border: 1px solid rgba(115, 164, 223, 0.18);
-            backdrop-filter: blur(14px);
-        }
-
-        .navbar .nav-link,
-        .navbar .navbar-brand,
-        .navbar-text,
-        a {
-            color: #dbe9f8;
-        }
-
-        .navbar .nav-link:hover,
-        .navbar .navbar-brand:hover,
-        a:hover {
-            color: #9cc8ff;
-        }
-
-        .main-shell {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-
-        .card {
-            background: rgba(12, 22, 39, 0.9);
-            border-color: rgba(115, 164, 223, 0.15);
-            color: #e8eef6;
-        }
-
-        .table {
-            color: #e8eef6;
-        }
-
-        .table thead th {
-            color: #a9c7e8;
-            border-bottom-color: rgba(115, 164, 223, 0.2);
-        }
-
-        .table td,
-        .table th {
-            border-color: rgba(115, 164, 223, 0.12);
-        }
-
-        .form-control,
-        .form-select,
-        textarea {
-            background-color: rgba(3, 10, 20, 0.75);
-            border-color: rgba(115, 164, 223, 0.25);
-            color: #f3f7fb;
-        }
-
-        .form-control:focus,
-        .form-select:focus,
-        textarea:focus {
-            background-color: rgba(3, 10, 20, 0.9);
-            color: #f3f7fb;
-            border-color: #5aa6ff;
-            box-shadow: 0 0 0 0.2rem rgba(90, 166, 255, 0.2);
-        }
-
-        .text-muted {
-            color: #9bb5cf !important;
-        }
-
-        .badge-soft {
-            background: rgba(90, 166, 255, 0.16);
-            color: #b5d6ff;
-        }
-
-        .profile-thumb {
-            width: 32px;
-            height: 32px;
-            object-fit: cover;
-            border-radius: 999px;
-            border: 1px solid rgba(115, 164, 223, 0.3);
-        }
-    </style>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
-    <header class="navbar navbar-expand-lg shadow-sm">
-        <div class="container-fluid px-4">
-            <a class="navbar-brand fw-semibold" asp-controller="Dashboard" asp-action="Index">LinkshellManager</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#appNav" aria-controls="appNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="appNav">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    @if (isSignedIn)
-                    {
-                        <li class="nav-item"><a class="nav-link" asp-controller="Dashboard" asp-action="Index">Dashboard</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="Linkshell" asp-action="Index">Linkshells</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="Event" asp-action="Index">Events</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="Auction" asp-action="Index">Auctions</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="AuctionHistory" asp-action="Index">Auction History</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="EventHistory" asp-action="Index">History</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="DkpHistory" asp-action="Index">DKP History</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/discord-activity">Discord Activity</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="Account" asp-action="Profile">Profile</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="Account" asp-action="Settings">Settings</a></li>
-                    }
-                </ul>
-                <div class="d-flex align-items-center gap-3">
-                    @if (isSignedIn && currentUser is not null)
-                    {
-                        @await Component.InvokeAsync("LinkshellDropdown")
-                        <span class="navbar-text d-flex align-items-center gap-2">
+    @if (isSignedIn && currentUser is not null)
+    {
+        <div class="app">
+            <partial name="_Sidebar" />
+
+            <div class="main">
+                <div class="topbar">
+                    <div class="crumbs">
+                        @if (!string.IsNullOrWhiteSpace(activeLinkshellName))
+                        {
+                            <span>@activeLinkshellName</span>
+                            <span class="sep">/</span>
+                        }
+                        <span class="here">@pageTitle</span>
+                    </div>
+
+                    <div class="topbar-actions">
+                        <button type="button" class="search" aria-label="Search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                            <span>Search…</span>
+                            <kbd>⌘K</kbd>
+                        </button>
+                        <button type="button" class="icon-btn" title="Notifications" aria-label="Notifications">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+                        </button>
+                        <a class="avatar-btn" asp-controller="Account" asp-action="Profile" title="Profile">
                             @if (profileImage is not null)
                             {
-                                <img class="profile-thumb" src="@profileImage" alt="Profile" />
+                                <img class="avatar-img" src="@profileImage" alt="" />
                             }
-                            <span>@(currentUser.CharacterName ?? currentUser.UserName ?? "User")</span>
-                        </span>
-                        <a class="btn btn-outline-light btn-sm" asp-controller="Account" asp-action="Logout">Sign out</a>
-                    }
-                    else
-                    {
-                        <a class="btn btn-primary btn-sm" asp-controller="Account" asp-action="Login">Continue with Discord</a>
-                    }
+                            else
+                            {
+                                <span class="avatar">@avatarInitials</span>
+                            }
+                            <span class="avatar-name">@displayName</span>
+                        </a>
+                        <a class="icon-btn" asp-controller="Account" asp-action="Logout" title="Sign out" aria-label="Sign out">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="content">
+                    @RenderBody()
                 </div>
             </div>
         </div>
-    </header>
-
-    <main class="main-shell">
-        <div class="container-fluid px-4">
+    }
+    else
+    {
+        <div class="auth-shell">
             @RenderBody()
         </div>
-    </main>
-
-    <footer class="footer-shell mt-auto py-3">
-        <div class="container-fluid px-4 text-muted small">
-            Same-origin MVC shell for Linkshells and Events. Discord Activity remains mounted at <code>/discord-activity</code>.
-        </div>
-    </footer>
+    }
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/sidebar.js" asp-append-version="true"></script>
     <partial name="_ValidationScriptsPartial" />
     @await RenderSectionAsync("Scripts", required: false)
 </body>

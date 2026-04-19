@@ -2,111 +2,149 @@
 @{
     ViewData["Title"] = "Events";
     var currentCharacter = ViewBag.CharacterName as string;
+
+    string RelativeTime(DateTime? when)
+    {
+        if (!when.HasValue) return "TBD";
+        var delta = when.Value - DateTime.UtcNow;
+        var abs = delta.Duration();
+        var prefix = delta.TotalSeconds < 0 ? "" : "in ";
+        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
+        if (abs.TotalMinutes < 60) return $"{prefix}{(int)abs.TotalMinutes}m{suffix}";
+        if (abs.TotalHours < 24) return $"{prefix}{(int)abs.TotalHours}h{suffix}";
+        if (abs.TotalDays < 14) return $"{prefix}{(int)abs.TotalDays}d{suffix}";
+        return when.Value.ToString("MMM d");
+    }
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head fade d1">
     <div>
-        <h1 class="h3 mb-1">Events</h1>
-        <p class="text-muted mb-0">Create, sign up for, and start linkshell events.</p>
+        <h1 class="page-title">Event System</h1>
+        <div class="page-sub">
+            <span><span class="num">@Model.Count()</span> active</span>
+            <span class="live-dot">Live</span>
+        </div>
     </div>
-    <a class="btn btn-primary" asp-action="Create">Create event</a>
+    <div class="page-actions">
+        <a class="btn primary" asp-action="Create">+ Create event</a>
+    </div>
 </div>
 
 @if (!Model.Any())
 {
-    <div class="card card-shell shadow-sm"><div class="card-body"><p class="text-muted mb-0">No active events yet.</p></div></div>
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No active events</div>
+            <div style="margin-bottom:12px">Create your first event to begin scheduling linkshell runs.</div>
+            <a class="btn primary" asp-action="Create">Create event</a>
+        </div>
+    </div>
 }
 else
 {
-    <div class="row g-4">
+    <div class="fade d2" style="display:grid;gap:16px">
         @foreach (var item in Model)
         {
             var signedUp = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter);
-            <div class="col-12">
-                <div class="card card-shell shadow-sm">
-                    <div class="card-body p-4">
-                        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
-                            <div>
-                                <div class="small text-muted text-uppercase">@item.Event.EventType</div>
-                                <h2 class="h4 mb-1">@item.Event.EventName</h2>
-                                <div class="text-muted">@item.Event.EventLocation</div>
-                            </div>
-                            <div class="text-lg-end">
-                                <div><span class="badge badge-soft">Starts @(item.Event.StartTime?.ToString("g") ?? "TBD")</span></div>
-                                <div class="small text-muted mt-2">Created by @(item.CreatorCharacterName ?? "Unknown")</div>
-                            </div>
+            var isLive = item.Event.CommencementStartTime.HasValue;
+            <div class="card">
+                <div class="card-head">
+                    <div style="display:flex;flex-direction:column;gap:4px">
+                        <div class="card-title">
+                            @item.Event.EventName
+                            @if (!string.IsNullOrWhiteSpace(item.Event.EventType))
+                            {
+                                <span class="tag">@item.Event.EventType</span>
+                            }
+                            @if (isLive)
+                            {
+                                <span class="tag success">Live</span>
+                            }
                         </div>
-
-                        @if (!string.IsNullOrWhiteSpace(item.Event.Details))
-                        {
-                            <p class="text-muted">@item.Event.Details</p>
-                        }
-
-                        <div class="table-responsive mb-3">
-                            <table class="table table-sm align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Job</th>
-                                        <th>Type</th>
-                                        <th>Qty</th>
-                                        <th>Signed</th>
-                                        <th>Roster</th>
-                                        <th class="text-end">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                @foreach (var job in item.Jobs)
-                                {
-                                    var onThisJob = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter && entry.JobName == job.JobName && entry.SubJobName == job.SubJobName);
-                                    <tr>
-                                        <td>@job.JobName/@job.SubJobName</td>
-                                        <td>@job.JobType</td>
-                                        <td>@(job.Quantity ?? 0)</td>
-                                        <td>@(job.SignedUp ?? 0)</td>
-                                        <td class="small text-muted">@(job.Enlisted.Count > 0 ? string.Join(", ", job.Enlisted) : "No one yet")</td>
-                                        <td class="text-end">
-                                            @if (onThisJob)
-                                            {
-                                                <form asp-action="Unsign" method="post" class="d-inline">
-                                                    <input type="hidden" name="jobId" value="@job.Id" />
-                                                    <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                                    <button class="btn btn-outline-warning btn-sm" type="submit">Unsign</button>
-                                                </form>
-                                            }
-                                            else
-                                            {
-                                                <form asp-action="SignUp" method="post" class="d-inline">
-                                                    <input type="hidden" name="jobId" value="@job.Id" />
-                                                    <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                                    <button class="btn btn-outline-light btn-sm" type="submit">Sign up</button>
-                                                </form>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
-                            <div class="small text-muted">Participants: @item.AppUserEvents.Count @(signedUp ? "� You are signed up" : string.Empty)</div>
-                            <div class="d-flex flex-wrap gap-2">
-                                @if (item.Event.CommencementStartTime.HasValue)
-                                {
-                                    <a class="btn btn-primary btn-sm" asp-action="Start" asp-route-eventId="@item.Event.Id">Resume event</a>
-                                }
-                                else
-                                {
-                                    <form asp-action="StartEvent" method="post" class="d-inline">
-                                        <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                        <button class="btn btn-primary btn-sm" type="submit">Start event</button>
-                                    </form>
-                                }
-                                <a class="btn btn-outline-light btn-sm" asp-action="Edit" asp-route-id="@item.Event.Id">Edit</a>
-                                <a class="btn btn-outline-danger btn-sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
-                            </div>
+                        <div style="font-size:12px;color:var(--fg-3)">
+                            @if (!string.IsNullOrWhiteSpace(item.Event.EventLocation))
+                            {
+                                <span>@item.Event.EventLocation</span>
+                                <span class="dot"> · </span>
+                            }
+                            <span>@(item.Event.StartTime?.ToString("ddd MMM d, HH:mm") ?? "Start TBD")</span>
+                            <span class="dot"> · </span>
+                            <span>@RelativeTime(item.Event.StartTime)</span>
+                            <span class="dot"> · </span>
+                            <span>by @(item.CreatorCharacterName ?? "Unknown")</span>
                         </div>
                     </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        @if (isLive)
+                        {
+                            <a class="btn primary sm" asp-action="Start" asp-route-eventId="@item.Event.Id">Resume</a>
+                        }
+                        else
+                        {
+                            <form asp-action="StartEvent" method="post" style="display:inline">
+                                <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                <button class="btn primary sm" type="submit">Start</button>
+                            </form>
+                        }
+                        <a class="btn ghost sm" asp-action="Edit" asp-route-id="@item.Event.Id">Edit</a>
+                        <a class="btn ghost sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(item.Event.Details))
+                {
+                    <div style="padding:0 16px 12px;color:var(--fg-3);font-size:13px">@item.Event.Details</div>
+                }
+
+                @if (item.Jobs.Count > 0)
+                {
+                    <table class="table themed">
+                        <thead>
+                            <tr>
+                                <th>Job</th>
+                                <th>Role</th>
+                                <th>Qty</th>
+                                <th>Signed</th>
+                                <th>Roster</th>
+                                <th style="text-align:right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var job in item.Jobs)
+                            {
+                                var onThisJob = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter && entry.JobName == job.JobName && entry.SubJobName == job.SubJobName);
+                                <tr>
+                                    <td>@job.JobName/@job.SubJobName</td>
+                                    <td><span class="tag">@job.JobType</span></td>
+                                    <td>@(job.Quantity ?? 0)</td>
+                                    <td>@(job.SignedUp ?? 0)</td>
+                                    <td style="color:var(--fg-3);font-size:12px">@(job.Enlisted.Count > 0 ? string.Join(", ", job.Enlisted) : "—")</td>
+                                    <td style="text-align:right">
+                                        @if (onThisJob)
+                                        {
+                                            <form asp-action="Unsign" method="post" style="display:inline">
+                                                <input type="hidden" name="jobId" value="@job.Id" />
+                                                <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                                <button class="btn ghost sm" type="submit">Unsign</button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="SignUp" method="post" style="display:inline">
+                                                <input type="hidden" name="jobId" value="@job.Id" />
+                                                <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                                <button class="btn primary sm" type="submit">Sign up</button>
+                                            </form>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--fg-3)">
+                    <span><span class="num">@item.AppUserEvents.Count</span> participants @(signedUp ? "· you are signed up" : "")</span>
                 </div>
             </div>
         }

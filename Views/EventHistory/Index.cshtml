@@ -1,49 +1,66 @@
 @model IEnumerable<EventHistory>
 @{
     ViewData["Title"] = "Event history";
+
+    string RelativeTime(DateTime? when)
+    {
+        if (!when.HasValue) return "—";
+        var delta = when.Value - DateTime.UtcNow;
+        var abs = delta.Duration();
+        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
+        if (abs.TotalMinutes < 60) return $"{(int)abs.TotalMinutes}m{suffix}";
+        if (abs.TotalHours < 24) return $"{(int)abs.TotalHours}h{suffix}";
+        if (abs.TotalDays < 14) return $"{(int)abs.TotalDays}d{suffix}";
+        return when.Value.ToString("MMM d");
+    }
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-head fade d1">
     <div>
-        <h1 class="h3 mb-1">Event history</h1>
-        <p class="text-muted mb-0">Completed events for your current primary linkshell.</p>
+        <h1 class="page-title">Event history</h1>
+        <div class="page-sub">
+            <span><span class="num">@Model.Count()</span> completed</span>
+        </div>
     </div>
-    <a class="btn btn-outline-light" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    </div>
 </div>
 
-<div class="card card-shell shadow-sm">
-    <div class="card-body">
-        @if (!Model.Any())
-        {
-            <p class="text-muted mb-0">No completed events yet.</p>
-        }
-        else
-        {
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Location</th>
-                            <th>End time</th>
-                            <th class="text-end"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var history in Model)
-                    {
-                        <tr>
-                            <td>@history.EventName</td>
-                            <td>@history.EventType</td>
-                            <td>@history.EventLocation</td>
-                            <td>@(history.EndTime?.ToString("g") ?? history.TimeStamp?.ToString("g") ?? "Unknown")</td>
-                            <td class="text-end"><a class="btn btn-outline-light btn-sm" asp-action="Details" asp-route-id="@history.Id">Details</a></td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
+<div class="card fade d2">
+    @if (!Model.Any())
+    {
+        <div class="empty">No completed events yet.</div>
+    }
+    else
+    {
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>Event</th>
+                    <th>Type</th>
+                    <th>Location</th>
+                    <th>Ended</th>
+                    <th>When</th>
+                    <th style="text-align:right"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var history in Model)
+                {
+                    var end = history.EndTime ?? history.TimeStamp;
+                    <tr>
+                        <td style="font-weight:500">@history.EventName</td>
+                        <td><span class="tag">@history.EventType</span></td>
+                        <td>@history.EventLocation</td>
+                        <td>@(end?.ToString("g") ?? "—")</td>
+                        <td style="color:var(--fg-3);font-size:12px">@RelativeTime(end)</td>
+                        <td style="text-align:right">
+                            <a class="btn ghost sm" asp-action="Details" asp-route-id="@history.Id">Details</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 </div>

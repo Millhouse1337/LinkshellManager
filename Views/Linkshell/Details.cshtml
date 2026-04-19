@@ -1,57 +1,90 @@
 @model Linkshell
 @{
     ViewData["Title"] = "Linkshell details";
+
+    string RosterAvClass(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return "a";
+        var h = 0;
+        foreach (var ch in name) { h = (h * 31 + ch) & 0x7fffffff; }
+        return new[] { "a", "b", "c", "d", "e" }[h % 5];
+    }
+
+    string Initials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var ini = string.Concat(parts.Select(p => p[0])).ToUpperInvariant();
+        return ini.Length > 2 ? ini[..2] : ini;
+    }
 }
 
-<div class="row g-4">
-    <div class="col-xl-4">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <h1 class="h3 mb-2">@Model.LinkshellName</h1>
-                <p class="text-muted">@Model.Details</p>
-                <dl class="row mb-0">
-                    <dt class="col-sm-4">Status</dt>
-                    <dd class="col-sm-8">@(Model.Status ?? "Active")</dd>
-                    <dt class="col-sm-4">Members</dt>
-                    <dd class="col-sm-8">@Model.AppUserLinkshells.Count</dd>
-                </dl>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@Model.LinkshellName</h1>
+        <div class="page-sub">
+            <span>@(Model.Status ?? "Active")</span>
+            <span>·</span>
+            <span><span class="num">@Model.AppUserLinkshells.Count</span> members</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
+        <a class="btn ghost" asp-action="Delete" asp-route-id="@Model.Id">Delete</a>
+    </div>
+</div>
+
+<div class="grid fade d2">
+    <div class="col">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Overview</div>
+            </div>
+            <div style="padding:4px 16px 16px">
+                @if (!string.IsNullOrWhiteSpace(Model.Details))
+                {
+                    <p style="color:var(--fg-3);font-size:13px;margin:0 0 12px">@Model.Details</p>
+                }
+                <div style="display:grid;grid-template-columns:110px 1fr;gap:8px 12px;font-size:13px">
+                    <div style="color:var(--fg-3)">Status</div><div>@(Model.Status ?? "Active")</div>
+                    <div style="color:var(--fg-3)">Members</div><div class="num">@Model.AppUserLinkshells.Count</div>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-xl-8">
-        <div class="card card-shell shadow-sm h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 mb-0">Roster</h2>
-                    <div class="d-flex gap-2">
-                        <a class="btn btn-outline-light btn-sm" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
-                        <a class="btn btn-outline-danger btn-sm" asp-action="Delete" asp-route-id="@Model.Id">Delete</a>
-                    </div>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle">
-                        <thead>
-                            <tr>
-                                <th>Character</th>
-                                <th>Rank</th>
-                                <th>Status</th>
-                                <th class="text-end">DKP</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        @foreach (var member in Model.AppUserLinkshells.OrderBy(m => m.CharacterName))
-                        {
-                            <tr>
-                                <td>@(member.CharacterName ?? member.AppUser?.UserName ?? "Unknown")</td>
-                                <td>@(member.Rank ?? "Member")</td>
-                                <td>@(member.Status ?? "Active")</td>
-                                <td class="text-end">@((member.LinkshellDkp ?? 0).ToString("0.##"))</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
+    <div class="col">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Roster</div>
             </div>
+            @if (Model.AppUserLinkshells.Count == 0)
+            {
+                <div class="empty">No members in this linkshell yet.</div>
+            }
+            else
+            {
+                <div class="roster-head">
+                    <div></div>
+                    <div>Character</div>
+                    <div>Rank</div>
+                    <div style="text-align:right">DKP</div>
+                    <div>Status</div>
+                </div>
+                @foreach (var member in Model.AppUserLinkshells.OrderBy(m => m.CharacterName))
+                {
+                    var name = member.CharacterName ?? member.AppUser?.UserName ?? "Unknown";
+                    var status = member.Status ?? "Active";
+                    var statusClass = status.Equals("Active", StringComparison.OrdinalIgnoreCase) ? "success"
+                        : status.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "warning" : "";
+                    <div class="roster-row">
+                        <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
+                        <div><div class="roster-name">@name</div></div>
+                        <div class="roster-rank">@(member.Rank ?? "Member")</div>
+                        <div class="roster-dkp">@((member.LinkshellDkp ?? 0).ToString("0.##"))</div>
+                        <div><span class="tag @statusClass">@status</span></div>
+                    </div>
+                }
+            }
         </div>
     </div>
 </div>
