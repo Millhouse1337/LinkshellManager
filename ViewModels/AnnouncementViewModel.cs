@@ -1,19 +1,31 @@
-﻿using LinkshellManager.Models;
+using System.ComponentModel.DataAnnotations;
+using LinkshellManagerDiscordApp.Models;
 
-namespace LinkshellManager.ViewModels
+namespace LinkshellManagerDiscordApp.ViewModels;
+
+public class AnnouncementViewModel
 {
-    public class AnnouncementViewModel
-    {
-        public int Id { get; set; }
-        public List<Linkshell>? Linkshells { get; set; }
-        public int LinkshellId { get; set; }
-        public string? LinkshellName { get; set; }
-        public string AnnouncementTitle { get; set; }
-        public string AnnouncementDetails { get; set; }
+    public int Id { get; set; }
 
-        public AnnouncementViewModel()
-        {
-            Linkshells = new List<Linkshell>();
-        }
-    }
+    public List<Linkshell> Linkshells { get; set; } = new();
+
+    [Display(Name = "Linkshell")]
+    public int LinkshellId { get; set; }
+
+    public string? LinkshellName { get; set; }
+
+    [Required]
+    [Display(Name = "Title")]
+    [StringLength(256)]
+    public string AnnouncementTitle { get; set; } = string.Empty;
+
+    [Required]
+    [Display(Name = "Details")]
+    [StringLength(4000)]
+    public string AnnouncementDetails { get; set; } = string.Empty;
+
+    public string? CreatedByCharacterName { get; set; }
+    public DateTime CreatedAt { get; set; }
+
+    public bool CanManage { get; set; }
 }

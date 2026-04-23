@@ -62,6 +62,15 @@ export class ActivityQueuePanelComponent {
     return rank === 'leader' || rank === 'officer';
   }
 
+  protected linkshellLootStructure(linkshellId: number): 'Dkp' | 'LootCouncil' | 'Hybrid' {
+    const link = this.linkshellMemberships().find(l => l.id === linkshellId);
+    return (link?.settings?.lootStructure as 'Dkp' | 'LootCouncil' | 'Hybrid') ?? 'Dkp';
+  }
+
+  protected isDkpModeForSelectedLinkshell(): boolean {
+    return this.linkshellLootStructure(this.createModel.linkshellId) !== 'LootCouncil';
+  }
+
   protected canManageAnyLinkshell(): boolean {
     return this.linkshellMemberships().some(link => this.canManageLinkshell(link.id));
   }

@@ -1,25 +1,86 @@
-﻿@model IEnumerable<LinkshellManager.ViewModels.AnnouncementViewModel>
-<div class="container" style="max-width: 90%; margin: 0 auto;">
-    <h2 class="my-5">Announcements</h2>
+@model IEnumerable<LinkshellManagerDiscordApp.ViewModels.AnnouncementViewModel>
+@{
+    ViewData["Title"] = "Announcements";
+    var canManage = (bool)(ViewBag.CanManage ?? false);
+    var linkshellName = ViewBag.LinkshellName as string;
+}
 
-    <table class="mt-5 table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var announcement in Model)
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Announcements</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(linkshellName))
             {
-                <tr>
-                    <td>@announcement.AnnouncementTitle</td>
-                    <td>@announcement.AnnouncementDetails</td>
-                </tr>
+                <span>@linkshellName</span>
+                <span class="dot"> · </span>
             }
-        </tbody>
-    </table>
-    <div class="d-flex justify-content-end mt-3">
-        <a asp-action="Create" class="btn btn-primary">Create New Announcement</a>
+            <span><span class="num">@Model.Count()</span> announcement@(Model.Count() == 1 ? "" : "s")</span>
+        </div>
     </div>
+    @if (canManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-action="Create">+ Create announcement</a>
+        </div>
+    }
 </div>
+
+@if (!Model.Any())
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No announcements yet</div>
+            <div style="margin-bottom:12px">
+                @if (canManage)
+                {
+                    <span>Post an announcement to share news with your linkshell.</span>
+                }
+                else
+                {
+                    <span>No announcements have been posted for your linkshell.</span>
+                }
+            </div>
+            @if (canManage)
+            {
+                <a class="btn primary" asp-action="Create">Create announcement</a>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="fade d2" style="display:grid;gap:12px">
+        @foreach (var announcement in Model)
+        {
+            <div class="card">
+                <div class="card-head">
+                    <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                        <div class="card-title">@announcement.AnnouncementTitle</div>
+                        <div style="font-size:12px;color:var(--fg-3)">
+                            @if (!string.IsNullOrWhiteSpace(announcement.CreatedByCharacterName))
+                            {
+                                <span>Posted by @announcement.CreatedByCharacterName</span>
+                                <span class="dot"> · </span>
+                            }
+                            <span>@announcement.CreatedAt.ToString("MMM d, yyyy")</span>
+                        </div>
+                    </div>
+                    @if (announcement.CanManage)
+                    {
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            <a class="btn ghost sm" asp-action="Edit" asp-route-id="@announcement.Id">Edit</a>
+                            <form asp-action="Delete" asp-route-id="@announcement.Id" method="post" style="display:inline"
+                                  onsubmit="return confirm('Delete this announcement?');">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn ghost sm">Delete</button>
+                            </form>
+                        </div>
+                    }
+                </div>
+                <div style="padding:0 16px 16px;color:var(--fg-1);white-space:pre-wrap;font-size:13px">
+                    @announcement.AnnouncementDetails
+                </div>
+            </div>
+        }
+    </div>
+}

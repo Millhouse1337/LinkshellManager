@@ -2,7 +2,7 @@
   <div class="panel__header">
     <div>
       <p class="eyebrow eyebrow--small">{{ isMemberMode() ? 'Signups' : 'Queue' }}</p>
-      <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Ready room' }}</h2>
+      <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Pending Events' }}</h2>
     </div>
     <div class="button-cluster">
       @if (canManageAnyLinkshell()) {
@@ -67,10 +67,12 @@
           <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25" />
         </label>
 
-        <label>
-          <span>DKP/hour</span>
-          <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
-        </label>
+        @if (isDkpModeForSelectedLinkshell()) {
+          <label>
+            <span>DKP/hour</span>
+            <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
+          </label>
+        }
       </div>
 
       <label class="create-form__full">

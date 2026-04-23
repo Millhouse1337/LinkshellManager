@@ -1,68 +1,82 @@
-﻿@model LinkshellManager.ViewModels.ManageTeamViewModel
-
+@model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
 @{
-    ViewData["Title"] = "Player Search";
+    ViewData["Title"] = "Add members";
 }
 
-<div class="container">
-    <div class="pagetitle d-flex justify-content-center py-4">
-        <h2>Player Search</h2>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Add members</h1>
+        <div class="page-sub"><span>Search players and send linkshell invites</span></div>
     </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Back to team</a>
+    </div>
+</div>
 
-    <section class="section">
-        <div class="row">
-            <div class="col-lg-12">
-                <div class="card">
-                    <div class="card-body pt-3">
-                        <form asp-action="SearchPlayers" method="post">
-                            <div class="input-group mb-3">
-                                <input type="text" class="form-control" placeholder="Search players" name="searchTerm" value="@Model.SearchTerm">
-                                <button class="btn btn-primary" type="submit">Search</button>
-                            </div>
-                        </form>
-
-                        <h3>Search Results</h3>
-                        @if (Model.Players != null && Model.Players.Any())
-                        {
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Player Name</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var player in Model.Players)
-                                    {
-                                        <tr>
-                                            <td>@player.CharacterName</td>
-                                            <td>
-                                                <form asp-action="SendInvite" method="post" class="d-inline">
-                                                    <input type="hidden" name="userId" value="@player.Id" />
-                                                    <div class="input-group mb-3">
-                                                        <select class="form-select" name="linkshellId">
-                                                            @foreach (var linkshell in Model.Linkshells)
-                                                            {
-                                                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                                                            }
-                                                        </select>
-                                                        <button type="submit" class="btn btn-success">Send Invite</button>
-                                                    </div>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
-                        else
-                        {
-                            <p>No players found.</p>
-                        }
-
-                    </div>
-                </div>
+<div class="card fade d2" style="padding:20px">
+    <form asp-action="SearchPlayers" method="post" class="form-grid">
+        @Html.AntiForgeryToken()
+        <div class="field" style="grid-column:1/-1">
+            <label for="searchTerm">Search players</label>
+            <div style="display:flex;gap:8px">
+                <input id="searchTerm" name="searchTerm" class="form-control" value="@Model.SearchTerm" placeholder="Character name" />
+                <button type="submit" class="btn primary">Search</button>
             </div>
         </div>
-    </section>
+    </form>
+</div>
+
+<div class="card fade d3" style="margin-top:16px">
+    <div class="card-head">
+        <div class="card-title">Results</div>
+        @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+        {
+            <div class="card-sub"><span class="num">@Model.Players.Count</span> found</div>
+        }
+    </div>
+    @if (Model.Players.Count == 0)
+    {
+        <div class="empty">
+            @if (string.IsNullOrWhiteSpace(Model.SearchTerm))
+            {
+                <span>Enter a character name to begin searching.</span>
+            }
+            else
+            {
+                <span>No players match "@Model.SearchTerm".</span>
+            }
+        </div>
+    }
+    else
+    {
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>Character</th>
+                    <th style="text-align:right">Invite</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var player in Model.Players)
+                {
+                    <tr>
+                        <td>@player.CharacterName</td>
+                        <td style="text-align:right">
+                            <form asp-action="SendInvite" method="post" style="display:inline-flex;gap:6px;align-items:center;justify-content:flex-end">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="UserId" value="@player.Id" />
+                                <select name="LinkshellId" class="form-select" style="max-width:220px">
+                                    @foreach (var linkshell in Model.Linkshells)
+                                    {
+                                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                                    }
+                                </select>
+                                <button type="submit" class="btn primary sm">Send invite</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 </div>

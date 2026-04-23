@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(dotnet tool *)",
+      "Bash(export PATH=\"$PATH:/c/Users/millh/.dotnet/tools\")",
+      "Bash(dotnet-ef database *)",
+      "Bash(export PGPASSWORD=postgres)",
+      "Bash(psql -h localhost -U postgres -l)",
+      "Bash(dotnet-ef migrations *)"
+    ]
+  }
+}

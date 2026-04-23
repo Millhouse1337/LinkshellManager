@@ -36,5 +36,8 @@ public class Tod
 
     public int? TotalTods { get; set; }
 
+    [MaxLength(512)]
+    public string? ImagePath { get; set; }
+
     public ICollection<TodLootDetail> TodLootDetails { get; set; } = new List<TodLootDetail>();
 }

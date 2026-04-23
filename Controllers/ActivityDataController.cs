@@ -32,6 +32,7 @@ public sealed class ActivityDataController : ControllerBase
     private readonly AppUserProfileService _appUserProfileService;
     private readonly UserManager<AppUser> _userManager;
     private readonly IHostEnvironment _environment;
+    private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
     private readonly IDateTimeZoneProvider _dateTimeZoneProvider;
 
     public ActivityDataController(
@@ -40,6 +41,7 @@ public sealed class ActivityDataController : ControllerBase
         AppUserProfileService appUserProfileService,
         UserManager<AppUser> userManager,
         IHostEnvironment environment,
+        Microsoft.AspNetCore.Hosting.IWebHostEnvironment webHostEnvironment,
         IDateTimeZoneProvider dateTimeZoneProvider)
     {
         _dbContext = dbContext;
@@ -47,6 +49,7 @@ public sealed class ActivityDataController : ControllerBase
         _appUserProfileService = appUserProfileService;
         _userManager = userManager;
         _environment = environment;
+        _webHostEnvironment = webHostEnvironment;
         _dateTimeZoneProvider = dateTimeZoneProvider;
     }
 
@@ -79,6 +82,20 @@ public sealed class ActivityDataController : ControllerBase
             .GroupBy(link => link.LinkshellId)
             .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
+
+        foreach (var linkId in linkshellIds)
+        {
+            await EnsureDefaultRolesAsync(linkId, cancellationToken);
+        }
+
+        var allRoles = await _dbContext.LinkshellRoles
+            .Where(r => linkshellIds.Contains(r.LinkshellId))
+            .ToListAsync(cancellationToken);
+        var rolesByLinkshellAndName = allRoles
+            .GroupBy(r => r.LinkshellId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase));
 
         var activeEvents = await _dbContext.Events
             .Include(evt => evt.Jobs)
@@ -147,6 +164,41 @@ public sealed class ActivityDataController : ControllerBase
                 .ToListAsync(cancellationToken)
             : new List<AppUserLinkshell>();
 
+        var primaryRules = primaryLinkshellId.HasValue
+            ? await _dbContext.Rules
+                .AsNoTracking()
+                .Where(rule => rule.LinkshellId == primaryLinkshellId.Value)
+                .OrderByDescending(rule => rule.CreatedAt)
+                .ThenByDescending(rule => rule.Id)
+                .ToListAsync(cancellationToken)
+            : new List<Rule>();
+
+        var primaryAnnouncements = primaryLinkshellId.HasValue
+            ? await _dbContext.Announcements
+                .AsNoTracking()
+                .Where(announcement => announcement.LinkshellId == primaryLinkshellId.Value)
+                .OrderByDescending(announcement => announcement.CreatedAt)
+                .ThenByDescending(announcement => announcement.Id)
+                .ToListAsync(cancellationToken)
+            : new List<Announcement>();
+
+        var primaryItems = primaryLinkshellId.HasValue
+            ? await _dbContext.Items
+                .AsNoTracking()
+                .Where(item => item.LinkshellId == primaryLinkshellId.Value)
+                .OrderBy(item => item.ItemName)
+                .ToListAsync(cancellationToken)
+            : new List<Item>();
+
+        var primaryRevenue = primaryLinkshellId.HasValue
+            ? await _dbContext.RevenueEntries
+                .AsNoTracking()
+                .Where(entry => entry.LinkshellId == primaryLinkshellId.Value)
+                .OrderByDescending(entry => entry.OccurredAt)
+                .ThenByDescending(entry => entry.Id)
+                .ToListAsync(cancellationToken)
+            : new List<RevenueEntry>();
+
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
 
@@ -165,7 +217,9 @@ public sealed class ActivityDataController : ControllerBase
                 link.Status,
                 link.LinkshellDkp,
                 memberCounts.GetValueOrDefault(link.LinkshellId, 0),
-                link.Linkshell?.Details)).ToList(),
+                link.Linkshell?.Details,
+                ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName),
+                MapLinkshellSettingsDto(link.Linkshell))).ToList(),
             primaryLinkshell is null
                 ? null
                 : new ActivityPrimaryLinkshellDto(
@@ -179,7 +233,45 @@ public sealed class ActivityDataController : ControllerBase
                         member.CharacterName ?? member.AppUser?.UserName ?? "Unknown member",
                         member.Rank,
                         member.Status,
-                        member.LinkshellDkp)).ToList()),
+                        member.LinkshellDkp)).ToList(),
+                    primaryRules.Select(rule => new ActivityRuleDto(
+                        rule.Id,
+                        rule.LinkshellId,
+                        rule.RuleTitle,
+                        rule.RuleDetails,
+                        rule.CreatedByAppUserId,
+                        rule.CreatedByCharacterName,
+                        rule.CreatedAt)).ToList(),
+                    primaryAnnouncements.Select(announcement => new ActivityAnnouncementDto(
+                        announcement.Id,
+                        announcement.LinkshellId,
+                        announcement.AnnouncementTitle,
+                        announcement.AnnouncementDetails,
+                        announcement.CreatedByAppUserId,
+                        announcement.CreatedByCharacterName,
+                        announcement.CreatedAt)).ToList(),
+                    primaryItems.Select(item => new ActivityItemDto(
+                        item.Id,
+                        item.LinkshellId,
+                        item.ItemName,
+                        item.ItemType,
+                        item.Quantity,
+                        item.Notes,
+                        item.CreatedByAppUserId,
+                        item.CreatedByCharacterName,
+                        item.CreatedAt,
+                        item.UpdatedAt)).ToList(),
+                    primaryRevenue.Select(entry => new ActivityRevenueEntryDto(
+                        entry.Id,
+                        entry.LinkshellId,
+                        entry.EntryType,
+                        entry.Category,
+                        entry.Value,
+                        entry.Details,
+                        entry.OccurredAt,
+                        entry.CreatedByAppUserId,
+                        entry.CreatedByCharacterName,
+                        entry.CreatedAt)).ToList()),
             activeEvents.Select(evt => new ActivityEventDto(
                 evt.Id,
                 evt.LinkshellId,
@@ -213,7 +305,9 @@ public sealed class ActivityDataController : ControllerBase
                                 item.OccurredAt,
                                 item.RequiresVerification,
                                 item.VerifiedAt,
-                                item.VerifiedBy))
+                                item.VerifiedBy,
+                                item.DeniedAt,
+                                item.DeniedBy))
                             .ToList()))
                     .FirstOrDefault(),
                 evt.AppUserEvents
@@ -243,7 +337,9 @@ public sealed class ActivityDataController : ControllerBase
                                 item.OccurredAt,
                                 item.RequiresVerification,
                                 item.VerifiedAt,
-                                item.VerifiedBy))
+                                item.VerifiedBy,
+                                item.DeniedAt,
+                                item.DeniedBy))
                             .ToList()))
                     .ToList(),
                 evt.EventLootDetails
@@ -512,6 +608,125 @@ public sealed class ActivityDataController : ControllerBase
             }).ToList()));
     }
 
+    [HttpPost("dkp-audit")]
+    public async Task<IActionResult> CreateDkpAuditAsync(
+        [FromBody] ActivityDkpAuditRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to adjust DKP."
+            });
+        }
+
+        if (request.LinkshellId <= 0 || string.IsNullOrWhiteSpace(request.TargetAppUserId))
+        {
+            return BadRequest(new { error = "Linkshell and target member are required." });
+        }
+
+        var mode = request.Mode?.Trim();
+        if (!string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(mode, "Misc", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "Audit mode must be 'Adjust' or 'Misc'." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return BadRequest(new { error = "A reason for the audit is required." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanAuditDkp, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var targetMembership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(link =>
+                link.LinkshellId == request.LinkshellId &&
+                link.AppUserId == request.TargetAppUserId,
+                cancellationToken);
+        if (targetMembership is null)
+        {
+            return NotFound(new { error = "The selected member is not in this linkshell." });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var officerName = appUser.CharacterName ?? appUser.UserName ?? "Officer";
+        var reason = request.Reason.Trim();
+
+        var nextSequence = await _dbContext.DkpLedgerEntries
+            .Where(entry => entry.LinkshellId == request.LinkshellId && entry.AppUserId == request.TargetAppUserId)
+            .Select(entry => (int?)entry.Sequence)
+            .MaxAsync(cancellationToken);
+        var sequence = (nextSequence ?? 0) + 1;
+
+        DkpLedgerEntry newEntry;
+        double deltaAmount;
+
+        if (string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!request.RelatedLedgerEntryId.HasValue)
+            {
+                return BadRequest(new { error = "A related ledger entry is required when adjusting a previous entry." });
+            }
+
+            var original = await _dbContext.DkpLedgerEntries.FirstOrDefaultAsync(
+                entry => entry.Id == request.RelatedLedgerEntryId.Value &&
+                         entry.LinkshellId == request.LinkshellId &&
+                         entry.AppUserId == request.TargetAppUserId,
+                cancellationToken);
+            if (original is null)
+            {
+                return NotFound(new { error = "The selected original ledger entry was not found for this member." });
+            }
+
+            deltaAmount = request.Amount - original.Amount;
+            newEntry = new DkpLedgerEntry
+            {
+                AppUserId = request.TargetAppUserId,
+                LinkshellId = request.LinkshellId,
+                EntryType = "AuditAdjustment",
+                Amount = deltaAmount,
+                Sequence = sequence,
+                OccurredAt = nowUtc,
+                CharacterName = targetMembership.CharacterName,
+                EventName = original.EventName,
+                EventType = original.EventType,
+                EventLocation = original.EventLocation,
+                EventStartTime = original.EventStartTime,
+                EventEndTime = original.EventEndTime,
+                ItemName = original.ItemName,
+                Details = $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {original.Amount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0})."
+            };
+        }
+        else
+        {
+            deltaAmount = request.Amount;
+            newEntry = new DkpLedgerEntry
+            {
+                AppUserId = request.TargetAppUserId,
+                LinkshellId = request.LinkshellId,
+                EntryType = "AuditMisc",
+                Amount = deltaAmount,
+                Sequence = sequence,
+                OccurredAt = nowUtc,
+                CharacterName = targetMembership.CharacterName,
+                Details = $"Audit by {officerName}: {reason}"
+            };
+        }
+
+        targetMembership.LinkshellDkp = (targetMembership.LinkshellDkp ?? 0) + deltaAmount;
+        _dbContext.DkpLedgerEntries.Add(newEntry);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     [HttpPost("profile")]
     public async Task<IActionResult> UpdateProfileAsync(
         [FromBody] ActivityUpdateProfileRequest request,
@@ -551,6 +766,295 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         return Ok(new { success = true });
+    }
+
+    [HttpGet("linkshells/{linkshellId:int}/roles")]
+    public async Task<IActionResult> GetLinkshellRolesAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to load linkshell roles." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var roles = await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
+        var dtoRoles = roles.Select(MapLinkshellRoleDto).ToList();
+        return Ok(new ActivityLinkshellRolesResponse(linkshellId, dtoRoles));
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/roles")]
+    public async Task<IActionResult> CreateLinkshellRoleAsync(
+        int linkshellId,
+        [FromBody] ActivityLinkshellRolePermissions request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to create a linkshell role." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageRoles, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var name = request.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return BadRequest(new { error = "A role name is required." });
+        }
+        if (name.Length > 64)
+        {
+            return BadRequest(new { error = "Role name must be 64 characters or fewer." });
+        }
+
+        await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
+
+        var existing = await _dbContext.LinkshellRoles
+            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == name, cancellationToken);
+        if (existing is not null)
+        {
+            return BadRequest(new { error = "A role with that name already exists." });
+        }
+
+        var maxSort = await _dbContext.LinkshellRoles
+            .Where(r => r.LinkshellId == linkshellId)
+            .MaxAsync(r => (int?)r.SortOrder, cancellationToken) ?? 0;
+
+        var role = new LinkshellRole
+        {
+            LinkshellId = linkshellId,
+            Name = name,
+            IsSystem = false,
+            SortOrder = maxSort + 1
+        };
+        ApplyPermissions(role, request);
+        _dbContext.LinkshellRoles.Add(role);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(MapLinkshellRoleDto(role));
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/roles/{roleId:int}/update")]
+    public async Task<IActionResult> UpdateLinkshellRoleAsync(
+        int linkshellId,
+        int roleId,
+        [FromBody] ActivityLinkshellRolePermissions request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to update a linkshell role." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageRoles, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var role = await _dbContext.LinkshellRoles
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.LinkshellId == linkshellId, cancellationToken);
+        if (role is null)
+        {
+            return NotFound(new { error = "The role was not found." });
+        }
+
+        if (!role.IsSystem)
+        {
+            var name = request.Name?.Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                if (name.Length > 64)
+                {
+                    return BadRequest(new { error = "Role name must be 64 characters or fewer." });
+                }
+
+                if (!string.Equals(role.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    var clash = await _dbContext.LinkshellRoles.AnyAsync(r =>
+                        r.LinkshellId == linkshellId && r.Id != roleId && r.Name == name, cancellationToken);
+                    if (clash)
+                    {
+                        return BadRequest(new { error = "Another role with that name already exists." });
+                    }
+
+                    var previousName = role.Name;
+                    role.Name = name;
+                    await _dbContext.AppUserLinkshells
+                        .Where(link => link.LinkshellId == linkshellId && link.Rank == previousName)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(link => link.Rank, name), cancellationToken);
+                }
+            }
+        }
+
+        if (role.Name.Equals("Leader", StringComparison.OrdinalIgnoreCase))
+        {
+            // Safety: a Leader must always retain CanManageRoles so there is a way back.
+            request = request with { CanManageRoles = true };
+        }
+
+        ApplyPermissions(role, request);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(MapLinkshellRoleDto(role));
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/roles/{roleId:int}/delete")]
+    public async Task<IActionResult> DeleteLinkshellRoleAsync(
+        int linkshellId,
+        int roleId,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to delete a linkshell role." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageRoles, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var role = await _dbContext.LinkshellRoles
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.LinkshellId == linkshellId, cancellationToken);
+        if (role is null)
+        {
+            return NotFound(new { error = "The role was not found." });
+        }
+
+        if (role.IsSystem)
+        {
+            return BadRequest(new { error = "System roles cannot be deleted." });
+        }
+
+        var inUse = await _dbContext.AppUserLinkshells
+            .AnyAsync(link => link.LinkshellId == linkshellId && link.Rank == role.Name, cancellationToken);
+        if (inUse)
+        {
+            return BadRequest(new { error = "Members still have this role. Reassign them first." });
+        }
+
+        _dbContext.LinkshellRoles.Remove(role);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { success = true });
+    }
+
+    private static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)
+    {
+        role.CanManageRoles = permissions.CanManageRoles;
+        role.CanManageMembers = permissions.CanManageMembers;
+        role.CanManageEvents = permissions.CanManageEvents;
+        role.CanModerateLiveEvent = permissions.CanModerateLiveEvent;
+        role.CanAddLoot = permissions.CanAddLoot;
+        role.CanManageInventory = permissions.CanManageInventory;
+        role.CanManageTreasury = permissions.CanManageTreasury;
+        role.CanManageRules = permissions.CanManageRules;
+        role.CanManageAnnouncements = permissions.CanManageAnnouncements;
+        role.CanManageTods = permissions.CanManageTods;
+        role.CanAuditDkp = permissions.CanAuditDkp;
+        role.CanManageAuctions = permissions.CanManageAuctions;
+        role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
+    }
+
+    private static bool IsValidLootStructure(string? structure)
+    {
+        return string.Equals(structure, "Dkp", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLootStructure(string structure)
+    {
+        if (string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase)) return "LootCouncil";
+        if (string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase)) return "Hybrid";
+        return "Dkp";
+    }
+
+    private static ActivityLinkshellSettingsDto MapLinkshellSettingsDto(Linkshell? linkshell)
+    {
+        if (linkshell is null)
+        {
+            return new ActivityLinkshellSettingsDto("Dkp", null, true, true, true, true, true);
+        }
+
+        return new ActivityLinkshellSettingsDto(
+            string.IsNullOrWhiteSpace(linkshell.LootStructure) ? "Dkp" : linkshell.LootStructure,
+            linkshell.HybridDkpPercentage,
+            linkshell.EnableHnmSection,
+            linkshell.EnableMissions,
+            linkshell.EnableAuctions,
+            linkshell.EnableToDs,
+            linkshell.EnableEndgame);
+    }
+
+    private static ActivityPermissionsDto? ResolvePermissionsFor(
+        int linkshellId,
+        string? rank,
+        Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName)
+    {
+        if (!rolesByLinkshellAndName.TryGetValue(linkshellId, out var rolesByName))
+        {
+            return null;
+        }
+
+        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+        if (!rolesByName.TryGetValue(rankName, out var role))
+        {
+            if (!rolesByName.TryGetValue("Member", out role))
+            {
+                return null;
+            }
+        }
+
+        return new ActivityPermissionsDto(
+            role.CanManageRoles,
+            role.CanManageMembers,
+            role.CanManageEvents,
+            role.CanModerateLiveEvent,
+            role.CanAddLoot,
+            role.CanManageInventory,
+            role.CanManageTreasury,
+            role.CanManageRules,
+            role.CanManageAnnouncements,
+            role.CanManageTods,
+            role.CanAuditDkp,
+            role.CanManageAuctions,
+            role.CanCustomizeLinkshell);
+    }
+
+    private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
+    {
+        return new ActivityLinkshellRoleDto(
+            role.Id,
+            role.Name,
+            role.IsSystem,
+            role.SortOrder,
+            role.CanManageRoles,
+            role.CanManageMembers,
+            role.CanManageEvents,
+            role.CanModerateLiveEvent,
+            role.CanAddLoot,
+            role.CanManageInventory,
+            role.CanManageTreasury,
+            role.CanManageRules,
+            role.CanManageAnnouncements,
+            role.CanManageTods,
+            role.CanAuditDkp,
+            role.CanManageAuctions,
+            role.CanCustomizeLinkshell);
     }
 
     [HttpPost("linkshells")]
@@ -718,7 +1222,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -777,7 +1281,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -855,7 +1359,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -1020,7 +1524,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -1127,7 +1631,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -1182,7 +1686,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -1205,7 +1709,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var currentMembership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!IsLeader(currentMembership))
+        if (!await CanAsync(currentMembership, r => r.CanManageMembers, cancellationToken))
         {
             return Forbid();
         }
@@ -1271,7 +1775,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var currentMembership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!IsLeader(currentMembership))
+        if (!await CanAsync(currentMembership, r => r.CanManageRoles, cancellationToken))
         {
             return Forbid();
         }
@@ -1284,20 +1788,32 @@ public sealed class ActivityDataController : ControllerBase
             return NotFound(new { error = "The selected member was not found." });
         }
 
-        var normalizedRole = NormalizeMemberRole(request.Role);
-        if (normalizedRole is null)
+        var normalizedRole = request.Role?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedRole))
         {
-            return BadRequest(new { error = "Role must be Member, Officer, or Leader." });
+            return BadRequest(new { error = "A role name is required." });
         }
 
-        if (normalizedRole == "Leader")
+        await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
+        var roleRow = await _dbContext.LinkshellRoles
+            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == normalizedRole, cancellationToken);
+        if (roleRow is null)
+        {
+            return BadRequest(new { error = "That role does not exist for this linkshell." });
+        }
+        normalizedRole = roleRow.Name;
+
+        if (string.Equals(normalizedRole, "Leader", StringComparison.OrdinalIgnoreCase))
         {
             if (string.Equals(targetMembership.AppUserId, appUser.Id, StringComparison.Ordinal))
             {
                 return BadRequest(new { error = "You are already the leader of this linkshell." });
             }
 
-            currentMembership!.Rank = "Officer";
+            if (string.Equals(currentMembership!.Rank, "Leader", StringComparison.OrdinalIgnoreCase))
+            {
+                currentMembership.Rank = "Officer";
+            }
             targetMembership.Rank = "Leader";
         }
         else
@@ -1335,7 +1851,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanCustomizeLinkshell, cancellationToken))
         {
             return Forbid();
         }
@@ -1361,6 +1877,32 @@ public sealed class ActivityDataController : ControllerBase
 
         linkshell.LinkshellName = trimmedName;
         linkshell.Details = request.Details?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.LootStructure))
+        {
+            var requestedStructure = request.LootStructure.Trim();
+            if (!IsValidLootStructure(requestedStructure))
+            {
+                return BadRequest(new { error = "Loot structure must be Dkp, LootCouncil, or Hybrid." });
+            }
+            linkshell.LootStructure = NormalizeLootStructure(requestedStructure);
+        }
+
+        if (request.HybridDkpPercentage.HasValue)
+        {
+            var pct = request.HybridDkpPercentage.Value;
+            if (pct < 0 || pct > 100)
+            {
+                return BadRequest(new { error = "Hybrid DKP percentage must be between 0 and 100." });
+            }
+            linkshell.HybridDkpPercentage = pct;
+        }
+
+        if (request.EnableHnmSection.HasValue) linkshell.EnableHnmSection = request.EnableHnmSection.Value;
+        if (request.EnableMissions.HasValue) linkshell.EnableMissions = request.EnableMissions.Value;
+        if (request.EnableAuctions.HasValue) linkshell.EnableAuctions = request.EnableAuctions.Value;
+        if (request.EnableToDs.HasValue) linkshell.EnableToDs = request.EnableToDs.Value;
+        if (request.EnableEndgame.HasValue) linkshell.EnableEndgame = request.EnableEndgame.Value;
 
         var memberships = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == linkshellId)
@@ -1828,6 +2370,150 @@ public sealed class ActivityDataController : ControllerBase
         return Ok(new { success = true });
     }
 
+    [HttpPost("events/{eventId:int}/break/force")]
+    public async Task<IActionResult> ForceBreakAsync(
+        int eventId,
+        [FromBody] ActivityForceBreakRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to send a member to the break room."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events.FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanModerateLiveEvent, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest(new { error = "Break status is only available after the event has started." });
+        }
+
+        var participation = await _dbContext.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == request.ParticipantId && item.EventId == eventId, cancellationToken);
+
+        if (participation is null)
+        {
+            return NotFound(new { error = "The selected participant was not found." });
+        }
+
+        if (participation.IsOnBreak == true)
+        {
+            return BadRequest(new { error = "That member is already marked as on break." });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.IsOnBreak = true;
+        participation.PauseTime = nowUtc;
+        participation.ResumeTime = null;
+        _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEventId = participation.Id,
+            EventId = eventId,
+            AppUserId = participation.AppUserId,
+            ActionType = "BreakStart",
+            OccurredAt = nowUtc,
+            RequiresVerification = false
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/break/resume/force")]
+    public async Task<IActionResult> ForceResumeAsync(
+        int eventId,
+        [FromBody] ActivityForceResumeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to resume a member."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events.FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanModerateLiveEvent, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest(new { error = "Break status is only available after the event has started." });
+        }
+
+        var participation = await _dbContext.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == request.ParticipantId && item.EventId == eventId, cancellationToken);
+
+        if (participation is null)
+        {
+            return NotFound(new { error = "The selected participant was not found." });
+        }
+
+        if (participation.IsOnBreak != true)
+        {
+            return BadRequest(new { error = "That member is not currently on break." });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        participation.IsOnBreak = false;
+        participation.PauseTime = null;
+        participation.ResumeTime = nowUtc;
+
+        var pendingReturns = await _dbContext.AppUserEventStatusLedgers
+            .Where(entry =>
+                entry.AppUserEventId == participation.Id &&
+                entry.ActionType == "BreakReturn" &&
+                entry.RequiresVerification &&
+                entry.VerifiedAt == null &&
+                entry.DeniedAt == null)
+            .ToListAsync(cancellationToken);
+        foreach (var pending in pendingReturns)
+        {
+            pending.VerifiedAt = nowUtc;
+            pending.VerifiedBy = appUser.CharacterName ?? appUser.UserName;
+        }
+
+        _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEventId = participation.Id,
+            EventId = eventId,
+            AppUserId = participation.AppUserId,
+            ActionType = "BreakReturn",
+            OccurredAt = nowUtc,
+            RequiresVerification = false,
+            VerifiedAt = nowUtc,
+            VerifiedBy = appUser.CharacterName ?? appUser.UserName
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     [HttpPost("events")]
     public async Task<IActionResult> CreateEventAsync([FromBody] ActivityCreateEventRequest request, CancellationToken cancellationToken)
     {
@@ -1851,7 +2537,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
         }
@@ -1925,7 +2611,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
         }
@@ -1941,7 +2627,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var currentMembership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(currentMembership))
+        if (!await CanAsync(currentMembership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
         }
@@ -2001,7 +2687,10 @@ public sealed class ActivityDataController : ControllerBase
     }
 
     [HttpPost("events/{eventId:int}/start")]
-    public async Task<IActionResult> StartEventAsync(int eventId, CancellationToken cancellationToken)
+    public async Task<IActionResult> StartEventAsync(
+        int eventId,
+        [FromBody] ActivityStartEventRequest? request,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -2023,14 +2712,49 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
+        }
+
+        var absentIds = request?.AbsentParticipantIds;
+        if (absentIds is { Count: > 0 })
+        {
+            var absentSet = new HashSet<int>(absentIds);
+            var absentParticipations = eventEntity.AppUserEvents
+                .Where(p => absentSet.Contains(p.Id))
+                .ToList();
+
+            if (absentParticipations.Count > 0)
+            {
+                var jobs = await _dbContext.Jobs
+                    .Where(job => job.EventId == eventId)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var participation in absentParticipations)
+                {
+                    var job = jobs.FirstOrDefault(j =>
+                        j.JobName == participation.JobName &&
+                        j.SubJobName == participation.SubJobName);
+
+                    if (job is not null)
+                    {
+                        job.Enlisted.RemoveAll(name => name == participation.CharacterName);
+                        job.SignedUp = job.Enlisted.Count;
+                    }
+
+                    _dbContext.AppUserEvents.Remove(participation);
+                }
+            }
         }
 
         eventEntity.CommencementStartTime ??= DateTime.UtcNow;
         foreach (var participation in eventEntity.AppUserEvents)
         {
+            if (absentIds is { Count: > 0 } && absentIds.Contains(participation.Id))
+            {
+                continue;
+            }
             participation.StartTime ??= eventEntity.CommencementStartTime;
         }
 
@@ -2062,7 +2786,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanModerateLiveEvent, cancellationToken))
         {
             return Forbid();
         }
@@ -2111,7 +2835,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanModerateLiveEvent, cancellationToken))
         {
             return Forbid();
         }
@@ -2153,7 +2877,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanModerateLiveEvent, cancellationToken))
         {
             return Forbid();
         }
@@ -2177,6 +2901,58 @@ public sealed class ActivityDataController : ControllerBase
 
         ledgerEntry.VerifiedAt = DateTime.UtcNow;
         ledgerEntry.VerifiedBy = appUser.CharacterName ?? appUser.UserName;
+        ledgerEntry.RequiresVerification = false;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/deny-return")]
+    public async Task<IActionResult> DenyReturnAsync(
+        int eventId,
+        [FromBody] ActivityVerifyReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to deny a break return."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events.FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanModerateLiveEvent, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var ledgerEntry = await _dbContext.AppUserEventStatusLedgers
+            .FirstOrDefaultAsync(
+                item => item.Id == request.LedgerEntryId &&
+                        item.EventId == eventId &&
+                        item.ActionType == "BreakReturn",
+                cancellationToken);
+
+        if (ledgerEntry is null)
+        {
+            return NotFound(new { error = "The selected ledger entry was not found." });
+        }
+
+        if (!ledgerEntry.RequiresVerification || ledgerEntry.VerifiedAt.HasValue || ledgerEntry.DeniedAt.HasValue)
+        {
+            return BadRequest(new { error = "That break return has already been resolved." });
+        }
+
+        ledgerEntry.DeniedAt = DateTime.UtcNow;
+        ledgerEntry.DeniedBy = appUser.CharacterName ?? appUser.UserName;
         ledgerEntry.RequiresVerification = false;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -2212,7 +2988,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanAddLoot, cancellationToken))
         {
             return Forbid();
         }
@@ -2255,9 +3031,9 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var monsterName = request.MonsterName?.Trim();
-        if (string.IsNullOrWhiteSpace(monsterName) || !SupportedTodMonsters.Contains(monsterName))
+        if (string.IsNullOrWhiteSpace(monsterName))
         {
-            return BadRequest(new { error = "Select a valid monster." });
+            return BadRequest(new { error = "A monster name is required." });
         }
 
         if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
@@ -2268,20 +3044,26 @@ public sealed class ActivityDataController : ControllerBase
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
             ? GetDefaultTodCooldown(monsterName)
             : request.Cooldown.Trim();
-        if (!SupportedTodCooldowns.Contains(cooldown))
+        if (!IsAcceptableTodCooldown(cooldown))
         {
-            return BadRequest(new { error = "Select a valid cooldown." });
+            return BadRequest(new { error = "Enter a valid cooldown (e.g. 22 Hour, 72 Hour, or a positive number of hours)." });
         }
 
-        var interval = string.IsNullOrWhiteSpace(request.Interval)
-            ? GetDefaultTodInterval(monsterName)
-            : request.Interval.Trim();
-        if (!SupportedTodIntervals.Contains(interval))
+        var interval = request.Interval?.Trim();
+        if (string.IsNullOrWhiteSpace(interval))
+        {
+            interval = null;
+        }
+        else if (!SupportedTodIntervals.Contains(interval))
         {
             return BadRequest(new { error = "Select a valid interval." });
         }
 
-        var normalizedLootDetails = request.Claim && !request.NoLoot
+        var linkshellEntity = await _dbContext.Linkshells
+            .FirstOrDefaultAsync(ls => ls.Id == request.LinkshellId, cancellationToken);
+        var linkshellStructure = NormalizeLootStructure(linkshellEntity?.LootStructure ?? "Dkp");
+
+        var normalizedLootDetails = request.Claim && !request.NoLoot && linkshellStructure != "LootCouncil"
             ? NormalizeTodLootDetails(request.LootDetails)
             : new List<TodLootDetail>();
 
@@ -2311,7 +3093,17 @@ public sealed class ActivityDataController : ControllerBase
 
             if (!lootDetail.WinningDkpSpent.HasValue || lootDetail.WinningDkpSpent <= 0)
             {
-                return BadRequest(new { error = "Each ToD loot row needs a positive DKP spent value." });
+                return BadRequest(new
+                {
+                    error = linkshellStructure == "Hybrid"
+                        ? "Each ToD loot row needs a deduction % (1-100)."
+                        : "Each ToD loot row needs a positive DKP spent value."
+                });
+            }
+
+            if (linkshellStructure == "Hybrid" && lootDetail.WinningDkpSpent > 100)
+            {
+                return BadRequest(new { error = "Deduction % cannot exceed 100." });
             }
         }
 
@@ -2328,7 +3120,8 @@ public sealed class ActivityDataController : ControllerBase
             Interval = interval,
             TimeStamp = nowUtc,
             TotalTods = 1,
-            TotalClaims = request.Claim ? 1 : 0
+            TotalClaims = request.Claim ? 1 : 0,
+            ImagePath = SanitizeUploadedImagePath(request.ImagePath)
         };
 
         _dbContext.Tods.Add(tod);
@@ -2379,10 +3172,241 @@ public sealed class ActivityDataController : ControllerBase
 
         await AdjustTodLootDkpAsync(tod, tod.TodLootDetails.ToList(), DateTime.UtcNow, isRefund: true, cancellationToken);
         _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
+        DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { success = true });
+    }
+
+    [HttpPost("tods/upload-image")]
+    [RequestSizeLimit(2_200_000)]
+    public async Task<IActionResult> UploadTodImageAsync(
+        [FromForm] IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to upload ToD images." });
+        }
+
+        if (file is null || file.Length <= 0)
+        {
+            return BadRequest(new { error = "Choose an image to upload." });
+        }
+
+        if (file.Length > 2_000_000)
+        {
+            return BadRequest(new { error = "Images must be 2 MB or smaller." });
+        }
+
+        var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".webp" };
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(extension))
+        {
+            return BadRequest(new { error = "Only PNG, JPG, or WEBP images are supported." });
+        }
+
+        var webRoot = _webHostEnvironment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        }
+
+        var uploadsDir = Path.Combine(webRoot, "uploads", "tods");
+        Directory.CreateDirectory(uploadsDir);
+
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var absolutePath = Path.Combine(uploadsDir, fileName);
+        await using (var stream = System.IO.File.Create(absolutePath))
+        {
+            await file.CopyToAsync(stream, cancellationToken);
+        }
+
+        var relativePath = $"/uploads/tods/{fileName}";
+        return Ok(new { imagePath = relativePath });
+    }
+
+    [HttpPost("tods/{todId:int}/update")]
+    public async Task<IActionResult> UpdateTodAsync(
+        int todId,
+        [FromBody] ActivityUpdateTodRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to update a ToD entry." });
+        }
+
+        var tod = await _dbContext.Tods
+            .Include(item => item.TodLootDetails)
+            .Include(item => item.Linkshell)
+            .FirstOrDefaultAsync(item => item.Id == todId, cancellationToken);
+
+        if (tod is null)
+        {
+            return NotFound(new { error = "The selected ToD entry was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, tod.LinkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var linkshellStructure = NormalizeLootStructure(tod.Linkshell?.LootStructure ?? "Dkp");
+
+        var monsterName = request.MonsterName?.Trim();
+        if (string.IsNullOrWhiteSpace(monsterName))
+        {
+            return BadRequest(new { error = "A monster name is required." });
+        }
+
+        if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
+        {
+            return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
+        }
+
+        var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
+            ? GetDefaultTodCooldown(monsterName)
+            : request.Cooldown.Trim();
+        if (!IsAcceptableTodCooldown(cooldown))
+        {
+            return BadRequest(new { error = "Enter a valid cooldown." });
+        }
+
+        var interval = request.Interval?.Trim();
+        if (string.IsNullOrWhiteSpace(interval))
+        {
+            interval = null;
+        }
+        else if (!SupportedTodIntervals.Contains(interval))
+        {
+            return BadRequest(new { error = "Select a valid interval." });
+        }
+
+        var normalizedLootDetails = request.Claim && !request.NoLoot && linkshellStructure != "LootCouncil"
+            ? NormalizeTodLootDetails(request.LootDetails)
+            : new List<TodLootDetail>();
+
+        var validCharacterNames = await _dbContext.AppUserLinkshells
+            .Where(link => link.LinkshellId == tod.LinkshellId)
+            .Select(link => link.CharacterName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .ToListAsync(cancellationToken);
+
+        foreach (var lootDetail in normalizedLootDetails)
+        {
+            if (string.IsNullOrWhiteSpace(lootDetail.ItemName))
+            {
+                return BadRequest(new { error = "Each ToD loot row needs an item name." });
+            }
+
+            if (string.IsNullOrWhiteSpace(lootDetail.ItemWinner))
+            {
+                return BadRequest(new { error = "Each ToD loot row needs an item winner." });
+            }
+
+            if (!validCharacterNames.Contains(lootDetail.ItemWinner.Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { error = "Choose a loot winner from the current linkshell roster." });
+            }
+
+            if (!lootDetail.WinningDkpSpent.HasValue || lootDetail.WinningDkpSpent <= 0)
+            {
+                return BadRequest(new
+                {
+                    error = linkshellStructure == "Hybrid"
+                        ? "Each ToD loot row needs a deduction % (1-100)."
+                        : "Each ToD loot row needs a positive DKP spent value."
+                });
+            }
+
+            if (linkshellStructure == "Hybrid" && lootDetail.WinningDkpSpent > 100)
+            {
+                return BadRequest(new { error = "Deduction % cannot exceed 100." });
+            }
+        }
+
+        var nowUtc = DateTime.UtcNow;
+
+        // Reverse DKP impact from existing loot, remove it, then apply the new set.
+        if (tod.TodLootDetails.Count > 0)
+        {
+            await AdjustTodLootDkpAsync(tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
+            _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
+        }
+
+        tod.MonsterName = monsterName;
+        tod.DayNumber = request.DayNumber;
+        tod.Claim = request.Claim;
+        tod.Time = todTimeUtc;
+        tod.Cooldown = cooldown;
+        tod.RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown));
+        tod.Interval = interval;
+        tod.TimeStamp = nowUtc;
+        tod.TotalClaims = request.Claim ? 1 : 0;
+
+        var previousImage = tod.ImagePath;
+        var newImage = SanitizeUploadedImagePath(request.ImagePath);
+        tod.ImagePath = newImage;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (normalizedLootDetails.Count > 0)
+        {
+            foreach (var lootDetail in normalizedLootDetails)
+            {
+                lootDetail.TodId = tod.Id;
+            }
+
+            await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
+            await AdjustTodLootDkpAsync(tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            tod.TodLootDetails = normalizedLootDetails;
+        }
+        else
+        {
+            tod.TodLootDetails = new List<TodLootDetail>();
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImage, StringComparison.Ordinal))
+        {
+            DeleteUploadedTodImage(previousImage);
+        }
+
+        return Ok(MapTodDto(tod));
+    }
+
+    private void DeleteUploadedTodImage(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || SanitizeUploadedImagePath(relativePath) is null)
+        {
+            return;
+        }
+
+        var webRoot = _webHostEnvironment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+        {
+            webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+        }
+
+        var fileName = Path.GetFileName(relativePath);
+        var absolutePath = Path.Combine(webRoot, "uploads", "tods", fileName);
+        try
+        {
+            if (System.IO.File.Exists(absolutePath))
+            {
+                System.IO.File.Delete(absolutePath);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
     }
 
     [HttpPost("events/{eventId:int}/end")]
@@ -2400,6 +3424,7 @@ public sealed class ActivityDataController : ControllerBase
         var eventEntity = await _dbContext.Events
             .Include(evt => evt.AppUserEvents)
             .Include(evt => evt.EventLootDetails)
+            .Include(evt => evt.Linkshell)
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
 
         if (eventEntity is null)
@@ -2408,10 +3433,14 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
         }
+
+        var lootStructure = NormalizeLootStructure(eventEntity.Linkshell?.LootStructure ?? "Dkp");
+        var isLootCouncil = lootStructure == "LootCouncil";
+        var isHybrid = lootStructure == "Hybrid";
 
         var endTimeUtc = DateTime.UtcNow;
         var history = new EventHistory
@@ -2452,7 +3481,7 @@ public sealed class ActivityDataController : ControllerBase
         {
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
             var roundedDuration = Math.Round(durationHours * 4) / 4;
-            var eventDkp = roundedDuration * (eventEntity.DkpPerHour ?? 0);
+            var eventDkp = isLootCouncil ? 0 : roundedDuration * (eventEntity.DkpPerHour ?? 0);
 
             participation.Duration = roundedDuration;
             participation.EventDkp = eventDkp;
@@ -2475,11 +3504,14 @@ public sealed class ActivityDataController : ControllerBase
             if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&
                 membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
             {
-                linkshellMembership.LinkshellDkp = (linkshellMembership.LinkshellDkp ?? 0) + eventDkp;
+                if (!isLootCouncil)
+                {
+                    linkshellMembership.LinkshellDkp = (linkshellMembership.LinkshellDkp ?? 0) + eventDkp;
+                }
                 nextSequenceByAppUserId[participation.AppUserId] = 2;
             }
 
-            if (!string.IsNullOrWhiteSpace(participation.AppUserId))
+            if (!isLootCouncil && !string.IsNullOrWhiteSpace(participation.AppUserId))
             {
                 ledgerEntries.Add(new DkpLedgerEntry
                 {
@@ -2502,46 +3534,64 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         _dbContext.EventHistories.Add(history);
-        foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
+        if (!isLootCouncil)
         {
-            if (lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
+            foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
             {
-                continue;
+                var rawValue = lootDetail.WinningDkpSpent.GetValueOrDefault();
+                if (rawValue <= 0)
+                {
+                    continue;
+                }
+
+                var winnerMembership = ResolveLootWinnerMembership(
+                    lootDetail.ItemWinner,
+                    membershipsByAppUserId,
+                    participantsByCharacterName,
+                    linkshellMemberships);
+                if (winnerMembership is null || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
+                {
+                    continue;
+                }
+
+                double amount;
+                string lootDetailsText;
+                if (isHybrid)
+                {
+                    var pct = Math.Clamp(rawValue, 0, 100);
+                    var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
+                    amount = -Math.Round(currentBalance * pct / 100d, 2);
+                    lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
+                }
+                else
+                {
+                    amount = -rawValue;
+                    lootDetailsText = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.";
+                }
+
+                winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
+
+                var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
+                ledgerEntries.Add(new DkpLedgerEntry
+                {
+                    AppUserId = winnerMembership.AppUserId,
+                    EventHistory = history,
+                    LinkshellId = eventEntity.LinkshellId,
+                    EntryType = "LootSpent",
+                    Amount = amount,
+                    Sequence = currentSequence,
+                    OccurredAt = endTimeUtc,
+                    CharacterName = winnerMembership.CharacterName,
+                    EventName = eventEntity.EventName,
+                    EventType = eventEntity.EventType,
+                    EventLocation = eventEntity.EventLocation,
+                    EventStartTime = eventEntity.StartTime,
+                    EventEndTime = endTimeUtc,
+                    ItemName = lootDetail.ItemName,
+                    Details = lootDetailsText
+                });
+                nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
             }
-
-            var winnerMembership = ResolveLootWinnerMembership(
-                lootDetail.ItemWinner,
-                membershipsByAppUserId,
-                participantsByCharacterName,
-                linkshellMemberships);
-            if (winnerMembership is null || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
-            {
-                continue;
-            }
-
-            var amount = -lootDetail.WinningDkpSpent.GetValueOrDefault();
-            winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
-
-            var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
-            ledgerEntries.Add(new DkpLedgerEntry
-            {
-                AppUserId = winnerMembership.AppUserId,
-                EventHistory = history,
-                LinkshellId = eventEntity.LinkshellId,
-                EntryType = "LootSpent",
-                Amount = amount,
-                Sequence = currentSequence,
-                OccurredAt = endTimeUtc,
-                CharacterName = winnerMembership.CharacterName,
-                EventName = eventEntity.EventName,
-                EventType = eventEntity.EventType,
-                EventLocation = eventEntity.EventLocation,
-                EventStartTime = eventEntity.StartTime,
-                EventEndTime = endTimeUtc,
-                ItemName = lootDetail.ItemName,
-                Details = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}."
-            });
-            nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
         }
 
         _dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
@@ -2580,7 +3630,7 @@ public sealed class ActivityDataController : ControllerBase
         }
 
         var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(membership))
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
         }
@@ -3221,6 +4271,17 @@ public sealed class ActivityDataController : ControllerBase
             return;
         }
 
+        var linkshell = tod.Linkshell ?? await _dbContext.Linkshells
+            .FirstOrDefaultAsync(ls => ls.Id == tod.LinkshellId, cancellationToken);
+
+        var structure = NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp");
+        if (structure == "LootCouncil")
+        {
+            // Loot council linkshells skip DKP math entirely.
+            return;
+        }
+        var isHybrid = structure == "Hybrid";
+
         var winnerNames = actionableLoot
             .Select(detail => detail.ItemWinner!.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -3260,8 +4321,53 @@ public sealed class ActivityDataController : ControllerBase
                 continue;
             }
 
-            var dkpValue = detail.WinningDkpSpent.GetValueOrDefault();
-            var amount = isRefund ? dkpValue : -dkpValue;
+            var rawValue = detail.WinningDkpSpent.GetValueOrDefault();
+            double amount;
+            string detailsText;
+            if (isHybrid)
+            {
+                var pct = Math.Clamp((double)rawValue, 0, 100);
+                var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
+                if (isRefund)
+                {
+                    if (detail.ActualDeductedDkp.HasValue)
+                    {
+                        amount = detail.ActualDeductedDkp.Value;
+                        detailsText = $"Refunded Hybrid DKP ({pct}%, {amount:0.##} DKP) for removed ToD loot on {tod.MonsterName ?? "Unknown monster"}.";
+                    }
+                    else
+                    {
+                        // Legacy approximation when the deducted amount wasn't stored.
+                        if (pct >= 100d)
+                        {
+                            continue;
+                        }
+                        amount = Math.Round(currentBalance * pct / (100d - pct), 2);
+                        detailsText = $"Refunded Hybrid DKP ({pct}%) for removed ToD loot on {tod.MonsterName ?? "Unknown monster"}.";
+                    }
+                }
+                else
+                {
+                    amount = -Math.Round(currentBalance * pct / 100d, 2);
+                    detail.ActualDeductedDkp = Math.Abs(amount);
+                    detailsText = $"Hybrid DKP spent ({pct}%, {Math.Abs(amount):0.##} DKP) on ToD loot from {tod.MonsterName ?? "Unknown monster"}.";
+                }
+            }
+            else
+            {
+                if (isRefund)
+                {
+                    amount = detail.ActualDeductedDkp ?? (double)rawValue;
+                    detailsText = $"Refunded DKP for deleted ToD loot on {tod.MonsterName ?? "Unknown monster"}.";
+                }
+                else
+                {
+                    amount = -(double)rawValue;
+                    detail.ActualDeductedDkp = Math.Abs(amount);
+                    detailsText = $"DKP spent on ToD loot from {tod.MonsterName ?? "Unknown monster"}.";
+                }
+            }
+
             winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0d) + amount;
 
             var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 1);
@@ -3277,9 +4383,7 @@ public sealed class ActivityDataController : ControllerBase
                 OccurredAt = occurredAtUtc,
                 CharacterName = winnerMembership.CharacterName,
                 ItemName = detail.ItemName,
-                Details = isRefund
-                    ? $"Refunded DKP for deleted ToD loot on {tod.MonsterName ?? "Unknown monster"}."
-                    : $"DKP spent on ToD loot from {tod.MonsterName ?? "Unknown monster"}."
+                Details = detailsText
             });
         }
 
@@ -3309,14 +4413,72 @@ public sealed class ActivityDataController : ControllerBase
                     detail.ItemName,
                     detail.ItemWinner,
                     detail.WinningDkpSpent))
-                .ToList());
+                .ToList(),
+            tod.ImagePath);
     }
 
     private static double ResolveTodCooldownHours(string? cooldown)
     {
-        return string.Equals(cooldown, TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase)
-            ? 72d
-            : 22d;
+        if (string.IsNullOrWhiteSpace(cooldown))
+        {
+            return 22d;
+        }
+
+        if (SupportedTodCooldowns.Contains(cooldown.Trim()))
+        {
+            return string.Equals(cooldown.Trim(), TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase)
+                ? 72d
+                : 22d;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(cooldown.Trim(), @"^\s*(\d+(?:\.\d+)?)\s*(?:Hours?|Hr|H)?\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hours) && hours > 0)
+        {
+            return hours;
+        }
+
+        return 22d;
+    }
+
+    private static bool IsAcceptableTodCooldown(string? cooldown)
+    {
+        if (string.IsNullOrWhiteSpace(cooldown))
+        {
+            return false;
+        }
+
+        if (SupportedTodCooldowns.Contains(cooldown.Trim()))
+        {
+            return true;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(cooldown.Trim(), @"^\s*(\d+(?:\.\d+)?)\s*(?:Hours?|Hr|H)?\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success
+            && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hours)
+            && hours > 0;
+    }
+
+    private static string? SanitizeUploadedImagePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var trimmed = path.Trim();
+        if (!trimmed.StartsWith("/uploads/tods/", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (trimmed.Contains("..", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return trimmed;
     }
 
     private static string GetDefaultTodCooldown(string? monsterName)
@@ -3499,6 +4661,476 @@ public sealed class ActivityDataController : ControllerBase
                 .ToList());
     }
 
+    [HttpPost("linkshells/{linkshellId:int}/rules")]
+    public async Task<IActionResult> CreateRuleAsync(
+        int linkshellId,
+        [FromBody] ActivityCreateRuleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var title = request.Title?.Trim() ?? string.Empty;
+        var details = request.Details?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest(new { error = "Rule title is required." });
+        }
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return BadRequest(new { error = "Rule details are required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to create rules."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageRules, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        var rule = new Rule
+        {
+            LinkshellId = linkshellId,
+            LinkshellName = linkshell.LinkshellName,
+            RuleTitle = title,
+            RuleDetails = details,
+            CreatedByAppUserId = appUser.Id,
+            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedAt = DateTime.UtcNow
+        };
+        _dbContext.Rules.Add(rule);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, id = rule.Id });
+    }
+
+    [HttpPost("rules/{ruleId:int}/update")]
+    public async Task<IActionResult> UpdateRuleAsync(
+        int ruleId,
+        [FromBody] ActivityCreateRuleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var title = request.Title?.Trim() ?? string.Empty;
+        var details = request.Details?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest(new { error = "Rule title is required." });
+        }
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return BadRequest(new { error = "Rule details are required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to update rules."
+            });
+        }
+
+        var rule = await _dbContext.Rules.FirstOrDefaultAsync(item => item.Id == ruleId, cancellationToken);
+        if (rule is null)
+        {
+            return NotFound(new { error = "The rule was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, rule.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageRules, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        rule.RuleTitle = title;
+        rule.RuleDetails = details;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("rules/{ruleId:int}/delete")]
+    public async Task<IActionResult> DeleteRuleAsync(int ruleId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to delete rules."
+            });
+        }
+
+        var rule = await _dbContext.Rules.FirstOrDefaultAsync(item => item.Id == ruleId, cancellationToken);
+        if (rule is null)
+        {
+            return NotFound(new { error = "The rule was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, rule.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageRules, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        _dbContext.Rules.Remove(rule);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/announcements")]
+    public async Task<IActionResult> CreateAnnouncementAsync(
+        int linkshellId,
+        [FromBody] ActivityCreateAnnouncementRequest request,
+        CancellationToken cancellationToken)
+    {
+        var title = request.Title?.Trim() ?? string.Empty;
+        var details = request.Details?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest(new { error = "Announcement title is required." });
+        }
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return BadRequest(new { error = "Announcement details are required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to create announcements."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageAnnouncements, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        var announcement = new Announcement
+        {
+            LinkshellId = linkshellId,
+            LinkshellName = linkshell.LinkshellName,
+            AnnouncementTitle = title,
+            AnnouncementDetails = details,
+            CreatedByAppUserId = appUser.Id,
+            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedAt = DateTime.UtcNow
+        };
+        _dbContext.Announcements.Add(announcement);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, id = announcement.Id });
+    }
+
+    [HttpPost("announcements/{announcementId:int}/update")]
+    public async Task<IActionResult> UpdateAnnouncementAsync(
+        int announcementId,
+        [FromBody] ActivityCreateAnnouncementRequest request,
+        CancellationToken cancellationToken)
+    {
+        var title = request.Title?.Trim() ?? string.Empty;
+        var details = request.Details?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest(new { error = "Announcement title is required." });
+        }
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return BadRequest(new { error = "Announcement details are required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to update announcements."
+            });
+        }
+
+        var announcement = await _dbContext.Announcements.FirstOrDefaultAsync(item => item.Id == announcementId, cancellationToken);
+        if (announcement is null)
+        {
+            return NotFound(new { error = "The announcement was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, announcement.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageAnnouncements, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        announcement.AnnouncementTitle = title;
+        announcement.AnnouncementDetails = details;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("announcements/{announcementId:int}/delete")]
+    public async Task<IActionResult> DeleteAnnouncementAsync(int announcementId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to delete announcements."
+            });
+        }
+
+        var announcement = await _dbContext.Announcements.FirstOrDefaultAsync(item => item.Id == announcementId, cancellationToken);
+        if (announcement is null)
+        {
+            return NotFound(new { error = "The announcement was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, announcement.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageAnnouncements, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        _dbContext.Announcements.Remove(announcement);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/items")]
+    public async Task<IActionResult> CreateItemAsync(
+        int linkshellId,
+        [FromBody] ActivityCreateItemRequest request,
+        CancellationToken cancellationToken)
+    {
+        var itemName = request.ItemName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(itemName))
+        {
+            return BadRequest(new { error = "Item name is required." });
+        }
+        if (request.Quantity < 0)
+        {
+            return BadRequest(new { error = "Quantity cannot be negative." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage items."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInventory, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(ls => ls.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        var now = DateTime.UtcNow;
+        var item = new Item
+        {
+            LinkshellId = linkshellId,
+            LinkshellName = linkshell.LinkshellName,
+            ItemName = itemName,
+            ItemType = string.IsNullOrWhiteSpace(request.ItemType) ? null : request.ItemType.Trim(),
+            Quantity = request.Quantity,
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+            CreatedByAppUserId = appUser.Id,
+            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _dbContext.Items.Add(item);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, id = item.Id });
+    }
+
+    [HttpPost("items/{itemId:int}/update")]
+    public async Task<IActionResult> UpdateItemAsync(
+        int itemId,
+        [FromBody] ActivityUpdateItemRequest request,
+        CancellationToken cancellationToken)
+    {
+        var itemName = request.ItemName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(itemName))
+        {
+            return BadRequest(new { error = "Item name is required." });
+        }
+        if (request.Quantity < 0)
+        {
+            return BadRequest(new { error = "Quantity cannot be negative." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage items."
+            });
+        }
+
+        var item = await _dbContext.Items.FirstOrDefaultAsync(entry => entry.Id == itemId, cancellationToken);
+        if (item is null)
+        {
+            return NotFound(new { error = "The item was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, item.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInventory, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        item.ItemName = itemName;
+        item.ItemType = string.IsNullOrWhiteSpace(request.ItemType) ? null : request.ItemType.Trim();
+        item.Quantity = request.Quantity;
+        item.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        item.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("items/{itemId:int}/delete")]
+    public async Task<IActionResult> DeleteItemAsync(int itemId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage items."
+            });
+        }
+
+        var item = await _dbContext.Items.FirstOrDefaultAsync(entry => entry.Id == itemId, cancellationToken);
+        if (item is null)
+        {
+            return NotFound(new { error = "The item was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, item.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInventory, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        _dbContext.Items.Remove(item);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/revenue")]
+    public async Task<IActionResult> CreateRevenueEntryAsync(
+        int linkshellId,
+        [FromBody] ActivityCreateRevenueRequest request,
+        CancellationToken cancellationToken)
+    {
+        var entryType = request.EntryType?.Trim() ?? string.Empty;
+        if (!string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(entryType, "Expense", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "Entry type must be Income or Expense." });
+        }
+        if (request.Value < 0)
+        {
+            return BadRequest(new { error = "Value cannot be negative." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage revenue."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageTreasury, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(ls => ls.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        var normalizedType = string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase) ? "Income" : "Expense";
+        var occurredAt = request.OccurredAt?.ToUniversalTime() ?? DateTime.UtcNow;
+        var entry = new RevenueEntry
+        {
+            LinkshellId = linkshellId,
+            LinkshellName = linkshell.LinkshellName,
+            EntryType = normalizedType,
+            Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
+            Value = request.Value,
+            Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim(),
+            OccurredAt = occurredAt,
+            CreatedByAppUserId = appUser.Id,
+            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
+            CreatedAt = DateTime.UtcNow
+        };
+        _dbContext.RevenueEntries.Add(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, id = entry.Id });
+    }
+
+    [HttpPost("revenue/{entryId:int}/delete")]
+    public async Task<IActionResult> DeleteRevenueEntryAsync(int entryId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage revenue."
+            });
+        }
+
+        var entry = await _dbContext.RevenueEntries.FirstOrDefaultAsync(item => item.Id == entryId, cancellationToken);
+        if (entry is null)
+        {
+            return NotFound(new { error = "The revenue entry was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, entry.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageTreasury, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        _dbContext.RevenueEntries.Remove(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     private async Task<AppUser?> ResolveAppUserAsync(CancellationToken cancellationToken)
     {
         if (TryGetBearerToken(out var accessToken))
@@ -3568,6 +5200,115 @@ public sealed class ActivityDataController : ControllerBase
 
         return membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase) ||
                membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<bool> CanAsync(
+        AppUserLinkshell? membership,
+        Func<LinkshellRole, bool> selector,
+        CancellationToken cancellationToken)
+    {
+        if (membership is null)
+        {
+            return false;
+        }
+
+        var role = await GetEffectiveRoleAsync(membership.Rank, membership.LinkshellId, cancellationToken);
+        return role is not null && selector(role);
+    }
+
+    private async Task<LinkshellRole?> GetEffectiveRoleAsync(
+        string? rank,
+        int linkshellId,
+        CancellationToken cancellationToken)
+    {
+        await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
+        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+        var role = await _dbContext.LinkshellRoles
+            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rankName, cancellationToken);
+        if (role is null)
+        {
+            role = await _dbContext.LinkshellRoles
+                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == "Member", cancellationToken);
+        }
+        return role;
+    }
+
+    private async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var existing = await _dbContext.LinkshellRoles
+            .Where(r => r.LinkshellId == linkshellId)
+            .ToListAsync(cancellationToken);
+
+        var existingByName = existing.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
+        var added = new List<LinkshellRole>();
+
+        if (!existingByName.ContainsKey("Leader"))
+        {
+            added.Add(new LinkshellRole
+            {
+                LinkshellId = linkshellId,
+                Name = "Leader",
+                IsSystem = true,
+                SortOrder = 0,
+                CanManageRoles = true,
+                CanManageMembers = true,
+                CanManageEvents = true,
+                CanModerateLiveEvent = true,
+                CanAddLoot = true,
+                CanManageInventory = true,
+                CanManageTreasury = true,
+                CanManageRules = true,
+                CanManageAnnouncements = true,
+                CanManageTods = true,
+                CanAuditDkp = true,
+                CanManageAuctions = true,
+                CanCustomizeLinkshell = true
+            });
+        }
+
+        if (!existingByName.ContainsKey("Officer"))
+        {
+            added.Add(new LinkshellRole
+            {
+                LinkshellId = linkshellId,
+                Name = "Officer",
+                IsSystem = true,
+                SortOrder = 1,
+                CanManageRoles = false,
+                CanManageMembers = true,
+                CanManageEvents = true,
+                CanModerateLiveEvent = true,
+                CanAddLoot = true,
+                CanManageInventory = true,
+                CanManageTreasury = false,
+                CanManageRules = true,
+                CanManageAnnouncements = true,
+                CanManageTods = true,
+                CanAuditDkp = false,
+                CanManageAuctions = true,
+                CanCustomizeLinkshell = false
+            });
+        }
+
+        if (!existingByName.ContainsKey("Member"))
+        {
+            added.Add(new LinkshellRole
+            {
+                LinkshellId = linkshellId,
+                Name = "Member",
+                IsSystem = true,
+                SortOrder = 2
+            });
+        }
+
+        if (added.Count > 0)
+        {
+            await _dbContext.LinkshellRoles.AddRangeAsync(added, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            existing.AddRange(added);
+        }
+
+        return existing.OrderBy(r => r.SortOrder).ThenBy(r => r.Name).ToList();
     }
 
     private static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)
@@ -3656,8 +5397,21 @@ public sealed class ActivityDataController : ControllerBase
             return true;
         }
 
+        var trimmed = localDateTimeValue.Trim();
+
+        if (HasExplicitUtcOffset(trimmed)
+            && DateTime.TryParse(
+                trimmed,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                out var parsedUtc))
+        {
+            utcDateTime = DateTime.SpecifyKind(parsedUtc, DateTimeKind.Utc);
+            return true;
+        }
+
         if (!DateTime.TryParseExact(
-                localDateTimeValue.Trim(),
+                trimmed,
                 ["yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss"],
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
@@ -3669,6 +5423,36 @@ public sealed class ActivityDataController : ControllerBase
         var zone = ResolveTimeZone(timeZoneId);
         utcDateTime = zone.AtLeniently(LocalDateTime.FromDateTime(localDateTime)).ToDateTimeUtc();
         return true;
+    }
+
+    private static bool HasExplicitUtcOffset(string value)
+    {
+        if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var tIndex = value.IndexOf('T');
+        if (tIndex < 0)
+        {
+            return false;
+        }
+
+        for (var i = value.Length - 1; i > tIndex; i--)
+        {
+            var c = value[i];
+            if (c == '+' || c == '-')
+            {
+                return true;
+            }
+            if (c == ':' || char.IsDigit(c))
+            {
+                continue;
+            }
+            return false;
+        }
+
+        return false;
     }
 
     private DateTimeZone ResolveTimeZone(string? timeZoneId)
@@ -3710,14 +5494,96 @@ public sealed record ActivityLinkshellDto(
     string? Status,
     double? LinkshellDkp,
     int MemberCount,
-    string? Details);
+    string? Details,
+    ActivityPermissionsDto? Permissions,
+    ActivityLinkshellSettingsDto Settings);
+
+public sealed record ActivityLinkshellSettingsDto(
+    string LootStructure,
+    int? HybridDkpPercentage,
+    bool EnableHnmSection,
+    bool EnableMissions,
+    bool EnableAuctions,
+    bool EnableToDs,
+    bool EnableEndgame);
+
+public sealed record ActivityPermissionsDto(
+    bool CanManageRoles,
+    bool CanManageMembers,
+    bool CanManageEvents,
+    bool CanModerateLiveEvent,
+    bool CanAddLoot,
+    bool CanManageInventory,
+    bool CanManageTreasury,
+    bool CanManageRules,
+    bool CanManageAnnouncements,
+    bool CanManageTods,
+    bool CanAuditDkp,
+    bool CanManageAuctions,
+    bool CanCustomizeLinkshell);
 
 public sealed record ActivityPrimaryLinkshellDto(
     int Id,
     string Name,
     int MemberCount,
     string? Details,
-    IReadOnlyList<ActivityMemberDto> Members);
+    IReadOnlyList<ActivityMemberDto> Members,
+    IReadOnlyList<ActivityRuleDto> Rules,
+    IReadOnlyList<ActivityAnnouncementDto> Announcements,
+    IReadOnlyList<ActivityItemDto> Items,
+    IReadOnlyList<ActivityRevenueEntryDto> RevenueEntries);
+
+public sealed record ActivityItemDto(
+    int Id,
+    int LinkshellId,
+    string ItemName,
+    string? ItemType,
+    int Quantity,
+    string? Notes,
+    string? CreatedByAppUserId,
+    string? CreatedByCharacterName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+public sealed record ActivityRevenueEntryDto(
+    int Id,
+    int LinkshellId,
+    string EntryType,
+    string? Category,
+    long Value,
+    string? Details,
+    DateTime OccurredAt,
+    string? CreatedByAppUserId,
+    string? CreatedByCharacterName,
+    DateTime CreatedAt);
+
+public sealed record ActivityCreateItemRequest(string ItemName, string? ItemType, int Quantity, string? Notes);
+
+public sealed record ActivityUpdateItemRequest(string ItemName, string? ItemType, int Quantity, string? Notes);
+
+public sealed record ActivityCreateRevenueRequest(string EntryType, string? Category, long Value, string? Details, DateTime? OccurredAt);
+
+public sealed record ActivityRuleDto(
+    int Id,
+    int LinkshellId,
+    string Title,
+    string Details,
+    string? CreatedByAppUserId,
+    string? CreatedByCharacterName,
+    DateTime CreatedAt);
+
+public sealed record ActivityAnnouncementDto(
+    int Id,
+    int LinkshellId,
+    string Title,
+    string Details,
+    string? CreatedByAppUserId,
+    string? CreatedByCharacterName,
+    DateTime CreatedAt);
+
+public sealed record ActivityCreateRuleRequest(string Title, string Details);
+
+public sealed record ActivityCreateAnnouncementRequest(string Title, string Details);
 
 public sealed record ActivityLinkshellDetailDto(
     int Id,
@@ -3789,7 +5655,9 @@ public sealed record ActivityStatusLedgerDto(
     DateTime OccurredAt,
     bool RequiresVerification,
     DateTime? VerifiedAt,
-    string? VerifiedBy);
+    string? VerifiedBy,
+    DateTime? DeniedAt,
+    string? DeniedBy);
 
 public sealed record ActivityJobDto(
     int Id,
@@ -3834,6 +5702,45 @@ public sealed record ActivityHistoryParticipantDto(
     double? EventDkp,
     bool? IsVerified);
 
+public sealed record ActivityLinkshellRolePermissions(
+    string? Name,
+    bool CanManageRoles,
+    bool CanManageMembers,
+    bool CanManageEvents,
+    bool CanModerateLiveEvent,
+    bool CanAddLoot,
+    bool CanManageInventory,
+    bool CanManageTreasury,
+    bool CanManageRules,
+    bool CanManageAnnouncements,
+    bool CanManageTods,
+    bool CanAuditDkp,
+    bool CanManageAuctions,
+    bool CanCustomizeLinkshell);
+
+public sealed record ActivityLinkshellRoleDto(
+    int Id,
+    string Name,
+    bool IsSystem,
+    int SortOrder,
+    bool CanManageRoles,
+    bool CanManageMembers,
+    bool CanManageEvents,
+    bool CanModerateLiveEvent,
+    bool CanAddLoot,
+    bool CanManageInventory,
+    bool CanManageTreasury,
+    bool CanManageRules,
+    bool CanManageAnnouncements,
+    bool CanManageTods,
+    bool CanAuditDkp,
+    bool CanManageAuctions,
+    bool CanCustomizeLinkshell);
+
+public sealed record ActivityLinkshellRolesResponse(
+    int LinkshellId,
+    IReadOnlyList<ActivityLinkshellRoleDto> Roles);
+
 public sealed record ActivityDkpHistoryDto(
     int? LinkshellId,
     string? LinkshellName,
@@ -3847,6 +5754,14 @@ public sealed record ActivityDkpHistoryMemberDto(
     string AppUserId,
     string CharacterName,
     double CurrentBalance);
+
+public sealed record ActivityDkpAuditRequest(
+    int LinkshellId,
+    string TargetAppUserId,
+    string Mode,
+    int? RelatedLedgerEntryId,
+    double Amount,
+    string Reason);
 
 public sealed record ActivityDkpLedgerEntryDto(
     int Id,
@@ -3952,7 +5867,8 @@ public sealed record ActivityTodDto(
     DateTime? RepopTime,
     string? Interval,
     int LootCount,
-    IReadOnlyList<ActivityTodLootDto> LootDetails);
+    IReadOnlyList<ActivityTodLootDto> LootDetails,
+    string? ImagePath);
 
 public sealed record ActivityTodLootDto(
     int Id,
@@ -3994,17 +5910,32 @@ public sealed record ActivityCreateJobRequest(
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 
-public sealed record ActivityUpdateLinkshellRequest(string Name, string? Details);
+public sealed record ActivityUpdateLinkshellRequest(
+    string Name,
+    string? Details,
+    string? LootStructure,
+    int? HybridDkpPercentage,
+    bool? EnableHnmSection,
+    bool? EnableMissions,
+    bool? EnableAuctions,
+    bool? EnableToDs,
+    bool? EnableEndgame);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
 public sealed record ActivityParticipantInviteCandidatesRequest(int LinkshellId, IReadOnlyList<string> DiscordUserIds);
+
+public sealed record ActivityStartEventRequest(IReadOnlyList<int>? AbsentParticipantIds);
 
 public sealed record ActivityVerifyParticipantRequest(int ParticipantId, bool IsVerified);
 
 public sealed record ActivityResetParticipantRequest(int ParticipantId);
 
 public sealed record ActivityVerifyReturnRequest(int LedgerEntryId);
+
+public sealed record ActivityForceBreakRequest(int ParticipantId);
+
+public sealed record ActivityForceResumeRequest(int ParticipantId);
 
 public sealed record ActivityAddLootRequest(string ItemName, string? ItemWinner, int? WinningDkpSpent);
 
@@ -4017,7 +5948,19 @@ public sealed record ActivityCreateTodRequest(
     string? Cooldown,
     string? Interval,
     bool NoLoot,
-    IReadOnlyList<ActivityCreateTodLootRequest> LootDetails);
+    IReadOnlyList<ActivityCreateTodLootRequest> LootDetails,
+    string? ImagePath);
+
+public sealed record ActivityUpdateTodRequest(
+    string? MonsterName,
+    int? DayNumber,
+    bool Claim,
+    string? TimeLocal,
+    string? Cooldown,
+    string? Interval,
+    bool NoLoot,
+    IReadOnlyList<ActivityCreateTodLootRequest> LootDetails,
+    string? ImagePath);
 
 public sealed record ActivityCreateTodLootRequest(
     string? ItemName,

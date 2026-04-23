@@ -1,25 +1,86 @@
-﻿@model IEnumerable<LinkshellManager.ViewModels.RuleViewModel>
-<div class="container" style="max-width: 90%; margin: 0 auto;">
-    <h2 class="my-5">Rules</h2>
+@model IEnumerable<LinkshellManagerDiscordApp.ViewModels.RuleViewModel>
+@{
+    ViewData["Title"] = "Rules";
+    var canManage = (bool)(ViewBag.CanManage ?? false);
+    var linkshellName = ViewBag.LinkshellName as string;
+}
 
-    <table class="my-5 table">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Details</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var rule in Model)
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Rules</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(linkshellName))
             {
-                <tr>
-                    <td>@rule.RuleTitle</td>
-                    <td>@rule.RuleDetails</td>
-                </tr>
+                <span>@linkshellName</span>
+                <span class="dot"> · </span>
             }
-        </tbody>
-    </table>
-    <div class="d-flex justify-content-end mt-3">
-        <a asp-action="Create" class="btn btn-primary">Create New Rule</a>
+            <span><span class="num">@Model.Count()</span> rule@(Model.Count() == 1 ? "" : "s")</span>
+        </div>
     </div>
+    @if (canManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-action="Create">+ Create rule</a>
+        </div>
+    }
 </div>
+
+@if (!Model.Any())
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No rules yet</div>
+            <div style="margin-bottom:12px">
+                @if (canManage)
+                {
+                    <span>Add rules so members know what's expected.</span>
+                }
+                else
+                {
+                    <span>Your linkshell hasn't published any rules.</span>
+                }
+            </div>
+            @if (canManage)
+            {
+                <a class="btn primary" asp-action="Create">Create rule</a>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="fade d2" style="display:grid;gap:12px">
+        @foreach (var rule in Model)
+        {
+            <div class="card">
+                <div class="card-head">
+                    <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                        <div class="card-title">@rule.RuleTitle</div>
+                        <div style="font-size:12px;color:var(--fg-3)">
+                            @if (!string.IsNullOrWhiteSpace(rule.CreatedByCharacterName))
+                            {
+                                <span>Added by @rule.CreatedByCharacterName</span>
+                                <span class="dot"> · </span>
+                            }
+                            <span>@rule.CreatedAt.ToString("MMM d, yyyy")</span>
+                        </div>
+                    </div>
+                    @if (rule.CanManage)
+                    {
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            <a class="btn ghost sm" asp-action="Edit" asp-route-id="@rule.Id">Edit</a>
+                            <form asp-action="Delete" asp-route-id="@rule.Id" method="post" style="display:inline"
+                                  onsubmit="return confirm('Delete this rule?');">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn ghost sm">Delete</button>
+                            </form>
+                        </div>
+                    }
+                </div>
+                <div style="padding:0 16px 16px;color:var(--fg-1);white-space:pre-wrap;font-size:13px">
+                    @rule.RuleDetails
+                </div>
+            </div>
+        }
+    </div>
+}

@@ -1,270 +1,282 @@
-﻿using LinkshellManager.Data;
-using LinkshellManager.Models;
-using LinkshellManager.ViewModels;
+using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.ViewModels;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
-namespace LinkshellManager.Controllers
+namespace LinkshellManagerDiscordApp.Controllers;
+
+[Authorize]
+public class ManageTeamController : Controller
 {
-    public class ManageTeamController : Controller
+    private readonly ApplicationDbContext _context;
+    private readonly UserManager<AppUser> _userManager;
+
+    public ManageTeamController(ApplicationDbContext context, UserManager<AppUser> userManager)
     {
-        private readonly ApplicationDbContext _context;
+        _context = context;
+        _userManager = userManager;
+    }
 
-        public ManageTeamController(ApplicationDbContext context)
+    public async Task<IActionResult> Index(int? selectedLinkshellId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var userLinkshells = await _context.AppUserLinkshells
+            .Include(ul => ul.Linkshell)
+            .Where(ul => ul.AppUserId == user.Id)
+            .Select(ul => ul.Linkshell!)
+            .Where(l => l != null)
+            .OrderBy(l => l.LinkshellName)
+            .ToListAsync();
+
+        if (userLinkshells.Count == 0)
         {
-            _context = context;
+            ViewBag.Message = "You are not part of any linkshells.";
+            return View(new ManageTeamViewModel());
         }
-        
-        public async Task<IActionResult> Index(int? selectedLinkshellId)
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            var userLinkshells = await _context.AppUserLinkshells
-                .Include(ul => ul.Linkshell)
-                .Where(ul => ul.AppUserId == userId)
-                .Select(ul => ul.Linkshell)
+        var targetId = selectedLinkshellId
+            ?? (userLinkshells.Any(l => l.Id == user.PrimaryLinkshellId) ? user.PrimaryLinkshellId : null)
+            ?? userLinkshells[0].Id;
+
+        var members = await _context.AppUserLinkshells
+            .Include(ul => ul.AppUser)
+            .Where(ul => ul.LinkshellId == targetId)
+            .OrderBy(ul => ul.CharacterName)
+            .ToListAsync();
+
+        var canManage = await CanManageAsync(user.Id, targetId);
+
+        return View(new ManageTeamViewModel
+        {
+            Linkshells = userLinkshells,
+            Members = members,
+            SelectedLinkshellId = targetId,
+            CanManage = canManage
+        });
+    }
+
+    public async Task<IActionResult> SearchPlayers()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var manageable = await GetManageableLinkshellsAsync(user.Id);
+        if (manageable.Count == 0) return Forbid();
+
+        return View("PlayerSearch", new ManageTeamViewModel
+        {
+            Linkshells = manageable,
+            CanManage = true
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SearchPlayers(string? searchTerm)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var manageable = await GetManageableLinkshellsAsync(user.Id);
+        if (manageable.Count == 0) return Forbid();
+
+        var players = new List<AppUser>();
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            players = await _context.Users
+                .Where(u => u.CharacterName != null
+                            && u.CharacterName.Contains(term)
+                            && u.Id != user.Id)
+                .OrderBy(u => u.CharacterName)
                 .ToListAsync();
-
-            if (!userLinkshells.Any())
-            {
-                var emptyViewModel = new ManageTeamViewModel
-                {
-                    Linkshells = new List<Linkshell>(),
-                    Members = new List<AppUserLinkshell>(), // Change this line
-                    SelectedLinkshellId = 0
-                };
-
-                ViewData["Title"] = "Manage Team";
-                ViewData["Message"] = "You are not part of any linkshells.";
-                return View(emptyViewModel);
-            }
-
-            selectedLinkshellId ??= userLinkshells.FirstOrDefault()?.Id ?? 0;
-
-            var members = await _context.AppUserLinkshells
-                .Include(ul => ul.AppUser)
-                .Where(ul => ul.LinkshellId == selectedLinkshellId)
-                .ToListAsync();
-
-            var viewModel = new ManageTeamViewModel
-            {
-                Linkshells = userLinkshells,
-                Members = members,
-                SelectedLinkshellId = selectedLinkshellId.Value
-            };
-
-            ViewData["Title"] = "Manage Team";
-            return View(viewModel);
         }
 
-        // Method to render the search view
-        public IActionResult SearchPlayers()
+        return View("PlayerSearch", new ManageTeamViewModel
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var userLinkshells = _context.AppUserLinkshells
-                .Include(ul => ul.Linkshell)
-                .Where(ul => ul.AppUserId == userId)
-                .Select(ul => ul.Linkshell)
-                .ToList();
+            Linkshells = manageable,
+            Players = players,
+            SearchTerm = searchTerm,
+            CanManage = true
+        });
+    }
 
-            var viewModel = new ManageTeamViewModel
-            {
-                Linkshells = userLinkshells
-            };
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendInvite(SendInviteInput input)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
 
-            ViewData["Title"] = "Player Search";
-            return View("PlayerSearch", viewModel);
-        }
+        if (!await CanManageAsync(user.Id, input.LinkshellId)) return Forbid();
 
-        // Method to handle the search action
-        [HttpPost]
-        public async Task<IActionResult> SearchPlayers(string searchTerm)
+        var targetExists = await _context.Users.AnyAsync(u => u.Id == input.UserId);
+        if (!targetExists) return NotFound();
+
+        var alreadyMember = await _context.AppUserLinkshells
+            .AnyAsync(ul => ul.AppUserId == input.UserId && ul.LinkshellId == input.LinkshellId);
+        var alreadyInvited = await _context.Invites
+            .AnyAsync(i => i.AppUserId == input.UserId && i.LinkshellId == input.LinkshellId);
+
+        if (!alreadyMember && !alreadyInvited)
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var userLinkshells = await _context.AppUserLinkshells
-                .Include(ul => ul.Linkshell)
-                .Where(ul => ul.AppUserId == userId)
-                .Select(ul => ul.Linkshell)
-                .ToListAsync();
-
-            var players = new List<AppUser>();
-            if (!string.IsNullOrEmpty(searchTerm))
+            _context.Invites.Add(new Invite
             {
-                players = await _context.Users
-                    .Where(u => u.CharacterName.Contains(searchTerm) && u.Id != userId)
-                    .OrderBy(u => u.CharacterName) // Order by CharacterName alphabetically
-                    .ToListAsync();
-            }
-
-            var viewModel = new ManageTeamViewModel
-            {
-                SearchTerm = searchTerm,
-                Players = players,
-                Linkshells = userLinkshells
-            };
-
-            ViewData["Title"] = "Player Search";
-            return View("PlayerSearch", viewModel);
-        }
-
-        // POST: Linkshell/SendInvite
-        [HttpPost]
-        public async Task<IActionResult> SendInvite(string userId, int linkshellId)
-        {
-            var invite = new Invite
-            {
-                AppUserId = userId,
-                LinkshellId = linkshellId,
+                AppUserId = input.UserId,
+                LinkshellId = input.LinkshellId,
                 Status = "Pending"
-            };
-
-            _context.Invites.Add(invite);
+            });
             await _context.SaveChangesAsync();
-
-            return RedirectToAction(nameof(Index));
         }
 
-        // POST: Linkshell/AcceptInvite
-[HttpPost]
-public async Task<IActionResult> AcceptInvite(int inviteId)
-{
-    var invite = await _context.Invites
-        .Include(i => i.Linkshell) // Include the Linkshell entity
-        .FirstOrDefaultAsync(i => i.Id == inviteId);
-
-    if (invite == null)
-    {
-        return NotFound();
+        return RedirectToAction(nameof(Index));
     }
 
-    var appUser = await _context.Users.FindAsync(invite.AppUserId);
-    if (appUser == null)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AcceptInvite(int inviteId)
     {
-        return NotFound();
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var invite = await _context.Invites
+            .Include(i => i.Linkshell)
+            .FirstOrDefaultAsync(i => i.Id == inviteId);
+        if (invite is null) return NotFound();
+        if (invite.AppUserId != user.Id) return Forbid();
+
+        _context.AppUserLinkshells.Add(new AppUserLinkshell
+        {
+            AppUserId = invite.AppUserId,
+            LinkshellId = invite.LinkshellId,
+            LinkshellDkp = 0,
+            DateJoined = DateTime.UtcNow,
+            CharacterName = user.CharacterName,
+            Rank = "Member",
+            Status = "Active"
+        });
+        _context.Invites.Remove(invite);
+
+        if (user.PrimaryLinkshellId is null)
+        {
+            user.PrimaryLinkshellId = invite.LinkshellId;
+            user.PrimaryLinkshellName = invite.Linkshell?.LinkshellName;
+            _context.Update(user);
+        }
+
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(ViewInvites));
     }
 
-    var appUserLinkshell = new AppUserLinkshell
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeclineInvite(int inviteId)
     {
-        AppUserId = invite.AppUserId,
-        LinkshellId = invite.LinkshellId,
-        LinkshellDkp = 0, // Initialize DKP if needed
-        DateJoined = DateTime.UtcNow, // Set the DateJoined to the current UTC time
-        CharacterName = appUser.CharacterName, // Set the CharacterName from the AppUser
-        Rank = "Member",
-        Status = "Pending"
-    };
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
 
-    _context.AppUserLinkshells.Add(appUserLinkshell);
-    _context.Invites.Remove(invite);
-    await _context.SaveChangesAsync();
+        var invite = await _context.Invites.FirstOrDefaultAsync(i => i.Id == inviteId);
+        if (invite is null) return NotFound();
+        if (invite.AppUserId != user.Id) return Forbid();
 
-    // Set the PrimaryLinkshellId and PrimaryLinkshellName fields of the AppUser
-    appUser.PrimaryLinkshellId = invite.LinkshellId;
-    appUser.PrimaryLinkshellName = invite.Linkshell.LinkshellName;
+        _context.Invites.Remove(invite);
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(ViewInvites));
+    }
 
-    _context.Update(appUser);
-    await _context.SaveChangesAsync();
+    public async Task<IActionResult> ViewInvites()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
 
-    return RedirectToAction(nameof(Index));
-}
+        var pendingInvites = await _context.Invites
+            .Include(i => i.Linkshell)
+            .Include(i => i.AppUser)
+            .Where(i => i.AppUserId == user.Id && i.Status == "Pending")
+            .ToListAsync();
 
-        // POST: Linkshell/DeclineInvite
-        [HttpPost]
-        public async Task<IActionResult> DeclineInvite(int inviteId)
+        var manageableIds = await _context.AppUserLinkshells
+            .Where(ul => ul.AppUserId == user.Id
+                         && (ul.Rank == "Leader" || ul.Rank == "Officer"))
+            .Select(ul => ul.LinkshellId)
+            .ToListAsync();
+
+        var sentInvites = await _context.Invites
+            .Include(i => i.Linkshell)
+            .Include(i => i.AppUser)
+            .Where(i => manageableIds.Contains(i.LinkshellId) && i.Status == "Pending")
+            .ToListAsync();
+
+        return View(new ManageTeamViewModel
         {
-            var invite = await _context.Invites.FindAsync(inviteId);
-            if (invite == null)
-            {
-                return NotFound();
-            }
+            PendingInvites = pendingInvites,
+            SentInvites = sentInvites,
+            CanManage = manageableIds.Count > 0
+        });
+    }
 
-            _context.Invites.Remove(invite);
-            await _context.SaveChangesAsync();
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UndoInvite(int inviteId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
 
-            return RedirectToAction(nameof(Index));
-        }
+        var invite = await _context.Invites.FirstOrDefaultAsync(i => i.Id == inviteId);
+        if (invite is null) return NotFound();
 
-        // GET: Linkshell/Invites
-        public async Task<IActionResult> ViewInvites()
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var pendingInvites = await _context.Invites
-                .Include(i => i.Linkshell)
-                .Include(i => i.AppUser) // Include AppUser to access CharacterName
-                .Where(i => i.AppUserId == userId && i.Status == "Pending")
-                .ToListAsync();
+        if (!await CanManageAsync(user.Id, invite.LinkshellId)) return Forbid();
 
-            var sentInvites = await _context.Invites
-                .Include(i => i.Linkshell)
-                .Include(i => i.AppUser) // Include AppUser to access CharacterName
-                .Where(i => i.Linkshell.AppUserLinkshells.Any(ul => ul.AppUserId == userId) && i.Status == "Pending")
-                .ToListAsync();
+        _context.Invites.Remove(invite);
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(ViewInvites));
+    }
 
-            var viewModel = new ManageTeamViewModel
-            {
-                PendingInvites = pendingInvites ?? new List<Invite>(), // Ensure the list is initialized
-                SentInvites = sentInvites ?? new List<Invite>() // Ensure the list is initialized
-            };
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ModifyRankStatus(ModifyRankStatusInput input)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
 
-            ViewData["Title"] = "Invites";
-            return View(viewModel);
-        }
+        var member = await _context.AppUserLinkshells.FirstOrDefaultAsync(ul => ul.Id == input.Id);
+        if (member is null) return NotFound();
 
-        [HttpPost]
-        public async Task<IActionResult> UndoInvite(int inviteId)
-        {
-            var invite = await _context.Invites.FindAsync(inviteId);
-            if (invite != null)
-            {
-                _context.Invites.Remove(invite);
-                await _context.SaveChangesAsync();
-            }
-            return RedirectToAction("ViewInvites");
-        }
+        if (!await CanManageAsync(user.Id, member.LinkshellId)) return Forbid();
 
-        [HttpPost]
-        public async Task<IActionResult> ModifyRankStatus(int id, string rank, string status)
-        {
-            var member = await _context.AppUserLinkshells.FindAsync(id);
-            if (member == null)
-            {
-                return NotFound();
-            }
+        if (!ModelState.IsValid) return RedirectToAction(nameof(Index), new { selectedLinkshellId = member.LinkshellId });
 
-            member.Rank = rank;
-            member.Status = status;
+        member.Rank = input.Rank;
+        member.Status = input.Status;
+        await _context.SaveChangesAsync();
 
-            _context.Update(member);
-            await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index), new { selectedLinkshellId = member.LinkshellId });
+    }
 
-            return RedirectToAction(nameof(Index));
-        }
+    private async Task<bool> CanManageAsync(string appUserId, int? linkshellId)
+    {
+        if (!linkshellId.HasValue) return false;
+        var membership = await _context.AppUserLinkshells
+            .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId.Value);
+        return membership is not null
+               && !string.IsNullOrWhiteSpace(membership.Rank)
+               && (membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase)
+                   || membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase));
+    }
 
-        [HttpPost]
-        public async Task<IActionResult> DkpAudit(int id, int linkshellDkp, string details)
-        {
-            var member = await _context.AppUserLinkshells.FindAsync(id);
-            if (member == null)
-            {
-                return NotFound();
-            }
-
-            var dkpAudit = new DkpAudit
-            {
-                AppUserLinkshellId = id,
-                PreviousDkp = member.LinkshellDkp,
-                NewDkp = linkshellDkp,
-                Details = details
-            };
-
-            member.LinkshellDkp = linkshellDkp;
-
-            _context.DkpAudits.Add(dkpAudit);
-            _context.Update(member);
-            await _context.SaveChangesAsync();
-
-            return RedirectToAction(nameof(Index));
-        }
+    private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)
+    {
+        return await _context.AppUserLinkshells
+            .Where(ul => ul.AppUserId == appUserId
+                         && (ul.Rank == "Leader" || ul.Rank == "Officer"))
+            .Select(ul => ul.Linkshell!)
+            .Where(l => l != null)
+            .OrderBy(l => l.LinkshellName)
+            .ToListAsync();
     }
 }

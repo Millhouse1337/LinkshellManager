@@ -30,6 +30,11 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<Tod> Tods => Set<Tod>();
         public DbSet<TodLootDetail> TodLootDetails => Set<TodLootDetail>();
         public DbSet<Notification> Notifications => Set<Notification>();
+        public DbSet<Rule> Rules => Set<Rule>();
+        public DbSet<Announcement> Announcements => Set<Announcement>();
+        public DbSet<Item> Items => Set<Item>();
+        public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
+        public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -194,6 +199,79 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("TodLootDetails");
                 entity.Property(item => item.ItemName).HasMaxLength(256);
                 entity.Property(item => item.ItemWinner).HasMaxLength(256);
+            });
+
+            builder.Entity<Rule>(entity =>
+            {
+                entity.ToTable("Rules");
+                entity.Property(item => item.LinkshellName).HasMaxLength(256);
+                entity.Property(item => item.RuleTitle).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.RuleDetails).HasMaxLength(4000).IsRequired();
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.CreatedAt });
+            });
+
+            builder.Entity<Announcement>(entity =>
+            {
+                entity.ToTable("Announcements");
+                entity.Property(item => item.LinkshellName).HasMaxLength(256);
+                entity.Property(item => item.AnnouncementTitle).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.AnnouncementDetails).HasMaxLength(4000).IsRequired();
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.CreatedAt });
+            });
+
+            builder.Entity<Item>(entity =>
+            {
+                entity.ToTable("Items");
+                entity.Property(item => item.LinkshellName).HasMaxLength(256);
+                entity.Property(item => item.ItemName).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.ItemType).HasMaxLength(128);
+                entity.Property(item => item.Notes).HasMaxLength(1024);
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.ItemName });
+            });
+
+            builder.Entity<RevenueEntry>(entity =>
+            {
+                entity.ToTable("RevenueEntries");
+                entity.Property(item => item.LinkshellName).HasMaxLength(256);
+                entity.Property(item => item.EntryType).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Category).HasMaxLength(128);
+                entity.Property(item => item.Details).HasMaxLength(1024);
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.OccurredAt });
+            });
+
+            builder.Entity<LinkshellRole>(entity =>
+            {
+                entity.ToTable("LinkshellRoles");
+                entity.Property(item => item.Name).HasMaxLength(64).IsRequired();
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.Name }).IsUnique();
             });
         }
     }

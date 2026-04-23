@@ -1,160 +1,180 @@
-﻿@model LinkshellManager.ViewModels.ManageTeamViewModel
-
+@model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
 @{
     ViewData["Title"] = "Manage Team";
+    var message = ViewBag.Message as string;
+    var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
 }
 
-<div class="container">
-    <div class="pagetitle d-flex justify-content-center py-4">
-        <h2>Manage Team</h2>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Manage Team</h1>
+        <div class="page-sub">
+            @if (selectedLinkshell != null)
+            {
+                <span>@selectedLinkshell.LinkshellName</span>
+                <span class="dot"> · </span>
+            }
+            <span><span class="num">@Model.Members.Count</span> member@(Model.Members.Count == 1 ? "" : "s")</span>
+        </div>
     </div>
+    @if (Model.CanManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-action="SearchPlayers">+ Add members</a>
+        </div>
+    }
+</div>
 
-    <section class="section">
-        <div class="row">
-            <div class="col-lg-12">
-                <div class="card">
-                    <div class="card-body">
-                        <form asp-action="Index" method="get">
-                            <div class="input-group d-flex justify-content-center mt-3 mb-3">
-                                <div class="mb-3">
-                                    <label for="linkshellSelect" class="form-label mb-3">Select Linkshell</label>
-                                    <select id="linkshellSelect" class="form-select" asp-for="SelectedLinkshellId" asp-items="@(new SelectList(Model.Linkshells, "Id", "LinkshellName"))" onchange="this.form.submit()"></select>
-                                </div>
-                            </div>
-                        </form>
-
-                        @if (!string.IsNullOrEmpty(ViewData["Message"] as string))
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">@message</div>
+        </div>
+    </div>
+}
+else
+{
+    @if (Model.Linkshells.Count > 1)
+    {
+        <div class="card fade d2" style="padding:16px">
+            <form asp-action="Index" method="get" class="form-grid">
+                <div class="field">
+                    <label for="selectedLinkshellId">Linkshell</label>
+                    <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select" onchange="this.form.submit()">
+                        @foreach (var linkshell in Model.Linkshells)
                         {
-                            <p>@ViewData["Message"]</p>
+                            if (linkshell.Id == Model.SelectedLinkshellId)
+                            {
+                                <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                            }
+                            else
+                            {
+                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                            }
                         }
-                        else
-                        {
-                            <h3>Members</h3>
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Character Name</th>
-                                        <th>Rank</th>
-                                        <th>Status</th>
-                                        <th>DKP</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var member in Model.Members)
-                                    {
-                                        <tr>
-                                            <td>@member.CharacterName</td>
-                                            <td>@member.Rank</td>
-                                            <td>@member.Status</td>
-                                            <td>@member.LinkshellDkp</td>
-                                            <td>
-                                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modifyRankStatusModal" data-id="@member.Id" data-rank="@member.Rank" data-status="@member.Status">Modify Rank/Status</button>
-                                                <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#dkpAuditModal" data-id="@member.Id" data-dkp="@member.LinkshellDkp">DKP Audit</button>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        }
-                    </div>
+                    </select>
                 </div>
+            </form>
+        </div>
+    }
+
+    <div class="card fade d3">
+        <div class="card-head">
+            <div class="card-title">Members</div>
+        </div>
+        @if (Model.Members.Count == 0)
+        {
+            <div class="empty">No members found for this linkshell.</div>
+        }
+        else
+        {
+            <table class="table themed">
+                <thead>
+                    <tr>
+                        <th>Character</th>
+                        <th>Rank</th>
+                        <th>Status</th>
+                        <th style="text-align:right">DKP</th>
+                        <th>Joined</th>
+                        @if (Model.CanManage)
+                        {
+                            <th style="text-align:right">Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in Model.Members)
+                    {
+                        <tr>
+                            <td>@(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")</td>
+                            <td><span class="tag">@(member.Rank ?? "—")</span></td>
+                            <td>@(member.Status ?? "—")</td>
+                            <td class="num" style="text-align:right">@((member.LinkshellDkp ?? 0).ToString("N0"))</td>
+                            <td style="font-size:12px;color:var(--fg-3)">
+                                @(member.DateJoined.HasValue ? member.DateJoined.Value.ToString("MMM d, yyyy") : "—")
+                            </td>
+                            @if (Model.CanManage)
+                            {
+                                <td style="text-align:right">
+                                    <button type="button" class="btn ghost sm js-modify"
+                                            data-id="@member.Id"
+                                            data-rank="@member.Rank"
+                                            data-status="@member.Status"
+                                            data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)">
+                                        Modify
+                                    </button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@if (Model.CanManage)
+{
+    <div class="modal fade" id="modifyModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="ModifyRankStatus" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header">
+                        <h5 class="modal-title">Modify rank &amp; status</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="Id" id="modifyId" />
+                        <div class="field" style="margin-bottom:12px">
+                            <label>Character</label>
+                            <div id="modifyName" style="color:var(--fg-3)"></div>
+                        </div>
+                        <div class="field" style="margin-bottom:12px">
+                            <label for="modifyRank">Rank</label>
+                            <select name="Rank" id="modifyRank" class="form-select" required>
+                                @foreach (var rank in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.RankOptions)
+                                {
+                                    <option value="@rank">@rank</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="modifyStatus">Status</label>
+                            <select name="Status" id="modifyStatus" class="form-select" required>
+                                @foreach (var status in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.StatusOptions)
+                                {
+                                    <option value="@status">@status</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn ghost" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn primary">Save changes</button>
+                    </div>
+                </form>
             </div>
         </div>
-    </section>
-</div>
-
-<!-- Modify Rank/Status Modal -->
-<div class="modal fade" id="modifyRankStatusModal" tabindex="-1" aria-labelledby="modifyRankStatusModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="ModifyRankStatus" method="post">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modifyRankStatusModalLabel">Modify Rank/Status</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="modifyRankStatusId" name="Id" />
-                    <div class="mb-3">
-                        <label for="modifyRank" class="form-label">Rank</label>
-                        <input type="text" class="form-control" id="modifyRank" name="Rank" />
-                    </div>
-                    <div class="mb-3">
-                        <label for="modifyStatus" class="form-label">Status</label>
-                        <input type="text" class="form-control" id="modifyStatus" name="Status" />
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save changes</button>
-                </div>
-            </form>
-        </div>
     </div>
-</div>
 
-<!-- DKP Audit Modal -->
-<div class="modal fade" id="dkpAuditModal" tabindex="-1" aria-labelledby="dkpAuditModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="DkpAudit" method="post">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="dkpAuditModalLabel">DKP Audit</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="dkpAuditId" name="Id" />
-                    <div class="mb-3">
-                        <label for="dkpValue" class="form-label">DKP</label>
-                        <input type="number" class="form-control" id="dkpValue" name="LinkshellDkp" />
-                    </div>
-                    <div class="mb-3">
-                        <label for="dkpReason" class="form-label">Reason</label>
-                        <textarea class="form-control" id="dkpReason" name="Details"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-@section Scripts {
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var modifyRankStatusModal = document.getElementById('modifyRankStatusModal');
-            modifyRankStatusModal.addEventListener('show.bs.modal', function (event) {
-                var button = event.relatedTarget;
-                var id = button.getAttribute('data-id');
-                var rank = button.getAttribute('data-rank');
-                var status = button.getAttribute('data-status');
-
-                var modalIdInput = modifyRankStatusModal.querySelector('#modifyRankStatusId');
-                var modalRankInput = modifyRankStatusModal.querySelector('#modifyRank');
-                var modalStatusInput = modifyRankStatusModal.querySelector('#modifyStatus');
-
-                modalIdInput.value = id;
-                modalRankInput.value = rank;
-                modalStatusInput.value = status;
+    @section Scripts {
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                var modalEl = document.getElementById('modifyModal');
+                if (!modalEl) return;
+                var modal = new bootstrap.Modal(modalEl);
+                document.querySelectorAll('.js-modify').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        document.getElementById('modifyId').value = btn.dataset.id || '';
+                        document.getElementById('modifyRank').value = btn.dataset.rank || 'Member';
+                        document.getElementById('modifyStatus').value = btn.dataset.status || 'Active';
+                        document.getElementById('modifyName').textContent = btn.dataset.name || '';
+                        modal.show();
+                    });
+                });
             });
-
-            var dkpAuditModal = document.getElementById('dkpAuditModal');
-            dkpAuditModal.addEventListener('show.bs.modal', function (event) {
-                var button = event.relatedTarget;
-                var id = button.getAttribute('data-id');
-                var dkp = button.getAttribute('data-dkp');
-
-                var modalIdInput = dkpAuditModal.querySelector('#dkpAuditId');
-                var modalDkpInput = dkpAuditModal.querySelector('#dkpValue');
-                var modalReasonInput = dkpAuditModal.querySelector('#dkpReason');
-
-                modalIdInput.value = id;
-                modalDkpInput.value = dkp;
-                modalReasonInput.value = '';
-            });
-        });
-    </script>
+        </script>
+    }
 }

@@ -88,8 +88,14 @@ builder.Services.ConfigureExternalCookie(options =>
     options.Cookie.IsEssential = true;
 });
 
-builder.Services.AddControllersWithViews();
-builder.Services.AddRazorPages();
+var mvcBuilder = builder.Services.AddControllersWithViews();
+var razorPagesBuilder = builder.Services.AddRazorPages();
+
+if (builder.Environment.IsDevelopment())
+{
+    mvcBuilder.AddRazorRuntimeCompilation();
+    razorPagesBuilder.AddRazorRuntimeCompilation();
+}
 
 builder.Services.AddOptions<DiscordOAuthOptions>()
     .Bind(builder.Configuration.GetSection("Discord"))

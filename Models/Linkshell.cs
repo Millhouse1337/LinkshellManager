@@ -28,6 +28,21 @@ public class Linkshell
 
     public string? Details { get; set; }
 
+    [MaxLength(32)]
+    public string LootStructure { get; set; } = "Dkp";
+
+    public int? HybridDkpPercentage { get; set; }
+
+    public bool EnableHnmSection { get; set; } = true;
+
+    public bool EnableMissions { get; set; } = true;
+
+    public bool EnableAuctions { get; set; } = true;
+
+    public bool EnableToDs { get; set; } = true;
+
+    public bool EnableEndgame { get; set; } = true;
+
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 
     public ICollection<Event> Events { get; set; } = new List<Event>();

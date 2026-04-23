@@ -2,19 +2,6 @@
 @{
     ViewData["Title"] = "Dashboard";
 
-    string RelativeTime(DateTime? when)
-    {
-        if (!when.HasValue) return "TBD";
-        var delta = when.Value - DateTime.UtcNow;
-        var abs = delta.Duration();
-        var prefix = delta.TotalSeconds < 0 ? "" : "in ";
-        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
-        if (abs.TotalMinutes < 60)  return $"{prefix}{(int)abs.TotalMinutes}m{suffix}";
-        if (abs.TotalHours < 24)    return $"{prefix}{(int)abs.TotalHours}h{suffix}";
-        if (abs.TotalDays < 14)     return $"{prefix}{(int)abs.TotalDays}d{suffix}";
-        return when.Value.ToString("MMM d");
-    }
-
     string RosterAvClass(string? name)
     {
         if (string.IsNullOrEmpty(name)) return "a";
@@ -29,6 +16,19 @@
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var ini = string.Concat(parts.Select(p => p[0])).ToUpperInvariant();
         return ini.Length > 2 ? ini[..2] : ini;
+    }
+
+    string RelativeEventTime(DateTime? when)
+    {
+        if (!when.HasValue) return "TBD";
+        var delta = when.Value - DateTime.UtcNow;
+        var abs = delta.Duration();
+        var prefix = delta.TotalSeconds < 0 ? "" : "in ";
+        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
+        if (abs.TotalMinutes < 60) return $"{prefix}{(int)abs.TotalMinutes}m{suffix}";
+        if (abs.TotalHours < 24) return $"{prefix}{(int)abs.TotalHours}h{suffix}";
+        if (abs.TotalDays < 14) return $"{prefix}{(int)abs.TotalDays}d{suffix}";
+        return when.Value.ToString("MMM d");
     }
 }
 
@@ -107,7 +107,7 @@ else
             <div class="stat-body">
                 <div class="stat-label">Completed Events</div>
                 <div class="stat-value">@Model.CompletedEvents</div>
-                <div class="stat-delta">last 10 shown</div>
+                <div class="stat-delta">last @Model.CompletedEvents shown</div>
             </div>
         </div>
         <div class="stat">
@@ -120,6 +120,48 @@ else
                 <div class="stat-delta">you belong to</div>
             </div>
         </div>
+    </div>
+
+    <div class="card fade d2" style="margin-top:16px;margin-bottom:16px">
+        <div class="card-head">
+            <div class="card-title">Rules</div>
+            <a class="card-link" asp-controller="Rule" asp-action="Index">View all</a>
+        </div>
+        <div class="empty">No rules defined yet.</div>
+    </div>
+
+    <div class="card fade d2" style="margin-top:16px;margin-bottom:16px">
+        <div class="card-head">
+            <div class="card-title">Recent Announcements</div>
+            <a class="card-link" asp-controller="Announcement" asp-action="Index">View all</a>
+        </div>
+        @if (Model.RecentAnnouncements.Count == 0)
+        {
+            <div class="empty">No recent announcements found.</div>
+        }
+        else
+        {
+            <div class="act-list">
+                @foreach (var ann in Model.RecentAnnouncements)
+                {
+                    <div class="act-row">
+                        <div class="act-when">@ann.RelativeTime</div>
+                        <div class="act-dot claim"></div>
+                        <div class="act-text">
+                            <strong>@ann.Title</strong>
+                            @if (!string.IsNullOrWhiteSpace(ann.Details))
+                            {
+                                <span> · @ann.Details</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(ann.Author))
+                            {
+                                <span class="roster-name-sub"> — @ann.Author</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
     </div>
 
     <div class="grid">
@@ -166,7 +208,7 @@ else
                                 </div>
                                 <div class="row-time @(isLive ? "warn" : "")">
                                     <span class="num">@(evt.StartTime?.ToString("HH:mm") ?? "—")</span>
-                                    <div class="row-time-sub">@RelativeTime(evt.StartTime)</div>
+                                    <div class="row-time-sub">@RelativeEventTime(evt.StartTime)</div>
                                 </div>
                                 <div class="row-cta">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
@@ -179,38 +221,35 @@ else
 
             <div class="card fade d4">
                 <div class="card-head">
-                    <div class="card-title">Recent event history</div>
+                    <div class="card-title">Recent activity</div>
                     <a class="card-link" asp-controller="EventHistory" asp-action="Index">Full log</a>
                 </div>
-                @if (Model.EventHistories.Count == 0)
+                @if (Model.RecentActivity.Count == 0)
                 {
-                    <div class="empty">No completed events yet.</div>
+                    <div class="empty">No activity yet.</div>
                 }
                 else
                 {
                     <div class="act-list">
-                        @foreach (var h in Model.EventHistories)
+                        @foreach (var item in Model.RecentActivity)
                         {
-                            var end = h.EndTime ?? h.TimeStamp;
-                            <a class="act-row" href="@Url.Action("Details", "EventHistory", new { id = h.Id })" style="text-decoration:none">
-                                <div class="act-when">@RelativeTime(end)</div>
-                                <div class="act-dot kill"></div>
+                            <div class="act-row">
+                                <div class="act-when">@item.RelativeTime</div>
+                                <div class="act-dot @item.DotClass"></div>
                                 <div class="act-text">
-                                    <strong>@(h.EventName ?? "Event")</strong>
-                                    @if (!string.IsNullOrWhiteSpace(h.EventLocation))
+                                    <strong>@item.Title</strong>
+                                    @if (!string.IsNullOrWhiteSpace(item.Subtitle))
                                     {
-                                        <span> · @h.EventLocation</span>
+                                        <span> · @item.Subtitle</span>
                                     }
                                 </div>
-                            </a>
+                            </div>
                         }
                     </div>
                 }
             </div>
-        </div>
 
-        <div class="col">
-            <div class="card fade d3">
+            <div class="card fade d5">
                 <div class="card-head">
                     <div class="card-title">Linkshell roster</div>
                     <a class="card-link" asp-controller="ManageTeam" asp-action="Index">Manage team</a>
@@ -251,6 +290,121 @@ else
                             <div><span class="tag @statusClass">@status</span></div>
                         </div>
                     }
+                }
+            </div>
+        </div>
+
+        <div class="col">
+            <div class="card fade d3">
+                <div class="card-head">
+                    <div class="card-title">ToD Tracker</div>
+                    <a class="card-link" asp-controller="ToD" asp-action="Index">All HNMs</a>
+                </div>
+                @if (Model.TodTracker.Count == 0)
+                {
+                    <div class="empty">No tracked windows yet. Log a ToD to start tracking.</div>
+                }
+                else
+                {
+                    <div class="tod-tracker-list">
+                        @foreach (var entry in Model.TodTracker)
+                        {
+                            <div class="tod-tracker-row">
+                                <div class="tod-tracker-av @entry.StatusTagClass"></div>
+                                <div class="tod-tracker-main">
+                                    <div class="tod-tracker-head">
+                                        <span class="tod-tracker-name">@entry.MonsterName</span>
+                                        <span class="tag @entry.StatusTagClass">@entry.StatusLabel</span>
+                                    </div>
+                                    <div class="tod-tracker-bar">
+                                        <div class="tod-tracker-bar-fill @entry.StatusTagClass" style="width:@(entry.ProgressPercent.ToString("0.##"))%"></div>
+                                    </div>
+                                </div>
+                                <div class="tod-tracker-time">
+                                    <div class="num">@entry.TimeLabel</div>
+                                    <div class="tod-tracker-sub">@entry.TimeSubLabel</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="card fade d4">
+                <div class="card-head">
+                    <div class="card-title">HNM claims (last @Model.HnmClaimsWindowDays days)</div>
+                </div>
+                @if (Model.HnmClaims.Count == 0)
+                {
+                    <div class="empty">No claims in the last @Model.HnmClaimsWindowDays days.</div>
+                }
+                else
+                {
+                    <div class="donut-wrap">
+                        <svg class="donut" viewBox="0 0 42 42">
+                            <circle class="donut-track" cx="21" cy="21" r="15.9155" fill="none" stroke-width="4"></circle>
+                            @{
+                                double offset = 25;
+                            }
+                            @foreach (var claim in Model.HnmClaims)
+                            {
+                                var dash = claim.Percent;
+                                var gap = 100 - dash;
+                                <circle class="donut-seg donut-seg-@claim.ColorClass" cx="21" cy="21" r="15.9155" fill="none" stroke-width="4"
+                                        stroke-dasharray="@(dash.ToString("0.##")) @(gap.ToString("0.##"))"
+                                        stroke-dashoffset="@(offset.ToString("0.##"))"></circle>
+                                offset = (offset - dash + 100) % 100;
+                            }
+                            <text x="21" y="20" text-anchor="middle" class="donut-value">@Model.HnmClaimsTotal</text>
+                            <text x="21" y="25" text-anchor="middle" class="donut-label">CLAIMS</text>
+                        </svg>
+                        <div class="donut-legend">
+                            @foreach (var claim in Model.HnmClaims)
+                            {
+                                <div class="donut-legend-row">
+                                    <span class="donut-swatch donut-seg-@claim.ColorClass"></span>
+                                    <span class="donut-legend-name">@claim.MonsterName</span>
+                                    <span class="donut-legend-stats"><span class="num">@claim.Count</span> · @(claim.Percent.ToString("0.#"))%</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="card fade d5">
+                <div class="card-head">
+                    <div class="card-title">News &amp; updates</div>
+                    <a class="card-link" asp-controller="DkpHistory" asp-action="Index">Full log</a>
+                </div>
+                @if (Model.NewsUpdates.Count == 0)
+                {
+                    <div class="empty">No loot recorded yet.</div>
+                }
+                else
+                {
+                    <div class="news-list">
+                        @foreach (var news in Model.NewsUpdates)
+                        {
+                            <div class="news-row">
+                                <div class="news-icon donut-seg-@news.ColorClass"></div>
+                                <div class="news-main">
+                                    <div class="news-title">@news.Title</div>
+                                    @if (!string.IsNullOrWhiteSpace(news.Subtitle))
+                                    {
+                                        <div class="news-sub">@news.Subtitle</div>
+                                    }
+                                </div>
+                                <div class="news-meta">
+                                    @if (news.Dkp.HasValue)
+                                    {
+                                        <div><span class="num">@news.Dkp.Value.ToString("N0")</span> dkp</div>
+                                    }
+                                    <div class="news-time">@news.RelativeTime</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
                 }
             </div>
         </div>

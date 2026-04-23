@@ -1,0 +1,47 @@
+@model LinkshellManagerDiscordApp.ViewModels.AnnouncementViewModel
+@{
+    ViewData["Title"] = "Edit announcement";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Edit announcement</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Cancel</a>
+    </div>
+</div>
+
+<div class="card fade d2" style="padding:20px">
+    <form asp-action="Edit" asp-route-id="@Model.Id" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="LinkshellId" />
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="form-grid">
+            <div class="field" style="grid-column:1/-1">
+                <label asp-for="AnnouncementTitle"></label>
+                <input asp-for="AnnouncementTitle" class="form-control" maxlength="256" />
+                <span asp-validation-for="AnnouncementTitle" class="text-danger"></span>
+            </div>
+
+            <div class="field" style="grid-column:1/-1">
+                <label asp-for="AnnouncementDetails"></label>
+                <textarea asp-for="AnnouncementDetails" class="form-control" rows="5" maxlength="4000"></textarea>
+                <span asp-validation-for="AnnouncementDetails" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <button type="submit" class="btn primary">Update announcement</button>
+            <a class="btn ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

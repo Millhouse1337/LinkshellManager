@@ -1,0 +1,165 @@
+@model LinkshellManagerDiscordApp.ViewModels.DkpAdjustmentViewModel
+@{
+    ViewData["Title"] = "DKP Adjustments";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">DKP Adjustments</h1>
+        <div class="page-sub">
+            <span>Manually adjust member DKP balances</span>
+            @if (!string.IsNullOrWhiteSpace(Model.SelectedLinkshellName))
+            {
+                <span class="dot"> · </span>
+                <span>@Model.SelectedLinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (TempData["DkpAdjustmentError"] is string errorMessage)
+{
+    <div class="alert alert-danger fade d2">@errorMessage</div>
+}
+@if (TempData["DkpAdjustmentSuccess"] is string successMessage)
+{
+    <div class="alert alert-success fade d2">@successMessage</div>
+}
+
+@if (!Model.CanManage)
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No permission</div>
+            <div>Only Leaders and Officers can adjust DKP balances.</div>
+        </div>
+    </div>
+}
+else if (Model.Linkshells.Count == 0)
+{
+    <div class="card fade d2">
+        <div class="empty">You don't manage any linkshells yet.</div>
+    </div>
+}
+else
+{
+    <div class="card fade d2" style="padding:16px;margin-bottom:16px">
+        <form method="get" class="field" style="max-width:320px">
+            <label for="linkshellId">Linkshell</label>
+            <select class="form-select" id="linkshellId" name="linkshellId" onchange="this.form.submit()">
+                @foreach (var linkshell in Model.Linkshells)
+                {
+                    @if (linkshell.Id == Model.SelectedLinkshellId)
+                    {
+                        <option value="@linkshell.Id" selected>@linkshell.Name</option>
+                    }
+                    else
+                    {
+                        <option value="@linkshell.Id">@linkshell.Name</option>
+                    }
+                }
+            </select>
+        </form>
+    </div>
+
+    <div class="card fade d3">
+        <div class="card-head">
+            <div class="card-title">Members <span class="tag">@Model.Members.Count</span></div>
+        </div>
+        @if (!Model.Members.Any())
+        {
+            <div class="empty">No members in this linkshell yet.</div>
+        }
+        else
+        {
+            <table class="table themed">
+                <thead>
+                    <tr>
+                        <th>Character</th>
+                        <th>Rank</th>
+                        <th style="text-align:right">Current DKP</th>
+                        <th style="text-align:right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in Model.Members)
+                    {
+                        <tr>
+                            <td style="font-weight:500">@member.CharacterName</td>
+                            <td><span class="tag">@(member.Rank ?? "Member")</span></td>
+                            <td class="num" style="text-align:right">@member.CurrentBalance.ToString("0.##")</td>
+                            <td style="text-align:right">
+                                <button type="button" class="btn ghost sm adjust-dkp-btn"
+                                        data-membership-id="@member.MembershipId"
+                                        data-character-name="@member.CharacterName"
+                                        data-current-balance="@member.CurrentBalance">Adjust</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <div class="modal fade" id="adjustDkpModal" tabindex="-1" aria-labelledby="adjustDkpModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="Adjust" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="LinkshellId" value="@Model.SelectedLinkshellId" />
+                    <input type="hidden" id="adjustMembershipId" name="MembershipId" />
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="adjustDkpModalLabel">Adjust DKP</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-2);font-size:13px">
+                            <div style="color:var(--fg-3)">Member</div>
+                            <div id="adjustCharacterName" style="font-weight:600"></div>
+                            <div style="color:var(--fg-3);margin-top:6px">Current balance</div>
+                            <div id="adjustCurrentBalance" class="num" style="font-weight:600"></div>
+                        </div>
+                        <div class="field">
+                            <label for="adjustAmount">Amount (+ to add, − to subtract)</label>
+                            <input type="number" step="any" class="form-control" id="adjustAmount" name="Amount" required />
+                        </div>
+                        <div class="field">
+                            <label for="adjustReason">Reason</label>
+                            <textarea class="form-control" id="adjustReason" name="Reason" rows="3" maxlength="1024" required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn ghost" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn primary">Save adjustment</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            const buttons = document.querySelectorAll('.adjust-dkp-btn');
+            if (!buttons.length) { return; }
+            const modalElement = document.getElementById('adjustDkpModal');
+            const membershipInput = document.getElementById('adjustMembershipId');
+            const nameLabel = document.getElementById('adjustCharacterName');
+            const balanceLabel = document.getElementById('adjustCurrentBalance');
+            const amountInput = document.getElementById('adjustAmount');
+            const reasonInput = document.getElementById('adjustReason');
+            buttons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    membershipInput.value = button.getAttribute('data-membership-id') ?? '';
+                    nameLabel.textContent = button.getAttribute('data-character-name') ?? '';
+                    const balance = parseFloat(button.getAttribute('data-current-balance') ?? '0');
+                    balanceLabel.textContent = Number.isFinite(balance) ? balance.toFixed(2) : '0';
+                    amountInput.value = '';
+                    reasonInput.value = '';
+                    new bootstrap.Modal(modalElement).show();
+                });
+            });
+        })();
+    </script>
+}

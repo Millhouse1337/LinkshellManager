@@ -34,4 +34,9 @@ public class AppUserEventStatusLedger
 
     [MaxLength(256)]
     public string? VerifiedBy { get; set; }
+
+    public DateTime? DeniedAt { get; set; }
+
+    [MaxLength(256)]
+    public string? DeniedBy { get; set; }
 }

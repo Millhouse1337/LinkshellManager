@@ -1,38 +1,59 @@
-﻿@model LinkshellManager.Models.Item
-
+@model LinkshellManagerDiscordApp.ViewModels.ManageItemViewModel
 @{
-    ViewData["Title"] = "Edit Item";
-    var linkshells = ViewBag.Linkshells as List<LinkshellManager.Models.Linkshell>;
+    ViewData["Title"] = "Edit item";
 }
 
-<h2>Edit Item</h2>
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Edit item</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Cancel</a>
+    </div>
+</div>
 
-<form asp-action="Edit">
-    <div class="form-group">
-        <label hidden asp-for="LinkshellId" class="control-label">Linkshell</label>
-        <select hidden asp-for="LinkshellId" class="form-control" asp-items="@(new SelectList(linkshells, "Id", "LinkshellName"))"></select>
-    </div>
-    <div class="form-group">
-        <label asp-for="LinkshellName" class="control-label"></label>
-        <input asp-for="LinkshellName" class="form-control" />
-    </div>
-    <div class="form-group">
-        <label asp-for="ItemName" class="control-label"></label>
-        <input asp-for="ItemName" class="form-control" />
-    </div>
-    <div class="form-group">
-        <label asp-for="ItemType" class="control-label"></label>
-        <input asp-for="ItemType" class="form-control" />
-    </div>
-    <div class="form-group">
-        <label asp-for="Quantity" class="control-label"></label>
-        <input asp-for="Quantity" class="form-control" />
-    </div>
-    <div class="form-group">
-        <label asp-for="Notes" class="control-label"></label>
-        <input asp-for="Notes" class="form-control" />
-    </div>
-    <input type="hidden" asp-for="Id" />
-    <button type="submit" class="btn btn-primary">Save</button>
-    <a asp-action="Index" class="btn btn-secondary">Cancel</a>
-</form>
+<div class="card fade d2" style="padding:20px">
+    <form asp-action="Edit" asp-route-id="@Model.Id" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="LinkshellId" />
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="form-grid">
+            <div class="field">
+                <label asp-for="ItemName"></label>
+                <input asp-for="ItemName" class="form-control" maxlength="256" />
+                <span asp-validation-for="ItemName" class="text-danger"></span>
+            </div>
+
+            <div class="field">
+                <label asp-for="ItemType"></label>
+                <input asp-for="ItemType" class="form-control" maxlength="128" />
+                <span asp-validation-for="ItemType" class="text-danger"></span>
+            </div>
+
+            <div class="field">
+                <label asp-for="Quantity"></label>
+                <input asp-for="Quantity" class="form-control" type="number" min="0" />
+                <span asp-validation-for="Quantity" class="text-danger"></span>
+            </div>
+
+            <div class="field" style="grid-column:1/-1">
+                <label asp-for="Notes"></label>
+                <textarea asp-for="Notes" class="form-control" rows="3" maxlength="1024"></textarea>
+                <span asp-validation-for="Notes" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <button type="submit" class="btn primary">Save changes</button>
+            <a class="btn ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

@@ -17,6 +17,17 @@ import {
 export class ActivityQueuePanelComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected editingEventId: number | null = null;
+  protected attendanceEventId: number | null = null;
+  protected attendanceEventName: string = '';
+  protected attendanceParticipants: Array<{
+    id: number;
+    characterName: string;
+    jobName: string;
+    subJobName: string;
+    jobType: string;
+  }> = [];
+  protected attendanceDecisions: Record<number, 'confirm' | 'absent'> = {};
+  protected isSubmittingAttendance = false;
   protected readonly createModel: ActivityCreateEventInput = {
     linkshellId: 0,
     eventName: '',
@@ -172,6 +183,64 @@ export class ActivityQueuePanelComponent {
           details: ''
         }
       ];
+    }
+  }
+
+  protected openAttendanceModal(event: {
+    id: number;
+    name?: string | null;
+    participants: Array<{
+      id: number;
+      characterName?: string | null;
+      jobName?: string | null;
+      subJobName?: string | null;
+      jobType?: string | null;
+    }>;
+  }): void {
+    this.activity.clearActionState();
+    this.attendanceEventId = event.id;
+    this.attendanceEventName = event.name?.trim() || 'Untitled event';
+    this.attendanceParticipants = (event.participants ?? []).map(p => ({
+      id: p.id,
+      characterName: p.characterName?.trim() || 'Unknown',
+      jobName: p.jobName?.trim() || '—',
+      subJobName: p.subJobName?.trim() || '—',
+      jobType: p.jobType?.trim() || '—'
+    }));
+    const decisions: Record<number, 'confirm' | 'absent'> = {};
+    for (const p of this.attendanceParticipants) {
+      decisions[p.id] = 'confirm';
+    }
+    this.attendanceDecisions = decisions;
+  }
+
+  protected closeAttendanceModal(): void {
+    this.attendanceEventId = null;
+    this.attendanceEventName = '';
+    this.attendanceParticipants = [];
+    this.attendanceDecisions = {};
+    this.isSubmittingAttendance = false;
+  }
+
+  protected setAttendanceDecision(participantId: number, decision: 'confirm' | 'absent'): void {
+    this.attendanceDecisions = { ...this.attendanceDecisions, [participantId]: decision };
+  }
+
+  protected async submitAttendance(): Promise<void> {
+    if (this.attendanceEventId == null) {
+      return;
+    }
+
+    const absentIds = this.attendanceParticipants
+      .filter(p => this.attendanceDecisions[p.id] === 'absent')
+      .map(p => p.id);
+
+    this.isSubmittingAttendance = true;
+    try {
+      await this.activity.startEvent(this.attendanceEventId, absentIds);
+      this.closeAttendanceModal();
+    } finally {
+      this.isSubmittingAttendance = false;
     }
   }
 

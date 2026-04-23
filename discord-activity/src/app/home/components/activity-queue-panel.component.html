@@ -2,7 +2,7 @@
   <div class="panel__header">
     <div>
       <p class="eyebrow eyebrow--small">Queue</p>
-      <h2 id="queue-heading">Ready room</h2>
+      <h2 id="queue-heading">Pending Events</h2>
     </div>
     @if (canManageAnyLinkshell()) {
       <div class="button-cluster">
@@ -189,7 +189,7 @@
                     type="button"
                     class="action-button"
                     [disabled]="activity.busyEventId() === event.id"
-                    (click)="activity.startEvent(event.id)">
+                    (click)="openAttendanceModal(event)">
                     {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
                   </button>
                   <button
@@ -216,7 +216,7 @@
                   type="button"
                   class="action-button action-button--secondary"
                   [disabled]="activity.busyEventId() === event.id"
-                  (click)="activity.startEvent(event.id)">
+                  (click)="openAttendanceModal(event)">
                   {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
                 </button>
                 <button
@@ -258,3 +258,77 @@
     </p>
   }
 </article>
+
+@if (attendanceEventId !== null) {
+  <div class="attendance-modal__backdrop" role="presentation" (click)="closeAttendanceModal()"></div>
+  <div class="attendance-modal" role="dialog" aria-labelledby="attendance-modal-title" aria-modal="true">
+    <div class="attendance-modal__header">
+      <h3 id="attendance-modal-title">Confirm Attendance</h3>
+      <button
+        type="button"
+        class="attendance-modal__close"
+        aria-label="Close"
+        (click)="closeAttendanceModal()">×</button>
+    </div>
+
+    <div class="attendance-modal__body">
+      @if (attendanceParticipants.length === 0) {
+        <p class="notice">No participants have signed up. You can still start the event.</p>
+      } @else {
+        <table class="attendance-table">
+          <thead>
+            <tr>
+              <th>Character Name</th>
+              <th>Job</th>
+              <th>Sub Job</th>
+              <th>Job Type</th>
+              <th class="attendance-table__choice">Confirm</th>
+              <th class="attendance-table__choice">Absent</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of attendanceParticipants; track p.id) {
+              <tr>
+                <td>{{ p.characterName }}</td>
+                <td>{{ p.jobName }}</td>
+                <td>{{ p.subJobName }}</td>
+                <td>{{ p.jobType }}</td>
+                <td class="attendance-table__choice">
+                  <input
+                    type="radio"
+                    [name]="'attendance-' + p.id"
+                    [checked]="attendanceDecisions[p.id] === 'confirm'"
+                    (change)="setAttendanceDecision(p.id, 'confirm')"
+                    [attr.aria-label]="'Confirm ' + p.characterName" />
+                </td>
+                <td class="attendance-table__choice">
+                  <input
+                    type="radio"
+                    [name]="'attendance-' + p.id"
+                    [checked]="attendanceDecisions[p.id] === 'absent'"
+                    (change)="setAttendanceDecision(p.id, 'absent')"
+                    [attr.aria-label]="'Mark ' + p.characterName + ' absent'" />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    <div class="attendance-modal__actions">
+      <button
+        type="button"
+        class="action-button action-button--secondary"
+        [disabled]="isSubmittingAttendance"
+        (click)="closeAttendanceModal()">Close</button>
+      <button
+        type="button"
+        class="action-button"
+        [disabled]="isSubmittingAttendance"
+        (click)="submitAttendance()">
+        {{ isSubmittingAttendance ? 'Starting...' : 'Confirm Attendance' }}
+      </button>
+    </div>
+  </div>
+}

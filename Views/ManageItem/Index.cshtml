@@ -1,51 +1,112 @@
-﻿@model IEnumerable<LinkshellManager.Models.Item>
-
+@model IEnumerable<LinkshellManagerDiscordApp.ViewModels.ManageItemViewModel>
 @{
-    ViewData["Title"] = "Manage Items";
-    var linkshells = ViewBag.Linkshells as List<LinkshellManager.Models.Linkshell>;
+    ViewData["Title"] = "Items";
+    var canManage = (bool)(ViewBag.CanManage ?? false);
+    var linkshellName = ViewBag.LinkshellName as string;
 }
-<div class="container" style="max-width: 90%; margin: 0 auto;">
-    <h2 class="my-5">Manage Items</h2>
 
-    <form method="get" asp-action="Index">
-        <div class="form-group mt-3 mb-3">
-            <label for="linkshellName">Filter by Linkshell</label>
-            <select id="linkshellName" name="linkshellName" class="form-control" onchange="this.form.submit()">
-                <option value="">All Linkshells</option>
-                @foreach (var linkshell in linkshells)
-                {
-                    <option value="@linkshell.LinkshellName">@linkshell.LinkshellName</option>
-                }
-            </select>
-        </div>
-    </form>
-
-    <table class="mt-5 table">
-        <thead>
-            <tr>
-                <th>Item Name</th>
-                <th>Item Type</th>
-                <th>Amount</th>
-                <th>Linkshell Name</th>
-                <th>Notes</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var item in Model)
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Items</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(linkshellName))
             {
-                <tr>
-                    <td>@item.ItemName</td>
-                    <td>@item.ItemType</td>
-                    <td>@item.Quantity</td>
-                    <td>@item.LinkshellName</td>
-                    <td>@item.Notes</td>
-                    <td>
-                        <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-primary">Edit</a>
-                        <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-danger">Delete</a>
-                    </td>
-                </tr>
+                <span>@linkshellName</span>
+                <span class="dot"> · </span>
             }
-        </tbody>
-    </table>
+            <span><span class="num">@Model.Count()</span> item@(Model.Count() == 1 ? "" : "s")</span>
+        </div>
+    </div>
+    @if (canManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-action="AddItem">+ Add item</a>
+        </div>
+    }
 </div>
+
+@if (!Model.Any())
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No items yet</div>
+            <div style="margin-bottom:12px">
+                @if (canManage)
+                {
+                    <span>Track gear, consumables, or gil reserves for your linkshell.</span>
+                }
+                else
+                {
+                    <span>No items have been added for your linkshell.</span>
+                }
+            </div>
+            @if (canManage)
+            {
+                <a class="btn primary" asp-action="AddItem">Add item</a>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Inventory</div>
+        </div>
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Type</th>
+                    <th style="text-align:right">Quantity</th>
+                    <th>Notes</th>
+                    <th>Added by</th>
+                    @if (canManage)
+                    {
+                        <th style="text-align:right">Actions</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td style="font-weight:500">@item.ItemName</td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(item.ItemType))
+                            {
+                                <span class="tag">@item.ItemType</span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--fg-4)">—</span>
+                            }
+                        </td>
+                        <td class="num" style="text-align:right">@item.Quantity</td>
+                        <td style="color:var(--fg-3)">@(item.Notes ?? "")</td>
+                        <td style="font-size:12px;color:var(--fg-3)">
+                            @if (!string.IsNullOrWhiteSpace(item.CreatedByCharacterName))
+                            {
+                                <div>@item.CreatedByCharacterName</div>
+                            }
+                            <div>@item.CreatedAt.ToString("MMM d, yyyy")</div>
+                        </td>
+                        @if (canManage)
+                        {
+                            <td style="text-align:right">
+                                <div style="display:inline-flex;gap:6px;flex-wrap:wrap">
+                                    <a class="btn ghost sm" asp-action="Edit" asp-route-id="@item.Id">Edit</a>
+                                    <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline"
+                                          onsubmit="return confirm('Delete this item?');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn ghost sm" style="color:var(--danger)">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

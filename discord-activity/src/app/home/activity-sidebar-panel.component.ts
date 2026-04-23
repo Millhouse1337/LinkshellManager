@@ -5,6 +5,7 @@ import {
   ActivityAuctionItemInput,
   ActivityCreateAuctionInput,
   ActivityCreateLinkshellInput,
+  ActivityLinkshellRole,
   DiscordActivityService
 } from '../discord/discord-activity.service';
 
@@ -87,6 +88,22 @@ export class ActivitySidebarPanelComponent {
   protected selectedJoinLinkshellId = 0;
   protected selectedLinkshellId = 0;
   protected selectedDkpHistoryAppUserId = '';
+  protected dkpSearchTerm = '';
+  protected dkpMemberSearchTerm = '';
+  protected isDkpAuditOpen = false;
+  protected readonly dkpAuditModel: {
+    mode: 'Adjust' | 'Misc';
+    targetAppUserId: string;
+    relatedLedgerEntryId: number | null;
+    amount: number | null;
+    reason: string;
+  } = {
+    mode: 'Misc',
+    targetAppUserId: '',
+    relatedLedgerEntryId: null,
+    amount: null,
+    reason: ''
+  };
   protected readonly auctionBidDrafts: Record<number, number | null> = {};
   protected readonly expandedAuctionBidItems: Record<number, boolean> = {};
   protected memberSearchTerm = '';
@@ -96,6 +113,7 @@ export class ActivitySidebarPanelComponent {
   protected isAuctionFormOpen = false;
   protected isSubmittingAuction = false;
   protected editingAuctionId: number | null = null;
+  protected readonly auctionsView = signal<'active' | 'history'>('active');
   protected readonly browserTimeZone = this.resolveBrowserTimeZone();
   protected readonly timeZoneOptions = this.resolveTimeZoneOptions();
   private profileSeed = '';
@@ -391,6 +409,45 @@ export class ActivitySidebarPanelComponent {
     }
   }
 
+  protected memberInitials(name?: string | null): string {
+    const trimmed = (name ?? '').trim();
+    if (!trimmed) {
+      return '?';
+    }
+
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  protected memberAvatarClass(name?: string | null): string {
+    const trimmed = (name ?? '').trim();
+    if (!trimmed) {
+      return 'a';
+    }
+
+    let hash = 0;
+    for (let i = 0; i < trimmed.length; i += 1) {
+      hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
+    }
+
+    return ['a', 'b', 'c', 'd', 'e'][hash % 5];
+  }
+
+  protected memberStatusClass(status?: string | null): string {
+    const normalized = (status ?? 'Active').toLowerCase();
+    if (normalized === 'active') {
+      return 'success';
+    }
+    if (normalized === 'pending') {
+      return 'warning';
+    }
+    return 'default';
+  }
+
   protected needsProfileSetup(): boolean {
     const appUser = this.activity.overview()?.appUser;
     return !appUser?.characterName?.trim() || !appUser?.timeZone?.trim();
@@ -665,6 +722,148 @@ export class ActivitySidebarPanelComponent {
     return this.formatElapsed(remaining);
   }
 
+  protected setAuctionsView(view: 'active' | 'history'): void {
+    this.auctionsView.set(view);
+  }
+
+  protected auctionState(auction: { startedAt?: string | null; startTime?: string | null; endTime?: string | null; status: string }): 'live' | 'ending' | 'ended' | 'scheduled' {
+    const normalized = (auction.status || '').toLowerCase();
+    if (normalized === 'closed' || normalized === 'archived' || normalized === 'ended') {
+      return 'ended';
+    }
+    const endMs = this.parseDate(auction.endTime);
+    const startMs = this.parseDate(auction.startedAt || auction.startTime);
+    const now = this.now();
+    if (endMs && endMs <= now) {
+      return 'ended';
+    }
+    if (startMs && now < startMs) {
+      return 'scheduled';
+    }
+    if (endMs && endMs - now < 60 * 60 * 1000) {
+      return 'ending';
+    }
+    return 'live';
+  }
+
+  protected auctionStatusLabel(auction: { status: string; startedAt?: string | null; startTime?: string | null; endTime?: string | null }): string {
+    switch (this.auctionState(auction)) {
+      case 'ending': return 'Ending soon';
+      case 'live': return 'Live';
+      case 'ended': return 'Ended';
+      case 'scheduled': return 'Scheduled';
+    }
+  }
+
+  protected auctionStatusTagClass(auction: { status: string; startedAt?: string | null; startTime?: string | null; endTime?: string | null }): string {
+    switch (this.auctionState(auction)) {
+      case 'ending': return 'warning';
+      case 'live': return 'success';
+      case 'ended': return '';
+      case 'scheduled': return 'warning';
+    }
+  }
+
+  protected auctionRemainingLabel(auction: { startedAt?: string | null; startTime?: string | null; endTime?: string | null; status: string }): string {
+    const state = this.auctionState(auction);
+    if (state === 'ended') return 'Ended';
+    if (state === 'scheduled') return 'Starts in';
+    return 'Remaining';
+  }
+
+  protected auctionTimerValue(auction: { startedAt?: string | null; startTime?: string | null; endTime?: string | null; status: string }): string {
+    const state = this.auctionState(auction);
+    if (state === 'ended') return 'Ended';
+    const startMs = this.parseDate(auction.startedAt || auction.startTime);
+    const endMs = this.parseDate(auction.endTime);
+    const now = this.now();
+    if (state === 'scheduled' && startMs) {
+      return this.formatElapsed(Math.max(0, startMs - now));
+    }
+    if (endMs) {
+      return this.formatElapsed(Math.max(0, endMs - now));
+    }
+    return '—';
+  }
+
+  protected auctionProgressPercent(auction: { startedAt?: string | null; startTime?: string | null; endTime?: string | null; status: string }): number {
+    const state = this.auctionState(auction);
+    if (state === 'ended') return 100;
+    const startMs = this.parseDate(auction.startedAt || auction.startTime);
+    const endMs = this.parseDate(auction.endTime);
+    if (!startMs || !endMs || endMs <= startMs) return 0;
+    const now = this.now();
+    const pct = ((now - startMs) / (endMs - startMs)) * 100;
+    return Math.max(0, Math.min(100, pct));
+  }
+
+  protected itemDotClass(itemType?: string | null): 'crafting' | 'loot' | 'drop' | 'other' {
+    const normalized = (itemType || '').trim().toLowerCase();
+    if (normalized === 'crafting') return 'crafting';
+    if (normalized === 'loot') return 'loot';
+    if (normalized === 'drop') return 'drop';
+    return 'other';
+  }
+
+  protected itemMinBid(item: { startingBidDkp?: number | null; currentHighestBid?: number | null }): number {
+    const highest = item.currentHighestBid ?? 0;
+    if (highest > 0) return highest + 1;
+    return item.startingBidDkp ?? 0;
+  }
+
+  protected isCurrentUserWinning(item: { currentHighestBidderAppUserId?: string | null; currentHighestBid?: number | null }): boolean {
+    const me = this.activity.overview()?.appUser?.id;
+    return Boolean(me && item.currentHighestBidderAppUserId && item.currentHighestBidderAppUserId === me);
+  }
+
+  protected auctionLiveCount(): number {
+    return this.auctions().filter(auction => {
+      const state = this.auctionState(auction);
+      return state === 'live' || state === 'ending';
+    }).length;
+  }
+
+  protected auctionTotalItems(): number {
+    return this.auctions().reduce((sum, auction) => sum + auction.items.length, 0);
+  }
+
+  protected auctionTotalBids(): number {
+    return this.auctions().reduce((sum, auction) => sum + auction.items.reduce((s, item) => s + (item.bidCount ?? 0), 0), 0);
+  }
+
+  protected bidderAvatarVariant(name?: string | null): 'a' | 'b' | 'c' | 'd' {
+    const raw = (name ?? '').trim();
+    if (!raw) return 'a';
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = (hash * 31 + raw.charCodeAt(i)) & 0xffffffff;
+    }
+    const variants: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
+    return variants[Math.abs(hash) % variants.length];
+  }
+
+  protected bidderInitials(name?: string | null): string {
+    const raw = (name ?? '').trim();
+    if (!raw) return '??';
+    const parts = raw.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+
+  protected timeAgo(value?: string | null): string {
+    const ms = this.parseDate(value ?? null);
+    if (!ms) return '';
+    const diff = Math.max(0, this.now() - ms);
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
   protected async selectLinkshell(linkshellId: number): Promise<void> {
     if (!linkshellId) {
       return;
@@ -681,6 +880,134 @@ export class ActivitySidebarPanelComponent {
   protected async onDkpHistoryMemberChange(appUserId: string): Promise<void> {
     this.selectedDkpHistoryAppUserId = appUserId;
     await this.reloadDkpHistory();
+  }
+
+  protected filteredDkpMembers() {
+    const members = this.dkpHistory()?.members ?? [];
+    const term = this.dkpMemberSearchTerm.trim().toLowerCase();
+    if (!term) {
+      return members;
+    }
+    return members.filter(member =>
+      (member.characterName ?? '').toLowerCase().includes(term)
+    );
+  }
+
+  protected filteredDkpEntries() {
+    const entries = this.dkpHistory()?.entries ?? [];
+    const term = this.dkpSearchTerm.trim().toLowerCase();
+    if (!term) {
+      return entries;
+    }
+    return entries.filter(entry => {
+      const haystacks = [
+        this.dkpEntryTypeLabel(entry.entryType),
+        entry.entryType,
+        entry.eventName,
+        entry.eventType,
+        entry.eventLocation,
+        entry.itemName,
+        entry.details
+      ];
+      return haystacks.some(field =>
+        typeof field === 'string' && field.toLowerCase().includes(term)
+      );
+    });
+  }
+
+  protected dkpEntryTypeLabel(entryType: string): string {
+    switch (entryType) {
+      case 'LootSpent':
+        return 'Loot spent';
+      case 'EventEarned':
+        return 'Event earned';
+      case 'AuditAdjustment':
+        return 'Audit · Adjustment';
+      case 'AuditMisc':
+        return 'Audit · Misc';
+      default:
+        return entryType || 'Entry';
+    }
+  }
+
+  protected canAuditSelectedLinkshell(): boolean {
+    return !!this.selectedLinkshellId && this.canManageLinkshell(this.selectedLinkshellId);
+  }
+
+  protected openDkpAudit(): void {
+    const history = this.dkpHistory();
+    this.dkpAuditModel.mode = 'Misc';
+    this.dkpAuditModel.targetAppUserId =
+      this.selectedDkpHistoryAppUserId || history?.members[0]?.appUserId || '';
+    this.dkpAuditModel.relatedLedgerEntryId = null;
+    this.dkpAuditModel.amount = null;
+    this.dkpAuditModel.reason = '';
+    this.isDkpAuditOpen = true;
+  }
+
+  protected closeDkpAudit(): void {
+    this.isDkpAuditOpen = false;
+  }
+
+  protected onDkpAuditModeChange(mode: 'Adjust' | 'Misc'): void {
+    this.dkpAuditModel.mode = mode;
+    if (mode === 'Misc') {
+      this.dkpAuditModel.relatedLedgerEntryId = null;
+    }
+  }
+
+  protected dkpAuditCandidateEntries() {
+    const entries = this.dkpHistory()?.entries ?? [];
+    return entries.filter(entry =>
+      entry.entryType === 'EventEarned' ||
+      entry.entryType === 'LootSpent' ||
+      entry.entryType === 'AuditAdjustment' ||
+      entry.entryType === 'AuditMisc'
+    );
+  }
+
+  protected async submitDkpAudit(): Promise<void> {
+    if (!this.selectedLinkshellId) {
+      this.activity.actionError.set('Select a linkshell before submitting an audit.');
+      return;
+    }
+
+    if (!this.dkpAuditModel.targetAppUserId) {
+      this.activity.actionError.set('Select the member this audit applies to.');
+      return;
+    }
+
+    const reason = this.dkpAuditModel.reason?.trim() ?? '';
+    if (!reason) {
+      this.activity.actionError.set('Enter a reason for the audit.');
+      return;
+    }
+
+    const amount = this.dkpAuditModel.amount;
+    if (amount === null || Number.isNaN(amount)) {
+      this.activity.actionError.set('Enter a numeric amount for the audit.');
+      return;
+    }
+
+    if (this.dkpAuditModel.mode === 'Adjust' && !this.dkpAuditModel.relatedLedgerEntryId) {
+      this.activity.actionError.set('Pick the previous entry you want to correct.');
+      return;
+    }
+
+    const ok = await this.activity.submitDkpAudit({
+      linkshellId: this.selectedLinkshellId,
+      targetAppUserId: this.dkpAuditModel.targetAppUserId,
+      mode: this.dkpAuditModel.mode,
+      relatedLedgerEntryId:
+        this.dkpAuditModel.mode === 'Adjust' ? this.dkpAuditModel.relatedLedgerEntryId : null,
+      amount,
+      reason
+    });
+
+    if (ok) {
+      this.selectedDkpHistoryAppUserId = this.dkpAuditModel.targetAppUserId;
+      this.isDkpAuditOpen = false;
+    }
   }
 
   protected async sendInvite(appUserId: string): Promise<void> {
@@ -793,6 +1120,32 @@ export class ActivitySidebarPanelComponent {
     }
 
     await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Leader');
+  }
+
+  protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
+
+  protected async ensureRolesLoaded(linkshellId: number): Promise<void> {
+    if (this.rolesByLinkshell()[linkshellId]) return;
+    const data = await this.activity.loadLinkshellRoles(linkshellId);
+    if (data) {
+      this.rolesByLinkshell.update(map => ({ ...map, [linkshellId]: data.roles }));
+    }
+  }
+
+  protected availableRolesForLinkshell(linkshellId: number): ActivityLinkshellRole[] {
+    void this.ensureRolesLoaded(linkshellId);
+    return this.rolesByLinkshell()[linkshellId] ?? [];
+  }
+
+  protected async changeMemberRole(linkshellId: number, memberId: number, characterName: string, newRole: string): Promise<void> {
+    const trimmed = newRole?.trim();
+    if (!trimmed) return;
+    const promoteToLeader = trimmed.toLowerCase() === 'leader';
+    const confirmation = promoteToLeader
+      ? `Transfer linkshell leadership to ${characterName}? You will become an officer.`
+      : `Change ${characterName}'s role to ${trimmed}?`;
+    if (!window.confirm(confirmation)) return;
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, trimmed);
   }
 
   private resolveBrowserTimeZone(): string {

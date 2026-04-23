@@ -2,27 +2,34 @@
 @model LinkshellManagerDiscordApp.Areas.Identity.Pages.Account.LoginModel
 @{
     ViewData["Title"] = "Sign in";
-    var discordLoginHref = $"/auth/discord/login?returnUrl={Uri.EscapeDataString(Model.ReturnUrl ?? "/")}";
+    var returnUrl = Model.ReturnUrl ?? "/";
+    var discordLoginHref = $"/auth/discord/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
+    var registerHref = string.IsNullOrWhiteSpace(Model.ReturnUrl)
+        ? "/Identity/Account/Register"
+        : $"/Identity/Account/Register?returnUrl={Uri.EscapeDataString(Model.ReturnUrl)}";
 }
 
-<div class="row justify-content-center">
-    <div class="col-xl-6 col-lg-7">
-        <div class="card card-shell shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h3 mb-3">Sign in with Discord</h1>
-                <p class="text-muted mb-4">
-                    Website access and the embedded Discord Activity both use the same Discord-linked app account.
-                </p>
+<div class="auth-card">
+    <div class="auth-brand">
+        <span class="brand-mark">LS</span>
+        <span class="brand-name">LinkshellManager</span>
+    </div>
 
-                @if (TempData["Error"] is string errorMessage)
-                {
-                    <div class="alert alert-danger">@errorMessage</div>
-                }
+    <h1 class="auth-title">Sign in</h1>
+    <p class="auth-sub">
+        Website access and the embedded Discord Activity both use the same Discord-linked account.
+    </p>
 
-                <div class="d-flex flex-wrap gap-2">
-                    <a class="btn btn-primary" href="@discordLoginHref">Continue with Discord</a>
-                </div>
-            </div>
-        </div>
+    @if (TempData["Error"] is string errorMessage)
+    {
+        <div class="alert alert-danger" role="alert">@errorMessage</div>
+    }
+
+    <div class="auth-actions">
+        <a class="btn primary" href="@discordLoginHref">Continue with Discord</a>
+    </div>
+
+    <div class="auth-meta">
+        New here? <a href="@registerHref">Create an account</a>
     </div>
 </div>

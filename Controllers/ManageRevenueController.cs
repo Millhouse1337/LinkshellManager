@@ -1,143 +1,219 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using LinkshellManager.Models;
-using LinkshellManager.Data;
+using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.ViewModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using System.Linq;
-using LinkshellManager.ViewModels;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace LinkshellManager.Controllers
+namespace LinkshellManagerDiscordApp.Controllers;
+
+[Authorize]
+public class ManageRevenueController : Controller
 {
-    public class ManageRevenueController : Controller
+    private readonly ApplicationDbContext _context;
+    private readonly UserManager<AppUser> _userManager;
+
+    public ManageRevenueController(ApplicationDbContext context, UserManager<AppUser> userManager)
     {
-        private readonly ApplicationDbContext _context;
-        private readonly UserManager<AppUser> _userManager;
-
-        public ManageRevenueController(ApplicationDbContext context, UserManager<AppUser> userManager)
-        {
-            _context = context;
-            _userManager = userManager;
-        }
-
-        public IActionResult Index(string linkshellName)
-        {
-            var userId = _userManager.GetUserId(User);
-            var userLinkshells = _context.AppUserLinkshells
-                .Where(ul => ul.AppUserId == userId)
-                .Select(ul => ul.Linkshell)
-                .ToList();
-
-            ViewBag.Linkshells = userLinkshells;
-
-            var incomes = _context.Incomes.AsQueryable();
-
-            if (!string.IsNullOrEmpty(linkshellName))
-            {
-                incomes = incomes.Where(i => i.Linkshell.LinkshellName == linkshellName);
-            }
-
-            return View(incomes.ToList());
-        }
-
-public async Task<IActionResult> AddIncome()
-{
-    var user = await _userManager.GetUserAsync(User);
-    if (user == null)
-    {
-        // _logger.LogWarning("User is not authenticated.");
-        return Challenge(); // Redirect to login if user is not authenticated
+        _context = context;
+        _userManager = userManager;
     }
 
-    var userLinkshells = await _context.AppUserLinkshells
-        .Where(ul => ul.AppUserId == user.Id)
-        .Select(ul => ul.Linkshell)
-        .ToListAsync();
-
-    var viewModel = new ManageRevenueViewModel
+    public async Task<IActionResult> Index()
     {
-        Linkshells = userLinkshells,
-        LinkshellId = user.PrimaryLinkshellId ?? 0 // Assuming PrimaryLinkshellId is nullable
-    };
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
 
-    return View(viewModel);
-}
+        var linkshellId = user.PrimaryLinkshellId;
+        var canManage = await CanManageAsync(user.Id, linkshellId);
 
-        [HttpPost]
-        public IActionResult AddIncome(Income income)
+        var entries = new List<ManageRevenueViewModel>();
+        long totalValue = 0;
+        if (linkshellId.HasValue)
         {
-            Console.WriteLine(income.LinkshellId);
-            Console.WriteLine(income.LinkshellName);
-            Console.WriteLine(income.MethodOfIncome);
-            Console.WriteLine(income.Value);
-            Console.WriteLine(income.Details);
-            Console.WriteLine(income.TimeStamp);
-            if (ModelState.IsValid)
-            {
-                var linkshell = _context.Linkshells.Find(income.LinkshellId);
-                if (linkshell != null)
+            entries = await _context.RevenueEntries
+                .Where(r => r.LinkshellId == linkshellId.Value)
+                .OrderByDescending(r => r.OccurredAt)
+                .Select(r => new ManageRevenueViewModel
                 {
-                    income.LinkshellName = linkshell.LinkshellName;
-                }
-                income.TimeStamp = DateTime.UtcNow; // Set the TimeStamp to the current UTC time
-                _context.Incomes.Add(income);
-                _context.SaveChanges();
-                return RedirectToAction("Index");
-            }
-            ViewBag.Linkshells = _context.Linkshells.ToList();
-            return View(income);
+                    Id = r.Id,
+                    LinkshellId = r.LinkshellId,
+                    LinkshellName = r.LinkshellName,
+                    EntryType = r.EntryType,
+                    Category = r.Category,
+                    Value = r.Value,
+                    Details = r.Details,
+                    OccurredAt = r.OccurredAt,
+                    CreatedByCharacterName = r.CreatedByCharacterName,
+                    CreatedAt = r.CreatedAt,
+                    CanManage = canManage
+                })
+                .ToListAsync();
+
+            totalValue = entries.Sum(e => e.Value);
         }
 
-        public IActionResult Edit(int id)
+        ViewBag.CanManage = canManage;
+        ViewBag.LinkshellName = user.PrimaryLinkshellName;
+        ViewBag.TotalValue = totalValue;
+        return View(entries);
+    }
+
+    public async Task<IActionResult> AddIncome()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var manageableLinkshells = await GetManageableLinkshellsAsync(user.Id);
+        if (manageableLinkshells.Count == 0) return Forbid();
+
+        var defaultLinkshellId = manageableLinkshells.Any(l => l.Id == user.PrimaryLinkshellId)
+            ? user.PrimaryLinkshellId ?? manageableLinkshells[0].Id
+            : manageableLinkshells[0].Id;
+
+        return View(new ManageRevenueViewModel
         {
-            var income = _context.Incomes.Find(id);
-            if (income == null)
-            {
-                return NotFound();
-            }
-            ViewBag.Linkshells = _context.Linkshells.ToList();
-            return View(income);
-        }
+            Linkshells = manageableLinkshells,
+            LinkshellId = defaultLinkshellId,
+            OccurredAt = DateTime.UtcNow
+        });
+    }
 
-        [HttpPost]
-        public IActionResult Edit(Income income)
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddIncome(ManageRevenueViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var manageableLinkshells = await GetManageableLinkshellsAsync(user.Id);
+        if (!manageableLinkshells.Any(l => l.Id == model.LinkshellId))
         {
-            if (ModelState.IsValid)
-            {
-                var linkshell = _context.Linkshells.Find(income.LinkshellId);
-                if (linkshell != null)
-                {
-                    income.LinkshellName = linkshell.LinkshellName;
-                }
-                income.TimeStamp = DateTime.UtcNow; // Set the TimeStamp to the current UTC time
-
-                _context.Incomes.Update(income);
-                _context.SaveChanges();
-                return RedirectToAction("Index");
-            }
-            ViewBag.Linkshells = _context.Linkshells.ToList();
-            return View(income);
+            ModelState.AddModelError(nameof(model.LinkshellId), "You cannot manage revenue for that linkshell.");
         }
 
-        public IActionResult Delete(int id)
+        if (!ModelState.IsValid)
         {
-            var income = _context.Incomes.Find(id);
-            if (income == null)
-            {
-                return NotFound();
-            }
-            return View(income);
+            model.Linkshells = manageableLinkshells;
+            return View(model);
         }
 
-        [HttpPost, ActionName("Delete")]
-        public IActionResult DeleteConfirmed(int id)
+        var linkshell = manageableLinkshells.First(l => l.Id == model.LinkshellId);
+        var membership = await _context.AppUserLinkshells
+            .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == model.LinkshellId);
+
+        _context.RevenueEntries.Add(new RevenueEntry
         {
-            var income = _context.Incomes.Find(id);
-            if (income != null)
-            {
-                _context.Incomes.Remove(income);
-                _context.SaveChanges();
-            }
-            return RedirectToAction("Index");
+            LinkshellId = model.LinkshellId,
+            LinkshellName = linkshell.LinkshellName,
+            EntryType = model.EntryType.Trim(),
+            Category = model.Category?.Trim(),
+            Value = model.Value,
+            Details = model.Details?.Trim(),
+            OccurredAt = model.OccurredAt == default ? DateTime.UtcNow : model.OccurredAt,
+            CreatedByAppUserId = user.Id,
+            CreatedByCharacterName = membership?.CharacterName ?? user.CharacterName,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var entry = await _context.RevenueEntries.FirstOrDefaultAsync(r => r.Id == id);
+        if (entry is null) return NotFound();
+
+        if (!await CanManageAsync(user.Id, entry.LinkshellId)) return Forbid();
+
+        var linkshells = await GetManageableLinkshellsAsync(user.Id);
+        return View(new ManageRevenueViewModel
+        {
+            Id = entry.Id,
+            LinkshellId = entry.LinkshellId,
+            LinkshellName = entry.LinkshellName,
+            EntryType = entry.EntryType,
+            Category = entry.Category,
+            Value = entry.Value,
+            Details = entry.Details,
+            OccurredAt = entry.OccurredAt,
+            CreatedByCharacterName = entry.CreatedByCharacterName,
+            CreatedAt = entry.CreatedAt,
+            CanManage = true,
+            Linkshells = linkshells
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, ManageRevenueViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var entry = await _context.RevenueEntries.FirstOrDefaultAsync(r => r.Id == id);
+        if (entry is null) return NotFound();
+
+        if (!await CanManageAsync(user.Id, entry.LinkshellId)) return Forbid();
+
+        if (!ModelState.IsValid)
+        {
+            model.Id = entry.Id;
+            model.LinkshellId = entry.LinkshellId;
+            model.LinkshellName = entry.LinkshellName;
+            model.Linkshells = await GetManageableLinkshellsAsync(user.Id);
+            return View(model);
         }
+
+        entry.EntryType = model.EntryType.Trim();
+        entry.Category = model.Category?.Trim();
+        entry.Value = model.Value;
+        entry.Details = model.Details?.Trim();
+        entry.OccurredAt = model.OccurredAt == default ? entry.OccurredAt : model.OccurredAt;
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var entry = await _context.RevenueEntries.FirstOrDefaultAsync(r => r.Id == id);
+        if (entry is null) return NotFound();
+
+        if (!await CanManageAsync(user.Id, entry.LinkshellId)) return Forbid();
+
+        _context.RevenueEntries.Remove(entry);
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<bool> CanManageAsync(string appUserId, int? linkshellId)
+    {
+        if (!linkshellId.HasValue) return false;
+        var membership = await _context.AppUserLinkshells
+            .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId.Value);
+        return membership is not null
+               && !string.IsNullOrWhiteSpace(membership.Rank)
+               && (membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase)
+                   || membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)
+    {
+        return await _context.AppUserLinkshells
+            .Where(ul => ul.AppUserId == appUserId
+                         && (ul.Rank == "Leader" || ul.Rank == "Officer"))
+            .Select(ul => ul.Linkshell!)
+            .Where(l => l != null)
+            .OrderBy(l => l.LinkshellName)
+            .ToListAsync();
     }
 }

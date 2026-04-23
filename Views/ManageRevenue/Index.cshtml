@@ -1,56 +1,111 @@
-﻿@model IEnumerable<LinkshellManager.Models.Income>
-
+@model IEnumerable<LinkshellManagerDiscordApp.ViewModels.ManageRevenueViewModel>
 @{
-    ViewData["Title"] = "Manage Revenue";
-    var linkshells = ViewBag.Linkshells as List<LinkshellManager.Models.Linkshell>;
-    var totalIncome = Model.Sum(income => income.Value ?? 0);
+    ViewData["Title"] = "Revenue";
+    var canManage = (bool)(ViewBag.CanManage ?? false);
+    var linkshellName = ViewBag.LinkshellName as string;
+    var totalValue = (long)(ViewBag.TotalValue ?? 0L);
 }
-<div class="container" style="max-width: 90%; margin: 0 auto;">
-    <h2 class="my-5">Manage Revenue</h2>
 
-    <form method="get" asp-action="Index">
-        <div class="form-group mt-3 mb-3">
-            <label for="linkshellName">Filter by Linkshell</label>
-            <select id="linkshellName" name="linkshellName" class="form-control" onchange="this.form.submit()">
-                <option value="">All Linkshells</option>
-                @foreach (var linkshell in linkshells)
-                {
-                    <option value="@linkshell.LinkshellName">@linkshell.LinkshellName</option>
-                }
-            </select>
-        </div>
-    </form>
-
-    <table class="mt-5 table">
-        <thead>
-            <tr>
-                <th>Linkshell Name</th>
-                <th>Method of Income</th>
-                <th>Details</th>
-                <th>Value</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var income in Model)
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Revenue</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(linkshellName))
             {
-                <tr>
-                    <td>@income.Linkshell?.LinkshellName</td>
-                    <td>@income.MethodOfIncome</td>
-                    <td>@income.Details</td>
-                    <td>@income.Value</td>
-                    <td>
-                        <a asp-action="Edit" asp-route-id="@income.Id" class="btn btn-primary">Edit</a>
-                        <a asp-action="Delete" asp-route-id="@income.Id" class="btn btn-danger">Delete</a>
-                    </td>
-                </tr>
+                <span>@linkshellName</span>
+                <span class="dot"> · </span>
             }
-        </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="4" class="text-right"><strong>Total Income:</strong></td>
-                <td><strong>@totalIncome</strong></td>
-            </tr>
-        </tfoot>
-    </table>
+            <span><span class="num">@Model.Count()</span> entr@(Model.Count() == 1 ? "y" : "ies")</span>
+            <span class="dot"> · </span>
+            <span>Total <span class="num">@totalValue.ToString("N0")</span></span>
+        </div>
+    </div>
+    @if (canManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-action="AddIncome">+ Add income</a>
+        </div>
+    }
 </div>
+
+@if (!Model.Any())
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No income recorded yet</div>
+            <div style="margin-bottom:12px">
+                @if (canManage)
+                {
+                    <span>Log AH sales, mercenary work, or donations to track your linkshell's revenue.</span>
+                }
+                else
+                {
+                    <span>No revenue entries have been added for your linkshell.</span>
+                }
+            </div>
+            @if (canManage)
+            {
+                <a class="btn primary" asp-action="AddIncome">Add income</a>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Income ledger</div>
+        </div>
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>When</th>
+                    <th>Source</th>
+                    <th>Category</th>
+                    <th>Details</th>
+                    <th>Logged by</th>
+                    <th style="text-align:right">Value</th>
+                    @if (canManage)
+                    {
+                        <th style="text-align:right">Actions</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model)
+                {
+                    <tr>
+                        <td style="font-size:12px;color:var(--fg-3)">@entry.OccurredAt.ToString("MMM d, yyyy")</td>
+                        <td><span class="tag">@entry.EntryType</span></td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(entry.Category))
+                            {
+                                <span>@entry.Category</span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--fg-4)">—</span>
+                            }
+                        </td>
+                        <td style="color:var(--fg-3)">@(entry.Details ?? "")</td>
+                        <td style="font-size:12px;color:var(--fg-3)">@(entry.CreatedByCharacterName ?? "")</td>
+                        <td class="num" style="text-align:right;font-weight:500">@entry.Value.ToString("N0")</td>
+                        @if (canManage)
+                        {
+                            <td style="text-align:right">
+                                <div style="display:inline-flex;gap:6px;flex-wrap:wrap">
+                                    <a class="btn ghost sm" asp-action="Edit" asp-route-id="@entry.Id">Edit</a>
+                                    <form asp-action="Delete" asp-route-id="@entry.Id" method="post" style="display:inline"
+                                          onsubmit="return confirm('Delete this revenue entry?');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn ghost sm" style="color:var(--danger)">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

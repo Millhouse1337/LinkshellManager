@@ -99,7 +99,7 @@ Provisioning behavior:
 - `GET /api/me` now returns both the Discord-linked local user record and the linked `AppUser` summary needed by the restored website features.
 - Linkshells, memberships, live events, completed event history, and notifications are all keyed from the `AppUser` layer.
 
-Important: for the embedded Activity flow, the backend does not send `redirect_uri` during token exchange. Discord’s current Activity tutorial shows the embedded flow without `redirect_uri`; the Redirect URI still needs to exist in the Developer Portal, but it is a portal requirement rather than a request parameter used by this app flow.
+Important: for the embedded Activity flow, the backend does not send `redirect_uri` during token exchange. Discordï¿½s current Activity tutorial shows the embedded flow without `redirect_uri`; the Redirect URI still needs to exist in the Developer Portal, but it is a portal requirement rather than a request parameter used by this app flow.
 
 Official references used:
 - Embedded App SDK reference: https://docs.discord.com/developers/developer-tools/embedded-app-sdk
@@ -226,3 +226,6 @@ Use the `https` profile. The Activity route should be available at:
 - Tunnel hostnames are included for development, but production CSP should be reviewed again once the final hostname is fixed.
 - The standalone browser preview is intentionally not a full Discord-authenticated experience.
 
+cd discord-activity npm run build
+dotnet run
+./cloudflared.exe tunnel --url http://localhost:5012

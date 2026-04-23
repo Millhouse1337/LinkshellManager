@@ -61,9 +61,27 @@ public class TodController : Controller
     }
 
     [HttpGet]
-    public IActionResult Create(int? linkshellId = null)
+    public async Task<IActionResult> Create(int? linkshellId = null)
     {
-        return RedirectToAction(nameof(Index), new { linkshellId });
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var model = await BuildViewModelAsync(user, new TodManagerViewModel
+        {
+            LinkshellId = linkshellId ?? 0,
+            Tod = new Tod
+            {
+                LinkshellId = linkshellId ?? user.PrimaryLinkshellId ?? 0,
+                Claim = true,
+                Cooldown = TodManagerViewModel.TwentyTwoHourCooldown,
+                Interval = TodManagerViewModel.TenMinuteInterval
+            }
+        });
+
+        return View(model);
     }
 
     [HttpPost]
@@ -97,7 +115,7 @@ public class TodController : Controller
         ValidateTodSubmission(model, hasLinkshellAccess, linkshellCharacterNames);
         if (!ModelState.IsValid)
         {
-            return View(nameof(Index), await BuildViewModelAsync(user, model));
+            return View(nameof(Create), await BuildViewModelAsync(user, model));
         }
 
         var todTimeUtc = ConvertUserTimeZoneToUtc(model.Tod.Time, user.TimeZone);

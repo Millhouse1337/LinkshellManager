@@ -47,7 +47,7 @@
         </label>
       </div>
 
-      <div class="create-form__actions">
+      <div class="create-form__actions create-form__actions--end">
         <button type="submit" class="action-button" [disabled]="activity.busyProfileSave()">
           {{ activity.busyProfileSave() ? 'Saving...' : 'Save profile' }}
         </button>
@@ -230,18 +230,7 @@
             </button>
           }
         </div>
-        @if (canManageLinkshell(selectedLinkshell.id)) {
-          <p class="muted">{{ deletePrimaryLinkshellHint() }}</p>
-        }
       </div>
-
-      @if (canManageMembers()) {
-        <p class="notice">Leaders can transfer ownership, promote officers, demote officers, and remove members from this roster.</p>
-      } @else if (canManageLinkshell(selectedLinkshell.id)) {
-        <p class="notice">Officers can manage invites and events, but only the leader can change roster roles.</p>
-      } @else {
-        <p class="notice">Member mode keeps this panel focused on your current linkshell and roster visibility.</p>
-      }
 
       <div class="invite-section">
         <div class="panel__header">
@@ -288,57 +277,46 @@
         </div>
       </div>
 
-      <ul class="compact-list">
+      <div class="ac-roster">
+        <div class="ac-roster-head">
+          <div></div>
+          <div>Character</div>
+          <div>Rank</div>
+          <div class="ac-roster-dkp-head">DKP</div>
+          <div>Status</div>
+        </div>
         @for (member of filteredSelectedLinkshellMembers(); track member.id) {
-          <li>
-            <div>
-              <strong>{{ member.characterName }}</strong>
-              <div class="member-meta">
-                <span class="{{ roleBadgeClass(member.rank) }}">{{ member.rank || 'Member' }}</span>
-                <span>{{ member.status || 'Active' }}</span>
-              </div>
+          <div class="ac-roster-row">
+            <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ memberInitials(member.characterName) }}</div>
+            <div class="ac-roster-name-cell">
+              <div class="ac-roster-name">{{ member.characterName }}</div>
             </div>
-            <div class="button-cluster button-cluster--stacked">
-              <span>{{ member.linkshellDkp ?? 0 }} DKP</span>
-              @if (canManageMembers() && member.appUserId && member.appUserId !== appUserId()) {
-                <div class="button-cluster">
-                  @if ((member.rank ?? '').toLowerCase() === 'member') {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyMemberId() === member.id"
-                      (click)="promoteMemberToOfficer(selectedLinkshell.id, member.id, member.characterName)">
-                      {{ activity.busyMemberId() === member.id ? 'Updating...' : 'Promote' }}
-                    </button>
-                  } @else if ((member.rank ?? '').toLowerCase() === 'officer') {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyMemberId() === member.id"
-                      (click)="demoteMemberToMember(selectedLinkshell.id, member.id, member.characterName)">
-                      {{ activity.busyMemberId() === member.id ? 'Updating...' : 'Demote' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="action-button"
-                      [disabled]="activity.busyMemberId() === member.id"
-                      (click)="transferLeadership(selectedLinkshell.id, member.id, member.characterName)">
-                      {{ activity.busyMemberId() === member.id ? 'Updating...' : 'Make leader' }}
-                    </button>
+            <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
+            <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+            <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+            @if (canManageMembers() && member.appUserId && member.appUserId !== appUserId()) {
+              <div class="ac-roster-actions">
+                <select
+                  [ngModel]="member.rank || 'Member'"
+                  (ngModelChange)="changeMemberRole(selectedLinkshell.id, member.id, member.characterName, $event)"
+                  [name]="'memberRole_' + member.id"
+                  [disabled]="activity.busyMemberId() === member.id">
+                  @for (role of availableRolesForLinkshell(selectedLinkshell.id); track role.id) {
+                    <option [value]="role.name">{{ role.name }}</option>
                   }
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    [disabled]="activity.busyMemberId() === member.id"
-                    (click)="activity.removeLinkshellMember(selectedLinkshell.id, member.id)">
-                    {{ activity.busyMemberId() === member.id ? 'Removing...' : 'Remove' }}
-                  </button>
-                </div>
-              }
-            </div>
-          </li>
+                </select>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyMemberId() === member.id"
+                  (click)="activity.removeLinkshellMember(selectedLinkshell.id, member.id)">
+                  {{ activity.busyMemberId() === member.id ? 'Removing...' : 'Remove' }}
+                </button>
+              </div>
+            }
+          </div>
         }
-      </ul>
+      </div>
       @if (filteredSelectedLinkshellMembers().length === 0) {
         <p class="notice">No roster members matched the current search/filter.</p>
       }
@@ -592,17 +570,51 @@
   }
 
   @if (showSection('auctions')) {
-  <article class="panel" aria-labelledby="auctions-heading">
-    <div class="panel__header">
+  <article class="panel auctions-panel" aria-labelledby="auctions-heading">
+    <div class="section-head">
       <div>
-        <p class="eyebrow eyebrow--small">Auction</p>
-        <h2 id="auctions-heading">Auction board</h2>
+        <p class="section-label">Auction</p>
+        <h2 id="auctions-heading" class="section-title">Auction board</h2>
       </div>
-      <div class="button-cluster">
-        <span class="pill">{{ auctions().length }}</span>
+      <div class="section-head-right">
+        <div class="view-tabs" role="tablist" aria-label="Auction view">
+          <button
+            type="button"
+            class="view-tab"
+            role="tab"
+            [class.active]="auctionsView() === 'active'"
+            [attr.aria-selected]="auctionsView() === 'active'"
+            (click)="setAuctionsView('active')">
+            Active
+          </button>
+          <button
+            type="button"
+            class="view-tab"
+            role="tab"
+            [class.active]="auctionsView() === 'history'"
+            [attr.aria-selected]="auctionsView() === 'history'"
+            (click)="setAuctionsView('history')">
+            History
+          </button>
+        </div>
         @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
-          <button type="button" class="action-button action-button--secondary" (click)="openCreateAuctionForm()">Create</button>
+          <button type="button" class="btn primary sm" (click)="openCreateAuctionForm()">Create</button>
         }
+      </div>
+    </div>
+
+    <div class="auction-stats" role="group" aria-label="Auction stats">
+      <div class="auction-stat">
+        <div class="auction-stat-label">Live</div>
+        <div class="auction-stat-value num">{{ auctionLiveCount() }}</div>
+      </div>
+      <div class="auction-stat">
+        <div class="auction-stat-label">Total items</div>
+        <div class="auction-stat-value num">{{ auctionTotalItems() }}</div>
+      </div>
+      <div class="auction-stat">
+        <div class="auction-stat-label">Total bids</div>
+        <div class="auction-stat-value num">{{ auctionTotalBids() }}</div>
       </div>
     </div>
 
@@ -676,168 +688,270 @@
 
     @if (!selectedLinkshell()) {
       <p class="notice">Select or join a linkshell before working with auctions.</p>
-    } @else if (activity.auctionsBusy()) {
-      <p class="notice">Loading auctions...</p>
-    } @else if (auctions().length > 0) {
-      <ul class="compact-list">
+    } @else if (auctionsView() === 'active') {
+      @if (activity.auctionsBusy()) {
+        <p class="notice">Loading auctions...</p>
+      } @else if (auctions().length > 0) {
         @for (auction of auctions(); track auction.id) {
-            <li>
-              <div>
-                <strong>{{ auction.title || 'Untitled auction' }}</strong>
-                <span>{{ auctionTimeWindowLabel(auction) }}</span>
-                <span>Timer {{ auctionTimerLabel(auction) }}</span>
-                <span>Created by {{ auction.createdBy || 'Unknown' }}</span>
-                <span>Status: {{ auction.status }}</span>
-              </div>
-            <div class="button-cluster button-cluster--stacked">
-              <span>{{ auction.items.length }} items</span>
-              @if (auction.canEdit) {
-                <button type="button" class="action-button action-button--secondary" (click)="openEditAuctionForm(auction)">Edit</button>
-              }
-              @if (auction.canStart) {
-                <button
-                  type="button"
-                  class="action-button"
-                  [disabled]="activity.busyAuctionId() === auction.id"
-                  (click)="startAuction(auction.id)">
-                  {{ activity.busyAuctionId() === auction.id ? 'Starting...' : 'Start auction' }}
-                </button>
-              }
-              @if (auction.canClose) {
-                <button
-                  type="button"
-                  class="action-button"
-                  [disabled]="activity.busyAuctionId() === auction.id"
-                  (click)="closeAuction(auction.id, auction.title)">
-                  {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close auction' }}
-                </button>
-              }
-            </div>
-          </li>
-          @for (item of auction.items; track item.id) {
-            <li class="compact-list__child">
-              <div>
-                <strong>{{ item.itemName || 'Item' }}</strong>
-                <span>{{ item.itemType || 'Unspecified' }} | Start {{ item.startingBidDkp ?? 0 }} DKP</span>
-                <span>Highest {{ item.currentHighestBid ?? 0 }} by {{ item.currentHighestBidder || 'No bids' }}</span>
-                @if (item.notes) {
-                  <span>{{ item.notes }}</span>
+          <section class="auction" [class.live]="auctionState(auction) === 'live'" [class.ending]="auctionState(auction) === 'ending'" [class.ended]="auctionState(auction) === 'ended'">
+            <header class="auction-header">
+              <div class="auction-title-row">
+                <div class="auction-name">
+                  <span>{{ auction.title || 'Untitled auction' }}</span>
+                  @if (auctionStatusTagClass(auction)) {
+                    <span class="tag {{ auctionStatusTagClass(auction) }}">{{ auctionStatusLabel(auction) }}</span>
+                  } @else {
+                    <span class="tag">{{ auctionStatusLabel(auction) }}</span>
+                  }
+                </div>
+                @if (auctionState(auction) !== 'ended') {
+                  <div class="auction-timer">
+                    <div class="auction-timer-value num">{{ auctionTimerValue(auction) }}</div>
+                    <div class="auction-timer-label">{{ auctionRemainingLabel(auction) }}</div>
+                  </div>
                 }
               </div>
-              <div class="button-cluster button-cluster--stacked">
-                <span>{{ item.bidCount }} bids</span>
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  (click)="toggleAuctionBids(item.id)">
-                  {{ expandedAuctionBidItems[item.id] ? 'Hide bids' : 'View bids' }}
-                </button>
+              <div class="auction-meta">
+                <div class="auction-meta-left">
+                  <div class="auction-meta-item">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>{{ auction.createdBy || 'Unknown' }}</span>
+                  </div>
+                  <div class="auction-meta-item">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>{{ auctionTimeWindowLabel(auction) }}</span>
+                  </div>
+                  <div class="auction-meta-item">
+                    <span>{{ auction.items.length }} {{ auction.items.length === 1 ? 'item' : 'items' }}</span>
+                  </div>
+                </div>
+                <div class="auction-meta-actions">
+                  @if (auction.canEdit) {
+                    <button type="button" class="btn sm" (click)="openEditAuctionForm(auction)">Edit</button>
+                  }
+                  @if (auction.canStart) {
+                    <button
+                      type="button"
+                      class="btn primary sm"
+                      [disabled]="activity.busyAuctionId() === auction.id"
+                      (click)="startAuction(auction.id)">
+                      {{ activity.busyAuctionId() === auction.id ? 'Starting...' : 'Start' }}
+                    </button>
+                  }
+                  @if (auction.canClose) {
+                    <button
+                      type="button"
+                      class="btn danger-outline sm"
+                      [disabled]="activity.busyAuctionId() === auction.id"
+                      (click)="closeAuction(auction.id, auction.title)">
+                      {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close' }}
+                    </button>
+                  }
+                </div>
               </div>
-            </li>
-            @if (expandedAuctionBidItems[item.id]) {
-              <li class="compact-list__child">
-                <div class="invite-section">
-                  @if (auction.status === 'Live') {
-                    <div class="invite-search">
+              <div class="auction-progress" aria-hidden="true">
+                <div class="auction-progress-fill" [style.width.%]="auctionProgressPercent(auction)"></div>
+              </div>
+            </header>
+
+            @for (item of auction.items; track item.id) {
+              <div class="item" [class.item-ended]="auctionState(auction) === 'ended'">
+                <div class="item-main">
+                  <div>
+                    <div class="item-name">
+                      <span class="item-type-dot {{ itemDotClass(item.itemType) }}" aria-hidden="true"></span>
+                      <span>{{ item.itemName || 'Item' }}</span>
+                    </div>
+                    <div class="item-sub">
+                      <span>{{ item.itemType || 'Unspecified' }}</span>
+                      <span>•</span>
+                      <span>Start {{ item.startingBidDkp ?? 0 }} DKP</span>
+                      @if (item.notes) {
+                        <span>•</span>
+                        <span>{{ item.notes }}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="item-right">
+                    <div class="bid-current">
+                      @if ((item.currentHighestBid ?? 0) > 0) {
+                        <div class="bid-amount num">{{ item.currentHighestBid }} <span class="bid-unit">DKP</span></div>
+                      } @else {
+                        <div class="bid-amount muted num">{{ item.startingBidDkp ?? 0 }} <span class="bid-unit">DKP</span></div>
+                      }
+                      @if (item.currentHighestBidder) {
+                        <div class="bid-leader" [class.you]="isCurrentUserWinning(item)">
+                          <span class="bid-leader-crown">♛</span>
+                          <span>{{ isCurrentUserWinning(item) ? 'You' : item.currentHighestBidder }}</span>
+                        </div>
+                      } @else {
+                        <div class="bid-none">No bids yet</div>
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                @if (auctionState(auction) !== 'ended' && auction.status === 'Live') {
+                  <div class="bid-form">
+                    <div class="bid-form-field">
+                      <div class="bid-form-label">Your bid</div>
                       <input
+                        class="bid-form-input"
                         [ngModel]="getAuctionBidDraft(item.id)"
                         (ngModelChange)="auctionBidDrafts[item.id] = $event"
                         [name]="'auctionBidDraft' + item.id"
                         type="number"
                         min="1"
-                        placeholder="Bid amount" />
-                      <button
-                        type="button"
-                        class="action-button"
-                        [disabled]="activity.busyAuctionItemId() === item.id"
-                        (click)="submitAuctionBid(item.id)">
-                        {{ activity.busyAuctionItemId() === item.id ? 'Bidding...' : 'Make bid' }}
-                      </button>
+                        [placeholder]="'Min ' + itemMinBid(item)" />
+                      <div class="bid-form-min">Minimum bid: {{ itemMinBid(item) }} DKP</div>
                     </div>
-                  }
+                    <button
+                      type="button"
+                      [class]="auctionState(auction) === 'ending' ? 'btn warning-fill' : 'btn primary'"
+                      [disabled]="activity.busyAuctionItemId() === item.id"
+                      (click)="submitAuctionBid(item.id)">
+                      {{ activity.busyAuctionItemId() === item.id ? 'Bidding...' : 'Bid' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      (click)="toggleAuctionBids(item.id)">
+                      {{ expandedAuctionBidItems[item.id] ? 'Hide' : 'History' }}
+                    </button>
+                  </div>
+                }
 
-                  @if (auctionBids(item.id).length > 0) {
-                    <ul class="compact-list compact-list--dense">
-                      @for (bid of auctionBids(item.id); track bid.id) {
-                        <li>
-                          <div>
-                            <strong>{{ bid.characterName }}</strong>
-                            <span>{{ activity.formatDateTime(bid.createdAt) || 'Unknown time' }}</span>
+                @if (expandedAuctionBidItems[item.id]) {
+                  <div class="bid-history">
+                    @if (auctionBids(item.id).length > 0) {
+                      @for (bid of auctionBids(item.id); track bid.id; let idx = $index) {
+                        <div class="bid-row" [class.top]="idx === 0">
+                          <div class="bid-rank num">#{{ idx + 1 }}</div>
+                          <div class="bidder">
+                            <div class="bidder-av {{ bidderAvatarVariant(bid.characterName) }}">{{ bidderInitials(bid.characterName) }}</div>
+                            <div class="bid-who">{{ bid.characterName }}</div>
                           </div>
-                          <div class="compact-list__meta">
-                            <span>{{ bid.bidAmount }} DKP</span>
-                          </div>
-                        </li>
+                          <div class="bid-val num">{{ bid.bidAmount }} DKP</div>
+                          <div class="bid-when">{{ timeAgo(bid.createdAt) }}</div>
+                        </div>
                       }
-                    </ul>
-                  } @else {
-                    <p class="notice">No bids yet.</p>
-                  }
-                </div>
-              </li>
+                    } @else {
+                      <div class="no-bids">No bids yet.</div>
+                    }
+                  </div>
+                }
+              </div>
             }
-          }
+          </section>
         }
-      </ul>
+      } @else {
+        <p class="notice">No auctions exist on this linkshell yet.</p>
+      }
     } @else {
-      <p class="notice">No auctions exist on this linkshell yet.</p>
-    }
-
-    <div class="invite-section">
-      <div class="panel__header">
-        <h3>Auction history</h3>
-        <span class="pill">{{ auctionHistory().length }}</span>
-      </div>
-
       @if (activity.auctionHistoryBusy()) {
         <p class="notice">Loading auction history...</p>
       } @else if (auctionHistory().length > 0) {
-        <ul class="compact-list compact-list--dense">
-          @for (history of auctionHistory(); track history.id) {
-            <li>
-              <div>
-                <strong>{{ history.title || 'Auction history' }}</strong>
-                <span>{{ auctionTimeWindowLabel(history) }}</span>
-                <span>Closed {{ activity.formatDateTime(history.closedAt) || 'Unknown time' }}</span>
-              </div>
-              <div class="compact-list__meta">
-                <span>{{ history.items.length }} items</span>
-              </div>
-            </li>
-            @for (item of history.items; track item.id) {
-              <li class="compact-list__child">
-                <div>
-                  <strong>{{ item.itemName || 'Item' }}</strong>
-                  <span>{{ item.currentHighestBidder || 'No winner' }} | {{ item.currentHighestBid ?? item.startingBidDkp ?? 0 }} DKP</span>
-                  <span>Status: {{ item.status || 'Pending' }}</span>
+        @for (history of auctionHistory(); track history.id) {
+          <section class="auction ended">
+            <header class="auction-header">
+              <div class="auction-title-row">
+                <div class="auction-name">
+                  <span>{{ history.title || 'Auction history' }}</span>
+                  <span class="tag">Closed</span>
                 </div>
-                <div class="button-cluster">
-                  @if ((item.status || 'Pending') === 'Pending' || (item.status || '') === 'Closed') {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyAuctionItemId() === item.id"
-                      (click)="markAuctionHistoryItemReceived(item.id)">
-                      {{ activity.busyAuctionItemId() === item.id ? 'Updating...' : 'Mark received' }}
-                    </button>
-                  } @else if ((item.status || '').toLowerCase() === 'received') {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyAuctionItemId() === item.id"
-                      (click)="undoAuctionHistoryItem(item.id)">
-                      {{ activity.busyAuctionItemId() === item.id ? 'Updating...' : 'Undo' }}
-                    </button>
+                @if (history.closedAt) {
+                  <div class="auction-timer">
+                    <div class="auction-timer-value num" style="font-size: 12px; color: var(--fg-3); font-family: var(--font-sans);">Closed</div>
+                    <div class="auction-timer-label">{{ activity.formatDateTime(history.closedAt) || '' }}</div>
+                  </div>
+                }
+              </div>
+              <div class="auction-meta">
+                <div class="auction-meta-left">
+                  @if (history.createdBy) {
+                    <div class="auction-meta-item">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <span>{{ history.createdBy }}</span>
+                    </div>
                   }
+                  <div class="auction-meta-item">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>{{ auctionTimeWindowLabel(history) }}</span>
+                  </div>
+                  <div class="auction-meta-item">
+                    <span>{{ history.items.length }} {{ history.items.length === 1 ? 'item' : 'items' }}</span>
+                  </div>
                 </div>
-              </li>
+              </div>
+            </header>
+
+            @for (item of history.items; track item.id) {
+              <div class="item item-ended">
+                <div class="item-main">
+                  <div>
+                    <div class="item-name">
+                      <span class="item-type-dot {{ itemDotClass(item.itemType) }}" aria-hidden="true"></span>
+                      <span>{{ item.itemName || 'Item' }}</span>
+                    </div>
+                    <div class="item-sub">
+                      <span>{{ item.itemType || 'Unspecified' }}</span>
+                      <span>•</span>
+                      <span>Status: {{ item.status || 'Pending' }}</span>
+                    </div>
+                  </div>
+                  <div class="item-right">
+                    <div class="bid-current">
+                      <div class="bid-amount num">{{ item.currentHighestBid ?? item.startingBidDkp ?? 0 }} <span class="bid-unit">DKP</span></div>
+                      @if (item.currentHighestBidder) {
+                        <div class="bid-leader">
+                          <span class="bid-leader-crown">♛</span>
+                          <span>{{ item.currentHighestBidder }}</span>
+                        </div>
+                      } @else {
+                        <div class="bid-none">No winner</div>
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                @if (item.currentHighestBidder) {
+                  <div class="item-winner">
+                    <div>
+                      <div class="item-winner-label">Winner</div>
+                      <div>{{ item.currentHighestBidder }}</div>
+                    </div>
+                    <div class="item-winner-amount num">{{ item.currentHighestBid ?? item.startingBidDkp ?? 0 }} DKP</div>
+                    <div class="item-winner-actions">
+                      @if ((item.status || 'Pending') === 'Pending' || (item.status || '') === 'Closed') {
+                        <button
+                          type="button"
+                          class="btn success-fill sm"
+                          [disabled]="activity.busyAuctionItemId() === item.id"
+                          (click)="markAuctionHistoryItemReceived(item.id)">
+                          {{ activity.busyAuctionItemId() === item.id ? 'Updating...' : 'Mark received' }}
+                        </button>
+                      } @else if ((item.status || '').toLowerCase() === 'received') {
+                        <button
+                          type="button"
+                          class="btn sm"
+                          [disabled]="activity.busyAuctionItemId() === item.id"
+                          (click)="undoAuctionHistoryItem(item.id)">
+                          {{ activity.busyAuctionItemId() === item.id ? 'Updating...' : 'Undo' }}
+                        </button>
+                      }
+                    </div>
+                  </div>
+                } @else {
+                  <div class="no-bids">No bids were placed on this item.</div>
+                }
+              </div>
             }
-          }
-        </ul>
+          </section>
+        }
       } @else {
         <p class="notice">Closed auctions will appear here after they are archived.</p>
       }
-    </div>
+    }
   </article>
   }
 
@@ -846,7 +960,7 @@
     <div class="panel__header">
       <div>
         <p class="eyebrow eyebrow--small">History</p>
-        <h2 id="history-heading">Event history</h2>
+        <h2 id="history-heading">Event History</h2>
       </div>
       <span class="pill">{{ historyList().length }}</span>
     </div>
@@ -854,32 +968,42 @@
     @if (activity.historyBusy()) {
       <p class="notice">Loading event history...</p>
     } @else if (historyList().length) {
-      <ul class="compact-list">
-        @for (history of historyList(); track history.id) {
-          <li>
-            <div>
-              <strong>{{ history.name || 'Completed event' }}</strong>
-              <span>{{ history.type || 'Event' }} | {{ history.location || 'Unknown location' }}</span>
-              @if (activity.formatDateTime(history.endTime); as completedAt) {
-                <span>Completed {{ completedAt }}</span>
-              }
-            </div>
-            <div class="button-cluster button-cluster--stacked">
-              <span>{{ history.participantCount }} participants</span>
-              <span>{{ history.duration ?? 0 }}h</span>
-              <button
-                type="button"
-                class="action-button action-button--secondary"
-                (click)="openHistoryDetail(history.id)">
-                Details
-              </button>
-            </div>
-          </li>
-        }
-      </ul>
+      <div class="table-wrap">
+        <table class="data-table history-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Type / Location</th>
+              <th>Completed</th>
+              <th class="num">Participants</th>
+              <th class="num">Duration</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (history of historyList(); track history.id) {
+              <tr>
+                <td><strong>{{ history.name || 'Completed event' }}</strong></td>
+                <td>{{ history.type || 'Event' }} | {{ history.location || 'Unknown location' }}</td>
+                <td>{{ activity.formatDateTime(history.endTime) || '—' }}</td>
+                <td class="num">{{ history.participantCount }}</td>
+                <td class="num">{{ history.duration ?? 0 }}h</td>
+                <td>
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    (click)="openHistoryDetail(history.id)">
+                    Details
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
 
       @if (historyDetail(); as historyDetail) {
-        <div class="invite-section">
+        <div class="summary-card history-detail-card">
           <div class="panel__header">
             <div>
               <h3>{{ historyDetail.name || 'History details' }}</h3>
@@ -893,15 +1017,15 @@
             </button>
           </div>
 
-          <div class="summary-card">
+          <div class="history-detail-meta">
             @if (activity.formatDateTime(historyDetail.startTime); as startedAt) {
-              <p><strong>Started:</strong> {{ startedAt }}</p>
+              <p class="history-detail-meta__line"><strong>Started:</strong> {{ startedAt }}</p>
             }
             @if (activity.formatDateTime(historyDetail.endTime); as endedAt) {
-              <p><strong>Ended:</strong> {{ endedAt }}</p>
+              <p class="history-detail-meta__line"><strong>Ended:</strong> {{ endedAt }}</p>
             }
-            <p><strong>Duration:</strong> {{ historyDetail.duration ?? 0 }}h</p>
-            <p><strong>DKP/hour:</strong> {{ historyDetail.dkpPerHour ?? 0 }}</p>
+            <p class="history-detail-meta__line"><strong>Duration:</strong> {{ historyDetail.duration ?? 0 }}h</p>
+            <p class="history-detail-meta__line"><strong>DKP/hour:</strong> {{ historyDetail.dkpPerHour ?? 0 }}</p>
             @if (historyDetail.details) {
               <p class="muted">{{ historyDetail.details }}</p>
             }
@@ -943,7 +1067,13 @@
         <p class="eyebrow eyebrow--small">Ledger</p>
         <h2 id="dkp-history-heading">DKP history</h2>
       </div>
-      <span class="pill">{{ dkpHistory()?.entries?.length ?? 0 }}</span>
+      <div class="button-cluster">
+        <span class="pill">{{ dkpHistory()?.entries?.length ?? 0 }}</span>
+        @if (canAuditSelectedLinkshell() && !isDkpAuditOpen) {
+          <button type="button" class="action-button action-button--secondary"
+            (click)="openDkpAudit()">Add audit</button>
+        }
+      </div>
     </div>
 
     @if (!selectedLinkshell()) {
@@ -954,72 +1084,175 @@
       @if (dkpHistory.members.length > 0) {
         <div class="invite-section">
           <label>
+            <span>Search member</span>
+            <input type="text" [(ngModel)]="dkpMemberSearchTerm" name="dkpMemberSearchTerm"
+              placeholder="Filter members by character name" />
+          </label>
+          <label>
             <span>Member</span>
             <select
               [ngModel]="selectedDkpHistoryAppUserId"
               (ngModelChange)="onDkpHistoryMemberChange($event)"
               name="selectedDkpHistoryAppUserId">
-              @for (member of dkpHistory.members; track member.appUserId) {
+              @for (member of filteredDkpMembers(); track member.appUserId) {
                 <option [ngValue]="member.appUserId">
                   {{ member.characterName }} ({{ member.currentBalance }} DKP)
                 </option>
               }
             </select>
+            @if (filteredDkpMembers().length === 0) {
+              <small class="muted">No members match your search.</small>
+            }
           </label>
         </div>
 
-        <div class="summary-card">
-          <p class="summary-card__label">Selected member</p>
+        <div class="summary-card dkp-summary-card">
           <strong>{{ dkpHistory.selectedMemberName || 'Unknown member' }}</strong>
-          <p>{{ dkpHistory.currentBalance }} current DKP</p>
+          <p>Current DKP: {{ dkpHistory.currentBalance }}</p>
           @if (dkpHistory.linkshellName) {
             <p class="muted">{{ dkpHistory.linkshellName }}</p>
           }
         </div>
       }
 
+      @if (canAuditSelectedLinkshell() && isDkpAuditOpen) {
+        <form class="dkp-audit-form" (ngSubmit)="submitDkpAudit()">
+          <div class="dkp-audit-form__header">
+            <strong>Record DKP audit</strong>
+            <button type="button" class="action-button action-button--secondary" (click)="closeDkpAudit()">Close</button>
+          </div>
+
+          <div class="dkp-audit-form__mode">
+            <label class="dkp-audit-form__mode-option">
+              <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
+                (ngModelChange)="onDkpAuditModeChange('Adjust')" value="Adjust" />
+              <span>
+                <strong>Correct a previous entry</strong>
+                <span class="muted">Fix DKP awarded/charged on a past event or auction.</span>
+              </span>
+            </label>
+            <label class="dkp-audit-form__mode-option">
+              <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
+                (ngModelChange)="onDkpAuditModeChange('Misc')" value="Misc" />
+              <span>
+                <strong>Miscellaneous adjustment</strong>
+                <span class="muted">Add or subtract DKP for any other reason.</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="dkp-audit-form__grid">
+            <label>
+              <span>Member</span>
+              <select [(ngModel)]="dkpAuditModel.targetAppUserId" name="auditTargetAppUserId" required>
+                <option value="" disabled>Select member</option>
+                @for (member of dkpHistory.members; track member.appUserId) {
+                  <option [ngValue]="member.appUserId">
+                    {{ member.characterName }} ({{ member.currentBalance }} DKP)
+                  </option>
+                }
+              </select>
+            </label>
+
+            @if (dkpAuditModel.mode === 'Adjust') {
+              <label>
+                <span>Entry to correct</span>
+                <select [(ngModel)]="dkpAuditModel.relatedLedgerEntryId" name="auditRelatedEntryId" required>
+                  <option [ngValue]="null" disabled>Select a previous entry</option>
+                  @for (candidate of dkpAuditCandidateEntries(); track candidate.id) {
+                    <option [ngValue]="candidate.id">
+                      {{ dkpEntryTypeLabel(candidate.entryType) }}
+                      · {{ activity.formatDateTime(candidate.occurredAt) || 'Unknown time' }}
+                      · {{ candidate.amount >= 0 ? '+' : '' }}{{ candidate.amount }} DKP
+                      @if (candidate.eventName) { · {{ candidate.eventName }} }
+                      @if (candidate.itemName) { · {{ candidate.itemName }} }
+                    </option>
+                  }
+                </select>
+              </label>
+
+              <label>
+                <span>Corrected amount (DKP)</span>
+                <input type="number" step="0.01" [(ngModel)]="dkpAuditModel.amount"
+                  name="auditAmountAdjust" placeholder="e.g. 45" required />
+              </label>
+            } @else {
+              <label>
+                <span>Amount (positive to add, negative to subtract)</span>
+                <input type="number" step="0.01" [(ngModel)]="dkpAuditModel.amount"
+                  name="auditAmountMisc" placeholder="e.g. 10 or -5" required />
+              </label>
+            }
+
+            <label class="dkp-audit-form__reason">
+              <span>Reason</span>
+              <textarea rows="2" [(ngModel)]="dkpAuditModel.reason" name="auditReason"
+                maxlength="1024" placeholder="Explain why this audit is being recorded" required></textarea>
+            </label>
+          </div>
+
+          <div class="dkp-audit-form__actions">
+            <button type="submit" class="action-button" [disabled]="activity.busyDkpAudit()">
+              {{ activity.busyDkpAudit() ? 'Saving…' : 'Save audit' }}
+            </button>
+            <button type="button" class="action-button action-button--secondary"
+              (click)="closeDkpAudit()" [disabled]="activity.busyDkpAudit()">Cancel</button>
+          </div>
+        </form>
+      }
+
       @if (dkpHistory.entries.length > 0) {
-        <ul class="compact-list compact-list--dense">
-          @for (entry of dkpHistory.entries; track entry.id) {
-            <li>
-              <div>
-                <strong>
-                  @if (entry.entryType === 'LootSpent') {
-                    Loot spent
-                  } @else {
-                    Event earned
-                  }
-                </strong>
-                <span>{{ activity.formatDateTime(entry.occurredAt) || 'Unknown time' }}</span>
-                <span>
-                  {{ entry.eventName || 'Unknown event' }}
-                  @if (entry.eventType || entry.eventLocation) {
-                    <span> | {{ entry.eventType || 'Event' }} | {{ entry.eventLocation || 'Unknown location' }}</span>
-                  }
-                </span>
-                @if (entry.itemName) {
-                  <span>Item: {{ entry.itemName }}</span>
+        <div class="invite-section">
+          <label>
+            <span>Search ledger</span>
+            <input type="text" [(ngModel)]="dkpSearchTerm" name="dkpSearchTerm"
+              placeholder="Search by event, item, details, or type" />
+          </label>
+        </div>
+
+        @if (filteredDkpEntries().length > 0) {
+          <div class="table-wrap">
+            <table class="data-table dkp-history-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Date</th>
+                  <th>Event / Context</th>
+                  <th>Item</th>
+                  <th>Details</th>
+                  <th class="num">Amount</th>
+                  <th class="num">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (entry of filteredDkpEntries(); track entry.id) {
+                  <tr>
+                    <td><strong>{{ dkpEntryTypeLabel(entry.entryType) }}</strong></td>
+                    <td>{{ activity.formatDateTime(entry.occurredAt) || '—' }}</td>
+                    <td>
+                      @if (entry.eventName) {
+                        {{ entry.eventName }}
+                        @if (entry.eventType || entry.eventLocation) {
+                          <span class="muted"> · {{ entry.eventType || 'Event' }} · {{ entry.eventLocation || 'Unknown location' }}</span>
+                        }
+                      } @else {
+                        <span class="muted">—</span>
+                      }
+                    </td>
+                    <td>{{ entry.itemName || '—' }}</td>
+                    <td class="dkp-history-table__details">{{ entry.details || '—' }}</td>
+                    <td class="num" [class.text-success]="entry.amount > 0" [class.text-danger]="entry.amount < 0">
+                      {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }}
+                    </td>
+                    <td class="num">{{ entry.runningBalance }}</td>
+                  </tr>
                 }
-                @if (entry.details) {
-                  <span>{{ entry.details }}</span>
-                }
-                @if (entry.eventStartTime || entry.eventEndTime) {
-                  <span>
-                    {{ activity.formatDateTime(entry.eventStartTime) || 'Unknown start' }}
-                    -
-                    {{ activity.formatDateTime(entry.eventEndTime) || 'Unknown end' }}
-                  </span>
-                }
-              </div>
-              <div class="button-cluster button-cluster--stacked">
-                <span [class.text-success]="entry.amount >= 0" [class.text-danger]="entry.amount < 0">
-                  {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }} DKP
-                </span>
-                <span>Balance {{ entry.runningBalance }}</span>
-              </div>
-            </li>
-          }
-        </ul>
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="notice">No DKP entries match your search.</p>
+        }
       } @else {
         <p class="notice">No DKP ledger entries exist for this member yet.</p>
       }

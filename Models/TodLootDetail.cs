@@ -18,4 +18,6 @@ public class TodLootDetail
     public string? ItemWinner { get; set; }
 
     public int? WinningDkpSpent { get; set; }
+
+    public double? ActualDeductedDkp { get; set; }
 }
