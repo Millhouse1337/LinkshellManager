@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateTodInput,
   ActivityEventParticipant,
+  ActivityDkpRoundingIncrement,
   ActivityLinkshellSettings,
   ActivityLootStructure,
   ActivityStatusLedgerEntry,
@@ -249,15 +250,31 @@ export class ActivityHomeComponent {
   }
 
   protected attendanceParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {
-    return event.participants.filter(participant => !participant.isOnBreak && participant.isVerified !== true);
+    return this.sortCurrentUserFirst(
+      event.participants.filter(participant => !participant.isOnBreak && participant.isVerified !== true)
+    );
   }
 
   protected activeRoomParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {
-    return event.participants.filter(participant => !participant.isOnBreak && participant.isVerified === true);
+    return this.sortCurrentUserFirst(
+      event.participants.filter(participant => !participant.isOnBreak && participant.isVerified === true)
+    );
   }
 
   protected onBreakParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {
-    return event.participants.filter(participant => !!participant.isOnBreak);
+    return this.sortCurrentUserFirst(
+      event.participants.filter(participant => !!participant.isOnBreak)
+    );
+  }
+
+  private sortCurrentUserFirst(participants: ActivityEventParticipant[]): ActivityEventParticipant[] {
+    const currentUserId = this.activity.overview()?.appUser?.id ?? null;
+    if (!currentUserId) return participants;
+    return [...participants].sort((a, b) => {
+      const aIsMe = a.appUserId === currentUserId ? 0 : 1;
+      const bIsMe = b.appUserId === currentUserId ? 0 : 1;
+      return aIsMe - bIsMe;
+    });
   }
 
   protected queuedEvents() {
@@ -294,6 +311,35 @@ export class ActivityHomeComponent {
   }
 
   protected dashboardRosterSearch = '';
+
+  protected editingRankMemberId = signal<number | null>(null);
+  protected editingRankValue = '';
+  protected readonly rankOptions = ['Leader', 'Officer', 'Member'] as const;
+
+  protected beginEditRank(memberId: number, currentRank: string | null | undefined): void {
+    this.editingRankMemberId.set(memberId);
+    this.editingRankValue = currentRank || 'Member';
+  }
+
+  protected cancelEditRank(): void {
+    this.editingRankMemberId.set(null);
+    this.editingRankValue = '';
+  }
+
+  protected async saveEditRank(linkshellId: number, memberId: number): Promise<void> {
+    const newRank = this.editingRankValue;
+    if (!newRank) return;
+    const characterName = this.selectedDashboardMembers().find(m => m.id === memberId)?.characterName ?? null;
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, newRank, characterName);
+    this.editingRankMemberId.set(null);
+    this.editingRankValue = '';
+  }
+
+  protected canEditRosterRank(memberAppUserId: string | null | undefined): boolean {
+    if (!this.canManageSelectedDashboard()) return false;
+    if (!memberAppUserId) return false;
+    return memberAppUserId !== this.activity.overview()?.appUser?.id;
+  }
 
   protected showRuleForm = signal(false);
   protected ruleTitle = '';
@@ -728,20 +774,28 @@ export class ActivityHomeComponent {
   // --- Customize Linkshell state ---
   protected readonly customizeDraft: {
     lootStructure: ActivityLootStructure;
-    hybridDkpPercentage: number | null;
     enableHnmSection: boolean;
     enableMissions: boolean;
     enableAuctions: boolean;
     enableToDs: boolean;
     enableEndgame: boolean;
+    enableEvents: boolean;
+    enableDkp: boolean;
+    enableItems: boolean;
+    enableRevenue: boolean;
+    dkpRoundingIncrement: ActivityDkpRoundingIncrement;
   } = {
     lootStructure: 'Dkp',
-    hybridDkpPercentage: 50,
     enableHnmSection: true,
     enableMissions: true,
     enableAuctions: true,
     enableToDs: true,
-    enableEndgame: true
+    enableEndgame: true,
+    enableEvents: true,
+    enableDkp: true,
+    enableItems: true,
+    enableRevenue: true,
+    dkpRoundingIncrement: 'Quarter'
   };
 
   protected customizeLinkshellId: number | null = null;
@@ -763,12 +817,16 @@ export class ActivityHomeComponent {
     const settings = link?.settings;
     if (!settings) return;
     this.customizeDraft.lootStructure = settings.lootStructure;
-    this.customizeDraft.hybridDkpPercentage = settings.hybridDkpPercentage ?? 50;
     this.customizeDraft.enableHnmSection = settings.enableHnmSection;
     this.customizeDraft.enableMissions = settings.enableMissions;
     this.customizeDraft.enableAuctions = settings.enableAuctions;
     this.customizeDraft.enableToDs = settings.enableToDs;
     this.customizeDraft.enableEndgame = settings.enableEndgame;
+    this.customizeDraft.enableEvents = settings.enableEvents;
+    this.customizeDraft.enableDkp = settings.enableDkp;
+    this.customizeDraft.enableItems = settings.enableItems;
+    this.customizeDraft.enableRevenue = settings.enableRevenue;
+    this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
     this.customizeDirty = false;
   }
 
@@ -792,14 +850,16 @@ export class ActivityHomeComponent {
         name: link.name,
         details: link.details ?? null,
         lootStructure: this.customizeDraft.lootStructure,
-        hybridDkpPercentage: this.customizeDraft.lootStructure === 'Hybrid'
-          ? this.customizeDraft.hybridDkpPercentage
-          : null,
         enableHnmSection: this.customizeDraft.enableHnmSection,
         enableMissions: this.customizeDraft.enableMissions,
         enableAuctions: this.customizeDraft.enableAuctions,
         enableToDs: this.customizeDraft.enableToDs,
-        enableEndgame: this.customizeDraft.enableEndgame
+        enableEndgame: this.customizeDraft.enableEndgame,
+        enableEvents: this.customizeDraft.enableEvents,
+        enableDkp: this.customizeDraft.enableDkp,
+        enableItems: this.customizeDraft.enableItems,
+        enableRevenue: this.customizeDraft.enableRevenue,
+        dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement
       });
       this.customizeDirty = false;
       this.syncCustomizeDraft();

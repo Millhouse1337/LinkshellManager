@@ -44,7 +44,23 @@
 
         <label>
           <span>Event type</span>
-          <input [(ngModel)]="createModel.eventType" name="eventType" />
+          <div class="tod-day-number-row">
+            <select [ngModel]="eventTypeSelection" (ngModelChange)="onEventTypeSelectionChange($event)"
+              name="eventTypeSelection" required>
+              <option value="" disabled>Select event type</option>
+              @for (option of eventTypeOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+              <option value="Other">Other</option>
+            </select>
+            @if (eventTypeSelection === 'Other') {
+              <input [(ngModel)]="createModel.eventType" name="eventType"
+                placeholder="Specify event type" required />
+            }
+          </div>
+          @if (eventTypeError) {
+            <small class="form-error">Event type is required.</small>
+          }
         </label>
 
         <label>
@@ -54,17 +70,42 @@
 
         <label>
           <span>Start</span>
-          <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local" />
+          <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local"
+            (ngModelChange)="onStartTimeChange()" />
         </label>
 
         <label>
           <span>End</span>
-          <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local" />
+          <div class="tod-day-number-row">
+            @if (!endTimeNotSpecified) {
+              <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local"
+                (ngModelChange)="onEndTimeChange()" />
+            } @else {
+              <input value="Not specified" disabled />
+            }
+            <label class="tod-toggle">
+              <input type="checkbox" [ngModel]="endTimeNotSpecified"
+                (ngModelChange)="onEndTimeNotSpecifiedChange($event)" name="endTimeNotSpecified" />
+              <span>Not specified</span>
+            </label>
+          </div>
         </label>
 
         <label>
           <span>Duration (hours)</span>
-          <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25" />
+          <div class="tod-day-number-row">
+            @if (!durationNotSpecified) {
+              <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25"
+                (ngModelChange)="onDurationChange()" />
+            } @else {
+              <input value="Not specified" disabled />
+            }
+            <label class="tod-toggle">
+              <input type="checkbox" [ngModel]="durationNotSpecified"
+                (ngModelChange)="onDurationNotSpecifiedChange($event)" name="durationNotSpecified" />
+              <span>Not specified</span>
+            </label>
+          </div>
         </label>
 
         @if (isDkpModeForSelectedLinkshell()) {
@@ -82,16 +123,25 @@
 
       <div class="create-form__jobs">
         <div class="panel__header">
-          <h3>Minimal Party Setup (Optional)</h3>
-          <button type="button" class="action-button action-button--secondary" (click)="addJobRow()">Add job</button>
+          <div class="panel__header-title-row">
+            <h3>Minimal Party Setup (Optional)</h3>
+            <label class="tod-toggle">
+              <input type="checkbox" [(ngModel)]="partySetupNotSpecified" name="partySetupNotSpecified" />
+              <span>Not specified</span>
+            </label>
+          </div>
+          @if (!partySetupNotSpecified) {
+            <button type="button" class="action-button action-button--secondary" (click)="addJobRow()">Add job</button>
+          }
         </div>
 
+        @if (!partySetupNotSpecified) {
         @for (job of createModel.jobs; track $index) {
           <div class="job-editor">
             <label>
               <span>Role</span>
               <select [(ngModel)]="job.jobType" [name]="'jobType' + $index">
-                <option value="">Select role</option>
+                <option value="">Not specified</option>
                 @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
                   <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
                 }
@@ -117,7 +167,20 @@
             </label>
             <label>
               <span>Quantity</span>
-              <input [(ngModel)]="job.quantity" [name]="'jobQuantity' + $index" type="number" />
+              <div class="tod-day-number-row">
+                @if (!jobQuantityNotSpecified[$index]) {
+                  <input [(ngModel)]="job.quantity" [name]="'jobQuantity' + $index" type="number" min="1" />
+                } @else {
+                  <input value="Not specified" disabled />
+                }
+                <label class="tod-toggle">
+                  <input type="checkbox"
+                    [ngModel]="jobQuantityNotSpecified[$index]"
+                    (ngModelChange)="onJobQuantityNotSpecifiedChange($index, $event)"
+                    [name]="'jobQuantityNotSpec' + $index" />
+                  <span>Not specified</span>
+                </label>
+              </div>
             </label>
             <label class="job-editor__details">
               <span>Details</span>
@@ -125,6 +188,7 @@
             </label>
             <button type="button" class="action-button action-button--secondary" (click)="removeJobRow($index)">Remove</button>
           </div>
+        }
         }
       </div>
 
@@ -250,14 +314,24 @@
                   Cancel
                 </button>
               }
-              @for (job of event.jobs; track job.id) {
+              @if (event.jobs.length === 0) {
                 <button
                   type="button"
                   class="action-button"
                   [disabled]="activity.busyEventId() === event.id"
-                  (click)="activity.signUpForEvent(event.id, job.id)">
-                  Join {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                  (click)="activity.signUpForEvent(event.id, 0)">
+                  {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
                 </button>
+              } @else {
+                @for (job of event.jobs; track job.id) {
+                  <button
+                    type="button"
+                    class="action-button"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="activity.signUpForEvent(event.id, job.id)">
+                    Join {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                  </button>
+                }
               }
             </div>
           }

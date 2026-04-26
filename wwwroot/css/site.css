@@ -540,7 +540,71 @@ a { color: inherit; text-decoration: none; }
 .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #0a0a0b; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--fg-2); }
 .btn.ghost:hover { background: var(--surface); color: var(--fg); }
+.btn.warn { background: #d29a2a; border-color: #d29a2a; color: #1a1306; font-weight: 600; }
+.btn.warn:hover { background: #e2ac3c; border-color: #e2ac3c; color: #1a1306; }
 .btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+
+/* ---------- Manage Team modals ---------- */
+.mt-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 16px;
+  overflow-y: auto;
+}
+.mt-modal.mt-modal--open { display: flex; }
+.mt-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  cursor: pointer;
+}
+.mt-modal__dialog {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  z-index: 1;
+}
+.mt-modal__dialog--lg { max-width: 780px; }
+.mt-modal__content {
+  background: var(--surface, #1a1a1d);
+  color: var(--fg, #e6e6e6);
+  border: 1px solid var(--border, #2a2a2f);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mt-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, #2a2a2f);
+}
+.mt-modal__title { margin: 0; font-size: 15px; font-weight: 600; }
+.mt-modal__close {
+  background: transparent;
+  border: 0;
+  color: var(--fg-2, #bbb);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.mt-modal__close:hover { color: var(--fg, #fff); }
+.mt-modal__body { padding: 16px 18px; }
+.mt-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border, #2a2a2f);
+}
 
 /* ---------- Stat strip ---------- */
 .stats {

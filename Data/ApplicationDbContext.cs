@@ -35,6 +35,8 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<Item> Items => Set<Item>();
         public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
         public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
+        public DbSet<AddonApiToken> AddonApiTokens => Set<AddonApiToken>();
+        public DbSet<AddonPairingCode> AddonPairingCodes => Set<AddonPairingCode>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -136,6 +138,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("AppUserEventStatusLedgers");
                 entity.Property(item => item.ActionType).HasMaxLength(32).IsRequired();
                 entity.Property(item => item.VerifiedBy).HasMaxLength(256);
+                entity.Property(item => item.Source).HasMaxLength(32);
                 entity.HasOne(item => item.AppUserEvent)
                     .WithMany(item => item.StatusLedgerEntries)
                     .HasForeignKey(item => item.AppUserEventId)
@@ -272,6 +275,43 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.Name }).IsUnique();
+            });
+
+            builder.Entity<AddonApiToken>(entity =>
+            {
+                entity.ToTable("AddonApiTokens");
+                entity.Property(item => item.TokenHash).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.TokenPrefix).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Label).HasMaxLength(128);
+                entity.Property(item => item.IssuedToAppUserId).HasMaxLength(450);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.IssuedToAppUser)
+                    .WithMany()
+                    .HasForeignKey(item => item.IssuedToAppUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => item.TokenHash).IsUnique();
+                entity.HasIndex(item => item.LinkshellId);
+            });
+
+            builder.Entity<AddonPairingCode>(entity =>
+            {
+                entity.ToTable("AddonPairingCodes");
+                entity.Property(item => item.Code).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Label).HasMaxLength(128);
+                entity.Property(item => item.IssuedToAppUserId).HasMaxLength(450);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.IssuedToAppUser)
+                    .WithMany()
+                    .HasForeignKey(item => item.IssuedToAppUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => item.Code).IsUnique();
+                entity.HasIndex(item => item.ExpiresAt);
             });
         }
     }

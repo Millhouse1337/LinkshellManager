@@ -46,12 +46,14 @@
         }
       </button>
     }
-    <button type="button" class="tab" [class.active]="activeTab() === 'events'" (click)="setActiveTab('events')">
-      Events
-      @if (openEventsCount() > 0) {
-        <span class="tab-badge default">{{ openEventsCount() }}</span>
-      }
-    </button>
+    @if (isFeatureEnabled('enableEvents')) {
+      <button type="button" class="tab" [class.active]="activeTab() === 'events'" (click)="setActiveTab('events')">
+        Events
+        @if (openEventsCount() > 0) {
+          <span class="tab-badge default">{{ openEventsCount() }}</span>
+        }
+      </button>
+    }
     @if (isFeatureEnabled('enableToDs')) {
       <button type="button" class="tab" [class.active]="activeTab() === 'tods'" (click)="setActiveTab('tods')">
         ToDs
@@ -60,7 +62,7 @@
         }
       </button>
     }
-    @if (isDkpModeEnabled()) {
+    @if (isFeatureEnabled('enableDkp') && isDkpModeEnabled()) {
       <button type="button" class="tab" [class.active]="activeTab() === 'dkp'" (click)="setActiveTab('dkp')">DKP</button>
     }
     <button type="button" class="tab" [class.active]="activeTab() === 'linkshell'" (click)="setActiveTab('linkshell')">Management</button>
@@ -105,10 +107,18 @@
             <div class="stat-cell-label">Upcoming Events</div>
             <div class="stat-cell-value">{{ selectedDashboardEvents().length }}</div>
           </div>
-          <div class="stat-cell">
-            <div class="stat-cell-label">Completed</div>
-            <div class="stat-cell-value">{{ selectedDashboardHistory().length }}</div>
-          </div>
+          @if (dashboardLinkshell.settings?.enableItems) {
+            <div class="stat-cell">
+              <div class="stat-cell-label">Items</div>
+              <div class="stat-cell-value">{{ dashboardLinkshell.itemCount }}</div>
+            </div>
+          }
+          @if (dashboardLinkshell.settings?.enableRevenue) {
+            <div class="stat-cell">
+              <div class="stat-cell-label">Revenue</div>
+              <div class="stat-cell-value">{{ dashboardLinkshell.revenue }}</div>
+            </div>
+          }
         </div>
       }
 
@@ -242,11 +252,11 @@
         }
       </div>
 
-      <!-- Linkshell roster (compact, read-only) -->
+      <!-- Linkshell Roster (compact, read-only) -->
       @if (selectedDashboardLinkshell()) {
         <div class="card">
           <div class="card-head">
-            <div class="card-title">Linkshell roster</div>
+            <div class="card-title">Linkshell Roster</div>
             <div class="card-head-right">
               <span class="tag default num">{{ selectedDashboardMembers().length }}</span>
               <button type="button" class="card-link" (click)="setActiveTab('linkshell')">Manage team</button>
@@ -576,7 +586,97 @@
         </div>
       </div>
 
-      <!-- Invites + team roster from sidebar -->
+      <!-- Linkshell Roster (same data as Dashboard) -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Linkshell Roster</div>
+            <div class="card-head-right">
+              <span class="tag default num">{{ selectedDashboardMembers().length }}</span>
+            </div>
+          </div>
+          @if (selectedDashboardMembers().length > 0) {
+            <div class="ac-roster-search">
+              <input
+                type="text"
+                class="form-input"
+                placeholder="Search roster"
+                [(ngModel)]="dashboardRosterSearch"
+                name="manageRosterSearch" />
+            </div>
+            <div class="ac-roster ac-roster--with-actions">
+              <div class="ac-roster-head">
+                <div></div>
+                <div>Character</div>
+                <div>Rank</div>
+                <div class="ac-roster-dkp-head">DKP</div>
+                <div>Status</div>
+                <div></div>
+              </div>
+              @for (member of filteredDashboardMembers(); track member.id) {
+                <div class="ac-roster-row">
+                  <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
+                  <div class="ac-roster-name-cell">
+                    <div class="ac-roster-name">{{ member.characterName }}</div>
+                  </div>
+                  <div class="ac-roster-rank">
+                    @if (editingRankMemberId() === member.id) {
+                      <select
+                        [(ngModel)]="editingRankValue"
+                        [name]="'rankEdit_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id">
+                        @for (rank of rankOptions; track rank) {
+                          <option [value]="rank">{{ rank }}</option>
+                        }
+                      </select>
+                    } @else {
+                      {{ member.rank || 'Member' }}
+                    }
+                  </div>
+                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+                  <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+                  <div class="ac-roster-actions">
+                    @if (canEditRosterRank(member.appUserId)) {
+                      @if (editingRankMemberId() === member.id) {
+                        <button
+                          type="button"
+                          class="btn primary sm"
+                          [disabled]="activity.busyMemberId() === member.id"
+                          (click)="saveEditRank(selectedDashboardLinkshellId(), member.id)">
+                          {{ activity.busyMemberId() === member.id ? 'Saving…' : 'Save' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn ghost sm"
+                          [disabled]="activity.busyMemberId() === member.id"
+                          (click)="cancelEditRank()">
+                          Cancel
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          class="btn ghost sm"
+                          (click)="beginEditRank(member.id, member.rank)">
+                          Modify Rank
+                        </button>
+                      }
+                    }
+                  </div>
+                </div>
+              }
+              @if (filteredDashboardMembers().length === 0) {
+                <div class="ac-roster-row"><div style="grid-column: 1 / -1; color: var(--fg-3); font-size: 12px;">No members matched your search.</div></div>
+              }
+            </div>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No members in this linkshell yet.</div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Invites section from sidebar -->
       <app-activity-sidebar-panel [visibleSections]="['invites']" />
 
       <!-- Manage Items -->
@@ -775,8 +875,11 @@
                   <p>Started {{ liveStart }}</p>
                 }
               </div>
+              <div class="event-card__global-timer">
+                <span class="event-card__global-timer-label">Global timer</span>
+                <span class="num event-card__global-timer-value">{{ liveEventTimerLabel(event) }}</span>
+              </div>
               <div class="event-card__meta">
-                <span>Global timer <span class="num">{{ liveEventTimerLabel(event) }}</span></span>
                 <span>{{ event.participantCount }} participants</span>
                 <span>{{ event.requestedSlots }} requested slots</span>
                 <span class="num">{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
@@ -814,6 +917,9 @@
                         </span>
                         <div class="live-metrics">
                           <span class="tag default">Role {{ participant.jobType || 'Unassigned' }}</span>
+                          @if (participant.isQuickJoin && participant.startTime) {
+                            <span class="tag default num">Timer {{ participantTimerLabel(participant, event) }}</span>
+                          }
                         </div>
                       </div>
                       <div class="participant-list__actions">
@@ -1205,32 +1311,38 @@
             }
           </div>
           <div class="card-body">
-            <form class="form-grid" (ngSubmit)="submitTod()">
-              <div class="form-row">
+            <form class="form-grid tod-form" (ngSubmit)="submitTod()">
+              <div class="tod-form__row tod-form__row--monster" [class.tod-form__row--split]="isTodMonsterOther()">
                 <label class="field">
                   <span class="form-label">Monster</span>
                   <select class="form-select" [(ngModel)]="todDraft.monsterName" (ngModelChange)="onTodMonsterChange($event)" name="todMonsterName">
                     @for (monster of todMonsterOptions; track monster) { <option [value]="monster">{{ monster }}</option> }
                   </select>
-                  @if (isTodMonsterOther()) {
+                </label>
+                @if (isTodMonsterOther()) {
+                  <label class="field">
+                    <span class="form-label">Monster name</span>
                     <input class="form-input" [(ngModel)]="todCustomMonsterName" name="todCustomMonsterName"
-                      placeholder="Enter monster name" maxlength="128" required
-                      style="margin-top:8px" />
-                  }
-                </label>
-                <label class="field">
-                  <span class="form-label">Day number</span>
-                  @if (!todDayNumberNotSpecified) {
-                    <input class="form-input" [(ngModel)]="todDraft.dayNumber" name="todDayNumber" type="number" min="0" placeholder="0" />
-                  }
-                  <label class="tod-toggle">
-                    <input type="checkbox" [ngModel]="todDayNumberNotSpecified"
-                      (ngModelChange)="onTodDayNumberNotSpecifiedChange($event)" name="todDayNumberNotSpecified" />
-                    <span>Not specified</span>
+                      placeholder="Enter monster name" maxlength="128" required />
                   </label>
-                </label>
+                }
               </div>
               <div class="form-row">
+                <label class="field">
+                  <span class="form-label">Day number</span>
+                  <div class="tod-day-number-row">
+                    @if (!todDayNumberNotSpecified) {
+                      <input class="form-input" [(ngModel)]="todDraft.dayNumber" name="todDayNumber" type="number" min="0" placeholder="0" />
+                    } @else {
+                      <input class="form-input" value="Not specified" disabled />
+                    }
+                    <label class="tod-toggle">
+                      <input type="checkbox" [ngModel]="todDayNumberNotSpecified"
+                        (ngModelChange)="onTodDayNumberNotSpecifiedChange($event)" name="todDayNumberNotSpecified" />
+                      <span>Not specified</span>
+                    </label>
+                  </div>
+                </label>
                 <label class="field">
                   <span class="form-label">Claim</span>
                   <select class="form-select" [ngModel]="todClaimChoice"
@@ -1240,25 +1352,29 @@
                     <option value="NotSpecified">Not specified</option>
                   </select>
                 </label>
+              </div>
+              <div class="tod-form__row tod-form__row--cooldown" [class.tod-form__row--split]="isTodCooldownOther()">
                 <label class="field">
                   <span class="form-label">Cooldown</span>
                   <select class="form-select" [(ngModel)]="todDraft.cooldown" (ngModelChange)="updateTodRepopTime()" name="todCooldown">
                     @for (cooldown of todCooldownOptions; track cooldown) { <option [value]="cooldown">{{ cooldown }}</option> }
                   </select>
-                  @if (isTodCooldownOther()) {
+                </label>
+                @if (isTodCooldownOther()) {
+                  <label class="field">
+                    <span class="form-label">Cooldown hours</span>
                     <input class="form-input" [ngModel]="todCustomCooldownHours"
                       (ngModelChange)="onTodCustomCooldownChange($event)" name="todCustomCooldownHours"
-                      type="number" min="1" placeholder="Cooldown hours" required
-                      style="margin-top:8px" />
-                  }
+                      type="number" min="1" placeholder="Cooldown hours" required />
+                  </label>
+                }
+                <label class="field">
+                  <span class="form-label">Interval</span>
+                  <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
+                    @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
+                  </select>
                 </label>
               </div>
-              <label class="field">
-                <span class="form-label">Interval</span>
-                <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
-                  @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
-                </select>
-              </label>
               <div class="form-row">
                 <label class="field">
                   <span class="form-label">Time of death</span>
@@ -1275,7 +1391,6 @@
               <div class="tod-repop-card">
                 <div class="tod-repop-card__label">Calculated repop</div>
                 <strong>{{ todRepopSummary() }}</strong>
-                <p class="muted">{{ todCooldownLabelForSummary() }} cooldown with {{ todDraft.interval || '10 Min' }} tracking interval.</p>
               </div>
               @if (todDraft.claim && lootStructureFor(todDraft.linkshellId) !== 'LootCouncil') {
                 <label class="tod-toggle">
@@ -1537,6 +1652,147 @@
 
       <div class="card">
         <div class="card-head">
+          <div class="card-title">Customize Linkshell</div>
+          @if (dashboardLinkshells().length > 1) {
+            <select
+              class="form-select"
+              [ngModel]="customizeTargetLinkshellId()"
+              (ngModelChange)="onCustomizeLinkshellChange($event)"
+              name="customizeLinkshellSelect">
+              @for (linkshell of dashboardLinkshells(); track linkshell.id) {
+                <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+              }
+            </select>
+          }
+        </div>
+
+        @if (!canCustomizeSelectedLinkshell()) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Only members with the "Customize linkshell settings" permission can change these.</div>
+          </div>
+        } @else {
+          <form class="customize-form" (ngSubmit)="$event.preventDefault(); saveCustomizeDraft()">
+            <div class="customize-form__section">
+              <strong>Loot structure</strong>
+              <p class="muted">Choose how loot is awarded for this linkshell.</p>
+              <div class="customize-form__options">
+                <label class="customize-form__option">
+                  <input type="radio" name="lootStructureDraft" value="Dkp"
+                    [ngModel]="customizeDraft.lootStructure"
+                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                  <span>
+                    <strong>DKP</strong>
+                    <span class="muted">Time-based DKP earned per event, spent on loot.</span>
+                  </span>
+                </label>
+                <label class="customize-form__option">
+                  <input type="radio" name="lootStructureDraft" value="LootCouncil"
+                    [ngModel]="customizeDraft.lootStructure"
+                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                  <span>
+                    <strong>Loot Council</strong>
+                    <span class="muted">Leader decides; DKP is not tracked.</span>
+                  </span>
+                </label>
+                <label class="customize-form__option">
+                  <input type="radio" name="lootStructureDraft" value="Hybrid"
+                    [ngModel]="customizeDraft.lootStructure"
+                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                  <span>
+                    <strong>Hybrid</strong>
+                    <span class="muted">DKP earned as usual; loot deducts a percentage of the winner's balance.</span>
+                  </span>
+                </label>
+              </div>
+
+              @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
+                <label class="customize-form__field">
+                  <span>DKP rounding increment</span>
+                  <select name="dkpRoundingIncrementDraft"
+                    [ngModel]="customizeDraft.dkpRoundingIncrement"
+                    (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
+                    <option value="Quarter">Nearest quarter (0.25)</option>
+                    <option value="Half">Nearest half (0.5)</option>
+                  </select>
+                </label>
+              }
+            </div>
+
+            <div class="customize-form__section">
+              <strong>Feature toggles</strong>
+              <p class="muted">Hide sections your linkshell doesn't use.</p>
+              <div class="customize-form__toggles">
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableEndgameDraft"
+                    [ngModel]="customizeDraft.enableEndgame"
+                    (ngModelChange)="customizeDraft.enableEndgame = $event; onCustomizeFieldChange()" />
+                  <span>Endgame tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableHnmDraft"
+                    [ngModel]="customizeDraft.enableHnmSection"
+                    (ngModelChange)="customizeDraft.enableHnmSection = $event; onCustomizeFieldChange()" />
+                  <span>HNM tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableMissionsDraft"
+                    [ngModel]="customizeDraft.enableMissions"
+                    (ngModelChange)="customizeDraft.enableMissions = $event; onCustomizeFieldChange()" />
+                  <span>Missions tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableAuctionsDraft"
+                    [ngModel]="customizeDraft.enableAuctions"
+                    (ngModelChange)="customizeDraft.enableAuctions = $event; onCustomizeFieldChange()" />
+                  <span>Auctions tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableTodsDraft"
+                    [ngModel]="customizeDraft.enableToDs"
+                    (ngModelChange)="customizeDraft.enableToDs = $event; onCustomizeFieldChange()" />
+                  <span>ToDs tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableEventsDraft"
+                    [ngModel]="customizeDraft.enableEvents"
+                    (ngModelChange)="customizeDraft.enableEvents = $event; onCustomizeFieldChange()" />
+                  <span>Events tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableDkpDraft"
+                    [ngModel]="customizeDraft.enableDkp"
+                    (ngModelChange)="customizeDraft.enableDkp = $event; onCustomizeFieldChange()" />
+                  <span>DKP tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableItemsDraft"
+                    [ngModel]="customizeDraft.enableItems"
+                    (ngModelChange)="customizeDraft.enableItems = $event; onCustomizeFieldChange()" />
+                  <span>Items tile on dashboard</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableRevenueDraft"
+                    [ngModel]="customizeDraft.enableRevenue"
+                    (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
+                  <span>Revenue tile on dashboard</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="customize-form__actions">
+              <button type="submit" class="btn primary" [disabled]="!customizeDirty">
+                {{ customizeDirty ? 'Save changes' : 'Saved' }}
+              </button>
+              <button type="button" class="btn ghost" (click)="syncCustomizeDraft()" [disabled]="!customizeDirty">
+                Discard
+              </button>
+            </div>
+          </form>
+        }
+      </div>
+
+      <div class="card">
+        <div class="card-head">
           <div class="card-title">Permissions</div>
           <div class="card-head-right">
             @if (dashboardLinkshells().length > 1) {
@@ -1642,119 +1898,6 @@
         }
       </div>
 
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Customize Linkshell</div>
-          @if (dashboardLinkshells().length > 1) {
-            <select
-              class="form-select"
-              [ngModel]="customizeTargetLinkshellId()"
-              (ngModelChange)="onCustomizeLinkshellChange($event)"
-              name="customizeLinkshellSelect">
-              @for (linkshell of dashboardLinkshells(); track linkshell.id) {
-                <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
-              }
-            </select>
-          }
-        </div>
-
-        @if (!canCustomizeSelectedLinkshell()) {
-          <div class="empty-state empty-state--compact">
-            <div class="empty-state-desc">Only members with the "Customize linkshell settings" permission can change these.</div>
-          </div>
-        } @else {
-          <form class="customize-form" (ngSubmit)="$event.preventDefault(); saveCustomizeDraft()">
-            <div class="customize-form__section">
-              <strong>Loot structure</strong>
-              <p class="muted">Choose how loot is awarded for this linkshell.</p>
-              <div class="customize-form__options">
-                <label class="customize-form__option">
-                  <input type="radio" name="lootStructureDraft" value="Dkp"
-                    [ngModel]="customizeDraft.lootStructure"
-                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
-                  <span>
-                    <strong>DKP</strong>
-                    <span class="muted">Time-based DKP earned per event, spent on loot.</span>
-                  </span>
-                </label>
-                <label class="customize-form__option">
-                  <input type="radio" name="lootStructureDraft" value="LootCouncil"
-                    [ngModel]="customizeDraft.lootStructure"
-                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
-                  <span>
-                    <strong>Loot Council</strong>
-                    <span class="muted">Leader decides; DKP is not tracked.</span>
-                  </span>
-                </label>
-                <label class="customize-form__option">
-                  <input type="radio" name="lootStructureDraft" value="Hybrid"
-                    [ngModel]="customizeDraft.lootStructure"
-                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
-                  <span>
-                    <strong>Hybrid</strong>
-                    <span class="muted">DKP earned as usual; loot deducts a percentage of the winner's balance.</span>
-                  </span>
-                </label>
-              </div>
-
-              @if (customizeDraft.lootStructure === 'Hybrid') {
-                <label class="customize-form__field">
-                  <span>Default hybrid deduction (%)</span>
-                  <input type="number" min="0" max="100" step="1" name="hybridPercentageDraft"
-                    [ngModel]="customizeDraft.hybridDkpPercentage"
-                    (ngModelChange)="customizeDraft.hybridDkpPercentage = $event; onCustomizeFieldChange()" />
-                </label>
-              }
-            </div>
-
-            <div class="customize-form__section">
-              <strong>Feature toggles</strong>
-              <p class="muted">Hide sections your linkshell doesn't use.</p>
-              <div class="customize-form__toggles">
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableEndgameDraft"
-                    [ngModel]="customizeDraft.enableEndgame"
-                    (ngModelChange)="customizeDraft.enableEndgame = $event; onCustomizeFieldChange()" />
-                  <span>Endgame tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableHnmDraft"
-                    [ngModel]="customizeDraft.enableHnmSection"
-                    (ngModelChange)="customizeDraft.enableHnmSection = $event; onCustomizeFieldChange()" />
-                  <span>HNM tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableMissionsDraft"
-                    [ngModel]="customizeDraft.enableMissions"
-                    (ngModelChange)="customizeDraft.enableMissions = $event; onCustomizeFieldChange()" />
-                  <span>Missions tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableAuctionsDraft"
-                    [ngModel]="customizeDraft.enableAuctions"
-                    (ngModelChange)="customizeDraft.enableAuctions = $event; onCustomizeFieldChange()" />
-                  <span>Auctions tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableTodsDraft"
-                    [ngModel]="customizeDraft.enableToDs"
-                    (ngModelChange)="customizeDraft.enableToDs = $event; onCustomizeFieldChange()" />
-                  <span>ToDs tab</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="customize-form__actions">
-              <button type="submit" class="btn primary" [disabled]="!customizeDirty">
-                {{ customizeDirty ? 'Save changes' : 'Saved' }}
-              </button>
-              <button type="button" class="btn ghost" (click)="syncCustomizeDraft()" [disabled]="!customizeDirty">
-                Discard
-              </button>
-            </div>
-          </form>
-        }
-      </div>
     </div>
   }
 </main>

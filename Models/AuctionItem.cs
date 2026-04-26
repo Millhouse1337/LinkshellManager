@@ -49,4 +49,9 @@ public class AuctionItem
 
     [MaxLength(1024)]
     public string? Notes { get; set; }
+
+    public int? SourceItemId { get; set; }
+
+    [ForeignKey(nameof(SourceItemId))]
+    public Item? SourceItem { get; set; }
 }

@@ -191,7 +191,7 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Officer');
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Officer', characterName);
   }
 
   protected async demoteMemberToMember(linkshellId: number, memberId: number, characterName: string): Promise<void> {
@@ -199,7 +199,7 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Member');
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Member', characterName);
   }
 
   protected async transferLeadership(linkshellId: number, memberId: number, characterName: string): Promise<void> {
@@ -207,6 +207,6 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Leader');
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Leader', characterName);
   }
 }

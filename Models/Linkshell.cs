@@ -31,7 +31,8 @@ public class Linkshell
     [MaxLength(32)]
     public string LootStructure { get; set; } = "Dkp";
 
-    public int? HybridDkpPercentage { get; set; }
+    [MaxLength(16)]
+    public string DkpRoundingIncrement { get; set; } = "Quarter";
 
     public bool EnableHnmSection { get; set; } = true;
 
@@ -42,6 +43,14 @@ public class Linkshell
     public bool EnableToDs { get; set; } = true;
 
     public bool EnableEndgame { get; set; } = true;
+
+    public bool EnableEvents { get; set; } = true;
+
+    public bool EnableDkp { get; set; } = true;
+
+    public bool EnableItems { get; set; } = true;
+
+    public bool EnableRevenue { get; set; } = true;
 
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 

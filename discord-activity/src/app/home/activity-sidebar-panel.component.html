@@ -21,9 +21,9 @@
 
     <p class="notice">
       @if (needsProfileSetup()) {
-        Set your character name and preferred IANA time zone so invites, rosters, and event timing render correctly.
+        Set your character name and preferred IANA time zone so invites, Roster, and event timing render correctly.
       } @else {
-        These settings drive your linkshell roster name and event time conversions across the website and Discord Activity.
+        These settings drive your Linkshell Roster name and event time conversions across the website and Discord Activity.
       }
     </p>
 
@@ -434,8 +434,11 @@
       </div>
     }
 
-    <div class="invite-section">
-      <h3>Invite players</h3>
+    <div class="card invite-players-card">
+      <div class="card-head">
+        <div class="card-title">Invite players</div>
+      </div>
+      <div class="card-body">
       @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0)) {
         <div class="invite-search">
           <select
@@ -485,9 +488,9 @@
           </div>
         }
 
-        @if (activity.inviteSearchResults().length > 0) {
+        @if (filteredInviteSearchResults().length > 0) {
           <ul class="compact-list compact-list--dense">
-            @for (result of activity.inviteSearchResults(); track result.id) {
+            @for (result of filteredInviteSearchResults(); track result.id) {
               <li>
                 <div>
                   <strong>{{ result.displayName }}</strong>
@@ -518,6 +521,7 @@
       } @else {
         <p class="notice">Create or join a linkshell before sending invites.</p>
       }
+      </div>
     </div>
 
     @if (!isMemberMode() && activity.overview()?.sentInvites?.length) {
@@ -653,12 +657,33 @@
             <div class="create-form create-form--compact">
               <div class="create-form__grid">
                 <label>
+                  <span>Source</span>
+                  <select [ngModel]="auctionItemFromInventory[$index] ? 'inventory' : 'external'"
+                    (ngModelChange)="onAuctionItemSourceModeChange($index, $event)"
+                    [name]="'auctionItemSource' + $index">
+                    <option value="inventory">From Inventory</option>
+                    <option value="external">Not From Inventory</option>
+                  </select>
+                </label>
+                <label>
                   <span>Item name</span>
-                  <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
+                  @if (auctionItemFromInventory[$index]) {
+                    <select [ngModel]="item.sourceItemId"
+                      (ngModelChange)="onAuctionItemInventoryPick($index, $event)"
+                      [name]="'auctionItemInv' + $index" required>
+                      <option [ngValue]="null">Select item...</option>
+                      @for (inv of inventoryItemsForAuctionForm(); track inv.id) {
+                        <option [ngValue]="inv.id">{{ inv.itemName }} ({{ inv.quantity }} on hand)</option>
+                      }
+                    </select>
+                  } @else {
+                    <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
+                  }
                 </label>
                 <label>
                   <span>Item type</span>
-                  <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index" />
+                  <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index"
+                    [readonly]="auctionItemFromInventory[$index]" />
                 </label>
                 <label>
                   <span>Starting DKP</span>
@@ -738,13 +763,13 @@
                       {{ activity.busyAuctionId() === auction.id ? 'Starting...' : 'Start' }}
                     </button>
                   }
-                  @if (auction.canClose) {
+                  @if (auction.canClose && closingAuctionId !== auction.id) {
                     <button
                       type="button"
                       class="btn danger-outline sm"
                       [disabled]="activity.busyAuctionId() === auction.id"
-                      (click)="closeAuction(auction.id, auction.title)">
-                      {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close' }}
+                      (click)="beginCloseAuction(auction.id)">
+                      Close
                     </button>
                   }
                 </div>
@@ -753,6 +778,47 @@
                 <div class="auction-progress-fill" [style.width.%]="auctionProgressPercent(auction)"></div>
               </div>
             </header>
+
+            @if (closingAuctionId === auction.id) {
+              <div class="auction-close-panel">
+                <div class="auction-close-panel__head">
+                  <strong>Confirm close &amp; item delivery</strong>
+                  <p class="muted">Check off items you've handed to each winner. Checked items linked to inventory will be removed from the linkshell stockpile.</p>
+                </div>
+                @for (item of auction.items; track item.id) {
+                  <div class="auction-close-panel__row">
+                    <div>
+                      <strong>{{ item.itemName || 'Item' }}</strong>
+                      @if (item.currentHighestBidderAppUserId) {
+                        <div class="muted">Won by {{ item.currentHighestBidder }} for {{ item.currentHighestBid }} DKP
+                          @if (item.sourceItemId) {
+                            <span class="tag accent">From inventory</span>
+                          } @else {
+                            <span class="tag default">Not from inventory</span>
+                          }
+                        </div>
+                      } @else {
+                        <div class="muted">No winner</div>
+                      }
+                    </div>
+                    <label class="auction-close-panel__toggle">
+                      <input type="checkbox"
+                        [ngModel]="auctionCloseDelivered[item.id] === true"
+                        (ngModelChange)="toggleAuctionItemDelivered(item.id, $event)"
+                        [disabled]="!item.currentHighestBidderAppUserId"
+                        [name]="'auctionDelivered' + item.id" />
+                      <span>Delivered to winner</span>
+                    </label>
+                  </div>
+                }
+                <div class="auction-close-panel__actions">
+                  <button type="button" class="btn ghost sm" (click)="cancelCloseAuction()" [disabled]="activity.busyAuctionId() === auction.id">Cancel</button>
+                  <button type="button" class="btn danger-outline sm" (click)="confirmCloseAuction(auction.id)" [disabled]="activity.busyAuctionId() === auction.id">
+                    {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Confirm close' }}
+                  </button>
+                </div>
+              </div>
+            }
 
             @for (item of auction.items; track item.id) {
               <div class="item" [class.item-ended]="auctionState(auction) === 'ended'">
@@ -987,73 +1053,86 @@
                 <td>{{ history.type || 'Event' }} | {{ history.location || 'Unknown location' }}</td>
                 <td>{{ activity.formatDateTime(history.endTime) || '—' }}</td>
                 <td class="num">{{ history.participantCount }}</td>
-                <td class="num">{{ history.duration ?? 0 }}h</td>
+                <td class="num">{{ formatDurationForLinkshell(history.duration, history.linkshellId) }}h</td>
                 <td>
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    (click)="openHistoryDetail(history.id)">
-                    Details
-                  </button>
+                  @if (historyDetail()?.id === history.id) {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      (click)="closeHistoryDetail()">
+                      Hide
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      (click)="openHistoryDetail(history.id)">
+                      Details
+                    </button>
+                  }
                 </td>
               </tr>
+              @if (historyDetail(); as historyDetail) {
+                @if (historyDetail.id === history.id) {
+                  <tr class="history-detail-row">
+                    <td colspan="6">
+                      <div class="history-detail-inline">
+                        <div class="history-detail-inline__meta">
+                          @if (activity.formatDateTime(historyDetail.startTime); as startedAt) {
+                            <span><strong>Started:</strong> {{ startedAt }}</span>
+                          }
+                          @if (activity.formatDateTime(historyDetail.endTime); as endedAt) {
+                            <span><strong>Ended:</strong> {{ endedAt }}</span>
+                          }
+                          <span><strong>Duration:</strong> {{ formatDurationForLinkshell(historyDetail.duration, historyDetail.linkshellId) }}h</span>
+                          <span><strong>DKP/hour:</strong> {{ historyDetail.dkpPerHour ?? 0 }}</span>
+                        </div>
+                        @if (historyDetail.details) {
+                          <p class="muted history-detail-inline__notes">{{ historyDetail.details }}</p>
+                        }
+                        @if (historyDetail.participants.length > 0) {
+                          <table class="data-table history-participants-table">
+                            <thead>
+                              <tr>
+                                <th>Character</th>
+                                <th>Job / Sub</th>
+                                <th class="num">Duration</th>
+                                <th class="num">DKP</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (participant of historyDetail.participants; track participant.id) {
+                                <tr>
+                                  <td><strong>{{ participant.characterName || 'Unknown participant' }}</strong></td>
+                                  <td>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</td>
+                                  <td class="num">{{ formatDurationForLinkshell(participant.duration, historyDetail.linkshellId) }}h</td>
+                                  <td class="num">{{ participant.eventDkp ?? 0 }}</td>
+                                  <td>
+                                    @if (participant.isVerified === true) {
+                                      <span class="tag success">Verified</span>
+                                    } @else if (participant.isVerified === false) {
+                                      <span class="tag danger">Denied</span>
+                                    } @else {
+                                      <span class="tag default">Not reviewed</span>
+                                    }
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        } @else {
+                          <p class="notice">No participants recorded.</p>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              }
             }
           </tbody>
         </table>
       </div>
-
-      @if (historyDetail(); as historyDetail) {
-        <div class="summary-card history-detail-card">
-          <div class="panel__header">
-            <div>
-              <h3>{{ historyDetail.name || 'History details' }}</h3>
-              <p class="notice">{{ historyDetail.type || 'Event' }} | {{ historyDetail.location || 'Unknown location' }}</p>
-            </div>
-            <button
-              type="button"
-              class="action-button action-button--secondary"
-              (click)="closeHistoryDetail()">
-              Close
-            </button>
-          </div>
-
-          <div class="history-detail-meta">
-            @if (activity.formatDateTime(historyDetail.startTime); as startedAt) {
-              <p class="history-detail-meta__line"><strong>Started:</strong> {{ startedAt }}</p>
-            }
-            @if (activity.formatDateTime(historyDetail.endTime); as endedAt) {
-              <p class="history-detail-meta__line"><strong>Ended:</strong> {{ endedAt }}</p>
-            }
-            <p class="history-detail-meta__line"><strong>Duration:</strong> {{ historyDetail.duration ?? 0 }}h</p>
-            <p class="history-detail-meta__line"><strong>DKP/hour:</strong> {{ historyDetail.dkpPerHour ?? 0 }}</p>
-            @if (historyDetail.details) {
-              <p class="muted">{{ historyDetail.details }}</p>
-            }
-          </div>
-
-          <ul class="compact-list compact-list--dense">
-            @for (participant of historyDetail.participants; track participant.id) {
-              <li>
-                <div>
-                  <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
-                  <span>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</span>
-                </div>
-                <div class="compact-list__meta">
-                  <span>{{ participant.duration ?? 0 }}h</span>
-                  <span>{{ participant.eventDkp ?? 0 }} DKP</span>
-                  @if (participant.isVerified === true) {
-                    <span>Verified</span>
-                  } @else if (participant.isVerified === false) {
-                    <span>Denied</span>
-                  } @else {
-                    <span>Not reviewed</span>
-                  }
-                </div>
-              </li>
-            }
-          </ul>
-        </div>
-      }
     } @else {
       <p class="notice">Completed events will show up here after a run is archived.</p>
     }
@@ -1113,6 +1192,20 @@
             <p class="muted">{{ dkpHistory.linkshellName }}</p>
           }
         </div>
+
+        @if (dkpEarnedByEventType().length > 0) {
+          <div class="summary-card dkp-summary-card">
+            <strong>DKP earned by event type</strong>
+            <ul class="dkp-event-type-breakdown">
+              @for (row of dkpEarnedByEventType(); track row.eventType) {
+                <li>
+                  <span>{{ row.eventType }}</span>
+                  <span class="num">{{ row.amount >= 0 ? '+' : '' }}{{ row.amount }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
       }
 
       @if (canAuditSelectedLinkshell() && isDkpAuditOpen) {

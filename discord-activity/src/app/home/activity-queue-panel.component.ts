@@ -41,8 +41,106 @@ export class ActivityQueuePanelComponent {
     ]
   };
 
+  protected readonly eventTypeOptions = ['Sky', 'Sea', 'HNM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
+  protected eventTypeSelection: string = '';
+  protected eventTypeError = false;
+
   protected isCreateOpen = false;
   protected isSubmittingCreate = false;
+  protected durationNotSpecified = false;
+  protected endTimeNotSpecified = false;
+  protected partySetupNotSpecified = false;
+  protected jobQuantityNotSpecified: boolean[] = [false];
+
+  protected onEventTypeSelectionChange(value: string): void {
+    this.eventTypeSelection = value;
+    if (value === 'Other') {
+      this.createModel.eventType = '';
+    } else {
+      this.createModel.eventType = value;
+    }
+    this.eventTypeError = false;
+  }
+
+  protected onJobQuantityNotSpecifiedChange(index: number, checked: boolean): void {
+    this.jobQuantityNotSpecified = this.jobQuantityNotSpecified.map((v, i) => i === index ? checked : v);
+    const job = this.createModel.jobs[index];
+    if (!job) return;
+    if (checked) {
+      job.quantity = null;
+    } else if (job.quantity == null) {
+      job.quantity = 1;
+    }
+  }
+
+  protected onDurationNotSpecifiedChange(checked: boolean): void {
+    this.durationNotSpecified = checked;
+    if (checked) {
+      this.createModel.duration = null;
+    } else {
+      if (this.createModel.duration == null) {
+        this.createModel.duration = 1;
+      }
+      this.recomputeEndFromStartDuration();
+    }
+  }
+
+  protected onEndTimeNotSpecifiedChange(checked: boolean): void {
+    this.endTimeNotSpecified = checked;
+    if (checked) {
+      this.createModel.endTimeLocal = '';
+    } else {
+      this.recomputeEndFromStartDuration();
+    }
+  }
+
+  protected onStartTimeChange(): void {
+    if (!this.endTimeNotSpecified && this.createModel.endTimeLocal) {
+      this.recomputeDurationFromStartEnd();
+    } else if (!this.durationNotSpecified && this.createModel.duration != null) {
+      this.recomputeEndFromStartDuration();
+    }
+  }
+
+  protected onEndTimeChange(): void {
+    this.recomputeDurationFromStartEnd();
+  }
+
+  protected onDurationChange(): void {
+    this.recomputeEndFromStartDuration();
+  }
+
+  private recomputeDurationFromStartEnd(): void {
+    if (this.durationNotSpecified || this.endTimeNotSpecified) return;
+    const start = this.parseLocalDateTime(this.createModel.startTimeLocal);
+    const end = this.parseLocalDateTime(this.createModel.endTimeLocal);
+    if (!start || !end) return;
+    const hours = (end.getTime() - start.getTime()) / 3_600_000;
+    if (hours < 0) return;
+    this.createModel.duration = Math.round(hours * 100) / 100;
+  }
+
+  private recomputeEndFromStartDuration(): void {
+    if (this.endTimeNotSpecified || this.durationNotSpecified) return;
+    const start = this.parseLocalDateTime(this.createModel.startTimeLocal);
+    const hours = this.createModel.duration;
+    if (!start || hours == null || hours < 0) return;
+    const end = new Date(start.getTime() + hours * 3_600_000);
+    this.createModel.endTimeLocal = this.formatLocalDateTime(end);
+  }
+
+  private parseLocalDateTime(value: string | null | undefined): Date | null {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private formatLocalDateTime(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
 
   protected readonly mainJobOptions = [...EVENT_MAIN_JOB_OPTIONS];
   protected readonly subJobOptions = [...EVENT_SUB_JOB_OPTIONS];
@@ -106,6 +204,7 @@ export class ActivityQueuePanelComponent {
       quantity: 1,
       details: ''
     });
+    this.jobQuantityNotSpecified = [...this.jobQuantityNotSpecified, false];
   }
 
   protected removeJobRow(index: number): void {
@@ -117,20 +216,34 @@ export class ActivityQueuePanelComponent {
         quantity: 1,
         details: ''
       };
+      this.jobQuantityNotSpecified = [false];
       return;
     }
 
     this.createModel.jobs.splice(index, 1);
+    this.jobQuantityNotSpecified = this.jobQuantityNotSpecified.filter((_, i) => i !== index);
   }
 
   protected async submitCreateForm(): Promise<void> {
+    const eventType = this.createModel.eventType?.trim() ?? '';
+    if (!this.eventTypeSelection || !eventType) {
+      this.eventTypeError = true;
+      return;
+    }
+    this.eventTypeError = false;
+    this.createModel.eventType = eventType;
+
     this.isSubmittingCreate = true;
 
     try {
+      const payload = {
+        ...this.createModel,
+        jobs: this.partySetupNotSpecified ? [] : this.createModel.jobs
+      };
       if (this.editingEventId) {
-        await this.activity.updateEvent(this.editingEventId, this.createModel);
+        await this.activity.updateEvent(this.editingEventId, payload);
       } else {
-        await this.activity.createEvent(this.createModel);
+        await this.activity.createEvent(payload);
       }
       this.resetCreateModel();
       this.isCreateOpen = false;
@@ -162,11 +275,22 @@ export class ActivityQueuePanelComponent {
     this.editingEventId = event.id;
     this.createModel.linkshellId = event.linkshellId;
     this.createModel.eventName = event.name ?? '';
-    this.createModel.eventType = event.type ?? '';
+    const incomingType = event.type ?? '';
+    this.createModel.eventType = incomingType;
+    if (!incomingType) {
+      this.eventTypeSelection = '';
+    } else {
+      this.eventTypeSelection = (this.eventTypeOptions as readonly string[]).includes(incomingType) ? incomingType : 'Other';
+    }
+    this.eventTypeError = false;
     this.createModel.eventLocation = event.location ?? '';
     this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null);
     this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null);
     this.createModel.duration = 1;
+    this.durationNotSpecified = false;
+    this.endTimeNotSpecified = !this.createModel.endTimeLocal;
+    this.partySetupNotSpecified = false;
+    this.recomputeDurationFromStartEnd();
     this.createModel.dkpPerHour = event.dkpPerHour ?? 0;
     this.createModel.details = event.details ?? '';
     this.createModel.jobs = event.jobs.map(job => ({
@@ -188,6 +312,7 @@ export class ActivityQueuePanelComponent {
         }
       ];
     }
+    this.jobQuantityNotSpecified = this.createModel.jobs.map(job => job.quantity == null);
   }
 
   protected async confirmCancelEvent(eventId: number, eventName?: string | null): Promise<void> {
@@ -208,12 +333,17 @@ export class ActivityQueuePanelComponent {
     this.createModel.linkshellId = defaultLinkshellId;
     this.createModel.eventName = '';
     this.createModel.eventType = '';
+    this.eventTypeSelection = '';
+    this.eventTypeError = false;
     this.createModel.eventLocation = '';
     this.createModel.startTimeLocal = '';
     this.createModel.endTimeLocal = '';
     this.createModel.duration = 1;
     this.createModel.dkpPerHour = 0;
     this.createModel.details = '';
+    this.durationNotSpecified = false;
+    this.endTimeNotSpecified = false;
+    this.partySetupNotSpecified = false;
     this.createModel.jobs = [
       {
         jobName: '',
@@ -223,5 +353,6 @@ export class ActivityQueuePanelComponent {
         details: ''
       }
     ];
+    this.jobQuantityNotSpecified = [false];
   }
 }

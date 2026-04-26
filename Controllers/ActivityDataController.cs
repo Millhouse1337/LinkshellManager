@@ -83,6 +83,18 @@ public sealed class ActivityDataController : ControllerBase
             .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
 
+        var itemCounts = await _dbContext.Items
+            .Where(item => linkshellIds.Contains(item.LinkshellId))
+            .GroupBy(item => item.LinkshellId)
+            .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
+
+        var revenueTotals = await _dbContext.RevenueEntries
+            .Where(entry => linkshellIds.Contains(entry.LinkshellId))
+            .GroupBy(entry => entry.LinkshellId)
+            .Select(group => new { LinkshellId = group.Key, Total = group.Sum(entry => entry.Value) })
+            .ToDictionaryAsync(item => item.LinkshellId, item => item.Total, cancellationToken);
+
         foreach (var linkId in linkshellIds)
         {
             await EnsureDefaultRolesAsync(linkId, cancellationToken);
@@ -217,6 +229,8 @@ public sealed class ActivityDataController : ControllerBase
                 link.Status,
                 link.LinkshellDkp,
                 memberCounts.GetValueOrDefault(link.LinkshellId, 0),
+                itemCounts.GetValueOrDefault(link.LinkshellId, 0),
+                revenueTotals.GetValueOrDefault(link.LinkshellId, 0L),
                 link.Linkshell?.Details,
                 ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName),
                 MapLinkshellSettingsDto(link.Linkshell))).ToList(),
@@ -307,7 +321,8 @@ public sealed class ActivityDataController : ControllerBase
                                 item.VerifiedAt,
                                 item.VerifiedBy,
                                 item.DeniedAt,
-                                item.DeniedBy))
+                                item.DeniedBy,
+                                item.Source))
                             .ToList()))
                     .FirstOrDefault(),
                 evt.AppUserEvents
@@ -339,7 +354,8 @@ public sealed class ActivityDataController : ControllerBase
                                 item.VerifiedAt,
                                 item.VerifiedBy,
                                 item.DeniedAt,
-                                item.DeniedBy))
+                                item.DeniedBy,
+                                item.Source))
                             .ToList()))
                     .ToList(),
                 evt.EventLootDetails
@@ -987,17 +1003,27 @@ public sealed class ActivityDataController : ControllerBase
     {
         if (linkshell is null)
         {
-            return new ActivityLinkshellSettingsDto("Dkp", null, true, true, true, true, true);
+            return new ActivityLinkshellSettingsDto("Dkp", true, true, true, true, true, true, true, true, true, "Quarter");
         }
 
         return new ActivityLinkshellSettingsDto(
             string.IsNullOrWhiteSpace(linkshell.LootStructure) ? "Dkp" : linkshell.LootStructure,
-            linkshell.HybridDkpPercentage,
             linkshell.EnableHnmSection,
             linkshell.EnableMissions,
             linkshell.EnableAuctions,
             linkshell.EnableToDs,
-            linkshell.EnableEndgame);
+            linkshell.EnableEndgame,
+            linkshell.EnableEvents,
+            linkshell.EnableDkp,
+            linkshell.EnableItems,
+            linkshell.EnableRevenue,
+            NormalizeDkpRounding(linkshell.DkpRoundingIncrement));
+    }
+
+    private static string NormalizeDkpRounding(string? raw)
+    {
+        if (string.Equals(raw, "Half", StringComparison.OrdinalIgnoreCase)) return "Half";
+        return "Quarter";
     }
 
     private static ActivityPermissionsDto? ResolvePermissionsFor(
@@ -1888,21 +1914,19 @@ public sealed class ActivityDataController : ControllerBase
             linkshell.LootStructure = NormalizeLootStructure(requestedStructure);
         }
 
-        if (request.HybridDkpPercentage.HasValue)
-        {
-            var pct = request.HybridDkpPercentage.Value;
-            if (pct < 0 || pct > 100)
-            {
-                return BadRequest(new { error = "Hybrid DKP percentage must be between 0 and 100." });
-            }
-            linkshell.HybridDkpPercentage = pct;
-        }
-
         if (request.EnableHnmSection.HasValue) linkshell.EnableHnmSection = request.EnableHnmSection.Value;
         if (request.EnableMissions.HasValue) linkshell.EnableMissions = request.EnableMissions.Value;
         if (request.EnableAuctions.HasValue) linkshell.EnableAuctions = request.EnableAuctions.Value;
         if (request.EnableToDs.HasValue) linkshell.EnableToDs = request.EnableToDs.Value;
         if (request.EnableEndgame.HasValue) linkshell.EnableEndgame = request.EnableEndgame.Value;
+        if (request.EnableEvents.HasValue) linkshell.EnableEvents = request.EnableEvents.Value;
+        if (request.EnableDkp.HasValue) linkshell.EnableDkp = request.EnableDkp.Value;
+        if (request.EnableItems.HasValue) linkshell.EnableItems = request.EnableItems.Value;
+        if (request.EnableRevenue.HasValue) linkshell.EnableRevenue = request.EnableRevenue.Value;
+        if (!string.IsNullOrWhiteSpace(request.DkpRoundingIncrement))
+        {
+            linkshell.DkpRoundingIncrement = NormalizeDkpRounding(request.DkpRoundingIncrement);
+        }
 
         var memberships = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == linkshellId)
@@ -2127,11 +2151,6 @@ public sealed class ActivityDataController : ControllerBase
     [HttpPost("events/{eventId:int}/signup")]
     public async Task<IActionResult> SignUpAsync(int eventId, [FromBody] ActivityEventSignupRequest request, CancellationToken cancellationToken)
     {
-        if (request.JobId <= 0)
-        {
-            return BadRequest(new { error = "A job selection is required." });
-        }
-
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
         {
@@ -2139,6 +2158,48 @@ public sealed class ActivityDataController : ControllerBase
             {
                 error = "Sign in with ASP.NET Identity or provide a Discord bearer token to sign up for events."
             });
+        }
+
+        var displayName = appUser.CharacterName ?? appUser.UserName ?? "Unknown";
+
+        if (request.JobId <= 0)
+        {
+            var eventEntity = await _dbContext.Events
+                .Include(item => item.Jobs)
+                .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+
+            if (eventEntity is null)
+            {
+                return NotFound(new { error = "The selected event was not found." });
+            }
+
+            if (eventEntity.Jobs.Count > 0)
+            {
+                return BadRequest(new { error = "A job selection is required." });
+            }
+
+            var existingNoJobSignup = await _dbContext.AppUserEvents
+                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
+
+            if (existingNoJobSignup is not null)
+            {
+                _dbContext.AppUserEvents.Remove(existingNoJobSignup);
+            }
+
+            _dbContext.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = appUser.Id,
+                EventId = eventId,
+                CharacterName = displayName,
+                JobName = null,
+                SubJobName = null,
+                JobType = null,
+                EventDkp = 0,
+                StartTime = eventEntity.CommencementStartTime
+            });
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new { success = true });
         }
 
         var job = await _dbContext.Jobs
@@ -2150,7 +2211,6 @@ public sealed class ActivityDataController : ControllerBase
             return NotFound(new { error = "The selected event job was not found." });
         }
 
-        var displayName = appUser.CharacterName ?? appUser.UserName ?? "Unknown";
         var existingSignup = await _dbContext.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
 
@@ -3441,6 +3501,8 @@ public sealed class ActivityDataController : ControllerBase
         var lootStructure = NormalizeLootStructure(eventEntity.Linkshell?.LootStructure ?? "Dkp");
         var isLootCouncil = lootStructure == "LootCouncil";
         var isHybrid = lootStructure == "Hybrid";
+        var roundingStep = NormalizeDkpRounding(eventEntity.Linkshell?.DkpRoundingIncrement) == "Half" ? 0.5 : 0.25;
+        var roundingMultiplier = 1d / roundingStep;
 
         var endTimeUtc = DateTime.UtcNow;
         var history = new EventHistory
@@ -3480,7 +3542,7 @@ public sealed class ActivityDataController : ControllerBase
         foreach (var participation in eventEntity.AppUserEvents)
         {
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
-            var roundedDuration = Math.Round(durationHours * 4) / 4;
+            var roundedDuration = Math.Round(durationHours * roundingMultiplier) / roundingMultiplier;
             var eventDkp = isLootCouncil ? 0 : roundedDuration * (eventEntity.DkpPerHour ?? 0);
 
             participation.Duration = roundedDuration;
@@ -3851,7 +3913,8 @@ public sealed class ActivityDataController : ControllerBase
                 StartTime = startTimeUtc,
                 EndTime = endTimeUtc,
                 Status = "Pending",
-                Notes = item.Notes?.Trim()
+                Notes = item.Notes?.Trim(),
+                SourceItemId = item.SourceItemId
             }).ToList()
         };
 
@@ -3923,6 +3986,7 @@ public sealed class ActivityDataController : ControllerBase
                 existingItem.StartTime = startTimeUtc;
                 existingItem.EndTime = endTimeUtc;
                 existingItem.Notes = itemRequest.Notes?.Trim();
+                existingItem.SourceItemId = itemRequest.SourceItemId;
                 remainingItems.Remove(itemRequest.Id);
                 continue;
             }
@@ -3939,13 +4003,17 @@ public sealed class ActivityDataController : ControllerBase
                 StartTime = startTimeUtc,
                 EndTime = endTimeUtc,
                 Status = "Pending",
-                Notes = itemRequest.Notes?.Trim()
+                Notes = itemRequest.Notes?.Trim(),
+                SourceItemId = itemRequest.SourceItemId
             });
         }
 
         if (remainingItems.Count > 0)
         {
-            _dbContext.Bids.RemoveRange(remainingItems.Values.SelectMany(item => item.Bids));
+            if (remainingItems.Values.Any(item => item.Bids.Count > 0))
+            {
+                return BadRequest(new { error = "Items that already have bids can't be removed from a live auction." });
+            }
             _dbContext.AuctionItems.RemoveRange(remainingItems.Values);
         }
 
@@ -4062,7 +4130,10 @@ public sealed class ActivityDataController : ControllerBase
     }
 
     [HttpPost("auctions/{auctionId:int}/close")]
-    public async Task<IActionResult> CloseAuctionAsync(int auctionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> CloseAuctionAsync(
+        int auctionId,
+        [FromBody] ActivityCloseAuctionRequest? request,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -4095,6 +4166,8 @@ public sealed class ActivityDataController : ControllerBase
             return BadRequest(new { error = "An auction can only be closed after its timer has run out." });
         }
 
+        var deliveredIds = (request?.DeliveredItemIds ?? Array.Empty<int>()).ToHashSet();
+
         var closedAt = DateTime.UtcNow;
         var history = new AuctionHistory
         {
@@ -4108,24 +4181,55 @@ public sealed class ActivityDataController : ControllerBase
             ClosedAt = closedAt,
             AuctionItems = auction.AuctionItems
                 .OrderBy(item => item.Id)
-                .Select(item => new AuctionItem
+                .Select(item =>
                 {
-                    ItemName = item.ItemName,
-                    ItemType = item.ItemType,
-                    StartingBidDkp = item.StartingBidDkp,
-                    CurrentHighestBid = item.CurrentHighestBid,
-                    CurrentHighestBidder = item.CurrentHighestBidder,
-                    CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
-                    EndingBidDkp = item.CurrentHighestBid,
-                    StartTime = item.StartTime,
-                    EndTime = item.EndTime,
-                    Status = string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId) ? "NoBids" : "Closed",
-                    Notes = item.Notes
+                    var hasWinner = !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId);
+                    var delivered = hasWinner && deliveredIds.Contains(item.Id);
+                    return new AuctionItem
+                    {
+                        ItemName = item.ItemName,
+                        ItemType = item.ItemType,
+                        StartingBidDkp = item.StartingBidDkp,
+                        CurrentHighestBid = item.CurrentHighestBid,
+                        CurrentHighestBidder = item.CurrentHighestBidder,
+                        CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
+                        EndingBidDkp = item.CurrentHighestBid,
+                        StartTime = item.StartTime,
+                        EndTime = item.EndTime,
+                        Status = !hasWinner ? "NoBids" : delivered ? "Received" : "Closed",
+                        Notes = item.Notes,
+                        SourceItemId = item.SourceItemId
+                    };
                 })
                 .ToList()
         };
 
         _dbContext.AuctionHistories.Add(history);
+
+        var sourceItemIds = auction.AuctionItems
+            .Where(item => item.SourceItemId.HasValue && deliveredIds.Contains(item.Id) && !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId))
+            .Select(item => item.SourceItemId!.Value)
+            .Distinct()
+            .ToList();
+        var inventoryItems = sourceItemIds.Count == 0
+            ? new List<Item>()
+            : await _dbContext.Items
+                .Where(inv => sourceItemIds.Contains(inv.Id) && inv.LinkshellId == auction.LinkshellId)
+                .ToListAsync(cancellationToken);
+        foreach (var auctionItem in auction.AuctionItems.Where(item =>
+                     item.SourceItemId.HasValue &&
+                     deliveredIds.Contains(item.Id) &&
+                     !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId)))
+        {
+            var inv = inventoryItems.FirstOrDefault(candidate => candidate.Id == auctionItem.SourceItemId!.Value);
+            if (inv is null) continue;
+            inv.Quantity = Math.Max(0, inv.Quantity - 1);
+            inv.UpdatedAt = closedAt;
+            if (inv.Quantity == 0)
+            {
+                _dbContext.Items.Remove(inv);
+            }
+        }
 
         foreach (var item in auction.AuctionItems.Where(item =>
                      !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId) &&
@@ -4550,7 +4654,6 @@ public sealed class ActivityDataController : ControllerBase
     private static bool CanEditAuction(string currentUserId, Auction auction, DateTime referenceUtc)
     {
         return IsAuctionCreator(currentUserId, auction)
-               && !HasAuctionStarted(auction, referenceUtc)
                && !HasAuctionEnded(auction, referenceUtc);
     }
 
@@ -4611,7 +4714,7 @@ public sealed class ActivityDataController : ControllerBase
             auction.EndTime,
             auction.StartedAt,
             status,
-            isCreator && !auction.StartedAt.HasValue,
+            CanEditAuction(currentUserId, auction, nowUtc),
             CanStartAuction(currentUserId, auction, nowUtc),
             isCreator && auction.StartedAt.HasValue && (!auction.EndTime.HasValue || nowUtc >= auction.EndTime.Value),
             auction.AuctionItems
@@ -4628,7 +4731,8 @@ public sealed class ActivityDataController : ControllerBase
                     item.EndTime,
                     item.Status,
                     item.Notes,
-                    item.Bids.Count))
+                    item.Bids.Count,
+                    item.SourceItemId))
                 .ToList());
     }
 
@@ -4657,7 +4761,8 @@ public sealed class ActivityDataController : ControllerBase
                     item.EndTime,
                     item.Status,
                     item.Notes,
-                    0))
+                    0,
+                    item.SourceItemId))
                 .ToList());
     }
 
@@ -5275,7 +5380,7 @@ public sealed class ActivityDataController : ControllerBase
                 IsSystem = true,
                 SortOrder = 1,
                 CanManageRoles = false,
-                CanManageMembers = true,
+                CanManageMembers = false,
                 CanManageEvents = true,
                 CanModerateLiveEvent = true,
                 CanAddLoot = true,
@@ -5494,18 +5599,24 @@ public sealed record ActivityLinkshellDto(
     string? Status,
     double? LinkshellDkp,
     int MemberCount,
+    int ItemCount,
+    long Revenue,
     string? Details,
     ActivityPermissionsDto? Permissions,
     ActivityLinkshellSettingsDto Settings);
 
 public sealed record ActivityLinkshellSettingsDto(
     string LootStructure,
-    int? HybridDkpPercentage,
     bool EnableHnmSection,
     bool EnableMissions,
     bool EnableAuctions,
     bool EnableToDs,
-    bool EnableEndgame);
+    bool EnableEndgame,
+    bool EnableEvents,
+    bool EnableDkp,
+    bool EnableItems,
+    bool EnableRevenue,
+    string DkpRoundingIncrement);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -5657,7 +5768,8 @@ public sealed record ActivityStatusLedgerDto(
     DateTime? VerifiedAt,
     string? VerifiedBy,
     DateTime? DeniedAt,
-    string? DeniedBy);
+    string? DeniedBy,
+    string? Source);
 
 public sealed record ActivityJobDto(
     int Id,
@@ -5803,7 +5915,8 @@ public sealed record ActivityAuctionItemDto(
     DateTime? EndTime,
     string? Status,
     string? Notes,
-    int BidCount);
+    int BidCount,
+    int? SourceItemId);
 
 public sealed record ActivityAuctionBidDto(
     int Id,
@@ -5914,12 +6027,16 @@ public sealed record ActivityUpdateLinkshellRequest(
     string Name,
     string? Details,
     string? LootStructure,
-    int? HybridDkpPercentage,
     bool? EnableHnmSection,
     bool? EnableMissions,
     bool? EnableAuctions,
     bool? EnableToDs,
-    bool? EnableEndgame);
+    bool? EnableEndgame,
+    bool? EnableEvents,
+    bool? EnableDkp,
+    bool? EnableItems,
+    bool? EnableRevenue,
+    string? DkpRoundingIncrement);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
@@ -5976,7 +6093,8 @@ public sealed record ActivityAuctionItemInput(
     string? ItemName,
     string? ItemType,
     int? StartingBidDkp,
-    string? Notes);
+    string? Notes,
+    int? SourceItemId);
 
 public sealed record ActivityCreateAuctionRequest(
     int LinkshellId,
@@ -5986,3 +6104,5 @@ public sealed record ActivityCreateAuctionRequest(
     IReadOnlyList<ActivityAuctionItemInput> Items);
 
 public sealed record ActivityAuctionBidRequest(int BidAmount);
+
+public sealed record ActivityCloseAuctionRequest(IReadOnlyList<int>? DeliveredItemIds);

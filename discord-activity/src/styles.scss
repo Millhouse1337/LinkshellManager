@@ -471,6 +471,32 @@ app-activity-queue-panel {
   font-size: 12px;
 }
 
+.event-card__global-timer {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  color: #ffffff;
+}
+
+.event-card__global-timer-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.event-card__global-timer-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+}
+
 .event-card__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1025,7 +1051,34 @@ app-activity-queue-panel {
 .customize-form {
   display: grid;
   gap: 16px;
-  padding: 14px 0;
+  padding: 14px 16px 16px;
+}
+
+.tod-form__row {
+  display: grid;
+  gap: 12px;
+}
+.tod-day-number-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tod-day-number-row .form-input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.tod-day-number-row .tod-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.tod-form__row--monster { grid-template-columns: 1fr; }
+.tod-form__row--monster.tod-form__row--split { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
+.tod-form__row--cooldown { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.tod-form__row--cooldown.tod-form__row--split { grid-template-columns: minmax(0, 180px) minmax(0, 180px) minmax(0, 1fr); }
+@media (max-width: 720px) {
+  .tod-form__row--monster.tod-form__row--split,
+  .tod-form__row--cooldown,
+  .tod-form__row--cooldown.tod-form__row--split { grid-template-columns: 1fr; }
 }
 
 .customize-form__section {
@@ -1288,6 +1341,12 @@ app-activity-queue-panel {
   gap: 10px;
 }
 
+.form-error {
+  color: var(--danger, #ff6b6b);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 .tod-toggle {
   display: inline-flex !important;
   align-items: center;
@@ -1326,6 +1385,31 @@ app-activity-queue-panel {
 
 .summary-card .button-cluster {
   margin-top: 10px;
+}
+
+.dkp-event-type-breakdown {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.dkp-event-type-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.dkp-event-type-breakdown li:last-child {
+  border-bottom: none;
+}
+
+.dkp-event-type-breakdown .num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .invite-section {
@@ -1786,7 +1870,7 @@ body {
 /* ===== Stat strip ===== */
 .stat-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
@@ -2410,10 +2494,10 @@ body {
 
 /* ----- Invite section (used for bid entry, member picker) ----- */
 .panel-tab .invite-section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   margin-top: 10px;
   display: flex;
   flex-direction: column;
@@ -2479,10 +2563,10 @@ body {
 
 /* ----- DKP summary + entries ----- */
 .panel-tab .summary-card {
-  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 4px 0 10px;
   margin: 10px 0;
   display: flex;
   flex-direction: column;
@@ -2693,6 +2777,29 @@ body {
   padding-top: 8px;
   margin-top: 4px;
   border-top: 1px dashed var(--border);
+}
+.panel-tab .ac-roster--with-actions .ac-roster-head,
+.panel-tab .ac-roster--with-actions .ac-roster-row {
+  grid-template-columns: 32px 1fr 110px 90px 90px 180px;
+}
+.panel-tab .ac-roster--with-actions .ac-roster-actions {
+  grid-column: auto;
+  display: flex;
+  gap: 6px;
+  padding-top: 0;
+  margin-top: 0;
+  border-top: 0;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.panel-tab .ac-roster--with-actions .ac-roster-rank select {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 12px;
 }
 .panel-tab .card-link {
   display: inline-flex;
@@ -3248,8 +3355,88 @@ body {
 /* ===== Data table ===== */
 .panel-tab .table-wrap {
   overflow-x: auto;
+  border-top: 0;
+}
+
+.panel-tab .auction-close-panel {
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.panel-tab .auction-close-panel__head { display: flex; flex-direction: column; gap: 4px; }
+.panel-tab .auction-close-panel__head p { margin: 0; font-size: 12px; }
+.panel-tab .auction-close-panel__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.panel-tab .auction-close-panel__row .muted { font-size: 11px; }
+.panel-tab .auction-close-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.panel-tab .auction-close-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.panel-tab .history-detail-row > td {
+  padding: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .history-detail-inline {
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel-tab .history-detail-inline__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.panel-tab .history-detail-inline__meta strong { color: var(--fg); font-weight: 500; }
+.panel-tab .history-detail-inline__notes { margin: 0; font-size: 12px; }
+.panel-tab .history-participants-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.panel-tab .history-participants-table th {
+  background: var(--surface-2);
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  padding: 8px 12px;
+  text-align: left;
+}
+.panel-tab .history-participants-table td {
+  padding: 8px 12px;
   border-top: 1px solid var(--border);
 }
+.panel-tab .history-participants-table .num { text-align: right; font-family: var(--font-mono); }
 .panel-tab .data-table {
   width: 100%;
   border-collapse: collapse;

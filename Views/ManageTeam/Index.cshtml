@@ -59,6 +59,71 @@ else
         </div>
     }
 
+    @if (Model.CanManage && Model.SelectedLinkshellId > 0)
+    {
+        <div class="card fade d3" id="addonTokenCard" data-linkshellid="@Model.SelectedLinkshellId">
+            <div class="card-head">
+                <div>
+                    <div class="card-title">Game Addon (att)</div>
+                    <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
+                        Generate a one-time pairing code, then in FFXI type
+                        <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/att link &lt;code&gt;</code>
+                        to connect the addon to this linkshell.
+                    </div>
+                </div>
+                <div class="page-actions">
+                    <button type="button" class="btn primary sm" id="addonGenerateBtn">+ Generate pairing code</button>
+                </div>
+            </div>
+            <div id="addonTokensWrapper" style="padding:0 4px 4px">
+                <div id="addonTokensEmpty" class="empty" style="display:none">No active addon tokens. Generate one to get started.</div>
+                <table class="table themed" id="addonTokensTable" style="display:none">
+                    <thead>
+                        <tr>
+                            <th>Token</th>
+                            <th>Label</th>
+                            <th>Created</th>
+                            <th>Last used</th>
+                            <th style="text-align:right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-modal" id="addonPairModal" role="dialog" aria-modal="true">
+            <div class="mt-modal__backdrop" data-mt-close="1"></div>
+            <div class="mt-modal__dialog">
+                <div class="mt-modal__content">
+                    <div class="mt-modal__header">
+                        <h5 class="mt-modal__title">Pairing code</h5>
+                        <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="mt-modal__body">
+                        <div class="field" style="margin-bottom:14px">
+                            <label for="addonPairLabel">Label (optional)</label>
+                            <input type="text" id="addonPairLabel" class="form-control" placeholder="e.g. Nils — desktop" maxlength="128" />
+                        </div>
+                        <div id="addonPairCodeWrapper" style="display:none">
+                            <div style="text-align:center;margin:12px 0">
+                                <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
+                                <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
+                                    Expires in <span id="addonPairCountdown">10:00</span>. In FFXI: <code>/att link &lt;code&gt;</code>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
+                    </div>
+                    <div class="mt-modal__footer">
+                        <button type="button" class="btn ghost" data-mt-close="1">Close</button>
+                        <button type="button" class="btn primary" id="addonPairCreateBtn">Generate</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <div class="card fade d3">
         <div class="card-head">
             <div class="card-title">Members</div>
@@ -86,6 +151,7 @@ else
                 <tbody>
                     @foreach (var member in Model.Members)
                     {
+                        var hasAppUserId = !string.IsNullOrWhiteSpace(member.AppUserId);
                         <tr>
                             <td>@(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")</td>
                             <td><span class="tag">@(member.Rank ?? "—")</span></td>
@@ -97,13 +163,29 @@ else
                             @if (Model.CanManage)
                             {
                                 <td style="text-align:right">
-                                    <button type="button" class="btn ghost sm js-modify"
-                                            data-id="@member.Id"
-                                            data-rank="@member.Rank"
-                                            data-status="@member.Status"
-                                            data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)">
-                                        Modify
-                                    </button>
+                                    <div style="display:inline-flex;gap:6px;justify-content:flex-end">
+                                        <button type="button" class="btn primary sm js-modify-rank"
+                                                data-id="@member.Id"
+                                                data-rank="@member.Rank"
+                                                data-status="@member.Status"
+                                                data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)">
+                                            Modify Rank
+                                        </button>
+                                        @if (hasAppUserId)
+                                        {
+                                            <button type="button" class="btn warn sm js-dkp-audit"
+                                                    data-linkshellid="@Model.SelectedLinkshellId"
+                                                    data-appuserid="@member.AppUserId"
+                                                    data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)"
+                                                    data-dkp="@((member.LinkshellDkp ?? 0).ToString("0.##"))">
+                                                DKP Audit
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn warn sm" disabled title="Member has no user account">DKP Audit</button>
+                                        }
+                                    </div>
                                 </td>
                             }
                         </tr>
@@ -116,65 +198,97 @@ else
 
 @if (Model.CanManage)
 {
-    <div class="modal fade" id="modifyModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <form asp-action="ModifyRankStatus" method="post">
-                    @Html.AntiForgeryToken()
-                    <div class="modal-header">
-                        <h5 class="modal-title">Modify rank &amp; status</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="mt-modal" id="modifyRankModal" role="dialog" aria-modal="true">
+        <div class="mt-modal__backdrop" data-mt-close="1"></div>
+        <div class="mt-modal__dialog">
+            <form asp-action="ModifyRankStatus" method="post" class="mt-modal__content">
+                @Html.AntiForgeryToken()
+                <div class="mt-modal__header">
+                    <h5 class="mt-modal__title">Modify rank</h5>
+                    <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
+                </div>
+                <div class="mt-modal__body">
+                    <input type="hidden" name="Id" id="modifyId" />
+                    <input type="hidden" name="Status" id="modifyStatus" />
+                    <div class="field" style="margin-bottom:12px">
+                        <label>Character</label>
+                        <div id="modifyName" style="color:var(--fg-3)"></div>
                     </div>
-                    <div class="modal-body">
-                        <input type="hidden" name="Id" id="modifyId" />
+                    <div class="field">
+                        <label for="modifyRank">Rank</label>
+                        <select name="Rank" id="modifyRank" class="form-select" required>
+                            @foreach (var rank in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.RankOptions)
+                            {
+                                <option value="@rank">@rank</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-modal__footer">
+                    <button type="button" class="btn ghost" data-mt-close="1">Cancel</button>
+                    <button type="submit" class="btn primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="mt-modal" id="dkpAuditModal" role="dialog" aria-modal="true">
+        <div class="mt-modal__backdrop" data-mt-close="1"></div>
+        <div class="mt-modal__dialog mt-modal__dialog--lg">
+            <div class="mt-modal__content">
+                <div class="mt-modal__header">
+                    <h5 class="mt-modal__title">Record DKP audit</h5>
+                    <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
+                </div>
+                <div class="mt-modal__body">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                        <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+                            <input type="radio" name="auditMode" value="Adjust" checked />
+                            <strong style="margin-left:6px">Correct a previous entry</strong>
+                            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Fix DKP awarded/charged on a past event or auction.</div>
+                        </label>
+                        <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+                            <input type="radio" name="auditMode" value="Misc" />
+                            <strong style="margin-left:6px">Miscellaneous adjustment</strong>
+                            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Add or subtract DKP for any other reason.</div>
+                        </label>
+                    </div>
+
+                    <div class="field" style="margin-bottom:12px">
+                        <label>Member</label>
+                        <div id="auditMemberName" style="color:var(--fg);font-weight:500"></div>
+                        <div id="auditMemberBalance" style="color:var(--fg-3);font-size:12px"></div>
+                    </div>
+
+                    <div id="auditAdjustFields">
                         <div class="field" style="margin-bottom:12px">
-                            <label>Character</label>
-                            <div id="modifyName" style="color:var(--fg-3)"></div>
-                        </div>
-                        <div class="field" style="margin-bottom:12px">
-                            <label for="modifyRank">Rank</label>
-                            <select name="Rank" id="modifyRank" class="form-select" required>
-                                @foreach (var rank in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.RankOptions)
-                                {
-                                    <option value="@rank">@rank</option>
-                                }
+                            <label for="auditEntrySelect">Entry to correct</label>
+                            <select id="auditEntrySelect" class="form-select">
+                                <option value="">Loading entries…</option>
                             </select>
-                        </div>
-                        <div class="field">
-                            <label for="modifyStatus">Status</label>
-                            <select name="Status" id="modifyStatus" class="form-select" required>
-                                @foreach (var status in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.StatusOptions)
-                                {
-                                    <option value="@status">@status</option>
-                                }
-                            </select>
+                            <div id="auditEntryHint" style="color:var(--fg-3);font-size:12px;margin-top:4px"></div>
                         </div>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn ghost" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn primary">Save changes</button>
+
+                    <div class="field" style="margin-bottom:12px">
+                        <label for="auditAmount" id="auditAmountLabel">Corrected amount (DKP)</label>
+                        <input type="number" step="0.01" id="auditAmount" class="form-control" placeholder="e.g. 45" />
                     </div>
-                </form>
+
+                    <div class="field" style="margin-bottom:4px">
+                        <label for="auditReason">Reason</label>
+                        <textarea id="auditReason" class="form-control" rows="3" placeholder="Explain why this audit is being recorded"></textarea>
+                    </div>
+
+                    <div id="auditError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
+                </div>
+                <div class="mt-modal__footer">
+                    <button type="button" class="btn ghost" data-mt-close="1">Cancel</button>
+                    <button type="button" class="btn primary" id="auditSaveBtn">Save audit</button>
+                </div>
             </div>
         </div>
     </div>
 
-    @section Scripts {
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                var modalEl = document.getElementById('modifyModal');
-                if (!modalEl) return;
-                var modal = new bootstrap.Modal(modalEl);
-                document.querySelectorAll('.js-modify').forEach(function (btn) {
-                    btn.addEventListener('click', function () {
-                        document.getElementById('modifyId').value = btn.dataset.id || '';
-                        document.getElementById('modifyRank').value = btn.dataset.rank || 'Member';
-                        document.getElementById('modifyStatus').value = btn.dataset.status || 'Active';
-                        document.getElementById('modifyName').textContent = btn.dataset.name || '';
-                        modal.show();
-                    });
-                });
-            });
-        </script>
-    }
+    <script src="~/js/manage-team.js" asp-append-version="true" defer></script>
 }

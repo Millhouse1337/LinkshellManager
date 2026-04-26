@@ -80,8 +80,9 @@ export class ActivitySidebarPanelComponent {
     title: '',
     startTimeLocal: '',
     endTimeLocal: '',
-    items: [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '' }]
+    items: [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }]
   };
+  protected auctionItemFromInventory: boolean[] = [true];
 
   protected inviteSearchTerm = '';
   protected inviteLinkshellId = 0;
@@ -318,7 +319,19 @@ export class ActivitySidebarPanelComponent {
   }
 
   protected connectedInviteCandidates() {
-    return this.activity.participantInviteCandidates();
+    const seen = new Set<string>();
+    return this.activity.participantInviteCandidates().filter(candidate => {
+      if (seen.has(candidate.appUserId)) return false;
+      seen.add(candidate.appUserId);
+      return true;
+    });
+  }
+
+  protected filteredInviteSearchResults() {
+    const connectedIds = new Set(
+      this.connectedInviteCandidates().map(candidate => candidate.appUserId)
+    );
+    return this.activity.inviteSearchResults().filter(result => !connectedIds.has(result.id));
   }
 
   protected canRequestLinkshellAccess(): boolean {
@@ -503,7 +516,8 @@ export class ActivitySidebarPanelComponent {
     this.auctionFormModel.title = '';
     this.auctionFormModel.startTimeLocal = '';
     this.auctionFormModel.endTimeLocal = '';
-    this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '' }];
+    this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }];
+    this.auctionItemFromInventory = [true];
   }
 
   protected openEditAuctionForm(auction: {
@@ -518,6 +532,7 @@ export class ActivitySidebarPanelComponent {
       itemType?: string | null;
       startingBidDkp?: number | null;
       notes?: string | null;
+      sourceItemId?: number | null;
     }>;
   }): void {
     this.activity.clearActionState();
@@ -533,9 +548,11 @@ export class ActivitySidebarPanelComponent {
           itemName: item.itemName ?? '',
           itemType: item.itemType ?? '',
           startingBidDkp: item.startingBidDkp ?? 0,
-          notes: item.notes ?? ''
+          notes: item.notes ?? '',
+          sourceItemId: item.sourceItemId ?? null
         }))
-      : [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '' }];
+      : [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }];
+    this.auctionItemFromInventory = this.auctionFormModel.items.map(item => item.sourceItemId != null);
   }
 
   protected closeAuctionForm(): void {
@@ -546,8 +563,42 @@ export class ActivitySidebarPanelComponent {
   protected addAuctionFormItem(): void {
     this.auctionFormModel.items = [
       ...this.auctionFormModel.items,
-      { id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '' }
+      { id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }
     ];
+    this.auctionItemFromInventory = [...this.auctionItemFromInventory, true];
+  }
+
+  protected inventoryItemsForAuctionForm(): Array<{ id: number; itemName: string; itemType?: string | null; quantity: number }> {
+    const linkshellId = this.auctionFormModel.linkshellId;
+    const primary = this.activity.overview()?.primaryLinkshell;
+    if (primary && primary.id === linkshellId) {
+      return primary.items ?? [];
+    }
+    return [];
+  }
+
+  protected onAuctionItemSourceModeChange(index: number, mode: 'inventory' | 'external'): void {
+    this.auctionItemFromInventory[index] = mode === 'inventory';
+    const item = this.auctionFormModel.items[index];
+    if (!item) return;
+    item.sourceItemId = null;
+    item.itemName = '';
+    item.itemType = '';
+  }
+
+  protected onAuctionItemInventoryPick(index: number, inventoryItemId: number | null): void {
+    const item = this.auctionFormModel.items[index];
+    if (!item) return;
+    if (inventoryItemId == null) {
+      item.sourceItemId = null;
+      item.itemName = '';
+      item.itemType = '';
+      return;
+    }
+    const match = this.inventoryItemsForAuctionForm().find(inv => inv.id === inventoryItemId);
+    item.sourceItemId = inventoryItemId;
+    item.itemName = match?.itemName ?? '';
+    item.itemType = match?.itemType ?? '';
   }
 
   protected removeAuctionFormItem(index: number): void {
@@ -556,6 +607,7 @@ export class ActivitySidebarPanelComponent {
     }
 
     this.auctionFormModel.items = this.auctionFormModel.items.filter((_, itemIndex) => itemIndex !== index);
+    this.auctionItemFromInventory = this.auctionItemFromInventory.filter((_, itemIndex) => itemIndex !== index);
   }
 
   protected getAuctionBidDraft(itemId: number): number | null {
@@ -668,6 +720,14 @@ export class ActivitySidebarPanelComponent {
 
   protected historyDetail() {
     return this.activity.historyDetail();
+  }
+
+  protected formatDurationForLinkshell(duration: number | null | undefined, linkshellId: number): string {
+    const hours = duration ?? 0;
+    const linkshell = (this.activity.overview()?.linkshells ?? []).find(l => l.id === linkshellId);
+    const step = linkshell?.settings?.dkpRoundingIncrement === 'Half' ? 0.5 : 0.25;
+    const rounded = Math.round(hours / step) * step;
+    return rounded.toFixed(2).replace(/\.?0+$/, '');
   }
 
   protected dkpHistory() {
@@ -930,6 +990,19 @@ export class ActivitySidebarPanelComponent {
     }
   }
 
+  protected dkpEarnedByEventType(): { eventType: string; amount: number }[] {
+    const entries = this.dkpHistory()?.entries ?? [];
+    const totals = new Map<string, number>();
+    for (const entry of entries) {
+      if (entry.entryType !== 'EventEarned') continue;
+      const key = (entry.eventType ?? '').trim() || 'Unspecified';
+      totals.set(key, (totals.get(key) ?? 0) + entry.amount);
+    }
+    return [...totals.entries()]
+      .map(([eventType, amount]) => ({ eventType, amount: Math.round(amount * 100) / 100 }))
+      .sort((a, b) => b.amount - a.amount);
+  }
+
   protected canAuditSelectedLinkshell(): boolean {
     return !!this.selectedLinkshellId && this.canManageLinkshell(this.selectedLinkshellId);
   }
@@ -1046,16 +1119,42 @@ export class ActivitySidebarPanelComponent {
     await this.activity.startAuction(auctionId, this.selectedLinkshellId);
   }
 
-  protected async closeAuction(auctionId: number, title?: string | null): Promise<void> {
-    if (!this.selectedLinkshellId) {
-      return;
-    }
+  protected closingAuctionId: number | null = null;
+  protected auctionCloseDelivered: Record<number, boolean> = {};
 
-    if (!window.confirm(`Close ${title || 'this auction'} and archive its outcome?`)) {
-      return;
+  protected beginCloseAuction(auctionId: number): void {
+    const auction = this.auctions().find(a => a.id === auctionId);
+    if (!auction) return;
+    this.closingAuctionId = auctionId;
+    this.auctionCloseDelivered = {};
+    for (const item of auction.items) {
+      if (item.currentHighestBidderAppUserId) {
+        this.auctionCloseDelivered[item.id] = true;
+      }
     }
+  }
 
-    await this.activity.closeAuction(auctionId, this.selectedLinkshellId);
+  protected cancelCloseAuction(): void {
+    this.closingAuctionId = null;
+    this.auctionCloseDelivered = {};
+  }
+
+  protected toggleAuctionItemDelivered(itemId: number, value: boolean): void {
+    this.auctionCloseDelivered = { ...this.auctionCloseDelivered, [itemId]: value };
+  }
+
+  protected async confirmCloseAuction(auctionId: number): Promise<void> {
+    if (!this.selectedLinkshellId) return;
+    const deliveredItemIds = Object.entries(this.auctionCloseDelivered)
+      .filter(([, delivered]) => delivered)
+      .map(([id]) => Number(id));
+    try {
+      await this.activity.closeAuction(auctionId, this.selectedLinkshellId, deliveredItemIds);
+      this.closingAuctionId = null;
+      this.auctionCloseDelivered = {};
+    } catch {
+      // message set by service
+    }
   }
 
   protected async submitAuctionBid(itemId: number): Promise<void> {
@@ -1103,7 +1202,7 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Officer');
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Officer', characterName);
   }
 
   protected async demoteMemberToMember(linkshellId: number, memberId: number, characterName: string): Promise<void> {
@@ -1111,7 +1210,7 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Member');
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Member', characterName);
   }
 
   protected async transferLeadership(linkshellId: number, memberId: number, characterName: string): Promise<void> {
@@ -1119,7 +1218,7 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Leader');
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, 'Leader', characterName);
   }
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
@@ -1145,7 +1244,7 @@ export class ActivitySidebarPanelComponent {
       ? `Transfer linkshell leadership to ${characterName}? You will become an officer.`
       : `Change ${characterName}'s role to ${trimmed}?`;
     if (!window.confirm(confirmation)) return;
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, trimmed);
+    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, trimmed, characterName);
   }
 
   private resolveBrowserTimeZone(): string {

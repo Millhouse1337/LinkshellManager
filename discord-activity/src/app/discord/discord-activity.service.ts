@@ -85,6 +85,8 @@ interface ActivityLinkshell {
   status?: string | null;
   linkshellDkp?: number | null;
   memberCount: number;
+  itemCount: number;
+  revenue: number;
   details?: string | null;
   permissions?: ActivityLinkshellPermissions | null;
   settings?: ActivityLinkshellSettings | null;
@@ -92,14 +94,20 @@ interface ActivityLinkshell {
 
 export type ActivityLootStructure = 'Dkp' | 'LootCouncil' | 'Hybrid';
 
+export type ActivityDkpRoundingIncrement = 'Quarter' | 'Half';
+
 export interface ActivityLinkshellSettings {
   lootStructure: ActivityLootStructure;
-  hybridDkpPercentage?: number | null;
   enableHnmSection: boolean;
   enableMissions: boolean;
   enableAuctions: boolean;
   enableToDs: boolean;
   enableEndgame: boolean;
+  enableEvents: boolean;
+  enableDkp: boolean;
+  enableItems: boolean;
+  enableRevenue: boolean;
+  dkpRoundingIncrement: ActivityDkpRoundingIncrement;
 }
 
 export interface ActivityLinkshellPermissions {
@@ -433,6 +441,7 @@ interface ActivityAuctionItem {
   status?: string | null;
   notes?: string | null;
   bidCount: number;
+  sourceItemId?: number | null;
 }
 
 interface ActivityAuction {
@@ -598,6 +607,7 @@ export interface ActivityAuctionItemInput {
   itemType?: string | null;
   startingBidDkp?: number | null;
   notes?: string | null;
+  sourceItemId?: number | null;
 }
 
 export interface ActivityCreateAuctionInput {
@@ -1265,13 +1275,13 @@ export class DiscordActivityService {
     }
   }
 
-  async closeAuction(auctionId: number, linkshellId: number): Promise<void> {
+  async closeAuction(auctionId: number, linkshellId: number, deliveredItemIds: number[] = []): Promise<void> {
     this.busyAuctionId.set(auctionId);
     this.actionError.set(null);
     this.actionMessage.set(null);
 
     try {
-      await this.postActivityAction(`/api/activity/auctions/${auctionId}/close`);
+      await this.postActivityAction(`/api/activity/auctions/${auctionId}/close`, { deliveredItemIds });
       await this.refreshOverview();
       await this.loadAuctions(linkshellId);
       await this.loadAuctionHistory(linkshellId);
@@ -1465,12 +1475,16 @@ export class DiscordActivityService {
     linkshellId: number,
     input: ActivityCreateLinkshellInput & {
       lootStructure?: ActivityLootStructure | null;
-      hybridDkpPercentage?: number | null;
       enableHnmSection?: boolean | null;
       enableMissions?: boolean | null;
       enableAuctions?: boolean | null;
       enableToDs?: boolean | null;
       enableEndgame?: boolean | null;
+      enableEvents?: boolean | null;
+      enableDkp?: boolean | null;
+      enableItems?: boolean | null;
+      enableRevenue?: boolean | null;
+      dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -1482,12 +1496,16 @@ export class DiscordActivityService {
         name: input.name,
         details: input.details || null,
         lootStructure: input.lootStructure ?? null,
-        hybridDkpPercentage: input.hybridDkpPercentage ?? null,
         enableHnmSection: input.enableHnmSection ?? null,
         enableMissions: input.enableMissions ?? null,
         enableAuctions: input.enableAuctions ?? null,
         enableToDs: input.enableToDs ?? null,
-        enableEndgame: input.enableEndgame ?? null
+        enableEndgame: input.enableEndgame ?? null,
+        enableEvents: input.enableEvents ?? null,
+        enableDkp: input.enableDkp ?? null,
+        enableItems: input.enableItems ?? null,
+        enableRevenue: input.enableRevenue ?? null,
+        dkpRoundingIncrement: input.dkpRoundingIncrement ?? null
       });
       await this.refreshOverview();
       this.actionMessage.set('Linkshell updated.');
@@ -1782,7 +1800,7 @@ export class DiscordActivityService {
     }
   }
 
-  async updateLinkshellMemberRole(linkshellId: number, memberId: number, role: string): Promise<void> {
+  async updateLinkshellMemberRole(linkshellId: number, memberId: number, role: string, characterName?: string | null): Promise<void> {
     this.busyMemberId.set(memberId);
     this.actionError.set(null);
     this.actionMessage.set(null);
@@ -1790,12 +1808,13 @@ export class DiscordActivityService {
     try {
       await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/members/${memberId}/role`, { role });
       await this.refreshOverview();
+      const who = characterName?.trim() || 'Member';
       this.actionMessage.set(
         role === 'Leader'
-          ? 'Leadership transferred.'
+          ? `Leadership transferred to ${who}.`
           : role === 'Officer'
-            ? 'Member promoted to officer.'
-            : `Role changed to ${role}.`
+            ? `${who} promoted to officer.`
+            : `${who}'s role changed to ${role}.`
       );
     } catch (error) {
       this.actionError.set(this.formatActionError(error, 'Updating the member role failed.'));

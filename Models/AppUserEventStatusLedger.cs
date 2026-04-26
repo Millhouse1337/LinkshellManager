@@ -39,4 +39,7 @@ public class AppUserEventStatusLedger
 
     [MaxLength(256)]
     public string? DeniedBy { get; set; }
+
+    [MaxLength(32)]
+    public string? Source { get; set; }
 }
