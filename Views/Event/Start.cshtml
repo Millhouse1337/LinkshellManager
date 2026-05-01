@@ -427,7 +427,7 @@
 </div>
 
 @section Scripts {
-    <script>
+    <script nonce="@Html.CspNonce()">
         // Attendance Windows: vanilla-JS tab switcher + per-row Remove. The
         // Bootstrap data-toggle="tab" plugin wasn't switching panes here (likely
         // a JS-load order quirk), so we wire it up ourselves — toggles `active`
@@ -486,7 +486,7 @@
         })();
     </script>
 
-    <script>
+    <script nonce="@Html.CspNonce()">
         (() => {
             const dashboard = document.querySelector('[data-live-event-dashboard]');
             if (!dashboard) { return; }

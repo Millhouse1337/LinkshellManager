@@ -241,7 +241,7 @@ else
 </div>
 
 @section Scripts {
-    <script>
+    <script nonce="@Html.CspNonce()">
         (() => {
             const addItemButtons = document.querySelectorAll('[data-bs-target="#addItemModal"]');
             addItemButtons.forEach((button) => {
@@ -263,7 +263,16 @@ else
                     } else {
                         bids.forEach((bid) => {
                             const row = document.createElement('tr');
-                            row.innerHTML = `<td>${bid.characterName}</td><td class="num">${bid.bidAmount}</td><td>${bid.createdAt ?? ''}</td>`;
+                            const nameCell = document.createElement('td');
+                            nameCell.textContent = bid.characterName ?? '';
+                            const amountCell = document.createElement('td');
+                            amountCell.className = 'num';
+                            amountCell.textContent = bid.bidAmount ?? '';
+                            const dateCell = document.createElement('td');
+                            dateCell.textContent = bid.createdAt ?? '';
+                            row.appendChild(nameCell);
+                            row.appendChild(amountCell);
+                            row.appendChild(dateCell);
                             tbody.appendChild(row);
                         });
                     }

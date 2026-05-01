@@ -198,7 +198,7 @@
 </div>
 
 @section Scripts {
-    <script>
+    <script nonce="@Html.CspNonce()">
         (function () {
             // Hide the DKP rounding row when the loot structure is Loot Council,
             // matching the Activity's behavior (rounding only applies to DKP-based modes).
@@ -214,7 +214,7 @@
         })();
     </script>
 
-    <script>
+    <script nonce="@Html.CspNonce()">
         // Addon-pairing card UX. Self-contained so this view doesn't depend on
         // manage-team.js (which has been retired alongside the old card location).
         (function () {
@@ -247,11 +247,7 @@
             var addonTokensEmpty = document.getElementById('addonTokensEmpty');
             var countdownTimer = null;
 
-            function escapeHtml(s) {
-                return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-                });
-            }
+            var escapeHtml = window.escapeHtml;
 
             function setAddonPairError(msg) {
                 addonPairError.textContent = msg || '';

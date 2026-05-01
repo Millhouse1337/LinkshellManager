@@ -121,7 +121,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="@Html.CspNonce()">
     (function () {
         var known = ['Sky','Sea','HNM','HENM','Limbus','Dynamis','BCNM','KSNM'];
         var picker = document.getElementById('event-type-picker');
@@ -144,7 +144,7 @@
     })();
 </script>
 
-<script>
+<script nonce="@Html.CspNonce()">
     // Start / End / Duration sync — mirrors the Discord Activity logic so editing
     // any two of the three keeps the third in step.
     //   Start changes: recompute Duration if End is set, else recompute End if Duration is set.
@@ -318,11 +318,11 @@
     }
 </div>
 
-<script>
+<script nonce="@Html.CspNonce()">
     // Minimal Party Setup "Not specified" toggle. When checked, the entire jobs
     // container and "+ Add job" button are hidden AND every input within is
     // disabled so it doesn't post (otherwise EF would still create empty Job rows).
-    // This <script> sits AFTER the markup it targets so getElementById resolves.
+    // This <script nonce="@Html.CspNonce()"> sits AFTER the markup it targets so getElementById resolves.
     (function () {
         var notSpecified = document.getElementById('party_setup_not_specified');
         var addJobBtn    = document.getElementById('add-job');

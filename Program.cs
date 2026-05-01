@@ -115,6 +115,8 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
     options.KnownProxies.Clear();
 });
 
+var isDevelopment = builder.Environment.IsDevelopment();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DiscordCors", policy =>
@@ -128,10 +130,16 @@ builder.Services.AddCors(options =>
                 try
                 {
                     var uri = new Uri(origin);
-                    return uri.Scheme == "https" && (
-                        uri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) ||
+                    if (uri.Scheme != "https") return false;
+
+                    if (uri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) ||
                         uri.Host.EndsWith(".discord.com", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".discordsays.com", StringComparison.OrdinalIgnoreCase) ||
+                        uri.Host.EndsWith(".discordsays.com", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    if (isDevelopment && (
                         uri.Host.EndsWith(".pinggy.link", StringComparison.OrdinalIgnoreCase) ||
                         uri.Host.EndsWith(".ngrok-free.app", StringComparison.OrdinalIgnoreCase) ||
                         uri.Host.EndsWith(".ngrok-free.dev", StringComparison.OrdinalIgnoreCase) ||
@@ -139,8 +147,12 @@ builder.Services.AddCors(options =>
                         uri.Host.EndsWith(".trycloudflare.com", StringComparison.OrdinalIgnoreCase) ||
                         origin.Equals("https://localhost:4200", StringComparison.OrdinalIgnoreCase) ||
                         origin.Equals("https://localhost:5001", StringComparison.OrdinalIgnoreCase) ||
-                        origin.Equals("https://localhost:7051", StringComparison.OrdinalIgnoreCase)
-                    );
+                        origin.Equals("https://localhost:7051", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return true;
+                    }
+
+                    return false;
                 }
                 catch
                 {
@@ -168,21 +180,36 @@ else
 
 app.Use(async (ctx, next) =>
 {
+    var nonceBytes = new byte[16];
+    System.Security.Cryptography.RandomNumberGenerator.Fill(nonceBytes);
+    var nonce = Convert.ToBase64String(nonceBytes);
+    ctx.Items["CspNonce"] = nonce;
+
     ctx.Response.OnStarting(() =>
     {
         ctx.Response.Headers.Remove("X-Frame-Options");
 
+        var devHosts = isDevelopment
+            ? " https://*.pinggy.link https://*.ngrok-free.app https://*.ngrok-free.dev https://*.ngrok.io https://*.trycloudflare.com"
+            : string.Empty;
+        var devLocalhost = isDevelopment
+            ? " https://localhost:* http://localhost:* ws://localhost:* wss://localhost:*"
+            : string.Empty;
+        var devLocalhostFrame = isDevelopment
+            ? " https://localhost:* http://localhost:*"
+            : string.Empty;
+
         var csp = string.Join(" ",
             "default-src 'self';",
             "base-uri 'self';",
-            "frame-ancestors 'self' https://discord.com https://*.discord.com https://*.discordsays.com https://*.pinggy.link https://*.ngrok-free.app https://*.ngrok-free.dev https://*.ngrok.io https://*.trycloudflare.com https://localhost:* http://localhost:*;",
-            "connect-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com https://*.pinggy.link https://*.ngrok-free.app https://*.ngrok-free.dev https://*.ngrok.io https://*.trycloudflare.com https://localhost:* http://localhost:* ws://localhost:* wss://localhost:*;",
+            $"frame-ancestors 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devHosts}{devLocalhostFrame};",
+            $"connect-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devHosts}{devLocalhost};",
             "img-src 'self' data: blob: https://cdn.discordapp.com https://media.discordapp.net https://*.discordsays.com;",
             "font-src 'self' data:;",
             "style-src 'self' 'unsafe-inline';",
-            "script-src 'self' 'unsafe-inline' blob:;",
+            $"script-src 'self' 'nonce-{nonce}' blob:;",
             "object-src 'none';",
-            "frame-src https://discord.com https://*.discord.com https://*.discordsays.com https://*.pinggy.link https://*.ngrok-free.app https://*.ngrok-free.dev https://*.ngrok.io https://*.trycloudflare.com;"
+            $"frame-src https://discord.com https://*.discord.com https://*.discordsays.com{devHosts};"
         );
 
         ctx.Response.Headers["Content-Security-Policy"] = csp;

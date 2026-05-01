@@ -28,7 +28,7 @@
 </div>
 
 @section Scripts {
-<script>
+<script nonce="@Html.CspNonce()">
 (() => {
     const mainJobOptions = @Html.Raw(mainJobOptionsJson);
     const subJobOptions = @Html.Raw(subJobOptionsJson);

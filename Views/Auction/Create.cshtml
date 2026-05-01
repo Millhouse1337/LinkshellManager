@@ -91,7 +91,7 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    <script>
+    <script nonce="@Html.CspNonce()">
         (() => {
             const itemsContainer = document.getElementById('auctionItems');
             const addItemButton = document.getElementById('addAuctionItemButton');

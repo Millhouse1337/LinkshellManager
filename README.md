@@ -131,11 +131,13 @@ Optional if you also want to override the client id locally:
 dotnet user-secrets set "Discord:ClientId" "<your-discord-client-id>"
 ```
 
-Set the PostgreSQL connection string with user secrets if your local credentials differ from the sample in `appsettings.json`:
+The PostgreSQL connection string is required and is **not** stored in `appsettings.json`. Set it via user secrets for local development:
 
 ```bash
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=linkshell_manager_discord_app;Username=postgres;Password=<your-password>"
 ```
+
+The app will fail to start if `ConnectionStrings:DefaultConnection` is not configured.
 
 For production or hosted environments, set environment variables instead:
 

@@ -139,7 +139,7 @@ else
 }
 
 @section Scripts {
-    <script>
+    <script nonce="@Html.CspNonce()">
         (() => {
             const buttons = document.querySelectorAll('.adjust-dkp-btn');
             if (!buttons.length) { return; }

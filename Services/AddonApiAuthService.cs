@@ -12,6 +12,8 @@ public sealed class AddonApiAuthService
     private const int TokenBodyLength = 36;
     private const int PairingCodeLength = 8;
     private const int PairingCodeTtlMinutes = 10;
+    // Throttle LastUsedAt writes so a polling addon doesn't issue a DB write per request.
+    private const int LastUsedAtThrottleSeconds = 60;
 
     // base32-style alphabet (no easily-confused chars: I/1/O/0)
     private const string PairingAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -99,12 +101,14 @@ public sealed class AddonApiAuthService
             CreatedAt = now
         };
 
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         _dbContext.AddonApiTokens.Add(record);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         pairing.ConsumedAt = now;
         pairing.ConsumedTokenId = record.Id;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
         return new RedeemResult(rawToken, record, pairing.Linkshell);
     }
@@ -124,8 +128,13 @@ public sealed class AddonApiAuthService
         if (record is null) return null;
         if (record.RevokedAt is not null) return null;
 
-        record.LastUsedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        if (record.LastUsedAt is null
+            || (now - record.LastUsedAt.Value).TotalSeconds >= LastUsedAtThrottleSeconds)
+        {
+            record.LastUsedAt = now;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         return record;
     }
