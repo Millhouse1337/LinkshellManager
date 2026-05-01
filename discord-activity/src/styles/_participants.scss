@@ -1,0 +1,155 @@
+.participant-list,
+.compact-list,
+.participants {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.participant-list li,
+.compact-list li,
+.participants li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.compact-list__child {
+  margin-left: 16px;
+  background: var(--bg-elev) !important;
+}
+
+.participant-list__copy,
+.compact-list div {
+  display: grid;
+  gap: 3px;
+}
+
+.participant-list__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.participant-list__identity strong {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.participant-list__actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.status-ledger {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-ledger li {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.status-ledger strong {
+  display: block;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.status-ledger span {
+  display: block;
+  color: var(--fg-3);
+  font-size: 11px;
+}
+
+.live-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.5s ease;
+}
+
+.verification-badge {
+  border: 1px solid transparent;
+  background: var(--surface-3);
+  color: var(--fg-2);
+}
+
+.verification-badge--approved {
+  background: var(--success-weak);
+  color: var(--success);
+}
+
+.verification-badge--denied {
+  background: var(--danger-weak);
+  color: var(--danger);
+}
+
+.verification-badge--break {
+  background: var(--warning-weak);
+  color: var(--warning);
+}
+
+.pending-resume-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.pending-resume-list li {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.pending-resume-list__when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warning);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}

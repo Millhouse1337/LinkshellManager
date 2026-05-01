@@ -1,0 +1,54 @@
+.job-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.job-tags li {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--accent-weak);
+  border: 1px solid transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.job-tags span {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.event-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.job-tags + .event-section {
+  margin-top: 12px;
+}
+
+.job-tags + .event-action-grid,
+.job-tags + .event-action-bar {
+  margin-top: 12px;
+}
+
+.linkshell-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-section--late-join {
+  margin-top: 12px;
+}

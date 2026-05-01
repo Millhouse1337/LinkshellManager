@@ -36,13 +36,15 @@ public class Linkshell
 
     public bool EnableHnmSection { get; set; } = true;
 
-    public bool EnableMissions { get; set; } = true;
+    // Disabled by default for Beta — Missions/Endgame UIs are placeholders.
+    // Linkshell admins can opt in via Customize to surface the tabs for testers.
+    public bool EnableMissions { get; set; } = false;
 
     public bool EnableAuctions { get; set; } = true;
 
     public bool EnableToDs { get; set; } = true;
 
-    public bool EnableEndgame { get; set; } = true;
+    public bool EnableEndgame { get; set; } = false;
 
     public bool EnableEvents { get; set; } = true;
 

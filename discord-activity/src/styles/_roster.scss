@@ -1,0 +1,102 @@
+/* ===== Activity Roster (Discord Activity member list) ===== */
+.panel-tab .ac-roster {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.panel-tab .ac-roster-head,
+.panel-tab .ac-roster-row {
+  display: grid;
+  grid-template-columns: 32px 1fr 100px 90px 90px;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.panel-tab .ac-roster-head {
+  font-size: 11px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+}
+.panel-tab .ac-roster-row:last-child { border-bottom: 0; }
+.panel-tab .ac-roster-row:hover { background: var(--surface-2); }
+.panel-tab .ac-roster-av {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+.panel-tab .ac-roster-av.a { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+.panel-tab .ac-roster-av.b { background: linear-gradient(135deg, #ec4899, #f43f5e); }
+.panel-tab .ac-roster-av.c { background: linear-gradient(135deg, #10b981, #06b6d4); }
+.panel-tab .ac-roster-av.d { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.panel-tab .ac-roster-av.e { background: linear-gradient(135deg, #8b5cf6, #3b82f6); }
+.panel-tab .ac-roster-name { font-size: 13px; color: var(--fg); font-weight: 500; }
+.panel-tab .ac-roster-name-sub { font-size: 11px; color: var(--fg-3); }
+.panel-tab .ac-roster-rank { font-size: 12px; color: var(--fg-1); }
+.panel-tab .ac-roster-dkp,
+.panel-tab .ac-roster-dkp-head {
+  font-family: var(--font-mono);
+  color: var(--fg);
+  font-size: 13px;
+  text-align: right;
+}
+.panel-tab .ac-roster-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+}
+.panel-tab .ac-roster--with-actions .ac-roster-head,
+.panel-tab .ac-roster--with-actions .ac-roster-row {
+  grid-template-columns: 32px 1fr 110px 90px 90px 180px;
+}
+.panel-tab .ac-roster--with-actions .ac-roster-actions {
+  grid-column: auto;
+  display: flex;
+  gap: 6px;
+  padding-top: 0;
+  margin-top: 0;
+  border-top: 0;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.panel-tab .ac-roster--with-actions .ac-roster-rank select {
+  width: 100%;
+  padding: 4px 6px;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+}
+.panel-tab .card-link {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.panel-tab .card-link:hover { color: var(--fg); }
+.panel-tab .ac-roster-search {
+  padding: 12px 16px 8px;
+}
+.panel-tab .ac-roster-search .form-input {
+  width: 100%;
+}

@@ -80,8 +80,7 @@ public class AccountController : Controller
         var result = await _appUserProfileService.UpdateProfileAsync(
             user,
             model.CharacterName,
-            normalizedTimeZone,
-            profileImage: null);
+            normalizedTimeZone);
 
         if (!result.Succeeded)
         {

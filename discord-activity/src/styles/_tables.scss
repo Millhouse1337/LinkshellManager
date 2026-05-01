@@ -1,0 +1,135 @@
+/* ===== Data table ===== */
+.panel-tab .table-wrap {
+  overflow-x: auto;
+  border-top: 0;
+}
+
+.panel-tab .auction-close-panel {
+  margin: 10px 0 14px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.panel-tab .auction-close-panel__head { display: flex; flex-direction: column; gap: 4px; }
+.panel-tab .auction-close-panel__head p { margin: 0; font-size: 12px; }
+.panel-tab .auction-close-panel__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.panel-tab .auction-close-panel__row .muted { font-size: 11px; }
+.panel-tab .auction-close-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.panel-tab .auction-close-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.panel-tab .history-detail-row > td {
+  padding: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .history-detail-inline {
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel-tab .history-detail-inline__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.panel-tab .history-detail-inline__meta strong { color: var(--fg); font-weight: 500; }
+.panel-tab .history-detail-inline__notes { margin: 0; font-size: 12px; }
+.panel-tab .history-participants-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.panel-tab .history-participants-table th {
+  background: var(--surface-2);
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  padding: 8px 12px;
+  text-align: left;
+}
+.panel-tab .history-participants-table td {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.panel-tab .history-participants-table .num { text-align: right; font-family: var(--font-mono); }
+.panel-tab .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.panel-tab .data-table th,
+.panel-tab .data-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .data-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+  background: var(--surface-2);
+}
+.panel-tab .data-table th.num,
+.panel-tab .data-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.panel-tab .data-table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+/* Active-auctions table: each auction is a group of consecutive rows.
+   The first row of each auction gets a thicker top border so groups
+   are visually delineated. Bid-history and close panels render as
+   full-width rows beneath the auction's items and inherit the group
+   without an extra delineator. */
+.panel-tab .auction-active-table tbody tr.auction-group-start > td {
+  border-top: 2px solid var(--border-strong, var(--border));
+}
+.panel-tab .auction-active-table tbody tr.auction-group-start:first-child > td {
+  border-top: none;
+}
+.panel-tab .auction-active-table tbody tr.auction-row-ended > td {
+  opacity: 0.7;
+}
+.panel-tab .auction-active-table tbody tr.auction-bid-history-row:hover,
+.panel-tab .auction-active-table tbody tr.auction-close-row:hover {
+  background: transparent;
+}
+.panel-tab .auction-active-table tbody tr.auction-bid-history-row > td,
+.panel-tab .auction-active-table tbody tr.auction-close-row > td {
+  background: var(--surface);
+  padding: 8px 14px;
+}

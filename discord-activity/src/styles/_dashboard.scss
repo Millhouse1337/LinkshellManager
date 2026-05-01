@@ -1,0 +1,218 @@
+/* ===== Dashboard 2-column rows ===== */
+.panel-tab .dash-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .panel-tab .dash-row { grid-template-columns: 1fr; }
+}
+
+/* ===== Upcoming events list ===== */
+.panel-tab .upcoming-list {
+  display: flex;
+  flex-direction: column;
+}
+.panel-tab .upcoming-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.panel-tab .upcoming-row:first-child { border-top: 0; }
+.panel-tab .upcoming-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.panel-tab .upcoming-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-tab .upcoming-title {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+}
+.panel-tab .upcoming-sub {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+.panel-tab .upcoming-time {
+  text-align: right;
+}
+.panel-tab .upcoming-time-main {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+}
+.panel-tab .upcoming-time-sub {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+
+/* ===== News & Updates list ===== */
+.panel-tab .news-list {
+  display: flex;
+  flex-direction: column;
+}
+.panel-tab .news-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+.panel-tab .news-row:first-child { border-top: 0; }
+.panel-tab .news-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fg-3);
+  justify-self: center;
+}
+.panel-tab .news-icon.donut-seg-a { background: #6366f1; }
+.panel-tab .news-icon.donut-seg-b { background: #10b981; }
+.panel-tab .news-icon.donut-seg-c { background: #f59e0b; }
+.panel-tab .news-icon.donut-seg-d { background: #ef4444; }
+.panel-tab .news-icon.donut-seg-e { background: #06b6d4; }
+.panel-tab .news-icon.donut-seg-f { background: #a855f7; }
+.panel-tab .news-title {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+}
+.panel-tab .news-sub {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+.panel-tab .news-meta {
+  text-align: right;
+}
+.panel-tab .news-dkp {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 500;
+}
+.panel-tab .news-when {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+
+/* ===== HNM claims donut ===== */
+.panel-tab .donut-wrap {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 24px 28px;
+  min-height: 320px;
+}
+@media (max-width: 560px) {
+  .panel-tab .donut-wrap { grid-template-columns: 1fr; }
+}
+.panel-tab .donut {
+  width: 100%;
+  height: auto;
+  max-width: 320px;
+  margin: 0 auto;
+  display: block;
+  transform: rotate(-90deg);
+}
+.panel-tab .donut-track { stroke: var(--surface-2); }
+.panel-tab .donut-value {
+  font-family: var(--font-mono, monospace);
+  font-size: 8px;
+  font-weight: 600;
+  fill: var(--fg);
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+.panel-tab .donut-label {
+  font-size: 2.4px;
+  letter-spacing: 0.2em;
+  fill: var(--fg-3);
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+.panel-tab circle.donut-seg-a { stroke: #6366f1; }
+.panel-tab circle.donut-seg-b { stroke: #10b981; }
+.panel-tab circle.donut-seg-c { stroke: #f59e0b; }
+.panel-tab circle.donut-seg-d { stroke: #ef4444; }
+.panel-tab circle.donut-seg-e { stroke: #06b6d4; }
+.panel-tab circle.donut-seg-f { stroke: #a855f7; }
+.panel-tab .donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.panel-tab .donut-legend-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--fg-1);
+}
+.panel-tab .donut-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.panel-tab .donut-swatch.donut-seg-a { background: #6366f1; }
+.panel-tab .donut-swatch.donut-seg-b { background: #10b981; }
+.panel-tab .donut-swatch.donut-seg-c { background: #f59e0b; }
+.panel-tab .donut-swatch.donut-seg-d { background: #ef4444; }
+.panel-tab .donut-swatch.donut-seg-e { background: #06b6d4; }
+.panel-tab .donut-swatch.donut-seg-f { background: #a855f7; }
+.panel-tab .donut-legend-name { color: var(--fg); font-weight: 500; }
+.panel-tab .donut-legend-stats { color: var(--fg-3); font-family: var(--font-sans); }
+.panel-tab .btn.active {
+  background: var(--accent-weak);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+/* ===== ToD Tracker fixed-height scroll card ===== */
+.panel-tab .dash-row--equal {
+  align-items: stretch;
+}
+.panel-tab .dash-row--equal > .card {
+  height: 520px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.panel-tab .card--tod-fixed .tod-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--border-2);
+}
+.panel-tab .dash-row--equal > .card .donut-wrap {
+  flex: 1 1 auto;
+  align-self: center;
+  width: 100%;
+}

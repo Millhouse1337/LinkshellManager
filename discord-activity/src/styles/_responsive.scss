@@ -1,0 +1,73 @@
+@media (max-width: 1180px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .activity-shell {
+    padding: 12px;
+  }
+
+  .hero,
+  .summary-strip,
+  .event-card__grid,
+  .create-form__grid,
+  .tod-layout,
+  .tod-field-grid,
+  .tod-repop-grid,
+  .tod-window-stats,
+  .tod-window-times {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loot-form,
+  .late-join-form,
+  .invite-search,
+  .loot-row-editor,
+  .tod-time-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .event-card__hero,
+  .queue-card__header,
+  .event-card__title-row,
+  .event-action-bar,
+  .event-section__header,
+  .tod-window-main,
+  .tod-window-actions,
+  .participant-list li,
+  .compact-list li,
+  .participants li,
+  .create-form__header,
+  .job-editor {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .event-card__meta,
+  .queue-card__meta,
+  .compact-list__meta {
+    text-align: left;
+    justify-items: start;
+  }
+
+  .participant-list__actions {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .summary-strip {
+    grid-template-columns: 1fr;
+  }
+}

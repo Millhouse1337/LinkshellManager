@@ -1,0 +1,138 @@
+.filter-pill {
+  appearance: none;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--fg-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.filter-pill:hover {
+  background: var(--surface-3);
+  color: var(--fg-1);
+}
+
+.filter-pill--active {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.member-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.role-pill--leader {
+  background: var(--warning-weak);
+  color: var(--warning);
+}
+
+.role-pill--officer {
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.role-pill--member {
+  background: var(--surface-3);
+  color: var(--fg-2);
+}
+
+.empty-state {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-2);
+}
+
+.empty-state strong {
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.checklist {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.checklist li > div {
+  display: grid;
+  gap: 3px;
+}
+
+.checklist strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.checklist span {
+  color: var(--fg-3);
+  font-size: 12px;
+}
+
+.checklist__marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.checklist__item--done .checklist__marker {
+  background: var(--success-weak);
+  color: var(--success);
+}
+
+.notice {
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-danger {
+  color: var(--danger);
+}

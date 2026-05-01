@@ -20,7 +20,6 @@ public sealed class AppUserProfileService
         AppUser user,
         string? characterName,
         string? timeZone,
-        byte[]? profileImage,
         CancellationToken cancellationToken = default)
     {
         var previousCharacterNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -34,11 +33,6 @@ public sealed class AppUserProfileService
 
         user.CharacterName = normalizedCharacterName;
         user.TimeZone = normalizedTimeZone;
-
-        if (profileImage is { Length: > 0 })
-        {
-            user.ProfileImage = profileImage;
-        }
 
         var displayName = user.CharacterName ?? user.UserName ?? "Unknown";
 

@@ -1,0 +1,60 @@
+.summary-card {
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.summary-card .button-cluster {
+  margin-top: 10px;
+}
+
+.dkp-event-type-breakdown {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.dkp-event-type-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.dkp-event-type-breakdown li:last-child {
+  border-bottom: none;
+}
+
+.dkp-event-type-breakdown .num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.invite-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.invite-section h3 {
+  color: var(--fg);
+}
+
+.invite-search {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+}
+
+.roster-tools {
+  display: grid;
+  gap: 8px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -28,6 +28,23 @@ import {
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
+import {
+  LONG_WINDOW_TOD_MONSTERS,
+  TOD_COOLDOWN_OPTIONS,
+  TOD_INTERVAL_OPTIONS,
+  TOD_MONSTER_OPTIONS
+} from './activity-home.types';
+import type { TabName } from './activity-home.types';
+import {
+  breakSessionInfo,
+  createEmptyTodLootRow,
+  formatBreakDuration,
+  formatDkp,
+  formatElapsed,
+  parseDate,
+  parseLocalDateTime,
+  toDateTimeLocalValue
+} from './activity-home.helpers';
 
 @Component({
   selector: 'app-activity-home',
@@ -37,31 +54,12 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ActivityHomeComponent {
-  private static readonly todMonsterOptions = [
-    'Fafnir',
-    'Nidhogg',
-    'Behemoth',
-    'King Behemoth',
-    'Adamantoise',
-    'Aspidochelone',
-    'Tiamat',
-    'Jormungand',
-    'Vrtra',
-    'King Arthro',
-    'Simurgh',
-    'Other'
-  ] as const;
-
-  private static readonly todCooldownOptions = ['22 Hour', '72 Hour', 'Other'] as const;
-  private static readonly todIntervalOptions = ['10 Min', '1 Hour', 'Not specified'] as const;
-  private static readonly longWindowTodMonsters = new Set(['Tiamat', 'Jormungand', 'Vrtra']);
-
   protected readonly activity = inject(DiscordActivityService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
-  protected readonly activeTab = signal<'dashboard' | 'profile' | 'linkshell' | 'events' | 'tods' | 'auctions' | 'dkp' | 'endgame' | 'hnm' | 'missions' | 'messages' | 'configurations'>('dashboard');
+  protected readonly activeTab = signal<TabName>('dashboard');
 
-  protected setActiveTab(tab: 'dashboard' | 'profile' | 'linkshell' | 'events' | 'tods' | 'auctions' | 'dkp' | 'endgame' | 'hnm' | 'missions' | 'messages' | 'configurations'): void {
+  protected setActiveTab(tab: TabName): void {
     this.activeTab.set(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (tab === 'configurations') {
@@ -129,12 +127,12 @@ export class ActivityHomeComponent {
   }
   protected readonly lootDrafts: Record<number, ActivityLootInput> = {};
   protected readonly quickJoinDrafts: Record<number, ActivityQuickJoinInput> = {};
-  protected readonly todMonsterOptions = [...ActivityHomeComponent.todMonsterOptions];
-  protected readonly todCooldownOptions = [...ActivityHomeComponent.todCooldownOptions];
-  protected readonly todIntervalOptions = [...ActivityHomeComponent.todIntervalOptions];
+  protected readonly todMonsterOptions = [...TOD_MONSTER_OPTIONS];
+  protected readonly todCooldownOptions = [...TOD_COOLDOWN_OPTIONS];
+  protected readonly todIntervalOptions = [...TOD_INTERVAL_OPTIONS];
   protected readonly todDraft: ActivityCreateTodInput = {
     linkshellId: 0,
-    monsterName: ActivityHomeComponent.todMonsterOptions[0],
+    monsterName: TOD_MONSTER_OPTIONS[0],
     dayNumber: null,
     claim: true,
     timeLocal: '',
@@ -1049,7 +1047,7 @@ export class ActivityHomeComponent {
   }
 
   protected eventRelativeLabel(value?: string | null): string {
-    const target = this.parseDate(value);
+    const target = parseDate(value);
     if (!target) return '';
     const deltaMs = target - this.now();
     if (deltaMs <= 0) return 'Now';
@@ -1065,7 +1063,7 @@ export class ActivityHomeComponent {
   }
 
   protected eventClockLabel(value?: string | null): string {
-    const target = this.parseDate(value);
+    const target = parseDate(value);
     if (!target) return '—';
     const date = new Date(target);
     const now = new Date(this.now());
@@ -1090,7 +1088,7 @@ export class ActivityHomeComponent {
 
     const nowMs = this.now();
     const filtered = cutoffMs === 0 ? tods : tods.filter(tod => {
-      const timeMs = this.parseDate(tod.time) ?? 0;
+      const timeMs = parseDate(tod.time) ?? 0;
       return timeMs > 0 && (nowMs - timeMs) <= cutoffMs;
     });
 
@@ -1151,7 +1149,7 @@ export class ActivityHomeComponent {
     const tods = (this.activity.overview()?.recentTods ?? []).filter(tod => tod.linkshellId === selectedId);
     for (const tod of tods) {
       if (!tod.claim || !tod.lootDetails?.length) continue;
-      const when = this.parseDate(tod.time) ?? 0;
+      const when = parseDate(tod.time) ?? 0;
       for (const loot of tod.lootDetails) {
         if (!loot.itemName) continue;
         const winner = (loot.itemWinner ?? '').trim();
@@ -1189,7 +1187,7 @@ export class ActivityHomeComponent {
 
     const tods = (this.activity.overview()?.recentTods ?? []).filter(tod => tod.linkshellId === selectedId);
     for (const tod of tods) {
-      const when = this.parseDate(tod.time) ?? 0;
+      const when = parseDate(tod.time) ?? 0;
       if (tod.claim && tod.lootDetails?.length) {
         for (const loot of tod.lootDetails) {
           const winner = (loot.itemWinner ?? '').trim();
@@ -1233,7 +1231,7 @@ export class ActivityHomeComponent {
     }
 
     for (const history of this.selectedDashboardHistory()) {
-      const when = this.parseDate(history.endTime) ?? 0;
+      const when = parseDate(history.endTime) ?? 0;
       const parts: string[] = [`${history.participantCount} participants`];
       if (history.type) parts.push(history.type);
       if (history.location) parts.push(history.location);
@@ -1252,7 +1250,7 @@ export class ActivityHomeComponent {
     const primary = this.activity.overview()?.primaryLinkshell;
     if (primary && primary.id === selectedId) {
       for (const rule of primary.rules ?? []) {
-        const when = this.parseDate(rule.createdAt) ?? 0;
+        const when = parseDate(rule.createdAt) ?? 0;
         items.push({
           kind: 'rule',
           name: rule.title,
@@ -1265,7 +1263,7 @@ export class ActivityHomeComponent {
         });
       }
       for (const announcement of primary.announcements ?? []) {
-        const when = this.parseDate(announcement.createdAt) ?? 0;
+        const when = parseDate(announcement.createdAt) ?? 0;
         items.push({
           kind: 'announcement',
           name: announcement.title,
@@ -1446,7 +1444,7 @@ export class ActivityHomeComponent {
   }
 
   protected liveEventTimerLabel(event: { commencementStartTime?: string | null; startTime?: string | null }): string {
-    return this.formatElapsed(this.liveEventElapsedMs(event));
+    return formatElapsed(this.liveEventElapsedMs(event));
   }
 
   protected participantElapsedMs(
@@ -1465,14 +1463,14 @@ export class ActivityHomeComponent {
     participant: { startTime?: string | null; resumeTime?: string | null; duration?: number | null; isOnBreak?: boolean | null },
     event: { commencementStartTime?: string | null; startTime?: string | null }
   ): string {
-    return this.formatElapsed(this.participantElapsedMs(participant, event));
+    return formatElapsed(this.participantElapsedMs(participant, event));
   }
 
   protected participantCurrentDkp(
     participant: { startTime?: string | null; resumeTime?: string | null; duration?: number | null; isOnBreak?: boolean | null },
     event: { commencementStartTime?: string | null; startTime?: string | null; dkpPerHour?: number | null }
   ): string {
-    return this.formatDkp(this.participantElapsedMs(participant, event), event.dkpPerHour);
+    return formatDkp(this.participantElapsedMs(participant, event), event.dkpPerHour);
   }
 
   protected participantProgressPercent(
@@ -1529,55 +1527,11 @@ export class ActivityHomeComponent {
     participant: ActivityEventParticipant,
     entry: ActivityStatusLedgerEntry
   ): string {
-    const info = this.breakSessionInfo(participant, entry.id);
+    const info = breakSessionInfo(participant, entry.id);
     if (!info) {
       return 'Break Session';
     }
-    return `Break Session #${info.sessionNumber} · ${this.formatBreakDuration(info.durationMs)}`;
-  }
-
-  private breakSessionInfo(
-    participant: ActivityEventParticipant,
-    breakReturnId: number
-  ): { sessionNumber: number; durationMs: number } | null {
-    const sorted = [...participant.statusLedger].sort(
-      (a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime()
-    );
-    let currentStart: ActivityStatusLedgerEntry | null = null;
-    let sessionNumber = 0;
-    for (const entry of sorted) {
-      if (entry.actionType === 'BreakStart') {
-        currentStart = entry;
-        sessionNumber += 1;
-      } else if (entry.actionType === 'BreakReturn' && currentStart) {
-        if (entry.id === breakReturnId) {
-          const durationMs = Math.max(
-            0,
-            new Date(entry.occurredAt).getTime() - new Date(currentStart.occurredAt).getTime()
-          );
-          return { sessionNumber, durationMs };
-        }
-        currentStart = null;
-      }
-    }
-    return null;
-  }
-
-  private formatBreakDuration(ms: number): string {
-    if (!Number.isFinite(ms) || ms <= 0) {
-      return '0s';
-    }
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ${seconds}s`;
-    }
-    return `${seconds}s`;
+    return `Break Session #${info.sessionNumber} · ${formatBreakDuration(info.durationMs)}`;
   }
 
   protected async onDashboardLinkshellChange(linkshellId: number): Promise<void> {
@@ -1593,7 +1547,7 @@ export class ActivityHomeComponent {
     this.todDraft.monsterName = monsterName;
     if (monsterName !== 'Other') {
       this.todCustomMonsterName = '';
-      const usesLongWindow = ActivityHomeComponent.longWindowTodMonsters.has(monsterName.trim());
+      const usesLongWindow = LONG_WINDOW_TOD_MONSTERS.has(monsterName.trim());
       this.todDraft.cooldown = usesLongWindow ? '72 Hour' : '22 Hour';
       this.todDraft.interval = usesLongWindow ? '1 Hour' : '10 Min';
     }
@@ -1608,7 +1562,7 @@ export class ActivityHomeComponent {
     this.todDraft.claim = claim;
     if (!claim) {
       this.todDraft.noLoot = true;
-      this.todDraft.lootDetails = [this.createEmptyTodLootRow()];
+      this.todDraft.lootDetails = [createEmptyTodLootRow()];
     }
   }
 
@@ -1660,7 +1614,7 @@ export class ActivityHomeComponent {
   protected onTodNoLootChange(noLoot: boolean): void {
     this.todDraft.noLoot = noLoot;
     if (noLoot) {
-      this.todDraft.lootDetails = [this.createEmptyTodLootRow()];
+      this.todDraft.lootDetails = [createEmptyTodLootRow()];
     }
   }
 
@@ -1671,7 +1625,7 @@ export class ActivityHomeComponent {
       return;
     }
 
-    const todLocalTime = this.parseLocalDateTime(this.todDraft.timeLocal);
+    const todLocalTime = parseLocalDateTime(this.todDraft.timeLocal);
     if (!todLocalTime) {
       this.todRepopLocalValue = '';
       return;
@@ -1683,7 +1637,7 @@ export class ActivityHomeComponent {
       return;
     }
     todLocalTime.setHours(todLocalTime.getHours() + cooldownHours);
-    this.todRepopLocalValue = this.toDateTimeLocalValue(todLocalTime);
+    this.todRepopLocalValue = toDateTimeLocalValue(todLocalTime);
   }
 
   protected todRepopSummary(): string {
@@ -1695,12 +1649,12 @@ export class ActivityHomeComponent {
   }
 
   protected addTodLootRow(): void {
-    this.todDraft.lootDetails = [...this.todDraft.lootDetails, this.createEmptyTodLootRow()];
+    this.todDraft.lootDetails = [...this.todDraft.lootDetails, createEmptyTodLootRow()];
   }
 
   protected removeTodLootRow(index: number): void {
     if (this.todDraft.lootDetails.length === 1) {
-      this.todDraft.lootDetails = [this.createEmptyTodLootRow()];
+      this.todDraft.lootDetails = [createEmptyTodLootRow()];
       return;
     }
 
@@ -1709,7 +1663,7 @@ export class ActivityHomeComponent {
 
   protected todCountdownLabel(tod: { repopTime?: string | null }): string {
     const remainingMilliseconds = this.remainingMs(tod.repopTime);
-    return remainingMilliseconds <= 0 ? 'Ready' : this.formatElapsed(remainingMilliseconds);
+    return remainingMilliseconds <= 0 ? 'Ready' : formatElapsed(remainingMilliseconds);
   }
 
   protected isTodReady(tod: { repopTime?: string | null }): boolean {
@@ -1842,7 +1796,7 @@ export class ActivityHomeComponent {
     this.todDayNumberNotSpecified = tod.dayNumber == null;
 
     const monsterName: string = tod.monsterName ?? '';
-    const presets = ActivityHomeComponent.todMonsterOptions as readonly string[];
+    const presets = TOD_MONSTER_OPTIONS as readonly string[];
     if (presets.includes(monsterName)) {
       this.todDraft.monsterName = monsterName;
       this.todCustomMonsterName = '';
@@ -1852,7 +1806,7 @@ export class ActivityHomeComponent {
     }
 
     const cooldown: string = tod.cooldown ?? '22 Hour';
-    const cooldownPresets = ActivityHomeComponent.todCooldownOptions as readonly string[];
+    const cooldownPresets = TOD_COOLDOWN_OPTIONS as readonly string[];
     if (cooldownPresets.includes(cooldown)) {
       this.todDraft.cooldown = cooldown;
       this.todCustomCooldownHours = null;
@@ -1870,12 +1824,12 @@ export class ActivityHomeComponent {
           itemWinner: loot.itemWinner ?? '',
           winningDkpSpent: loot.winningDkpSpent ?? null
         }))
-      : [this.createEmptyTodLootRow()]);
+      : [createEmptyTodLootRow()]);
 
     if (tod.time) {
       const d = new Date(tod.time);
       if (!Number.isNaN(d.getTime())) {
-        this.todTimeLocalValue = this.toDateTimeLocalValue(d);
+        this.todTimeLocalValue = toDateTimeLocalValue(d);
       } else {
         this.todTimeLocalValue = '';
       }
@@ -1991,24 +1945,16 @@ export class ActivityHomeComponent {
     }
   }
 
-  private createEmptyTodLootRow(): ActivityTodLootInput {
-    return {
-      itemName: '',
-      itemWinner: '',
-      winningDkpSpent: null
-    };
-  }
-
   private resetTodDraft(selectedLinkshellId = this.selectedDashboardLinkshellId()): void {
     this.todDraft.linkshellId = selectedLinkshellId;
-    this.todDraft.monsterName = ActivityHomeComponent.todMonsterOptions[0];
+    this.todDraft.monsterName = TOD_MONSTER_OPTIONS[0];
     this.todDraft.dayNumber = null;
     this.todDraft.claim = true;
     this.todDraft.timeLocal = '';
     this.todDraft.cooldown = '22 Hour';
     this.todDraft.interval = '10 Min';
     this.todDraft.noLoot = true;
-    this.todDraft.lootDetails = [this.createEmptyTodLootRow()];
+    this.todDraft.lootDetails = [createEmptyTodLootRow()];
     this.todTimeLocalValue = '';
     this.todRepopLocalValue = '';
     this.todCustomMonsterName = '';
@@ -2020,7 +1966,7 @@ export class ActivityHomeComponent {
   }
 
   private remainingMs(targetValue?: string | null): number {
-    const targetTime = this.parseDate(targetValue);
+    const targetTime = parseDate(targetValue);
     if (!targetTime) {
       return 0;
     }
@@ -2028,49 +1974,12 @@ export class ActivityHomeComponent {
     return Math.max(0, targetTime - this.now());
   }
 
-  private toDateTimeLocalValue(date: Date): string {
-    const pad = (value: number) => value.toString().padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  }
-
   private elapsedMs(startValue?: string | null): number {
-    const startTime = this.parseDate(startValue);
+    const startTime = parseDate(startValue);
     if (!startTime) {
       return 0;
     }
 
     return Math.max(0, this.now() - startTime);
-  }
-
-  private parseDate(value?: string | null): number | null {
-    if (!value) {
-      return null;
-    }
-
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
-  }
-
-  private parseLocalDateTime(value?: string | null): Date | null {
-    if (!value) {
-      return null;
-    }
-
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  private formatElapsed(totalMilliseconds: number): string {
-    const totalSeconds = Math.max(0, Math.floor(totalMilliseconds / 1000));
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    return [hours, minutes, seconds].map(value => value.toString().padStart(2, '0')).join(':');
-  }
-
-  private formatDkp(totalMilliseconds: number, dkpPerHour?: number | null): string {
-    const rate = dkpPerHour ?? 0;
-    return ((totalMilliseconds / 3600000) * rate).toFixed(2);
   }
 }

@@ -1,0 +1,177 @@
+/* ----- DKP summary + entries ----- */
+.panel-tab .summary-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 4px 0 10px;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-tab .summary-card__label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin: 0 0 4px;
+}
+
+.panel-tab .summary-card strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg-1);
+  letter-spacing: -0.01em;
+}
+
+.panel-tab .summary-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.panel-tab .summary-card p:nth-of-type(1) {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 4px 0 2px;
+  letter-spacing: -0.02em;
+}
+
+.panel-tab .summary-card .muted {
+  font-size: 11px;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+}
+
+.history-detail-card .history-detail-meta {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+// Pagination controls under the Event History table.
+.history-pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px 0;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.history-pager__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-pager__page {
+  font-family: var(--font-mono, inherit);
+  color: var(--fg);
+}
+
+.panel-tab .history-detail-card .history-detail-meta__line,
+.history-detail-card .history-detail-meta__line {
+  margin: 0;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--fg-2);
+}
+
+.history-table th,
+.history-table td {
+  white-space: nowrap;
+}
+
+.history-table td:nth-child(2) {
+  white-space: normal;
+}
+
+/* DKP ledger entries */
+.panel-tab .compact-list--dense > li {
+  padding: 10px 12px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.panel-tab .compact-list--dense > li > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-tab .compact-list--dense > li strong {
+  font-size: 13px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.panel-tab .compact-list--dense > li span {
+  display: block;
+  font-size: 11px;
+  color: var(--fg-3);
+  line-height: 1.4;
+}
+
+.panel-tab .compact-list--dense .button-cluster--stacked {
+  flex: 0 0 auto;
+  align-items: flex-end;
+}
+
+.panel-tab .compact-list--dense .button-cluster--stacked > span:first-child {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.panel-tab .compact-list--dense .button-cluster--stacked > span:last-child {
+  font-size: 10px;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  padding-top: 4px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+  width: 100%;
+  text-align: right;
+}
+
+.panel-tab .text-success {
+  color: var(--success) !important;
+}
+
+.panel-tab .text-danger {
+  color: var(--danger) !important;
+}
+
+/* ===== Responsive — narrow iframe ===== */
+@media (max-width: 520px) {
+  .stat-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .panel-tab .tod-meta-grid {
+    grid-template-columns: 1fr;
+  }
+  .panel-tab .form-row {
+    grid-template-columns: 1fr;
+  }
+  .panel-tab .loot-row-editor {
+    grid-template-columns: 1fr;
+  }
+  .panel-tab .compact-list--dense > li {
+    flex-direction: column;
+  }
+  .panel-tab .compact-list--dense .button-cluster--stacked {
+    align-items: flex-start;
+  }
+  .panel-tab .compact-list--dense .button-cluster--stacked > span:last-child {
+    text-align: left;
+  }
+}

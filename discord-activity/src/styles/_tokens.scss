@@ -1,0 +1,97 @@
+:root {
+  --bg:        #0a0a0b;
+  --bg-elev:   #101012;
+  --surface:   #141417;
+  --surface-2: #1a1a1e;
+  --surface-3: #212126;
+
+  --border:     rgba(255, 255, 255, 0.06);
+  --border-2:   rgba(255, 255, 255, 0.10);
+  --border-hot: rgba(255, 255, 255, 0.18);
+
+  --fg:       #fafafa;
+  --fg-1:     #e4e4e7;
+  --fg-2:     #a1a1aa;
+  --fg-3:     #71717a;
+  --fg-4:     #52525b;
+
+  --accent:       #818cf8;
+  --accent-hover: #a5acf9;
+  --accent-weak:  rgba(129, 140, 248, 0.12);
+
+  --success:      #4ade80;
+  --success-weak: rgba(74, 222, 128, 0.12);
+  --warning:      #f59e0b;
+  --warning-weak: rgba(245, 158, 11, 0.12);
+  --danger:       #f87171;
+  --danger-weak:  rgba(248, 113, 113, 0.12);
+
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, Consolas, 'Courier New', monospace;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  color-scheme: dark;
+  font-family: var(--font-sans);
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  font-family: var(--font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+code {
+  font-family: var(--font-mono);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.75rem, 4vw, 2.4rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--fg);
+}

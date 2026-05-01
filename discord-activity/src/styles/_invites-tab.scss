@@ -1,0 +1,68 @@
+/* ----- Invite section (used for bid entry, member picker) ----- */
+.panel-tab .invite-section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-tab .invite-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.panel-tab .invite-section input,
+.panel-tab .invite-section select,
+.panel-tab .invite-section textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--fg-1);
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.panel-tab .invite-section input:focus,
+.panel-tab .invite-section select:focus,
+.panel-tab .invite-section textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.panel-tab .invite-search {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.panel-tab .invite-search > * {
+  flex: 1;
+}
+
+.panel-tab .invite-search button {
+  flex: 0 0 auto;
+}
+
+/* ----- Notices / empty state ----- */
+.panel-tab .notice {
+  font-size: 12px;
+  color: var(--fg-3);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  padding: 12px;
+  margin: 8px 0;
+  text-align: center;
+}

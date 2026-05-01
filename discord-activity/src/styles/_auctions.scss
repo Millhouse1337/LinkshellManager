@@ -1,0 +1,193 @@
+/* ----- Auction cards ----- */
+.panel-tab .compact-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel-tab .compact-list > li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.panel-tab .compact-list > li:hover {
+  border-color: var(--border-2);
+}
+
+.panel-tab .compact-list > li > div:first-of-type {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.panel-tab .compact-list > li > div > strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-1);
+  letter-spacing: -0.01em;
+}
+
+.panel-tab .compact-list > li > div > span {
+  font-size: 12px;
+  color: var(--fg-3);
+  line-height: 1.4;
+}
+
+.panel-tab .compact-list > li > div > span:first-of-type {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Nested auction items */
+.panel-tab .compact-list__child,
+.panel-tab .compact-list > li ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-tab .compact-list > li ul > li {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-tab .compact-list > li ul > li:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+.panel-tab .auction-card {
+  padding: 0;
+  overflow: hidden;
+}
+.panel-tab .auction-card__header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+}
+.panel-tab .auction-card__header > div:first-of-type {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.panel-tab .auction-card__items {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.panel-tab .auction-card__items > li {
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.panel-tab .auction-card__items > li:last-child {
+  border-bottom: none;
+}
+.panel-tab .auction-card__items > li > div:first-of-type {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.panel-tab .auction-card__bids {
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.panel-tab .compact-list > li ul > li strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-1);
+}
+
+.panel-tab .compact-list > li ul > li span {
+  font-size: 11px;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+}
+
+.panel-tab .button-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.panel-tab .button-cluster--stacked {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.panel-tab .button-cluster button,
+.panel-tab .action-button {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--fg-2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.panel-tab .button-cluster button:hover,
+.panel-tab .action-button:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  color: var(--fg-1);
+}
+
+.panel-tab .action-button--primary {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.panel-tab .action-button--primary:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.panel-tab .action-button--danger {
+  color: var(--danger);
+}
+
+.panel-tab .action-button--danger:hover {
+  background: var(--danger-weak, rgba(239, 68, 68, 0.12));
+  border-color: var(--danger);
+  color: var(--danger);
+}

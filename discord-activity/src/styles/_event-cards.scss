@@ -1,0 +1,132 @@
+.live-stack,
+.queue-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.event-card,
+.queue-card,
+.summary-card {
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.event-card,
+.queue-card {
+  padding: 14px;
+}
+
+.event-card--live {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+
+// Stack spacing for sibling event cards (Live Operations list).
+.event-card + .event-card,
+.event-card + .card {
+  margin-top: 12px;
+}
+
+// Collapsible event/queue cards. The chevron lives at the far right of
+// the card header; rotating it via .collapsed gives the visual cue that
+// the card is hidden.
+.card-collapse-toggle {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--fg-3);
+  cursor: pointer;
+  font-size: 26px;
+  padding: 0 6px;
+  line-height: 1;
+  transition: transform 0.15s ease, color 0.15s ease;
+  flex: 0 0 auto;
+}
+
+.card-collapse-toggle--right {
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.card-collapse-toggle:hover {
+  color: var(--fg);
+}
+
+.card-collapse-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+
+.event-card--collapsed,
+.queue-card--collapsed {
+  // Tighter padding when collapsed since only the header is visible.
+  padding-bottom: 10px;
+}
+
+.event-card__hero,
+.queue-card__header,
+.event-card__title-row,
+.event-action-bar,
+.event-section__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.event-card__title-row strong,
+.queue-card__header strong,
+.compact-list strong,
+.participants strong,
+.participant-list__copy strong,
+.summary-card strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.event-card__title-row {
+  align-items: center;
+}
+
+.event-card__meta,
+.queue-card__meta,
+.compact-list__meta {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  font-size: 12px;
+}
+
+.event-card__global-timer {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  color: #ffffff;
+}
+
+.event-card__global-timer-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.event-card__global-timer-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.1;
+  font-family: var(--font-mono);
+}
+
+.event-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
