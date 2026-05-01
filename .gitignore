@@ -12,6 +12,8 @@ wwwroot/discord-activity/prerendered-routes.json
 tmp-run*.err
 tmp-run*.out
 
-artifacts/git-backups/
+artifacts/
+
+cloudflared.exe
 
 *.user
