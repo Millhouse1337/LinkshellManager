@@ -1129,3 +1129,66 @@ table.themed .num {
 .news-sub { font-size: 11px; color: var(--fg-3); margin-top: 2px; }
 .news-meta { text-align: right; font-size: 12px; color: var(--fg); }
 .news-time { font-size: 11px; color: var(--fg-3); margin-top: 2px; font-family: var(--font-sans); }
+
+/* Dark-themed Bootstrap tabs (used by attendance windows on the Start view). */
+.nav-tabs { border-bottom: 1px solid var(--border); padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 2px; }
+/* Override the sidebar's .nav-item rule (width:100%, display:flex column) — inside
+   .nav-tabs each <li.nav-item> should size to its content so tabs sit side-by-side. */
+.nav-tabs .nav-item {
+    list-style: none;
+    width: auto;
+    display: inline-block;
+    padding: 0;
+    background: transparent;
+}
+.nav-tabs .nav-item:hover { background: transparent; }
+.nav-tabs .nav-link {
+    color: var(--fg-3);
+    background: transparent;
+    border: 1px solid transparent;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.nav-tabs .nav-link:hover { color: var(--fg); background: var(--surface-2, rgba(255,255,255,0.04)); }
+.nav-tabs .nav-link.active {
+    color: var(--fg);
+    background: var(--surface, rgba(255,255,255,0.06));
+    border-color: var(--border);
+    border-bottom-color: transparent;
+}
+.tab-content > .tab-pane { display: none; }
+.tab-content > .tab-pane.active { display: block; }
+.tab-content > .tab-pane.fade { opacity: 0; transition: opacity 0.15s linear; }
+.tab-content > .tab-pane.fade.show { opacity: 1; }
+
+/* ----- Collapsible event cards (Views/Event/Index.cshtml) ----- */
+.card-collapse-toggle {
+    background: transparent;
+    border: none;
+    color: var(--fg-3);
+    cursor: pointer;
+    font-size: 26px;
+    padding: 0 8px;
+    line-height: 1;
+    transition: transform 0.15s ease, color 0.15s ease;
+    flex: 0 0 auto;
+}
+.card-collapse-toggle--right {
+    margin-left: auto;
+    align-self: flex-start;
+}
+.card-collapse-toggle:hover { color: var(--fg); }
+.card-collapse-toggle.collapsed,
+.event-card-collapsible.is-collapsed > .card-head .card-collapse-toggle {
+    transform: rotate(-90deg);
+}
+.event-card-collapsible.is-collapsed > .event-card-collapsible__body {
+    display: none;
+}

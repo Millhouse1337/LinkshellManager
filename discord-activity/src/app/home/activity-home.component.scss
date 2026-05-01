@@ -43,3 +43,87 @@
   gap: 8px;
   color: var(--fg-3, #a1a1aa);
 }
+
+.attendance-window-tabs {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.attendance-window-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  color: var(--fg-3, #a1a1aa);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  padding: 6px 12px;
+}
+
+.attendance-window-tab:hover {
+  color: var(--fg, #fafafa);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+
+.attendance-window-tab.is-active {
+  color: var(--fg, #fafafa);
+  background: var(--surface, rgba(255, 255, 255, 0.06));
+  border-color: var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.attendance-window-pane__meta {
+  font-size: 11px;
+  color: var(--fg-3, #a1a1aa);
+  margin-bottom: 8px;
+}
+
+/* Game Addon (att) pairing modal — Configurations tab. */
+.addon-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+.addon-modal-dialog {
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.addon-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 14px;
+}
+.addon-modal-body {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.addon-modal-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.addon-modal-field input { padding: 6px 10px; }
+.addon-modal-code { text-align: center; padding: 8px 0; }
+.addon-modal-code__value {
+  font-family: var(--font-mono, monospace);
+  font-size: 28px;
+  letter-spacing: 4px;
+  font-weight: 700;
+}
+.addon-modal-error { color: #e05a5a; font-size: 12px; }
+.addon-modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  padding-top: 12px;
+}

@@ -35,9 +35,6 @@
     @if (isFeatureEnabled('enableEndgame')) {
       <button type="button" class="tab" [class.active]="activeTab() === 'endgame'" (click)="setActiveTab('endgame')">Endgame</button>
     }
-    @if (isFeatureEnabled('enableHnmSection')) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'hnm'" (click)="setActiveTab('hnm')">HNM</button>
-    }
     @if (isFeatureEnabled('enableAuctions') && isDkpModeEnabled()) {
       <button type="button" class="tab" [class.active]="activeTab() === 'auctions'" (click)="setActiveTab('auctions')">
         Auctions
@@ -412,11 +409,11 @@
                   </div>
                   <div class="tod-meta-cell">
                     <div class="tod-meta-label">Time of death</div>
-                    <div class="tod-meta-value">{{ activity.formatDateTime(group.latest.time) || 'Unavailable' }}</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || 'Unavailable' }}</div>
                   </div>
                   <div class="tod-meta-cell">
                     <div class="tod-meta-label">Repop starts</div>
-                    <div class="tod-meta-value">{{ activity.formatDateTime(group.latest.repopTime) || 'Unavailable' }}</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || 'Unavailable' }}</div>
                   </div>
                 </div>
                 <div class="tod-entry-actions">
@@ -439,7 +436,7 @@
                       <div class="tod-history-item">
                         <div class="tod-history-main">
                           <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
-                          <span class="num">{{ activity.formatDateTime(hist.time) || 'Unavailable' }}</span>
+                          <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || 'Unavailable' }}</span>
                         </div>
                         <div class="tod-history-meta">
                           <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
@@ -863,7 +860,8 @@
         </div>
       } @else {
         @for (event of liveEvents(); track event.id) {
-          <article class="event-card event-card--live">
+          <article class="event-card event-card--live"
+                   [class.event-card--collapsed]="isLiveEventCollapsed(event.id)">
             <div class="event-card__hero">
               <div>
                 <div class="event-card__title-row">
@@ -884,8 +882,18 @@
                 <span>{{ event.requestedSlots }} requested slots</span>
                 <span class="num">{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
               </div>
+              <button
+                type="button"
+                class="card-collapse-toggle card-collapse-toggle--right"
+                [class.collapsed]="isLiveEventCollapsed(event.id)"
+                (click)="toggleLiveEventCollapsed(event.id)"
+                [attr.aria-expanded]="!isLiveEventCollapsed(event.id)"
+                [attr.aria-label]="isLiveEventCollapsed(event.id) ? 'Expand event' : 'Collapse event'">
+                <span class="card-collapse-toggle__chevron">▾</span>
+              </button>
             </div>
 
+            @if (!isLiveEventCollapsed(event.id)) {
             <ul class="job-tags">
               @for (job of event.jobs; track job.id) {
                 <li>
@@ -895,6 +903,73 @@
               }
             </ul>
 
+            @if (event.windowCount > 1) {
+              <section class="event-section">
+                <div class="event-section__header">
+                  <h3>Attendance Windows</h3>
+                  <span class="tag default num">{{ attendanceWindowsFor(event).length }} of {{ event.windowCount }}</span>
+                </div>
+
+                @if (!hasAttendanceWindows(event)) {
+                  <p class="notice">Tabs will appear here as windows are posted from the att addon.</p>
+                } @else {
+                  <ul class="attendance-window-tabs">
+                    @for (window of attendanceWindowsFor(event); track window.id) {
+                      <li>
+                        <button type="button"
+                                class="attendance-window-tab"
+                                [class.is-active]="isActiveAttendanceWindow(event, window)"
+                                (click)="setActiveAttendanceWindow(event.id, window.sequenceNumber)">
+                          {{ attendanceWindowLabel(window) }}
+                          <span class="tag default num">{{ window.attendees.length }}</span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+
+                  @if (activeAttendanceWindow(event); as activeWindow) {
+                    <div class="attendance-window-pane">
+                      <div class="attendance-window-pane__meta">
+                        Posted {{ activeWindow.postedAt | date:'short' }}
+                      </div>
+                      @if (activeWindow.attendees.length === 0) {
+                        <p class="notice">No attendees recorded for this window.</p>
+                      } @else {
+                        <ul class="participant-list">
+                          @for (attendee of activeWindow.attendees; track attendee.id) {
+                            <li>
+                              <div class="participant-list__copy">
+                                <strong>{{ attendee.characterName || 'Unknown attendee' }}</strong>
+                                <span>{{ attendee.jobName || 'Job' }}/{{ attendee.subJobName || 'Sub' }}</span>
+                                <div class="live-metrics">
+                                  <span class="tag default num">Verified {{ attendee.verifiedAt | date:'shortTime' }}</span>
+                                  @if (attendee.verifiedBy) {
+                                    <span class="tag default">by {{ attendee.verifiedBy }}</span>
+                                  }
+                                </div>
+                              </div>
+                              @if (canManageLinkshell(event.linkshellId)) {
+                                <div class="participant-list__actions">
+                                  <button type="button" class="btn ghost sm"
+                                    (click)="removeAttendanceWindowAttendee(attendee.id)">
+                                    Remove
+                                  </button>
+                                </div>
+                              }
+                            </li>
+                          }
+                        </ul>
+                      }
+                    </div>
+                  }
+                }
+              </section>
+            }
+
+            <!-- Attendance / Active Room / Break Room are sign-up + verify-cycle UX
+                 that doesn't apply to HNM-style events; the Attendance Windows card
+                 above is the source of truth for those. -->
+            @if (event.windowCount <= 1) {
             <section class="event-section">
               <div class="event-section__header">
                 <h3>Attendance</h3>
@@ -1090,6 +1165,7 @@
                 </ul>
               }
             </section>
+            }
 
             <section class="event-section">
               <div class="event-section__header">
@@ -1190,6 +1266,7 @@
                 </p>
               }
             </section>
+            } <!-- /event card body collapsed -->
           </article>
         }
       }
@@ -1246,11 +1323,11 @@
                 </div>
                 <div class="tod-meta-cell">
                   <div class="tod-meta-label">Time of death</div>
-                  <div class="tod-meta-value">{{ activity.formatDateTime(group.latest.time) || 'Unavailable' }}</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || 'Unavailable' }}</div>
                 </div>
                 <div class="tod-meta-cell">
                   <div class="tod-meta-label">Repop starts</div>
-                  <div class="tod-meta-value">{{ activity.formatDateTime(group.latest.repopTime) || 'Unavailable' }}</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || 'Unavailable' }}</div>
                 </div>
               </div>
               @if (group.latest.imagePath) {
@@ -1277,7 +1354,7 @@
                     <div class="tod-history-item">
                       <div class="tod-history-main">
                         <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
-                        <span class="num">{{ activity.formatDateTime(hist.time) || 'Unavailable' }}</span>
+                        <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || 'Unavailable' }}</span>
                       </div>
                       <div class="tod-history-meta">
                         <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
@@ -1898,6 +1975,122 @@
         }
       </div>
 
+      <div class="card" (mouseenter)="loadAddonTokensForCurrent()">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Game Addon (att)</div>
+            <p class="muted" style="font-size:12px;margin:4px 0 0">
+              Generate a one-time pairing code, then in FFXI type <code>/att link &lt;code&gt;</code>
+              to connect the addon to this linkshell.
+            </p>
+          </div>
+          @if (canManageAddonTokens()) {
+            <button type="button" class="btn primary sm" (click)="openAddonPairingModal()">
+              + Generate pairing code
+            </button>
+          }
+        </div>
+
+        @if (!canManageAddonTokens()) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Only members with the "Customize linkshell settings" permission can manage addon tokens.</div>
+          </div>
+        } @else if (addonTokens().length === 0) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">No active addon tokens. Generate one to get started.</div>
+          </div>
+        } @else {
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Token</th>
+                  <th>Label</th>
+                  <th>Created</th>
+                  <th>Last used</th>
+                  <th class="num"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (token of addonTokens(); track token.id) {
+                  <tr>
+                    <td><code>{{ token.prefix }}…</code></td>
+                    <td>{{ token.label || '—' }}</td>
+                    <td>{{ formatAddonTokenDate(token.createdAt) }}</td>
+                    <td>{{ formatAddonTokenDate(token.lastUsedAt) }}</td>
+                    <td class="num">
+                      <button type="button" class="btn warn sm"
+                        [disabled]="activity.busyAddonTokens()"
+                        (click)="revokeAddonToken(token.id)">Revoke</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
     </div>
   }
 </main>
+
+@if (todDeleteConfirm(); as pending) {
+  <div class="addon-modal-backdrop" (click)="cancelTodDelete()">
+    <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
+      <div class="addon-modal-header">
+        <strong>Delete {{ pending.name }}?</strong>
+        <button type="button" class="btn ghost sm" (click)="cancelTodDelete()">×</button>
+      </div>
+      <div class="addon-modal-body">
+        <div class="muted" style="font-size:13px">
+          This also reverses any attached ToD loot DKP.
+        </div>
+      </div>
+      <div class="addon-modal-footer">
+        <button type="button" class="btn ghost" (click)="cancelTodDelete()">Cancel</button>
+        <button type="button" class="btn danger-outline" (click)="confirmTodDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (addonModalOpen) {
+  <div class="addon-modal-backdrop" (click)="closeAddonPairingModal()">
+    <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
+      <div class="addon-modal-header">
+        <strong>Pairing code</strong>
+        <button type="button" class="btn ghost sm" (click)="closeAddonPairingModal()">×</button>
+      </div>
+      <div class="addon-modal-body">
+        <label class="addon-modal-field">
+          <span>Label (optional)</span>
+          <input type="text" [(ngModel)]="addonModalLabel" maxlength="128"
+            placeholder="e.g. Nils — desktop"
+            [disabled]="!!addonGeneratedCode" />
+        </label>
+        @if (addonGeneratedCode) {
+          <div class="addon-modal-code">
+            <div class="addon-modal-code__value">{{ addonGeneratedCode }}</div>
+            <div class="muted" style="font-size:12px;margin-top:6px">
+              Expires in {{ addonCountdownLabel }}. In FFXI: <code>/att link &lt;code&gt;</code>
+            </div>
+          </div>
+        }
+        @if (addonModalError) {
+          <div class="addon-modal-error">{{ addonModalError }}</div>
+        }
+      </div>
+      <div class="addon-modal-footer">
+        <button type="button" class="btn ghost" (click)="closeAddonPairingModal()">Close</button>
+        @if (!addonGeneratedCode) {
+          <button type="button" class="btn primary"
+            [disabled]="activity.busyAddonTokens()"
+            (click)="submitAddonPairingCode()">
+            {{ activity.busyAddonTokens() ? 'Generating…' : 'Generate' }}
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}

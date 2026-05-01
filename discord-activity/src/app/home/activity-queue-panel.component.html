@@ -220,7 +220,8 @@
     }
     <div class="queue-list">
       @for (event of queuedEvents(); track event.id) {
-        <article class="queue-card">
+        <article class="queue-card"
+                 [class.queue-card--collapsed]="isQueueCollapsed(event.id)">
           <div class="queue-card__header">
             <div>
               <strong>{{ event.name || 'Untitled event' }}</strong>
@@ -236,8 +237,18 @@
               <span>{{ event.participantCount }} participants</span>
               <span>{{ event.requestedSlots }} slots</span>
             </div>
+            <button
+              type="button"
+              class="card-collapse-toggle card-collapse-toggle--right"
+              [class.collapsed]="isQueueCollapsed(event.id)"
+              (click)="toggleQueueCollapsed(event.id)"
+              [attr.aria-expanded]="!isQueueCollapsed(event.id)"
+              [attr.aria-label]="isQueueCollapsed(event.id) ? 'Expand event' : 'Collapse event'">
+              <span class="card-collapse-toggle__chevron">▾</span>
+            </button>
           </div>
 
+          @if (!isQueueCollapsed(event.id)) {
           <ul class="job-tags">
             @for (job of event.jobs; track job.id) {
               <li>
@@ -315,13 +326,53 @@
                 </button>
               }
               @if (event.jobs.length === 0) {
-                <button
-                  type="button"
-                  class="action-button"
-                  [disabled]="activity.busyEventId() === event.id"
-                  (click)="activity.signUpForEvent(event.id, 0)">
-                  {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
-                </button>
+                <div class="ad-hoc-signup">
+                  <p class="ad-hoc-signup__hint">
+                    No party setup specified — pick the job you'll bring and sign up.
+                  </p>
+                  <div class="ad-hoc-signup__grid">
+                    <label>
+                      <span>Role</span>
+                      <select
+                        [(ngModel)]="getSignupDraft(event.id).jobType"
+                        [name]="'signupJobType' + event.id">
+                        <option value="">Select role</option>
+                        @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
+                          <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Main job</span>
+                      <select
+                        [(ngModel)]="getSignupDraft(event.id).jobName"
+                        [name]="'signupJobName' + event.id">
+                        <option value="">Select main job</option>
+                        @for (jobOption of mainJobOptions; track jobOption) {
+                          <option [value]="jobOption">{{ jobOption }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>Sub job</span>
+                      <select
+                        [(ngModel)]="getSignupDraft(event.id).subJobName"
+                        [name]="'signupSubJobName' + event.id">
+                        <option value="">Select sub job</option>
+                        @for (jobOption of subJobOptions; track jobOption) {
+                          <option [value]="jobOption">{{ jobOption }}</option>
+                        }
+                      </select>
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    class="action-button"
+                    [disabled]="activity.busyEventId() === event.id || !isSignupDraftComplete(event.id)"
+                    (click)="submitAdHocSignup(event.id)">
+                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
+                  </button>
+                </div>
               } @else {
                 @for (job of event.jobs; track job.id) {
                   <button
@@ -335,6 +386,7 @@
               }
             </div>
           }
+          } <!-- /queue card body collapsed -->
         </article>
       }
     </div>

@@ -37,6 +37,8 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
         public DbSet<AddonApiToken> AddonApiTokens => Set<AddonApiToken>();
         public DbSet<AddonPairingCode> AddonPairingCodes => Set<AddonPairingCode>();
+        public DbSet<EventAttendanceWindow> EventAttendanceWindows => Set<EventAttendanceWindow>();
+        public DbSet<AppUserEventWindow> AppUserEventWindows => Set<AppUserEventWindow>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -150,6 +152,10 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasOne(item => item.AppUser)
                     .WithMany()
                     .HasForeignKey(item => item.AppUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(item => item.EventAttendanceWindow)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventAttendanceWindowId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.AppUserEventId, item.OccurredAt });
             });
@@ -312,6 +318,34 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.Code).IsUnique();
                 entity.HasIndex(item => item.ExpiresAt);
+            });
+
+            builder.Entity<EventAttendanceWindow>(entity =>
+            {
+                entity.ToTable("EventAttendanceWindows");
+                entity.Property(item => item.Label).HasMaxLength(64);
+                entity.Property(item => item.PostedBySource).HasMaxLength(64);
+                entity.HasOne(item => item.Event)
+                    .WithMany(evt => evt.AttendanceWindows)
+                    .HasForeignKey(item => item.EventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.EventId, item.SequenceNumber }).IsUnique();
+            });
+
+            builder.Entity<AppUserEventWindow>(entity =>
+            {
+                entity.ToTable("AppUserEventWindows");
+                entity.Property(item => item.VerifiedBy).HasMaxLength(256);
+                entity.Property(item => item.Zone).HasMaxLength(64);
+                entity.HasOne(item => item.AppUserEvent)
+                    .WithMany(aue => aue.AttendedWindows)
+                    .HasForeignKey(item => item.AppUserEventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.EventAttendanceWindow)
+                    .WithMany(window => window.Attendees)
+                    .HasForeignKey(item => item.EventAttendanceWindowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.AppUserEventId, item.EventAttendanceWindowId }).IsUnique();
             });
         }
     }

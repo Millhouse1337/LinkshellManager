@@ -59,70 +59,8 @@ else
         </div>
     }
 
-    @if (Model.CanManage && Model.SelectedLinkshellId > 0)
-    {
-        <div class="card fade d3" id="addonTokenCard" data-linkshellid="@Model.SelectedLinkshellId">
-            <div class="card-head">
-                <div>
-                    <div class="card-title">Game Addon (att)</div>
-                    <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
-                        Generate a one-time pairing code, then in FFXI type
-                        <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/att link &lt;code&gt;</code>
-                        to connect the addon to this linkshell.
-                    </div>
-                </div>
-                <div class="page-actions">
-                    <button type="button" class="btn primary sm" id="addonGenerateBtn">+ Generate pairing code</button>
-                </div>
-            </div>
-            <div id="addonTokensWrapper" style="padding:0 4px 4px">
-                <div id="addonTokensEmpty" class="empty" style="display:none">No active addon tokens. Generate one to get started.</div>
-                <table class="table themed" id="addonTokensTable" style="display:none">
-                    <thead>
-                        <tr>
-                            <th>Token</th>
-                            <th>Label</th>
-                            <th>Created</th>
-                            <th>Last used</th>
-                            <th style="text-align:right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="mt-modal" id="addonPairModal" role="dialog" aria-modal="true">
-            <div class="mt-modal__backdrop" data-mt-close="1"></div>
-            <div class="mt-modal__dialog">
-                <div class="mt-modal__content">
-                    <div class="mt-modal__header">
-                        <h5 class="mt-modal__title">Pairing code</h5>
-                        <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
-                    </div>
-                    <div class="mt-modal__body">
-                        <div class="field" style="margin-bottom:14px">
-                            <label for="addonPairLabel">Label (optional)</label>
-                            <input type="text" id="addonPairLabel" class="form-control" placeholder="e.g. Nils — desktop" maxlength="128" />
-                        </div>
-                        <div id="addonPairCodeWrapper" style="display:none">
-                            <div style="text-align:center;margin:12px 0">
-                                <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
-                                <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
-                                    Expires in <span id="addonPairCountdown">10:00</span>. In FFXI: <code>/att link &lt;code&gt;</code>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
-                    </div>
-                    <div class="mt-modal__footer">
-                        <button type="button" class="btn ghost" data-mt-close="1">Close</button>
-                        <button type="button" class="btn primary" id="addonPairCreateBtn">Generate</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
+    @* The Game Addon (att) pairing card lives on /Linkshell/Customize now;
+       moved here so it sits next to the rest of the linkshell-wide settings. *@
 
     <div class="card fade d3">
         <div class="card-head">

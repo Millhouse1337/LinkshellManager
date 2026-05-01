@@ -437,6 +437,47 @@ app-activity-queue-panel {
   border-color: var(--accent);
 }
 
+// Stack spacing for sibling event cards (Live Operations list).
+.event-card + .event-card,
+.event-card + .card {
+  margin-top: 12px;
+}
+
+// Collapsible event/queue cards. The chevron lives at the far right of
+// the card header; rotating it via .collapsed gives the visual cue that
+// the card is hidden.
+.card-collapse-toggle {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--fg-3);
+  cursor: pointer;
+  font-size: 26px;
+  padding: 0 6px;
+  line-height: 1;
+  transition: transform 0.15s ease, color 0.15s ease;
+  flex: 0 0 auto;
+}
+
+.card-collapse-toggle--right {
+  margin-left: auto;
+  align-self: flex-start;
+}
+
+.card-collapse-toggle:hover {
+  color: var(--fg);
+}
+
+.card-collapse-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+
+.event-card--collapsed,
+.queue-card--collapsed {
+  // Tighter padding when collapsed since only the header is visible.
+  padding-bottom: 10px;
+}
+
 .event-card__hero,
 .queue-card__header,
 .event-card__title-row,
@@ -1207,6 +1248,42 @@ app-activity-queue-panel {
 .late-join-form {
   grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   align-items: end;
+}
+
+.ad-hoc-signup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.ad-hoc-signup__hint {
+  margin: 0;
+  color: var(--fg-3);
+  font-size: 12px;
+}
+
+.ad-hoc-signup__grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ad-hoc-signup__grid label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.ad-hoc-signup .action-button {
+  align-self: flex-start;
+}
+
+@media (max-width: 720px) {
+  .ad-hoc-signup__grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .loot-row-editor {
@@ -2613,6 +2690,28 @@ body {
   display: grid;
   gap: 4px;
   margin-top: 8px;
+}
+
+// Pagination controls under the Event History table.
+.history-pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px 0;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.history-pager__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-pager__page {
+  font-family: var(--font-mono, inherit);
+  color: var(--fg);
 }
 
 .panel-tab .history-detail-card .history-detail-meta__line,

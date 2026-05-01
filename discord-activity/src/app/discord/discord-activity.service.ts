@@ -335,6 +335,27 @@ interface ActivityEvent {
   participants: ActivityEventParticipant[];
   loot: ActivityLootEntry[];
   jobs: ActivityEventJob[];
+  windowCount: number;
+  attendanceWindows: ActivityAttendanceWindow[];
+}
+
+export interface ActivityAttendanceWindow {
+  id: number;
+  sequenceNumber: number;
+  label?: string | null;
+  postedAt: string;
+  attendees: ActivityAttendanceWindowAttendee[];
+}
+
+export interface ActivityAttendanceWindowAttendee {
+  // AppUserEventWindow.Id — used as the path segment for the per-row remove call.
+  id: number;
+  characterName?: string | null;
+  jobName?: string | null;
+  subJobName?: string | null;
+  zone?: string | null;
+  verifiedAt: string;
+  verifiedBy?: string | null;
 }
 
 interface ActivityParticipation {
@@ -395,6 +416,25 @@ interface ActivityHistoryDetail {
   dkpPerHour?: number | null;
   details?: string | null;
   participants: ActivityHistoryParticipant[];
+}
+
+// Game Addon (att) pairing — mirrors the web app's /Linkshell/Customize card.
+export interface ActivityAddonToken {
+  id: number;
+  prefix: string;
+  label?: string | null;
+  createdAt: string;
+  lastUsedAt?: string | null;
+  issuedToAppUserId?: string | null;
+}
+
+export interface ActivityAddonTokenList {
+  tokens: ActivityAddonToken[];
+}
+
+export interface ActivityAddonPairingCodeResponse {
+  code: string;
+  expiresInMinutes: number;
 }
 
 interface ActivityDkpHistoryMember {
@@ -879,13 +919,19 @@ export class DiscordActivityService {
     return payload as T;
   }
 
-  async signUpForEvent(eventId: number, jobId: number): Promise<void> {
+  async signUpForEvent(eventId: number, jobId: number, adHocJob?: ActivityQuickJoinInput): Promise<void> {
     this.busyEventId.set(eventId);
     this.actionError.set(null);
     this.actionMessage.set(null);
 
     try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/signup`, { jobId });
+      const body: { jobId: number; jobName?: string; subJobName?: string; jobType?: string } = { jobId };
+      if (jobId <= 0 && adHocJob) {
+        body.jobName = adHocJob.jobName;
+        body.subJobName = adHocJob.subJobName;
+        body.jobType = adHocJob.jobType;
+      }
+      await this.postActivityAction(`/api/activity/events/${eventId}/signup`, body);
       await this.refreshOverview();
       this.actionMessage.set('Event signup updated.');
     } catch (error) {
@@ -1022,6 +1068,87 @@ export class DiscordActivityService {
 
   readonly busyDkpAudit = signal(false);
   readonly busyRoles = signal(false);
+  readonly busyAddonTokens = signal(false);
+
+  // Game Addon (att) pairing — calls the same /api/addon/management endpoints
+  // the web Customize Linkshell page uses (cookie-authenticated; the Activity's
+  // session cookie carries through via credentials:'include' on every fetch).
+  async loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> {
+    this.busyAddonTokens.set(true);
+    this.actionError.set(null);
+    try {
+      const accessToken = this.session()?.access_token;
+      return await this.fetchActivityJson<ActivityAddonTokenList>(
+        `/api/addon/management/tokens?linkshellId=${linkshellId}`,
+        accessToken
+      );
+    } catch (error) {
+      this.actionError.set(this.formatActionError(error, 'Loading addon tokens failed.'));
+      return null;
+    } finally {
+      this.busyAddonTokens.set(false);
+    }
+  }
+
+  async createAddonPairingCode(linkshellId: number, label: string | null): Promise<ActivityAddonPairingCodeResponse | null> {
+    this.busyAddonTokens.set(true);
+    this.actionError.set(null);
+    try {
+      return await this.postActivityJson<ActivityAddonPairingCodeResponse>(
+        '/api/addon/management/pairing-code',
+        { linkshellId, label }
+      );
+    } catch (error) {
+      this.actionError.set(this.formatActionError(error, 'Generating the pairing code failed.'));
+      return null;
+    } finally {
+      this.busyAddonTokens.set(false);
+    }
+  }
+
+  async revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> {
+    this.busyAddonTokens.set(true);
+    this.actionError.set(null);
+    try {
+      await this.postActivityAction(
+        `/api/addon/management/tokens/${tokenId}/revoke?linkshellId=${linkshellId}`
+      );
+      return true;
+    } catch (error) {
+      this.actionError.set(this.formatActionError(error, 'Revoking the addon token failed.'));
+      return false;
+    } finally {
+      this.busyAddonTokens.set(false);
+    }
+  }
+
+  // Removes a single AppUserEventWindow row (a participant's attendance for one
+  // posted HNM window). The server cleans up the matching ledger entry too.
+  async removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> {
+    this.actionError.set(null);
+    try {
+      const accessToken = this.session()?.access_token;
+      const headers: Record<string, string> = {};
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const response = await fetch(
+        `/api/addon/management/window-attendees/${attendeeId}`,
+        { method: 'DELETE', headers, credentials: 'include' }
+      );
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const payload = JSON.parse(text || '{}') as { error?: string };
+          throw new Error(payload.error || `Remove failed (HTTP ${response.status}).`);
+        } catch {
+          throw new Error(text || `Remove failed (HTTP ${response.status}).`);
+        }
+      }
+      return true;
+    } catch (error) {
+      this.actionError.set(this.formatActionError(error, 'Removing the attendee failed.'));
+      return false;
+    }
+  }
 
   async loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> {
     this.busyRoles.set(true);
@@ -2463,6 +2590,26 @@ export class DiscordActivityService {
       timeZone: this.viewerTimeZone(),
       dateStyle: 'medium',
       timeStyle: 'short'
+    }).format(date);
+  }
+
+  // Same as formatDateTime but renders seconds. Used for ToD displays
+  // (TIME OF DEATH / REPOP STARTS) where the addon now captures down to
+  // the second and the user wants the precision to round-trip.
+  formatDateTimeWithSeconds(value?: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: this.viewerTimeZone(),
+      dateStyle: 'medium',
+      timeStyle: 'medium'
     }).format(date);
   }
 

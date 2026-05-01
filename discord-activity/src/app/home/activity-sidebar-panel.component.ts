@@ -718,6 +718,42 @@ export class ActivitySidebarPanelComponent {
     return this.activity.historyList();
   }
 
+  // ---------- Event History pagination (10 per page) ----------
+  protected readonly historyPageSize = 10;
+  protected readonly historyPage = signal(1);
+
+  protected historyTotalPages(): number {
+    return Math.max(1, Math.ceil(this.historyList().length / this.historyPageSize));
+  }
+
+  protected historyPageItems() {
+    const all = this.historyList();
+    // Clamp the page so deletes/refreshes that shrink the list can never
+    // leave us pointing at a non-existent page.
+    const page = Math.min(Math.max(1, this.historyPage()), this.historyTotalPages());
+    if (page !== this.historyPage()) {
+      // Defer the corrective set so we don't synchronously mutate during
+      // change detection — a microtask keeps Angular happy.
+      queueMicrotask(() => this.historyPage.set(page));
+    }
+    const start = (page - 1) * this.historyPageSize;
+    return all.slice(start, start + this.historyPageSize);
+  }
+
+  protected historyPageGoto(page: number): void {
+    const clamped = Math.min(Math.max(1, page), this.historyTotalPages());
+    this.historyPage.set(clamped);
+  }
+
+  protected historyPageRangeLabel(): string {
+    const total = this.historyList().length;
+    if (total === 0) return '0';
+    const page = Math.min(Math.max(1, this.historyPage()), this.historyTotalPages());
+    const start = (page - 1) * this.historyPageSize + 1;
+    const end = Math.min(start + this.historyPageSize - 1, total);
+    return `${start}–${end} of ${total}`;
+  }
+
   protected historyDetail() {
     return this.activity.historyDetail();
   }

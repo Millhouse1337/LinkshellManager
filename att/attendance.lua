@@ -130,7 +130,6 @@ function attendance.gather_zone(eventName)
     end
     attendance.sort()
     attendance.add_self()
-    print(string.format('[att] gather: added %d', added))
     return added
 end
 

@@ -1047,7 +1047,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (history of historyList(); track history.id) {
+            @for (history of historyPageItems(); track history.id) {
               <tr>
                 <td><strong>{{ history.name || 'Completed event' }}</strong></td>
                 <td>{{ history.type || 'Event' }} | {{ history.location || 'Unknown location' }}</td>
@@ -1133,6 +1133,23 @@
           </tbody>
         </table>
       </div>
+
+      @if (historyTotalPages() > 1) {
+        <div class="history-pager">
+          <span class="history-pager__range">{{ historyPageRangeLabel() }}</span>
+          <div class="history-pager__controls">
+            <button type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="historyPage() <= 1"
+                    (click)="historyPageGoto(historyPage() - 1)">Prev</button>
+            <span class="history-pager__page">Page {{ historyPage() }} / {{ historyTotalPages() }}</span>
+            <button type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="historyPage() >= historyTotalPages()"
+                    (click)="historyPageGoto(historyPage() + 1)">Next</button>
+          </div>
+        </div>
+      }
     } @else {
       <p class="notice">Completed events will show up here after a run is archived.</p>
     }

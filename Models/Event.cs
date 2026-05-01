@@ -35,6 +35,14 @@ public class Event
 
     public string? Details { get; set; }
 
+    // Identifies who created the event so clients can show source-specific
+    // controls (e.g. the att addon shows a Cancel button only on rows it
+    // created itself). Currently set to "Addon" by AddonApiController; null
+    // for everything else (web app, legacy rows). Keep this short — it's an
+    // internal discriminator, not a free-form label.
+    [MaxLength(32)]
+    public string? CreationSource { get; set; }
+
     public ICollection<Job> Jobs { get; set; } = new List<Job>();
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();
@@ -42,6 +50,8 @@ public class Event
     public ICollection<AppUserEventStatusLedger> StatusLedgerEntries { get; set; } = new List<AppUserEventStatusLedger>();
 
     public ICollection<EventLootDetail> EventLootDetails { get; set; } = new List<EventLootDetail>();
+
+    public ICollection<EventAttendanceWindow> AttendanceWindows { get; set; } = new List<EventAttendanceWindow>();
 
     public DateTime? TimeStamp { get; set; }
 }

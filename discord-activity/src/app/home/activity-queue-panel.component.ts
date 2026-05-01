@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateEventInput,
+  ActivityQuickJoinInput,
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import {
@@ -41,7 +42,7 @@ export class ActivityQueuePanelComponent {
     ]
   };
 
-  protected readonly eventTypeOptions = ['Sky', 'Sea', 'HNM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
+  protected readonly eventTypeOptions = ['Sky', 'Sea', 'HNM', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
   protected eventTypeSelection: string = '';
   protected eventTypeError = false;
 
@@ -145,6 +146,50 @@ export class ActivityQueuePanelComponent {
   protected readonly mainJobOptions = [...EVENT_MAIN_JOB_OPTIONS];
   protected readonly subJobOptions = [...EVENT_SUB_JOB_OPTIONS];
   protected readonly jobTypeOptions = [...EVENT_JOB_TYPE_OPTIONS];
+
+  // Per-event draft of the user's job selection for pending events that have
+  // no pre-defined party setup. Mirrors the late-join draft pattern used in
+  // activity-home; lazily seeded so the template can two-way bind directly.
+  protected readonly signupDrafts: { [eventId: number]: ActivityQuickJoinInput } = {};
+
+  // Tracks queued-event cards that are currently EXPANDED. Default empty
+  // set => everything starts collapsed. Toggling adds/removes the id.
+  // Session-only.
+  protected readonly expandedQueueIds = signal<Set<number>>(new Set());
+
+  protected isQueueCollapsed(eventId: number): boolean {
+    return !this.expandedQueueIds().has(eventId);
+  }
+
+  protected toggleQueueCollapsed(eventId: number): void {
+    const next = new Set(this.expandedQueueIds());
+    if (next.has(eventId)) next.delete(eventId); else next.add(eventId);
+    this.expandedQueueIds.set(next);
+  }
+
+  protected getSignupDraft(eventId: number): ActivityQuickJoinInput {
+    let draft = this.signupDrafts[eventId];
+    if (!draft) {
+      draft = { jobName: '', subJobName: '', jobType: '' };
+      this.signupDrafts[eventId] = draft;
+    }
+    return draft;
+  }
+
+  protected isSignupDraftComplete(eventId: number): boolean {
+    const draft = this.signupDrafts[eventId];
+    return !!(draft && draft.jobName && draft.subJobName && draft.jobType);
+  }
+
+  protected async submitAdHocSignup(eventId: number): Promise<void> {
+    const draft = this.getSignupDraft(eventId);
+    if (!draft.jobName || !draft.subJobName || !draft.jobType) {
+      this.activity.actionError.set('Role, main job, and sub job are required to sign up.');
+      return;
+    }
+    await this.activity.signUpForEvent(eventId, 0, draft);
+    delete this.signupDrafts[eventId];
+  }
 
   protected queuedEvents() {
     return (this.activity.overview()?.activeEvents ?? []).filter(event => !event.commencementStartTime);
@@ -261,6 +306,7 @@ export class ActivityQueuePanelComponent {
     location?: string | null;
     startTime?: string | null;
     endTime?: string | null;
+    duration?: number | null;
     dkpPerHour?: number | null;
     details?: string | null;
     jobs: {
@@ -286,11 +332,17 @@ export class ActivityQueuePanelComponent {
     this.createModel.eventLocation = event.location ?? '';
     this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null);
     this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null);
-    this.createModel.duration = 1;
-    this.durationNotSpecified = false;
+    // Source of truth is the actual stored value: addon-created (HNM) events
+    // come back with both endTime and duration null, so the "Not specified"
+    // checkboxes should reflect that on edit.
+    this.createModel.duration = event.duration ?? 1;
+    this.durationNotSpecified = event.duration == null;
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
-    this.partySetupNotSpecified = false;
-    this.recomputeDurationFromStartEnd();
+    this.partySetupNotSpecified = !(event.jobs && event.jobs.some(j =>
+      !!j.jobName || !!j.subJobName || !!j.jobType || (j.quantity != null && j.quantity > 0)));
+    if (!this.durationNotSpecified && !this.endTimeNotSpecified) {
+      this.recomputeDurationFromStartEnd();
+    }
     this.createModel.dkpPerHour = event.dkpPerHour ?? 0;
     this.createModel.details = event.details ?? '';
     this.createModel.jobs = event.jobs.map(job => ({

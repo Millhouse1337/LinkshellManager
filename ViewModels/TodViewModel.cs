@@ -4,6 +4,7 @@ namespace LinkshellManagerDiscordApp.ViewModels;
 
 public class TodManagerViewModel
 {
+    public const string TwoHourCooldown = "2 Hour";
     public const string TwentyTwoHourCooldown = "22 Hour";
     public const string SeventyTwoHourCooldown = "72 Hour";
     public const string OneHourInterval = "1 Hour";
@@ -26,6 +27,7 @@ public class TodManagerViewModel
 
     public static IReadOnlyList<string> SupportedCooldowns { get; } = new[]
     {
+        TwoHourCooldown,
         TwentyTwoHourCooldown,
         SeventyTwoHourCooldown
     };

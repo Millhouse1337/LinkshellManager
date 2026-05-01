@@ -7,7 +7,16 @@ local json = require('json')
 
 local api = {}
 
--- Caller-provided settings table { baseUrl, token, linkshellId, linkshellName, label }.
+-- Caller-provided settings table:
+--   {
+--     baseUrl  = '',
+--     pairings = {                                          -- Model A multi-LS auth
+--       { token, linkshellId, linkshellName, label, channel },  -- channel = 1 or 2
+--       ...
+--     },
+--   }
+-- Authenticated requests use the "primary" pairing (channel 1 preferred, else first
+-- in the list). Per-pairing routing for events/attendance is Phase 2.
 api.config = nil
 
 -- ---------- Internal helpers ----------
@@ -146,8 +155,9 @@ local function request(method, path, body_table)
         ['Accept'] = 'application/json',
         ['User-Agent'] = 'att-addon/4.1.8'
     }
-    if api.config and api.config.token and api.config.token ~= '' then
-        headers['Authorization'] = 'Bearer ' .. api.config.token
+    local primary = api.get_primary_pairing and api.get_primary_pairing() or nil
+    if primary and primary.token and primary.token ~= '' then
+        headers['Authorization'] = 'Bearer ' .. primary.token
     end
     if body_string then
         headers['Content-Type'] = 'application/json'
@@ -167,8 +177,12 @@ local function request(method, path, body_table)
         return decoded or {}, nil, status
     end
 
+    -- Only index `decoded.error` when decoded is actually a table. JSON bodies
+    -- can legally decode to a number or string primitive, and Sugar attaches a
+    -- strict-index metatable to numbers/strings that errors on unknown keys
+    -- ("Math namespace does not contain a definition for: error").
     local err_msg = 'HTTP ' .. status
-    if decoded and decoded.error then
+    if type(decoded) == 'table' and decoded.error then
         err_msg = err_msg .. ': ' .. tostring(decoded.error)
     elseif body and #body > 0 then
         err_msg = err_msg .. ': ' .. body:sub(1, 200)
@@ -185,27 +199,89 @@ function api.set_base_url(url)
     api.config.baseUrl = (url or ''):gsub('/+$', '')
 end
 
+-- Hits /api/addon/me on the configured server to verify it's reachable and
+-- exposes the LSManager addon route table. Returns (true, status_code) on
+-- any HTTP response (server is reachable; the actual status code indicates
+-- auth state rather than reachability). Returns (false, error_message) on
+-- network failure or HTTP 404 (URL is up but not an LSManager server).
+function api.probe()
+    local _, err, status = request('GET', '/api/addon/me')
+    if status == nil then
+        return false, err or 'no response'
+    end
+    if status == 404 then
+        return false, 'HTTP 404 - URL is reachable but does not look like an LSManager server.'
+    end
+    return true, status
+end
+
+-- Returns the list of paired linkshells. Always returns a table (possibly empty).
+function api.list_pairings()
+    if not api.config or not api.config.pairings then return {} end
+    return api.config.pairings
+end
+
+-- Returns the pairing on the given in-game channel (1 or 2), or nil.
+function api.get_pairing_by_channel(channel)
+    for _, p in ipairs(api.list_pairings()) do
+        if p.channel == channel then return p end
+    end
+    return nil
+end
+
+-- The "primary" pairing used for event/attendance ops:
+-- channel 1 if paired, else first in list, else nil.
+function api.get_primary_pairing()
+    return api.get_pairing_by_channel(1) or api.list_pairings()[1]
+end
+
 function api.is_paired()
-    return api.config and api.config.token and api.config.token ~= ''
+    return #api.list_pairings() > 0
 end
 
-function api.unpair()
-    if not api.config then return end
-    api.config.token = ''
-    api.config.linkshellId = nil
-    api.config.linkshellName = ''
-    api.config.label = ''
+-- Removes a pairing. channel = 1, 2, or nil/'all' to remove every pairing.
+function api.unpair(channel)
+    if not api.config or not api.config.pairings then return end
+    if channel == nil or channel == 'all' then
+        for k in pairs(api.config.pairings) do api.config.pairings[k] = nil end
+        return
+    end
+    channel = tonumber(channel)
+    for i = #api.config.pairings, 1, -1 do
+        if api.config.pairings[i].channel == channel then
+            table.remove(api.config.pairings, i)
+        end
+    end
 end
 
-function api.pair(code)
+-- Adds (or replaces) a pairing on the given in-game channel (1 or 2, defaults 1).
+-- Calls the server to redeem the pair code; on success writes the pairing into config.
+function api.pair(code, channel)
+    if not api.config then return nil, 'No config table provided.' end
+    channel = tonumber(channel) or 1
+    if channel ~= 1 and channel ~= 2 then return nil, 'Channel must be 1 or 2.' end
+
     local result, err = request('POST', '/api/addon/pair', { code = code })
     if not result then return nil, err end
-    if not api.config then return nil, 'No config table provided.' end
-    api.config.token = result.token
-    api.config.linkshellId = result.linkshellId
-    api.config.linkshellName = result.linkshellName or ''
-    api.config.label = result.label or ''
-    return result
+
+    local pairing = {
+        token         = result.token,
+        linkshellId   = result.linkshellId,
+        linkshellName = result.linkshellName or '',
+        label         = result.label or '',
+        channel       = channel,
+    }
+
+    if not api.config.pairings then api.config.pairings = {} end
+    -- Replace existing pairing on the same channel if any.
+    for i, p in ipairs(api.config.pairings) do
+        if p.channel == channel then
+            api.config.pairings[i] = pairing
+            return pairing
+        end
+    end
+    table.insert(api.config.pairings, pairing)
+    return pairing
 end
 
 function api.me()
@@ -218,11 +294,12 @@ function api.list_events()
     return result.events or {}
 end
 
-function api.create_event(name, etype, location)
+function api.create_event(name, etype, location, dkpPerHour)
     return request('POST', '/api/addon/events', {
-        name = name,
-        type = etype,
-        location = location
+        name       = name,
+        type       = etype,
+        location   = location,
+        dkpPerHour = tonumber(dkpPerHour)
     })
 end
 
@@ -230,11 +307,79 @@ function api.start_event(eventId)
     return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/start')
 end
 
+-- Ends a running event. Server writes EventHistory + DkpLedgerEntry rows
+-- and removes the live Event / Jobs / participants / loot details. Returns
+-- { eventId, eventName } on success.
+function api.end_event(eventId)
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/end')
+end
+
+-- Cancels (deletes) a queued event that hasn't started yet. Server returns 400
+-- if the event is already live.
+function api.cancel_event(eventId)
+    return request('DELETE', '/api/addon/events/' .. tostring(eventId))
+end
+
+-- Fetches a single event including its posted HNM attendance windows + attendees.
+-- Used to rehydrate the addon's per-event window cache after an addon reload, so
+-- the user sees their previously-posted windows on re-selection.
+function api.get_event(eventId)
+    return request('GET', '/api/addon/events/' .. tostring(eventId))
+end
+
+-- Removes a single character from an already-posted HNM window. Used by the
+-- Remove button on each row of a frozen window tab in the launcher; the server
+-- drops the AppUserEventWindow row and its matching ledger entry.
+function api.remove_window_attendee(eventId, windowSequence, characterName)
+    -- urlencode the character name to handle apostrophes / spaces / non-ASCII.
+    local encoded = (characterName or ''):gsub('([^%w%-%_%.%~])', function (c)
+        return string.format('%%%02X', string.byte(c))
+    end)
+    return request('DELETE', string.format(
+        '/api/addon/events/%d/windows/%d/attendees/%s',
+        tonumber(eventId) or 0, tonumber(windowSequence) or 0, encoded))
+end
+
 -- entries: array of { characterName, mainJob, subJob, zone }
-function api.post_attendance(eventId, entries)
+-- windowSequence: optional 1-based HNM window number. Pass nil for non-HNM events
+-- (server will treat the post as the legacy single-window verify).
+function api.post_attendance(eventId, entries, windowSequence)
     return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/attendance', {
-        recordedAtUtc = os.date('!%Y-%m-%dT%H:%M:%SZ'),
-        entries = entries
+        recordedAtUtc  = os.date('!%Y-%m-%dT%H:%M:%SZ'),
+        entries        = entries,
+        windowSequence = windowSequence
+    })
+end
+
+-- Posts a captured HNM ToD to the web app's existing ToD list. Server fills
+-- in cooldown / interval / repop time from per-monster defaults so the addon
+-- only needs to send what it observed: the monster name, the UTC kill time,
+-- and the verbatim chat line for audit. Returns the created Tod row info on
+-- success: { todId, monsterName, defeatedAtUtc, repopTimeUtc, cooldown, interval }.
+function api.post_tod(monsterName, defeatedAtEpochSec, capturedMessage)
+    local epoch = tonumber(defeatedAtEpochSec) or os.time()
+    return request('POST', '/api/addon/tod', {
+        monsterName     = monsterName,
+        defeatedAtUtc   = os.date('!%Y-%m-%dT%H:%M:%SZ', epoch),
+        capturedMessage = capturedMessage
+    })
+end
+
+-- Returns { characterNames = {...}, lootStructure = 'Dkp' | 'Hybrid' | 'LootCouncil' }
+-- for the linkshell the addon is paired to. Used to populate the Winner combo
+-- on the Loot Pool panel and to label the DKP field correctly per structure.
+function api.list_roster()
+    return request('GET', '/api/addon/roster')
+end
+
+-- Posts a single TodLootDetail row attached to an existing Tod. Server creates
+-- the DkpLedgerEntry (LootSpent) and updates the winner's LinkshellDkp. Returns
+-- { lootDetailId, itemName, itemWinner, winningDkpSpent, actualDeductedDkp }.
+function api.post_loot(todId, itemName, itemWinner, winningDkpSpent)
+    return request('POST', '/api/addon/tod/' .. tostring(todId) .. '/loot', {
+        itemName        = itemName,
+        itemWinner      = itemWinner,
+        winningDkpSpent = tonumber(winningDkpSpent)
     })
 end
 

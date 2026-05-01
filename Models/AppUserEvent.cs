@@ -47,4 +47,6 @@ public class AppUserEvent
     public DateTime? ResumeTime { get; set; }
 
     public ICollection<AppUserEventStatusLedger> StatusLedgerEntries { get; set; } = new List<AppUserEventStatusLedger>();
+
+    public ICollection<AppUserEventWindow> AttendedWindows { get; set; } = new List<AppUserEventWindow>();
 }

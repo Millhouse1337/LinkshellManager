@@ -42,4 +42,9 @@ public class AppUserEventStatusLedger
 
     [MaxLength(32)]
     public string? Source { get; set; }
+
+    public int? EventAttendanceWindowId { get; set; }
+
+    [ForeignKey(nameof(EventAttendanceWindowId))]
+    public EventAttendanceWindow? EventAttendanceWindow { get; set; }
 }

@@ -323,12 +323,53 @@ public class EventController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SignUp(int jobId, int eventId)
+    public async Task<IActionResult> SignUp(int jobId, int eventId, string? jobName = null, string? subJobName = null, string? jobType = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
         {
             return Challenge();
+        }
+
+        // Ad-hoc signup path: event has no pre-defined Jobs. The form supplies
+        // the user's Main/Sub/Role directly so they can still register their
+        // attendance intent + character info.
+        if (jobId <= 0)
+        {
+            var eventEntity = await _context.Events
+                .Include(item => item.Jobs)
+                .FirstOrDefaultAsync(item => item.Id == eventId);
+
+            if (eventEntity is null) return NotFound();
+            if (eventEntity.Jobs.Count > 0)
+            {
+                // Caller should have used the per-job button instead.
+                return BadRequest("This event already has predefined jobs; pick one of those.");
+            }
+
+            var adHocMembership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
+            if (adHocMembership is null) return Forbid();
+
+            var existingAdHoc = await _context.AppUserEvents
+                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
+            if (existingAdHoc is not null)
+            {
+                _context.AppUserEvents.Remove(existingAdHoc);
+            }
+
+            static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+            _context.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = user.Id,
+                EventId = eventId,
+                CharacterName = user.CharacterName,
+                JobName = Clean(jobName),
+                SubJobName = Clean(subJobName),
+                JobType = Clean(jobType),
+                EventDkp = 0,
+            });
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
         }
 
         var job = await _context.Jobs
@@ -512,6 +553,9 @@ public class EventController : Controller
             .Include(evt => evt.AppUserEvents)
                 .ThenInclude(participation => participation.StatusLedgerEntries)
             .Include(evt => evt.EventLootDetails)
+            .Include(evt => evt.AttendanceWindows)
+                .ThenInclude(window => window.Attendees)
+                    .ThenInclude(attendee => attendee.AppUserEvent)
             .FirstOrDefaultAsync(evt => evt.Id == eventId);
 
         if (eventToStart is null)
@@ -585,7 +629,31 @@ public class EventController : Controller
                   .ToList(),
             EventLootDetails = eventToStart.EventLootDetails.OrderByDescending(item => item.Id).ToList(),
             LinkshellMembers = eventToStart.AppUserEvents.Select(item => item.CharacterName ?? string.Empty).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().OrderBy(name => name).ToList(),
-            CommencementStartTime = ConvertUtcToUserTimeZone(eventToStart.CommencementStartTime, user.TimeZone)
+            CommencementStartTime = ConvertUtcToUserTimeZone(eventToStart.CommencementStartTime, user.TimeZone),
+            WindowCount = LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventToStart.EventName),
+            AttendanceWindows = eventToStart.AttendanceWindows
+                .OrderBy(window => window.SequenceNumber)
+                .Select(window => new EventAttendanceWindowViewModel
+                {
+                    Id = window.Id,
+                    SequenceNumber = window.SequenceNumber,
+                    Label = window.Label,
+                    PostedAt = ConvertUtcToUserTimeZone(window.PostedAt, user.TimeZone) ?? window.PostedAt,
+                    Attendees = window.Attendees
+                        .OrderBy(att => att.AppUserEvent != null ? att.AppUserEvent.CharacterName : string.Empty)
+                        .Select(att => new AttendanceWindowAttendeeViewModel
+                        {
+                            Id = att.Id,
+                            CharacterName = att.AppUserEvent?.CharacterName,
+                            JobName = att.AppUserEvent?.JobName,
+                            SubJobName = att.AppUserEvent?.SubJobName,
+                            Zone = att.Zone,
+                            VerifiedAt = ConvertUtcToUserTimeZone(att.VerifiedAt, user.TimeZone) ?? att.VerifiedAt,
+                            VerifiedBy = att.VerifiedBy
+                        })
+                        .ToList()
+                })
+                .ToList()
         };
 
         return View(model);
@@ -931,6 +999,18 @@ public class EventController : Controller
             return Forbid();
         }
 
+        await EndEventCoreAsync(_context, eventEntity);
+
+        return RedirectToAction(nameof(Index), "EventHistory");
+    }
+
+    // Shared end-event logic. Caller is responsible for loading the Event with
+    // its AppUserEvents and EventLootDetails included, and for verifying auth
+    // (linkshell membership / management permission) before calling. This
+    // helper writes the EventHistory + DkpLedgerEntry rows, removes the
+    // related Jobs / AppUserEvents / EventLootDetails / Event, and saves.
+    internal static async Task EndEventCoreAsync(ApplicationDbContext dbContext, Event eventEntity)
+    {
         var endTimeUtc = DateTime.UtcNow;
         var history = new EventHistory
         {
@@ -950,7 +1030,7 @@ public class EventController : Controller
             AppUserEventHistories = new List<AppUserEventHistory>()
         };
 
-        var linkshellMemberships = await _context.AppUserLinkshells
+        var linkshellMemberships = await dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
             .ToListAsync();
         var membershipsByAppUserId = linkshellMemberships
@@ -1017,7 +1097,7 @@ public class EventController : Controller
             }
         }
 
-        _context.EventHistories.Add(history);
+        dbContext.EventHistories.Add(history);
         foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
         {
             if (lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
@@ -1060,16 +1140,14 @@ public class EventController : Controller
             nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
         }
 
-        _context.DkpLedgerEntries.AddRange(ledgerEntries);
-        _context.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
-        _context.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
+        dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
+        dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
+        dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
 
-        var eventJobs = await _context.Jobs.Where(job => job.EventId == eventId).ToListAsync();
-        _context.Jobs.RemoveRange(eventJobs);
-        _context.Events.Remove(eventEntity);
-        await _context.SaveChangesAsync();
-
-        return RedirectToAction(nameof(Index), "EventHistory");
+        var eventJobs = await dbContext.Jobs.Where(job => job.EventId == eventEntity.Id).ToListAsync();
+        dbContext.Jobs.RemoveRange(eventJobs);
+        dbContext.Events.Remove(eventEntity);
+        await dbContext.SaveChangesAsync();
     }
 
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)
@@ -1117,7 +1195,7 @@ public class EventController : Controller
                membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)
+    internal static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)
     {
         var accumulatedHours = Math.Max(0, participation.Duration ?? 0);
         if (participation.IsOnBreak == true)
@@ -1135,7 +1213,7 @@ public class EventController : Controller
         return accumulatedHours + segmentHours;
     }
 
-    private static AppUserLinkshell? ResolveLootWinnerMembership(
+    internal static AppUserLinkshell? ResolveLootWinnerMembership(
         string? itemWinner,
         IReadOnlyDictionary<string, AppUserLinkshell> membershipsByAppUserId,
         IReadOnlyDictionary<string, AppUserEvent> participantsByCharacterName,
@@ -1158,7 +1236,7 @@ public class EventController : Controller
             string.Equals(NormalizeLookupKey(link.CharacterName), normalizedWinner, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string? NormalizeLookupKey(string? value)
+    internal static string? NormalizeLookupKey(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }

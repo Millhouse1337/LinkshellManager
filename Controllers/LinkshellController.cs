@@ -288,6 +288,134 @@ public class LinkshellController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // Mirrors the Discord Activity's "Customize Linkshell" card on its Configurations
+    // tab: loot structure, DKP rounding, and the per-tab feature toggles. Source of
+    // truth fields live on the Linkshell entity (LootStructure, DkpRoundingIncrement,
+    // and the Enable* booleans).
+    [HttpGet]
+    public async Task<IActionResult> Customize(int? id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var manageableLinkshells = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id
+                        && (link.Rank == "Leader" || link.Rank == "Officer"))
+            .Include(link => link.Linkshell)
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .Select(link => link.Linkshell!)
+            .ToListAsync();
+
+        if (manageableLinkshells.Count == 0)
+        {
+            return View(new LinkshellCustomizeViewModel
+            {
+                ManageableLinkshells = new List<Linkshell>()
+            });
+        }
+
+        var target = id.HasValue
+            ? manageableLinkshells.FirstOrDefault(link => link.Id == id.Value)
+            : manageableLinkshells.First();
+        if (target is null)
+        {
+            return Forbid();
+        }
+
+        return View(BuildCustomizeViewModel(target, manageableLinkshells));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Customize(LinkshellCustomizeViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, model.LinkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FindAsync(model.LinkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        // Validate enums against the same vocabulary the Activity uses; bad values
+        // would otherwise propagate into a string column nothing reads.
+        var allowedLoot = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Dkp", "LootCouncil", "Hybrid" };
+        var allowedRounding = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Quarter", "Half" };
+        if (!allowedLoot.Contains(model.LootStructure ?? string.Empty))
+        {
+            ModelState.AddModelError(nameof(model.LootStructure), "Invalid loot structure.");
+        }
+        if (!allowedRounding.Contains(model.DkpRoundingIncrement ?? string.Empty))
+        {
+            ModelState.AddModelError(nameof(model.DkpRoundingIncrement), "Invalid DKP rounding increment.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            var manageable = await _context.AppUserLinkshells
+                .Where(link => link.AppUserId == user.Id
+                            && (link.Rank == "Leader" || link.Rank == "Officer"))
+                .Include(link => link.Linkshell)
+                .OrderBy(link => link.Linkshell!.LinkshellName)
+                .Select(link => link.Linkshell!)
+                .ToListAsync();
+            model.ManageableLinkshells = manageable;
+            model.LinkshellName = linkshell.LinkshellName;
+            return View(model);
+        }
+
+        linkshell.LootStructure = model.LootStructure!;
+        linkshell.DkpRoundingIncrement = model.DkpRoundingIncrement!;
+        linkshell.EnableEndgame  = model.EnableEndgame;
+        linkshell.EnableHnmSection = model.EnableHnmSection;
+        linkshell.EnableMissions = model.EnableMissions;
+        linkshell.EnableAuctions = model.EnableAuctions;
+        linkshell.EnableToDs     = model.EnableToDs;
+        linkshell.EnableEvents   = model.EnableEvents;
+        linkshell.EnableDkp      = model.EnableDkp;
+        linkshell.EnableItems    = model.EnableItems;
+        linkshell.EnableRevenue  = model.EnableRevenue;
+
+        await _context.SaveChangesAsync();
+        TempData["CustomizeSaved"] = "Customization saved.";
+        return RedirectToAction(nameof(Customize), new { id = linkshell.Id });
+    }
+
+    private static LinkshellCustomizeViewModel BuildCustomizeViewModel(
+        Linkshell target, IReadOnlyList<Linkshell> manageableLinkshells) =>
+        new()
+        {
+            LinkshellId           = target.Id,
+            LinkshellName         = target.LinkshellName,
+            LootStructure         = target.LootStructure,
+            DkpRoundingIncrement  = target.DkpRoundingIncrement,
+            EnableEndgame         = target.EnableEndgame,
+            EnableHnmSection      = target.EnableHnmSection,
+            EnableMissions        = target.EnableMissions,
+            EnableAuctions        = target.EnableAuctions,
+            EnableToDs            = target.EnableToDs,
+            EnableEvents          = target.EnableEvents,
+            EnableDkp             = target.EnableDkp,
+            EnableItems           = target.EnableItems,
+            EnableRevenue         = target.EnableRevenue,
+            ManageableLinkshells  = manageableLinkshells.ToList()
+        };
+
     private async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId)
     {
         return await _context.AppUserLinkshells

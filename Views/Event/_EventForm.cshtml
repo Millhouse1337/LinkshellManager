@@ -4,12 +4,35 @@
     var mainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions;
     var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;
     var typeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
+    // Mirror the Discord Activity's eventTypeOptions list exactly so both UIs pick from
+    // the same vocabulary. "Other" is appended in the markup and reveals a free-text input.
+    var eventTypeOptions = new[] { "Sky", "Sea", "HNM", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
+    var currentEventType = Model.Event.EventType ?? string.Empty;
+    var isKnownEventType = eventTypeOptions.Any(option =>
+        string.Equals(option, currentEventType, StringComparison.OrdinalIgnoreCase));
+    var initialPickerValue = string.IsNullOrEmpty(currentEventType) ? string.Empty
+        : (isKnownEventType ? currentEventType : "Other");
+    var initialOtherValue = isKnownEventType ? string.Empty : currentEventType;
+
+    // Edit-mode auto-tick: if we're editing a saved event (Id > 0) and the field is null,
+    // pre-check the matching "Not specified" checkbox so addon-created HNM events (which
+    // have null EndTime + Duration) display correctly. On Create (Id == 0) all boxes
+    // start unchecked.
+    var isEditMode             = Model.Event.Id > 0;
+    var endTimeNotSpecified    = isEditMode && Model.Event.EndTime is null;
+    var durationNotSpecified   = isEditMode && Model.Event.Duration is null;
+    var partyNotSpecified      = isEditMode && !Model.Jobs.Any(j =>
+        !string.IsNullOrWhiteSpace(j.JobType) ||
+        !string.IsNullOrWhiteSpace(j.JobName) ||
+        !string.IsNullOrWhiteSpace(j.SubJobName) ||
+        (j.Quantity ?? 0) > 0 ||
+        !string.IsNullOrWhiteSpace(j.Details));
 }
 
 <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="margin-bottom:12px"></div>
 
-<div class="form-grid">
-    <div class="field">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;align-items:start">
+    <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_LinkshellId">Linkshell</label>
         <select class="form-select" id="Event_LinkshellId" name="Event.LinkshellId">
             @foreach (var linkshell in Model.Linkshells)
@@ -25,42 +48,201 @@
             }
         </select>
     </div>
-    <div class="field">
-        <label for="Event_EventName">Name</label>
+    <div class="field" style="display:flex;flex-direction:column">
+        <label for="Event_EventName">Event name</label>
         <input class="form-control" id="Event_EventName" name="Event.EventName" value="@Model.Event.EventName" />
     </div>
-    <div class="field">
-        <label for="Event_EventType">Type</label>
-        <input class="form-control" id="Event_EventType" name="Event.EventType" value="@Model.Event.EventType" />
+    <div class="field" style="display:flex;flex-direction:column">
+        <label for="event-type-picker">Event type</label>
+        <div style="display:flex;gap:8px">
+            <select class="form-select" id="event-type-picker" style="flex:1;min-width:0">
+                <option value="" disabled selected="@(string.IsNullOrEmpty(initialPickerValue))">Select event type</option>
+                @foreach (var option in eventTypeOptions)
+                {
+                    if (string.Equals(option, initialPickerValue, StringComparison.OrdinalIgnoreCase))
+                    {
+                        <option value="@option" selected>@option</option>
+                    }
+                    else
+                    {
+                        <option value="@option">@option</option>
+                    }
+                }
+                @if (initialPickerValue == "Other")
+                {
+                    <option value="Other" selected>Other</option>
+                }
+                else
+                {
+                    <option value="Other">Other</option>
+                }
+            </select>
+            <input class="form-control" type="text" id="event-type-other"
+                   placeholder="Specify event type" value="@initialOtherValue"
+                   style="flex:1;min-width:0;@(initialPickerValue == "Other" ? string.Empty : "display:none")" />
+        </div>
+        <input type="hidden" id="event-type-hidden" name="Event.EventType" value="@currentEventType" />
     </div>
-    <div class="field">
+    <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EventLocation">Location</label>
         <input class="form-control" id="Event_EventLocation" name="Event.EventLocation" value="@Model.Event.EventLocation" />
     </div>
-    <div class="field">
-        <label for="Event_DkpPerHour">DKP per hour</label>
-        <input class="form-control" id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" value="@Model.Event.DkpPerHour" />
-    </div>
-    <div class="field">
-        <label for="Event_Duration">Planned hours</label>
-        <input class="form-control" id="Event_Duration" name="Event.Duration" type="number" step="0.25" value="@Model.Event.Duration" />
-    </div>
-    <div class="field">
+    <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_StartTime">Start</label>
         <input class="form-control" id="Event_StartTime" name="Event.StartTime" type="datetime-local" value="@(Model.Event.StartTime?.ToString("yyyy-MM-ddTHH:mm"))" />
     </div>
-    <div class="field">
+    <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EndTime">End</label>
-        <input class="form-control" id="Event_EndTime" name="Event.EndTime" type="datetime-local" value="@(Model.Event.EndTime?.ToString("yyyy-MM-ddTHH:mm"))" />
+        <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-control" id="Event_EndTime" name="Event.EndTime" type="datetime-local" value="@(Model.Event.EndTime?.ToString("yyyy-MM-ddTHH:mm"))" style="flex:1;min-width:0" />
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
+                <input type="checkbox" id="Event_EndTime_NotSpecified" @(endTimeNotSpecified ? "checked" : null) />
+                Not specified
+            </label>
+        </div>
     </div>
-    <div class="field" style="grid-column:1/-1">
+    <div class="field" style="display:flex;flex-direction:column">
+        <label for="Event_Duration">Duration (hours)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+            <input class="form-control" id="Event_Duration" name="Event.Duration" type="number" step="0.25" value="@Model.Event.Duration" style="flex:1;min-width:0" />
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
+                <input type="checkbox" id="Event_Duration_NotSpecified" @(durationNotSpecified ? "checked" : null) />
+                Not specified
+            </label>
+        </div>
+    </div>
+    <div class="field" style="display:flex;flex-direction:column">
+        <label for="Event_DkpPerHour">DKP/hour</label>
+        <input class="form-control" id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" value="@Model.Event.DkpPerHour" />
+    </div>
+    <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
         <label for="Event_Details">Details</label>
         <textarea class="form-control" id="Event_Details" name="Event.Details" rows="4">@Model.Event.Details</textarea>
     </div>
 </div>
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:12px">
-    <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Minimal party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
+<script>
+    (function () {
+        var known = ['Sky','Sea','HNM','HENM','Limbus','Dynamis','BCNM','KSNM'];
+        var picker = document.getElementById('event-type-picker');
+        var other  = document.getElementById('event-type-other');
+        var hidden = document.getElementById('event-type-hidden');
+        if (!picker || !other || !hidden) return;
+
+        function sync() {
+            if (picker.value === 'Other') {
+                other.style.display = '';
+                hidden.value = other.value;
+            } else {
+                other.style.display = 'none';
+                hidden.value = picker.value;
+            }
+        }
+
+        picker.addEventListener('change', sync);
+        other.addEventListener('input', function () { hidden.value = other.value; });
+    })();
+</script>
+
+<script>
+    // Start / End / Duration sync — mirrors the Discord Activity logic so editing
+    // any two of the three keeps the third in step.
+    //   Start changes: recompute Duration if End is set, else recompute End if Duration is set.
+    //   End changes:   recompute Duration.
+    //   Duration changes: recompute End.
+    // The "Not specified" checkboxes blank + disable their fields so the form posts
+    // an empty value (= null on the server side).
+    (function () {
+        var startEl    = document.getElementById('Event_StartTime');
+        var endEl      = document.getElementById('Event_EndTime');
+        var durationEl = document.getElementById('Event_Duration');
+        var endNs      = document.getElementById('Event_EndTime_NotSpecified');
+        var durNs      = document.getElementById('Event_Duration_NotSpecified');
+        if (!startEl || !endEl || !durationEl || !endNs || !durNs) return;
+
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function formatLocal(date) {
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+                 + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+        }
+        function parseLocal(value) {
+            if (!value) return null;
+            var d = new Date(value);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function recomputeDurationFromStartEnd() {
+            if (durNs.checked || endNs.checked) return;
+            var start = parseLocal(startEl.value);
+            var end   = parseLocal(endEl.value);
+            if (!start || !end) return;
+            var hours = (end - start) / 3600000;
+            if (hours < 0) return;
+            durationEl.value = (Math.round(hours * 100) / 100).toString();
+        }
+
+        function recomputeEndFromStartDuration() {
+            if (endNs.checked || durNs.checked) return;
+            var start = parseLocal(startEl.value);
+            var hours = parseFloat(durationEl.value);
+            if (!start || isNaN(hours) || hours < 0) return;
+            var end = new Date(start.getTime() + hours * 3600000);
+            endEl.value = formatLocal(end);
+        }
+
+        function onStartEdited() {
+            if (!endNs.checked && endEl.value) {
+                recomputeDurationFromStartEnd();
+            } else if (!durNs.checked && durationEl.value !== '') {
+                recomputeEndFromStartDuration();
+            }
+        }
+        // Listen on both `input` (fires while typing / picker ticks) and `change`
+        // (fires on commit). The `input` handler is what makes Duration update
+        // live before the user clicks off the field.
+        startEl.addEventListener('input', onStartEdited);
+        startEl.addEventListener('change', onStartEdited);
+        endEl.addEventListener('input', recomputeDurationFromStartEnd);
+        endEl.addEventListener('change', recomputeDurationFromStartEnd);
+        durationEl.addEventListener('input', recomputeEndFromStartDuration);
+        durationEl.addEventListener('change', recomputeEndFromStartDuration);
+
+        function applyEndNotSpecified() {
+            if (endNs.checked) {
+                endEl.value = '';
+                endEl.disabled = true;
+            } else {
+                endEl.disabled = false;
+                recomputeEndFromStartDuration();
+            }
+        }
+        function applyDurationNotSpecified() {
+            if (durNs.checked) {
+                durationEl.value = '';
+                durationEl.disabled = true;
+            } else {
+                durationEl.disabled = false;
+                if (durationEl.value === '') durationEl.value = '1';
+                recomputeEndFromStartDuration();
+            }
+        }
+        endNs.addEventListener('change', applyEndNotSpecified);
+        durNs.addEventListener('change', applyDurationNotSpecified);
+
+        // Apply initial disabled state on page load (matches the pre-checked state).
+        applyEndNotSpecified();
+        applyDurationNotSpecified();
+    })();
+</script>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:12px;gap:12px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+        <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Minimal party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:0">
+            <input type="checkbox" id="party_setup_not_specified" @(partyNotSpecified ? "checked" : null) />
+            Not specified
+        </label>
+    </div>
     <button class="btn ghost sm" type="button" id="add-job">+ Add job</button>
 </div>
 
@@ -135,3 +317,35 @@
         </div>
     }
 </div>
+
+<script>
+    // Minimal Party Setup "Not specified" toggle. When checked, the entire jobs
+    // container and "+ Add job" button are hidden AND every input within is
+    // disabled so it doesn't post (otherwise EF would still create empty Job rows).
+    // This <script> sits AFTER the markup it targets so getElementById resolves.
+    (function () {
+        var notSpecified = document.getElementById('party_setup_not_specified');
+        var addJobBtn    = document.getElementById('add-job');
+        var jobsBox      = document.getElementById('jobs-container');
+        if (!notSpecified || !jobsBox) return;
+
+        function setJobInputsDisabled(disabled) {
+            jobsBox.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+                el.disabled = disabled;
+            });
+        }
+        function apply() {
+            if (notSpecified.checked) {
+                jobsBox.style.display = 'none';
+                if (addJobBtn) addJobBtn.style.display = 'none';
+                setJobInputsDisabled(true);
+            } else {
+                jobsBox.style.display = '';
+                if (addJobBtn) addJobBtn.style.display = '';
+                setJobInputsDisabled(false);
+            }
+        }
+        notSpecified.addEventListener('change', apply);
+        apply();
+    })();
+</script>

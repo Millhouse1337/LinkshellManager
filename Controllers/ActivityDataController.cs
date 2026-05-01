@@ -20,12 +20,6 @@ public sealed class ActivityDataController : ControllerBase
     private static readonly HashSet<string> SupportedTodMonsters = new(TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedTodCooldowns = new(TodManagerViewModel.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedTodIntervals = new(TodManagerViewModel.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> LongWindowTodMonsters = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Tiamat",
-        "Jormungand",
-        "Vrtra"
-    };
 
     private readonly ApplicationDbContext _dbContext;
     private readonly DiscordIdentityService _discordIdentityService;
@@ -109,14 +103,20 @@ public sealed class ActivityDataController : ControllerBase
                 g => g.Key,
                 g => g.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase));
 
+        // Cap is generous because this list feeds both the Live ops panel and the
+        // Pending Events queue in one fetch — splitting at 8 was clipping queued
+        // rows whenever the linkshell had more than a couple of live events going.
         var activeEvents = await _dbContext.Events
             .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
                 .ThenInclude(participation => participation.StatusLedgerEntries)
             .Include(evt => evt.EventLootDetails)
+            .Include(evt => evt.AttendanceWindows)
+                .ThenInclude(window => window.Attendees)
+                    .ThenInclude(attendee => attendee.AppUserEvent)
             .Where(evt => linkshellIds.Contains(evt.LinkshellId))
             .OrderBy(evt => evt.StartTime)
-            .Take(8)
+            .Take(50)
             .ToListAsync(cancellationToken);
 
         var recentHistory = await _dbContext.EventHistories
@@ -373,7 +373,27 @@ public sealed class ActivityDataController : ControllerBase
                     job.JobType,
                     job.Quantity,
                     job.SignedUp,
-                    job.Enlisted)).ToList())).ToList(),
+                    job.Enlisted)).ToList(),
+                HnmConfig.GetWindowCount(evt.EventName),
+                evt.AttendanceWindows
+                    .OrderBy(window => window.SequenceNumber)
+                    .Select(window => new ActivityAttendanceWindowDto(
+                        window.Id,
+                        window.SequenceNumber,
+                        window.Label,
+                        window.PostedAt,
+                        window.Attendees
+                            .OrderBy(att => att.AppUserEvent != null ? att.AppUserEvent.CharacterName : string.Empty)
+                            .Select(att => new ActivityAttendanceWindowAttendeeDto(
+                                att.Id,
+                                att.AppUserEvent != null ? att.AppUserEvent.CharacterName : null,
+                                att.AppUserEvent != null ? att.AppUserEvent.JobName : null,
+                                att.AppUserEvent != null ? att.AppUserEvent.SubJobName : null,
+                                att.Zone,
+                                att.VerifiedAt,
+                                att.VerifiedBy))
+                            .ToList()))
+                    .ToList())).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,
@@ -992,7 +1012,7 @@ public sealed class ActivityDataController : ControllerBase
                string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string NormalizeLootStructure(string structure)
+    internal static string NormalizeLootStructure(string structure)
     {
         if (string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase)) return "LootCouncil";
         if (string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase)) return "Hybrid";
@@ -2186,14 +2206,19 @@ public sealed class ActivityDataController : ControllerBase
                 _dbContext.AppUserEvents.Remove(existingNoJobSignup);
             }
 
+            // For events with no pre-defined party setup, accept the user's
+            // ad-hoc Main/Sub/Role from the body. Strings are trimmed and
+            // null-coalesced so blank picks land as null instead of "".
+            static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
             _dbContext.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = appUser.Id,
                 EventId = eventId,
                 CharacterName = displayName,
-                JobName = null,
-                SubJobName = null,
-                JobType = null,
+                JobName = Clean(request.JobName),
+                SubJobName = Clean(request.SubJobName),
+                JobType = Clean(request.JobType),
                 EventDkp = 0,
                 StartTime = eventEntity.CommencementStartTime
             });
@@ -3195,7 +3220,7 @@ public sealed class ActivityDataController : ControllerBase
             }
 
             await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await AdjustTodLootDkpAsync(tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            await AdjustTodLootDkpAsync(_dbContext, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
         }
@@ -3230,7 +3255,7 @@ public sealed class ActivityDataController : ControllerBase
             return Forbid();
         }
 
-        await AdjustTodLootDkpAsync(tod, tod.TodLootDetails.ToList(), DateTime.UtcNow, isRefund: true, cancellationToken);
+        await AdjustTodLootDkpAsync(_dbContext, tod, tod.TodLootDetails.ToList(), DateTime.UtcNow, isRefund: true, cancellationToken);
         _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
@@ -3396,7 +3421,7 @@ public sealed class ActivityDataController : ControllerBase
         // Reverse DKP impact from existing loot, remove it, then apply the new set.
         if (tod.TodLootDetails.Count > 0)
         {
-            await AdjustTodLootDkpAsync(tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
+            await AdjustTodLootDkpAsync(_dbContext, tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
             _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
         }
 
@@ -3424,7 +3449,7 @@ public sealed class ActivityDataController : ControllerBase
             }
 
             await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await AdjustTodLootDkpAsync(tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            await AdjustTodLootDkpAsync(_dbContext, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
         }
@@ -4344,7 +4369,7 @@ public sealed class ActivityDataController : ControllerBase
             .ToList();
     }
 
-    private static List<TodLootDetail> NormalizeTodLootDetails(IReadOnlyList<ActivityCreateTodLootRequest>? lootDetails)
+    internal static List<TodLootDetail> NormalizeTodLootDetails(IReadOnlyList<ActivityCreateTodLootRequest>? lootDetails)
     {
         return (lootDetails ?? Array.Empty<ActivityCreateTodLootRequest>())
             .Where(detail =>
@@ -4360,7 +4385,12 @@ public sealed class ActivityDataController : ControllerBase
             .ToList();
     }
 
-    private async Task AdjustTodLootDkpAsync(
+    // Refactored from instance method to static so AddonApiController can
+    // share the same DKP-ledger logic without depending on an
+    // ActivityDataController instance. _dbContext references became the
+    // explicit `dbContext` parameter; behavior is otherwise identical.
+    internal static async Task AdjustTodLootDkpAsync(
+        ApplicationDbContext dbContext,
         Tod tod,
         IReadOnlyList<TodLootDetail> lootDetails,
         DateTime occurredAtUtc,
@@ -4375,7 +4405,7 @@ public sealed class ActivityDataController : ControllerBase
             return;
         }
 
-        var linkshell = tod.Linkshell ?? await _dbContext.Linkshells
+        var linkshell = tod.Linkshell ?? await dbContext.Linkshells
             .FirstOrDefaultAsync(ls => ls.Id == tod.LinkshellId, cancellationToken);
 
         var structure = NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp");
@@ -4391,7 +4421,7 @@ public sealed class ActivityDataController : ControllerBase
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var memberships = await _dbContext.AppUserLinkshells
+        var memberships = await dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == tod.LinkshellId && link.AppUserId != null && winnerNames.Contains(link.CharacterName!))
             .ToListAsync(cancellationToken);
 
@@ -4411,7 +4441,7 @@ public sealed class ActivityDataController : ControllerBase
 
         var nextSequenceByAppUserId = appUserIds.Count == 0
             ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-            : await _dbContext.DkpLedgerEntries
+            : await dbContext.DkpLedgerEntries
                 .Where(entry => entry.LinkshellId == tod.LinkshellId && entry.AppUserId != null && appUserIds.Contains(entry.AppUserId))
                 .GroupBy(entry => entry.AppUserId!)
                 .Select(group => new { AppUserId = group.Key, NextSequence = group.Max(entry => entry.Sequence) + 1 })
@@ -4493,7 +4523,7 @@ public sealed class ActivityDataController : ControllerBase
 
         if (ledgerEntries.Count > 0)
         {
-            await _dbContext.DkpLedgerEntries.AddRangeAsync(ledgerEntries, cancellationToken);
+            await dbContext.DkpLedgerEntries.AddRangeAsync(ledgerEntries, cancellationToken);
         }
     }
 
@@ -4521,7 +4551,7 @@ public sealed class ActivityDataController : ControllerBase
             tod.ImagePath);
     }
 
-    private static double ResolveTodCooldownHours(string? cooldown)
+    internal static double ResolveTodCooldownHours(string? cooldown)
     {
         if (string.IsNullOrWhiteSpace(cooldown))
         {
@@ -4585,16 +4615,27 @@ public sealed class ActivityDataController : ControllerBase
         return trimmed;
     }
 
-    private static string GetDefaultTodCooldown(string? monsterName)
+    internal static string GetDefaultTodCooldown(string? monsterName)
     {
-        return !string.IsNullOrWhiteSpace(monsterName) && LongWindowTodMonsters.Contains(monsterName.Trim())
-            ? TodManagerViewModel.SeventyTwoHourCooldown
-            : TodManagerViewModel.TwentyTwoHourCooldown;
+        if (string.IsNullOrWhiteSpace(monsterName))
+        {
+            return TodManagerViewModel.TwentyTwoHourCooldown;
+        }
+        var trimmed = monsterName.Trim();
+        if (HnmConfig.LongWindowHnms.Contains(trimmed))
+        {
+            return TodManagerViewModel.SeventyTwoHourCooldown;
+        }
+        if (HnmConfig.SkyFarmNms.Contains(trimmed))
+        {
+            return TodManagerViewModel.TwoHourCooldown;
+        }
+        return TodManagerViewModel.TwentyTwoHourCooldown;
     }
 
-    private static string GetDefaultTodInterval(string? monsterName)
+    internal static string GetDefaultTodInterval(string? monsterName)
     {
-        return !string.IsNullOrWhiteSpace(monsterName) && LongWindowTodMonsters.Contains(monsterName.Trim())
+        return !string.IsNullOrWhiteSpace(monsterName) && HnmConfig.LongWindowHnms.Contains(monsterName.Trim())
             ? TodManagerViewModel.OneHourInterval
             : TodManagerViewModel.TenMinuteInterval;
     }
@@ -5729,7 +5770,25 @@ public sealed record ActivityEventDto(
     ActivityParticipationDto? CurrentParticipation,
     IReadOnlyList<ActivityEventParticipantDto> Participants,
     IReadOnlyList<ActivityLootDto> Loot,
-    IReadOnlyList<ActivityJobDto> Jobs);
+    IReadOnlyList<ActivityJobDto> Jobs,
+    int WindowCount,
+    IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows);
+
+public sealed record ActivityAttendanceWindowDto(
+    int Id,
+    int SequenceNumber,
+    string? Label,
+    DateTime PostedAt,
+    IReadOnlyList<ActivityAttendanceWindowAttendeeDto> Attendees);
+
+public sealed record ActivityAttendanceWindowAttendeeDto(
+    int Id,
+    string? CharacterName,
+    string? JobName,
+    string? SubJobName,
+    string? Zone,
+    DateTime VerifiedAt,
+    string? VerifiedBy);
 
 public sealed record ActivityParticipationDto(
     int Id,
@@ -5995,7 +6054,11 @@ public sealed record ActivityOverviewStatsDto(
     int CompletedEventCount,
     int LiveEventCount);
 
-public sealed record ActivityEventSignupRequest(int JobId);
+public sealed record ActivityEventSignupRequest(
+    int JobId,
+    string? JobName = null,
+    string? SubJobName = null,
+    string? JobType = null);
 
 public sealed record ActivityQuickJoinRequest(
     string? JobName,

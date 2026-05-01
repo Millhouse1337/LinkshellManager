@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  ActivityAddonToken,
+  ActivityAttendanceWindow,
   ActivityCreateTodInput,
   ActivityEventParticipant,
   ActivityDkpRoundingIncrement,
@@ -279,6 +281,52 @@ export class ActivityHomeComponent {
 
   protected queuedEvents() {
     return (this.activity.overview()?.activeEvents ?? []).filter(event => !event.commencementStartTime);
+  }
+
+  // ----- HNM attendance windows -----
+  // Tracks which window's tab is currently active per event (key = event id).
+  // Defaults to the most recently posted (highest sequence) window when unset.
+  protected readonly activeWindowByEvent = signal<Record<number, number>>({});
+
+  protected hasAttendanceWindows(event: { windowCount?: number; attendanceWindows?: ActivityAttendanceWindow[] }): boolean {
+    return (event.windowCount ?? 1) > 1 && (event.attendanceWindows?.length ?? 0) > 0;
+  }
+
+  protected attendanceWindowsFor(event: { attendanceWindows?: ActivityAttendanceWindow[] }): ActivityAttendanceWindow[] {
+    return event.attendanceWindows ?? [];
+  }
+
+  protected attendanceWindowLabel(window: ActivityAttendanceWindow): string {
+    return window.label && window.label.trim().length > 0 ? window.label : `Window ${window.sequenceNumber}`;
+  }
+
+  protected activeAttendanceWindow(event: { id: number; attendanceWindows?: ActivityAttendanceWindow[] }): ActivityAttendanceWindow | null {
+    const windows = this.attendanceWindowsFor(event);
+    if (windows.length === 0) return null;
+    const desiredSeq = this.activeWindowByEvent()[event.id];
+    if (desiredSeq != null) {
+      const match = windows.find(w => w.sequenceNumber === desiredSeq);
+      if (match) return match;
+    }
+    return windows[windows.length - 1];
+  }
+
+  protected isActiveAttendanceWindow(event: { id: number; attendanceWindows?: ActivityAttendanceWindow[] }, window: ActivityAttendanceWindow): boolean {
+    return this.activeAttendanceWindow(event)?.id === window.id;
+  }
+
+  protected setActiveAttendanceWindow(eventId: number, sequenceNumber: number): void {
+    this.activeWindowByEvent.update(map => ({ ...map, [eventId]: sequenceNumber }));
+  }
+
+  protected async removeAttendanceWindowAttendee(attendeeId: number): Promise<void> {
+    if (!window.confirm('Remove this attendee from the window? They will need to be re-posted to count.')) return;
+    const ok = await this.activity.removeAttendanceWindowAttendee(attendeeId);
+    if (ok) {
+      // The activeEvents payload is rebuilt by refreshOverview, which is what
+      // re-renders the windows tabs and roster.
+      await this.activity.refreshOverview();
+    }
   }
 
   protected dashboardLinkshells() {
@@ -868,6 +916,108 @@ export class ActivityHomeComponent {
     }
   }
 
+  // ----- Game Addon (att) pairing -----
+  // Mirrors the web /Linkshell/Customize "Game Addon" card. Token list + active
+  // pairing-code modal share state with the Configurations tab's selected LS.
+  protected readonly addonTokens = signal<ActivityAddonToken[]>([]);
+  protected addonModalOpen = false;
+  protected addonModalLabel = '';
+  protected addonGeneratedCode: string | null = null;
+  protected addonCountdownLabel = '';
+  protected addonModalError: string | null = null;
+  protected addonModalLoadedFor: number | null = null;
+  private addonCountdownTimer: ReturnType<typeof setInterval> | null = null;
+
+  protected canManageAddonTokens(): boolean {
+    // Same capability that gates the Customize card; pairing is an LS-leader/officer action.
+    return this.canCustomizeSelectedLinkshell();
+  }
+
+  protected async loadAddonTokensForCurrent(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id || !this.canManageAddonTokens()) {
+      this.addonTokens.set([]);
+      return;
+    }
+    if (this.addonModalLoadedFor === id) return;
+    const result = await this.activity.loadAddonTokens(id);
+    if (result) {
+      this.addonTokens.set(result.tokens);
+      this.addonModalLoadedFor = id;
+    }
+  }
+
+  protected openAddonPairingModal(): void {
+    this.addonModalLabel = '';
+    this.addonGeneratedCode = null;
+    this.addonCountdownLabel = '';
+    this.addonModalError = null;
+    this.addonModalOpen = true;
+  }
+
+  protected closeAddonPairingModal(): void {
+    this.addonModalOpen = false;
+    if (this.addonCountdownTimer) {
+      clearInterval(this.addonCountdownTimer);
+      this.addonCountdownTimer = null;
+    }
+    // Refresh the visible token list since a new code may have been redeemed.
+    this.addonModalLoadedFor = null;
+    this.loadAddonTokensForCurrent();
+  }
+
+  protected async submitAddonPairingCode(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id) return;
+    this.addonModalError = null;
+    const result = await this.activity.createAddonPairingCode(
+      id, this.addonModalLabel.trim() || null);
+    if (!result) {
+      this.addonModalError = this.activity.actionError() ?? 'Could not generate pairing code.';
+      return;
+    }
+    this.addonGeneratedCode = result.code;
+    this.startAddonCountdown((result.expiresInMinutes || 10) * 60);
+  }
+
+  private startAddonCountdown(totalSeconds: number): void {
+    if (this.addonCountdownTimer) clearInterval(this.addonCountdownTimer);
+    let remaining = totalSeconds;
+    const tick = () => {
+      if (remaining <= 0) {
+        this.addonCountdownLabel = 'expired';
+        if (this.addonCountdownTimer) {
+          clearInterval(this.addonCountdownTimer);
+          this.addonCountdownTimer = null;
+        }
+        return;
+      }
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      this.addonCountdownLabel = `${m}:${s.toString().padStart(2, '0')}`;
+      remaining--;
+    };
+    tick();
+    this.addonCountdownTimer = setInterval(tick, 1000);
+  }
+
+  protected async revokeAddonToken(tokenId: number): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id) return;
+    if (!window.confirm('Revoke this addon token? The addon will lose access immediately.')) return;
+    const ok = await this.activity.revokeAddonToken(tokenId, id);
+    if (ok) {
+      this.addonModalLoadedFor = null;
+      this.loadAddonTokensForCurrent();
+    }
+  }
+
+  protected formatAddonTokenDate(value?: string | null): string {
+    if (!value) return '—';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  }
+
   protected toggleCreateLinkshellForm(): void {
     this.showCreateLinkshellForm.update(value => !value);
     if (!this.showCreateLinkshellForm()) {
@@ -1233,6 +1383,21 @@ export class ActivityHomeComponent {
     this.expandedTodGroups.set(next);
   }
 
+  // Tracks which live-event cards are currently EXPANDED. Default empty
+  // set => everything starts collapsed; expanding a card inserts its id,
+  // collapsing again removes it. Session-only — resets on activity reload.
+  protected readonly expandedLiveEventIds = signal<Set<number>>(new Set());
+
+  protected isLiveEventCollapsed(eventId: number): boolean {
+    return !this.expandedLiveEventIds().has(eventId);
+  }
+
+  protected toggleLiveEventCollapsed(eventId: number): void {
+    const next = new Set(this.expandedLiveEventIds());
+    if (next.has(eventId)) next.delete(eventId); else next.add(eventId);
+    this.expandedLiveEventIds.set(next);
+  }
+
   protected todCharacterNames() {
     return [...new Set(this.selectedDashboardMembers().map(member => member.characterName).filter(name => name.trim().length > 0))]
       .sort((left, right) => left.localeCompare(right));
@@ -1488,7 +1653,7 @@ export class ActivityHomeComponent {
       return 'Pick a date and time to calculate the next repop window.';
     }
 
-    return this.activity.formatDateTime(this.todRepopLocalValue) ?? this.todRepopLocalValue;
+    return this.activity.formatDateTimeWithSeconds(this.todRepopLocalValue) ?? this.todRepopLocalValue;
   }
 
   protected addTodLootRow(): void {
@@ -1692,13 +1857,24 @@ export class ActivityHomeComponent {
     this.resetTodDraft();
   }
 
-  protected async deleteTod(todId: number, monsterName: string): Promise<void> {
-    if (!window.confirm(`Delete ${monsterName}? This also reverses any attached ToD loot DKP.`)) {
-      return;
-    }
+  // Discord Activities run in a sandboxed iframe without `allow-modals`, so
+  // window.confirm() returns false immediately. Use an in-app modal instead.
+  protected readonly todDeleteConfirm = signal<{ id: number; name: string } | null>(null);
 
+  protected deleteTod(todId: number, monsterName: string): void {
+    this.todDeleteConfirm.set({ id: todId, name: monsterName });
+  }
+
+  protected cancelTodDelete(): void {
+    this.todDeleteConfirm.set(null);
+  }
+
+  protected async confirmTodDelete(): Promise<void> {
+    const pending = this.todDeleteConfirm();
+    if (!pending) return;
+    this.todDeleteConfirm.set(null);
     try {
-      await this.activity.deleteTod(todId);
+      await this.activity.deleteTod(pending.id);
     } catch {
       // Service already exposes the action error state.
     }

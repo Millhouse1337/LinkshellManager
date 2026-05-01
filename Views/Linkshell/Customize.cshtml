@@ -1,17 +1,378 @@
+@model LinkshellCustomizeViewModel
 @{
-    ViewData["Title"] = "Customize linkshell";
+    ViewData["Title"] = "Customize Linkshell";
+    var savedMessage = TempData["CustomizeSaved"] as string;
 }
 
 <div class="page-head fade d1">
     <div>
-        <h1 class="page-title">Customize linkshell</h1>
-        <div class="page-sub"><span>Coming soon</span></div>
+        <h1 class="page-title">Customize Linkshell</h1>
+        <div class="page-sub">
+            @if (Model.ManageableLinkshells.Count > 0 && !string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span>@Model.LinkshellName</span>
+            }
+            else
+            {
+                <span>Settings</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Linkshell" asp-action="Index">Back to linkshells</a>
     </div>
 </div>
 
-<div class="card fade d2">
-    <div class="empty">
-        <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">Customization coming soon</div>
-        <div>Custom themes, banners, and member permissions will be available in a future update.</div>
+@if (Model.ManageableLinkshells.Count == 0)
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="padding:32px 16px;text-align:center;color:var(--fg-3)">
+                You're not a Leader or Officer in any linkshell, so there's nothing here to customize yet.
+            </div>
+        </div>
+    </div>
+    return;
+}
+
+@if (!string.IsNullOrEmpty(savedMessage))
+{
+    <div class="alert alert-success fade d2" style="margin-bottom:16px">@savedMessage</div>
+}
+
+@if (Model.ManageableLinkshells.Count > 1)
+{
+    <div class="card fade d2" style="margin-bottom:16px">
+        <div class="card-head">
+            <div class="card-title">Linkshell</div>
+        </div>
+        <form method="get" asp-action="Customize" style="padding:12px 16px;display:flex;gap:8px;align-items:center">
+            <select class="form-select" name="id" onchange="this.form.submit()" style="min-width:240px">
+                @foreach (var linkshell in Model.ManageableLinkshells)
+                {
+                    if (linkshell.Id == Model.LinkshellId)
+                    {
+                        <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                    }
+                    else
+                    {
+                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                    }
+                }
+            </select>
+            <noscript><button class="btn ghost sm" type="submit">Switch</button></noscript>
+        </form>
+    </div>
+}
+
+<form asp-action="Customize" method="post" class="fade d2">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="LinkshellId" />
+
+    <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+            <div class="card-title">Loot structure</div>
+        </div>
+        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:12px;color:var(--fg-3)">Choose how loot is awarded for this linkshell.</div>
+            <label style="display:flex;gap:10px;align-items:flex-start">
+                <input type="radio" asp-for="LootStructure" value="Dkp" id="loot-dkp" />
+                <span>
+                    <strong>DKP</strong>
+                    <div style="color:var(--fg-3);font-size:12px">Time-based DKP earned per event, spent on loot.</div>
+                </span>
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start">
+                <input type="radio" asp-for="LootStructure" value="LootCouncil" id="loot-council" />
+                <span>
+                    <strong>Loot Council</strong>
+                    <div style="color:var(--fg-3);font-size:12px">Leader decides; DKP is not tracked.</div>
+                </span>
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start">
+                <input type="radio" asp-for="LootStructure" value="Hybrid" id="loot-hybrid" />
+                <span>
+                    <strong>Hybrid</strong>
+                    <div style="color:var(--fg-3);font-size:12px">DKP earned as usual; loot deducts a percentage of the winner's balance.</div>
+                </span>
+            </label>
+
+            <div id="dkp-rounding-row" style="display:flex;flex-direction:column;gap:4px;max-width:320px;margin-top:8px">
+                <label asp-for="DkpRoundingIncrement">DKP rounding increment</label>
+                <select class="form-select" asp-for="DkpRoundingIncrement">
+                    <option value="Quarter">Nearest quarter (0.25)</option>
+                    <option value="Half">Nearest half (0.5)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+            <div class="card-title">Feature toggles</div>
+        </div>
+        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEndgame" /> Endgame tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableHnmSection" /> HNM tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableMissions" /> Missions tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableAuctions" /> Auctions tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableToDs" /> ToDs tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEvents" /> Events tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableDkp" /> DKP tab</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableItems" /> Items tile on dashboard</label>
+                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableRevenue" /> Revenue tile on dashboard</label>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn primary" type="submit">Save changes</button>
+        <a class="btn ghost" asp-action="Customize" asp-route-id="@Model.LinkshellId">Discard</a>
+    </div>
+</form>
+
+<!-- Game Addon (att) pairing card. Lives outside the customize form because tokens
+     are managed via separate XHR endpoints (no full-form post). -->
+<div class="card fade d2" id="addonTokenCard" style="margin-top:16px" data-linkshellid="@Model.LinkshellId">
+    <div class="card-head">
+        <div>
+            <div class="card-title">Game Addon (att)</div>
+            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
+                Generate a one-time pairing code, then in FFXI type
+                <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/att link &lt;code&gt;</code>
+                to connect the addon to this linkshell.
+            </div>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn primary sm" id="addonGenerateBtn">+ Generate pairing code</button>
+        </div>
+    </div>
+    <div id="addonTokensWrapper" style="padding:0 4px 4px">
+        <div id="addonTokensEmpty" class="empty" style="display:none">No active addon tokens. Generate one to get started.</div>
+        <table class="table themed" id="addonTokensTable" style="display:none">
+            <thead>
+                <tr>
+                    <th>Token</th>
+                    <th>Label</th>
+                    <th>Created</th>
+                    <th>Last used</th>
+                    <th style="text-align:right">Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
     </div>
 </div>
+
+<div class="mt-modal" id="addonPairModal" role="dialog" aria-modal="true">
+    <div class="mt-modal__backdrop" data-mt-close="1"></div>
+    <div class="mt-modal__dialog">
+        <div class="mt-modal__content">
+            <div class="mt-modal__header">
+                <h5 class="mt-modal__title">Pairing code</h5>
+                <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
+            </div>
+            <div class="mt-modal__body">
+                <div class="field" style="margin-bottom:14px">
+                    <label for="addonPairLabel">Label (optional)</label>
+                    <input type="text" id="addonPairLabel" class="form-control" placeholder="e.g. Nils — desktop" maxlength="128" />
+                </div>
+                <div id="addonPairCodeWrapper" style="display:none">
+                    <div style="text-align:center;margin:12px 0">
+                        <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
+                        <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
+                            Expires in <span id="addonPairCountdown">10:00</span>. In FFXI: <code>/att link &lt;code&gt;</code>
+                        </div>
+                    </div>
+                </div>
+                <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
+            </div>
+            <div class="mt-modal__footer">
+                <button type="button" class="btn ghost" data-mt-close="1">Close</button>
+                <button type="button" class="btn primary" id="addonPairCreateBtn">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            // Hide the DKP rounding row when the loot structure is Loot Council,
+            // matching the Activity's behavior (rounding only applies to DKP-based modes).
+            var dkpRow = document.getElementById('dkp-rounding-row');
+            var radios = document.querySelectorAll('input[type=radio][name="LootStructure"]');
+            function update() {
+                var selected = document.querySelector('input[type=radio][name="LootStructure"]:checked');
+                var value = selected ? selected.value : '';
+                dkpRow.style.display = (value === 'Dkp' || value === 'Hybrid') ? '' : 'none';
+            }
+            radios.forEach(function (r) { r.addEventListener('change', update); });
+            update();
+        })();
+    </script>
+
+    <script>
+        // Addon-pairing card UX. Self-contained so this view doesn't depend on
+        // manage-team.js (which has been retired alongside the old card location).
+        (function () {
+            var addonCard = document.getElementById('addonTokenCard');
+            if (!addonCard) return;
+
+            function openModal(id) {
+                var el = document.getElementById(id);
+                if (el) { el.classList.add('mt-modal--open'); document.body.style.overflow = 'hidden'; }
+            }
+            function closeModal(id) {
+                var el = document.getElementById(id);
+                if (el) { el.classList.remove('mt-modal--open'); document.body.style.overflow = ''; }
+            }
+            document.querySelectorAll('[data-mt-close]').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    var modal = el.closest('.mt-modal');
+                    if (modal) closeModal(modal.id);
+                });
+            });
+
+            var addonLinkshellId = parseInt(addonCard.dataset.linkshellid, 10);
+            var addonGenerateBtn = document.getElementById('addonGenerateBtn');
+            var addonPairCreateBtn = document.getElementById('addonPairCreateBtn');
+            var addonPairCodeWrapper = document.getElementById('addonPairCodeWrapper');
+            var addonPairCode = document.getElementById('addonPairCode');
+            var addonPairCountdown = document.getElementById('addonPairCountdown');
+            var addonPairError = document.getElementById('addonPairError');
+            var addonTokensTable = document.getElementById('addonTokensTable');
+            var addonTokensEmpty = document.getElementById('addonTokensEmpty');
+            var countdownTimer = null;
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+
+            function setAddonPairError(msg) {
+                addonPairError.textContent = msg || '';
+                addonPairError.style.display = msg ? 'block' : 'none';
+            }
+
+            function renderTokens(tokens) {
+                var tbody = addonTokensTable.querySelector('tbody');
+                tbody.innerHTML = '';
+                if (!tokens || tokens.length === 0) {
+                    addonTokensTable.style.display = 'none';
+                    addonTokensEmpty.style.display = 'block';
+                    return;
+                }
+                addonTokensEmpty.style.display = 'none';
+                addonTokensTable.style.display = '';
+                tokens.forEach(function (t) {
+                    var tr = document.createElement('tr');
+                    var lastUsed = t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '—';
+                    var created = new Date(t.createdAt).toLocaleString();
+                    tr.innerHTML =
+                        '<td><code>' + escapeHtml(t.prefix) + '…</code></td>' +
+                        '<td>' + escapeHtml(t.label || '—') + '</td>' +
+                        '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(created) + '</td>' +
+                        '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(lastUsed) + '</td>' +
+                        '<td style="text-align:right"><button type="button" class="btn warn sm" data-revoke="' + t.id + '">Revoke</button></td>';
+                    tbody.appendChild(tr);
+                });
+                tbody.querySelectorAll('button[data-revoke]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var id = parseInt(btn.dataset.revoke, 10);
+                        if (!id || !window.confirm('Revoke this addon token? The addon will lose access immediately.')) return;
+                        btn.disabled = true;
+                        fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
+                            method: 'POST',
+                            credentials: 'same-origin'
+                        }).then(function (res) {
+                            if (!res.ok) { btn.disabled = false; return; }
+                            loadTokens();
+                        }).catch(function () { btn.disabled = false; });
+                    });
+                });
+            }
+
+            function loadTokens() {
+                fetch('/api/addon/management/tokens?linkshellId=' + addonLinkshellId, {
+                    credentials: 'same-origin'
+                }).then(function (res) {
+                    if (!res.ok) return null;
+                    return res.json();
+                }).then(function (data) {
+                    if (!data) return;
+                    renderTokens(data.tokens || []);
+                });
+            }
+
+            function startCountdown(totalSeconds) {
+                if (countdownTimer) clearInterval(countdownTimer);
+                var remaining = totalSeconds;
+                function tick() {
+                    if (remaining <= 0) {
+                        addonPairCountdown.textContent = 'expired';
+                        clearInterval(countdownTimer);
+                        return;
+                    }
+                    var m = Math.floor(remaining / 60);
+                    var s = remaining % 60;
+                    addonPairCountdown.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+                    remaining--;
+                }
+                tick();
+                countdownTimer = setInterval(tick, 1000);
+            }
+
+            addonGenerateBtn.addEventListener('click', function () {
+                setAddonPairError('');
+                addonPairCodeWrapper.style.display = 'none';
+                addonPairCode.textContent = '';
+                document.getElementById('addonPairLabel').value = '';
+                openModal('addonPairModal');
+            });
+
+            addonPairCreateBtn.addEventListener('click', function () {
+                setAddonPairError('');
+                addonPairCreateBtn.disabled = true;
+                var label = document.getElementById('addonPairLabel').value.trim();
+                fetch('/api/addon/management/pairing-code', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ linkshellId: addonLinkshellId, label: label || null })
+                }).then(function (res) {
+                    if (!res.ok) {
+                        return res.text().then(function (txt) {
+                            var msg = 'Could not generate pairing code.';
+                            try { var j = JSON.parse(txt); if (j && j.error) msg = j.error; } catch (e) {}
+                            setAddonPairError(msg);
+                            return null;
+                        });
+                    }
+                    return res.json();
+                }).then(function (data) {
+                    if (!data) return;
+                    addonPairCode.textContent = data.code;
+                    addonPairCodeWrapper.style.display = 'block';
+                    startCountdown((data.expiresInMinutes || 10) * 60);
+                }).catch(function () {
+                    setAddonPairError('Network error generating pairing code.');
+                }).finally(function () {
+                    addonPairCreateBtn.disabled = false;
+                });
+            });
+
+            document.getElementById('addonPairModal').addEventListener('click', function (e) {
+                if (e.target.dataset && e.target.dataset.mtClose === '1') {
+                    if (countdownTimer) clearInterval(countdownTimer);
+                    loadTokens();
+                }
+            });
+
+            loadTokens();
+        })();
+    </script>
+}
