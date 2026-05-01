@@ -1055,7 +1055,7 @@ export class DiscordActivityService {
       return history;
     } catch (error) {
       this.dkpHistory.set(null);
-      this.actionError.set(this.formatActionError(error, 'Loading DKP history failed.'));
+      this.actionError.set(this.formatActionError(error, 'Loading DKP History failed.'));
       return null;
     } finally {
       this.dkpHistoryBusy.set(false);

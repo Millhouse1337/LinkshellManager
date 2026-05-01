@@ -457,6 +457,8 @@ static async Task EnsureLiveEventSchemaAsync(WebApplication app)
 
         ALTER TABLE "Events" ADD COLUMN IF NOT EXISTS "CreationSource" character varying(32) NULL;
 
+        ALTER TABLE "Events" ADD COLUMN IF NOT EXISTS "WindowCountOverride" integer NULL;
+
         ALTER TABLE "AppUserEventStatusLedgers" ADD COLUMN IF NOT EXISTS "EventAttendanceWindowId" integer NULL;
 
         CREATE INDEX IF NOT EXISTS "IX_AppUserEventStatusLedgers_EventAttendanceWindowId"

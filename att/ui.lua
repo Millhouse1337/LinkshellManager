@@ -17,6 +17,12 @@ local syncNewEventNamePtr = { '' }
 -- being created with an implicit style the user never selected.
 local syncStyleChosen     = { false }
 
+-- Event Type dropdown options for the Create New Event form. Mirrors the
+-- web app's Event Type list verbatim. Empty default forces the user to
+-- pick one explicitly (Create Event button gated on a non-empty value).
+local EVENT_TYPE_OPTIONS = { 'Sky', 'Sea', 'HNM', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM', 'Other' }
+local syncNewEventType   = { '' }
+
 -- Color used to highlight the local player's row in any roster table.
 local SELF_COLOR = { 1.0, 0.85, 0.3, 1.0 } -- warm gold
 
@@ -134,9 +140,14 @@ function ui.draw_launcher(is_open, state, callbacks)
     -- user can still drag-resize during the session — the flag is only
     -- set on open, not every frame.
     if state.launcherSizePending then
+        -- Also snap position back on a forced re-open so a launcher that
+        -- got dragged off-screen on a previous session can't render
+        -- invisibly the next time /attend is typed.
+        imgui.SetNextWindowPos({ 80, 80 }, ImGuiCond_Always)
         imgui.SetNextWindowSize({ 1240, 640 }, ImGuiCond_Always)
         state.launcherSizePending = false
     else
+        imgui.SetNextWindowPos({ 80, 80 }, ImGuiCond_FirstUseEver)
         imgui.SetNextWindowSize({ 1240, 640 }, ImGuiCond_FirstUseEver)
     end
     local openPtr = { is_open }
@@ -169,6 +180,11 @@ function ui.draw_launcher(is_open, state, callbacks)
             -- 3. Force-refresh the linkshell roster cache.
             if callbacks.on_load_roster then
                 callbacks.on_load_roster(true)
+            end
+            -- 4. Force the next d3d_present tick to re-poll Break Room data
+            --    (zeroing the timestamp short-circuits the 10s throttle).
+            if state.breakRoom then
+                state.breakRoom.lastFetchAt = 0
             end
         end
 
@@ -327,12 +343,14 @@ function ui.draw_launcher(is_open, state, callbacks)
                 centerCursor(72)
                 imgui.Text('Event Style')
 
-                -- Both checkboxes start unchecked (syncStyleChosen=false).
+                -- All three checkboxes start unchecked (syncStyleChosen=false).
                 -- Picking one flips the flag and sets state.selectedMode;
-                -- the other auto-unchecks via its own binding next frame.
-                centerCursor(160)
-                local regPtr = { syncStyleChosen[1] and state.selectedMode ~= 'HNM' }
-                if imgui.Checkbox('Regular', regPtr) then
+                -- the others auto-uncheck via their own bindings next frame.
+                -- 'Claim/Kill' is just an HNM with windowCount=2 — server
+                -- behavior is identical to ShortWindowHnms (On Time / Claim/Kill).
+                centerCursor(280)
+                local regPtr = { syncStyleChosen[1] and state.selectedMode == 'Event' }
+                if imgui.Checkbox('Timed', regPtr) then
                     if regPtr[1] then
                         state.selectedMode = 'Event'
                         syncStyleChosen[1] = true
@@ -350,6 +368,35 @@ function ui.draw_launcher(is_open, state, callbacks)
                         syncStyleChosen[1] = false
                     end
                 end
+                imgui.SameLine()
+                local claimKillPtr = { syncStyleChosen[1] and state.selectedMode == 'ClaimKill' }
+                if imgui.Checkbox('Claim/Kill', claimKillPtr) then
+                    if claimKillPtr[1] then
+                        state.selectedMode = 'ClaimKill'
+                        syncStyleChosen[1] = true
+                    else
+                        syncStyleChosen[1] = false
+                    end
+                end
+
+                imgui.Dummy({ 0, 6 })
+                centerCursor(72)
+                imgui.Text('Event Type')
+                centerCursor(260)
+                imgui.PushItemWidth(260)
+                local typePreview = (syncNewEventType[1] ~= '' and syncNewEventType[1])
+                    or 'Select event type'
+                if imgui.BeginCombo('##syncNewType', typePreview) then
+                    for _, opt in ipairs(EVENT_TYPE_OPTIONS) do
+                        local selected = (syncNewEventType[1] == opt)
+                        if imgui.Selectable(opt, selected) then
+                            syncNewEventType[1] = opt
+                        end
+                        if selected then imgui.SetItemDefaultFocus() end
+                    end
+                    imgui.EndCombo()
+                end
+                imgui.PopItemWidth()
 
                 imgui.Dummy({ 0, 6 })
                 centerCursor(72)
@@ -366,21 +413,29 @@ function ui.draw_launcher(is_open, state, callbacks)
                 imgui.Dummy({ 0, 6 })
                 local trimmedName = (syncNewEventNamePtr[1] or '')
                     :gsub('^%s+', ''):gsub('%s+$', '')
-                if trimmedName ~= '' and syncStyleChosen[1] then
+                local typeChosen = syncNewEventType[1] ~= ''
+                if trimmedName ~= '' and syncStyleChosen[1] and typeChosen then
                     centerCursor(260)
                     if imgui.Button('Create Event: ' .. trimmedName .. '##syncCreateInline', { 260, 0 }) then
                         if api.is_paired() then
                             local d = callbacks.event_defaults or {}
-                            local dkp = (state.selectedMode == 'HNM')
+                            local mode = state.selectedMode
+                            local isMultiPost = (mode == 'HNM') or (mode == 'ClaimKill')
+                            local dkp = isMultiPost
                                 and tonumber(d.dkpPerWindowHnm)
                                 or  tonumber(d.dkpPerHourRegular)
-                            local created, err = api.create_event(trimmedName, state.selectedMode, nil, dkp)
+                            -- Style determines window count and DKP rate semantics;
+                            -- the user-chosen Event Type from the dropdown is what
+                            -- gets sent to the server's EventType field verbatim.
+                            local windowCount = (mode == 'ClaimKill') and 2 or nil
+                            local created, err = api.create_event(trimmedName, syncNewEventType[1], nil, dkp, windowCount)
                             if created and created.eventId then
                                 state.lastSyncSummary = 'Created event: ' .. (created.name or trimmedName)
                                     .. ' (id ' .. tostring(created.eventId) .. ')'
                                 local events = api.list_events()
                                 if events then state.webEvents = events end
                                 syncNewEventNamePtr[1] = ''
+                                syncNewEventType[1] = ''
                             else
                                 state.lastSyncSummary = 'Create failed: ' .. tostring(err)
                             end
@@ -577,8 +632,16 @@ function ui.draw_launcher(is_open, state, callbacks)
             -- Selection status (only when an event is currently chosen).
             -- Sits between the Queued and Active lists since selection can come from either.
             if state.linkedEventId then
-                imgui.TextColored({ 0.6, 1.0, 0.6, 1.0 },
-                    string.format('Selected: %s (id %d)', state.linkedEventName or '?', state.linkedEventId))
+                local selShowIds = (callbacks.event_defaults
+                                    and callbacks.event_defaults.showEventIds == true)
+                local selLabel
+                if selShowIds then
+                    selLabel = string.format('Selected: %s (id %d)',
+                        state.linkedEventName or '?', state.linkedEventId)
+                else
+                    selLabel = 'Selected: ' .. (state.linkedEventName or '?')
+                end
+                imgui.TextColored({ 0.6, 1.0, 0.6, 1.0 }, selLabel)
                 imgui.SameLine()
                 if imgui.Button('Clear##syncClear') then
                     if state.windowStateByEvent and state.linkedEventId then
@@ -670,22 +733,21 @@ function ui.draw_launcher(is_open, state, callbacks)
                 imgui.TextDisabled(string.format('  scanning... %.1fs', left))
             end
 
-            -- Event Timer: counts up from CommencementStartTime for the
-            -- four event types that use a runtime ticker (Sky / Sea /
-            -- Dynamis / Limbus). Mirrors the elapsed timer on the web app's
-            -- active-event page. Pulled from the cached webEvents list so
-            -- the value updates whenever Refresh runs.
+            -- Event Timer: counts up from CommencementStartTime for any
+            -- live single-window event (Timed / Sky / Sea / Dynamis / Limbus
+            -- / etc). Multi-window HNMs use the per-window timestamps in
+            -- their tab strip instead, so we skip the global timer for them.
+            -- Pulled from the cached webEvents list; updates each frame.
             do
-                local TIMER_TYPES = {
-                    Sky = true, Sea = true, Dynamis = true, Limbus = true,
-                }
                 if state.linkedEventId and state.webEvents then
                     local linkedEv
                     for _, ev in ipairs(state.webEvents) do
                         if ev.id == state.linkedEventId then linkedEv = ev; break end
                     end
+                    local isSingleWindow = (tonumber(linkedEv and linkedEv.windowCount) or 1) <= 1
                     if linkedEv and linkedEv.commencementStartTime
-                       and TIMER_TYPES[linkedEv.type or ''] then
+                       and linkedEv.commencementStartTime ~= ''
+                       and isSingleWindow then
                         local startEpoch = constants.parse_iso_utc_to_epoch(
                             tostring(linkedEv.commencementStartTime))
                         if startEpoch then
@@ -711,29 +773,191 @@ function ui.draw_launcher(is_open, state, callbacks)
             -- separator), ToD panel (~116px), plus the original footer
             -- (40px non-HNM / 64px HNM for "Post New Window" + window-
             -- status text on top of CSV/Close).
-            -- Both branches now reserve room for an action bar between the
-            -- roster and the Loot Pool: HNM has the Post-window + End Event
-            -- pair, non-HNM has a single Start & Post (or End Event) button.
-            local rosterHeight  = isHnmEvent and -330 or -330
+            -- Roster height is fixed (positive) so adding/removing the Break
+            -- Room section below doesn't squish the Attendance roster. Whatever
+            -- comes after just flows downward inside the right column. Pick a
+            -- value that comfortably fits ~6 rows; the BeginChild lets it
+            -- scroll internally if the roster grows past that.
+            local rosterHeight = isHnmEvent and 200 or 180
 
             local function render_live_roster()
                 local selfKey = (get_self_name() or ''):lower()
                 if selfKey == '' then selfKey = nil end
+
+                -- Look up the linked event once for shared math: rate +
+                -- commencement epoch + non-HNM gate. Per-row time / DKP
+                -- below uses each participant's accumulatedHours plus the
+                -- live segment so the displayed numbers diverge correctly
+                -- when individuals take breaks.
+                local linkedEv, eventRate, eventCommencedEpoch
+                local showPerRowMeta = false
+                if state.linkedEventId and state.webEvents
+                   and (state.windowMax or 1) <= 1 then
+                    for _, ev in ipairs(state.webEvents) do
+                        if ev.id == state.linkedEventId then linkedEv = ev; break end
+                    end
+                    if linkedEv and linkedEv.commencementStartTime
+                       and linkedEv.commencementStartTime ~= '' then
+                        eventCommencedEpoch = constants.parse_iso_utc_to_epoch(
+                            tostring(linkedEv.commencementStartTime))
+                        eventRate = tonumber(linkedEv.dkpPerHour)
+                        showPerRowMeta = (eventCommencedEpoch ~= nil)
+                    end
+                end
+
+                -- Loot Council linkshells don't track DKP at all, so the
+                -- per-row DKP suffix is suppressed entirely. The accumulated
+                -- timer still renders since duration is meaningful regardless
+                -- of whether DKP gets awarded for it.
+                local lootStructForRoster = (state.rosterCache and state.rosterCache.lootStructure) or 'Dkp'
+                local showRowDkp = (lootStructForRoster ~= 'LootCouncil')
+
+                -- Falls back to the global event timer for rows that aren't
+                -- (yet) committed as server participants — no individual
+                -- accumulated time exists for them, so they share the global.
+                local globalDkpSuffix
+                if showPerRowMeta and showRowDkp and eventRate and eventRate > 0 then
+                    local hours = math.max(0, (os.time() - eventCommencedEpoch) / 3600)
+                    local rounded = math.floor(hours * 4 + 0.5) / 4
+                    globalDkpSuffix = string.format(' [%g DKP]', rounded * eventRate)
+                end
+
+                -- Build a name -> server participant index so we can fold
+                -- break/return state into each roster row. Names are matched
+                -- case-insensitively after stripping the local "X " prefix
+                -- the addon uses for opt-out rows.
+                local serverByName = {}
+                local br = state.breakRoom
+                if br and br.loaded then
+                    for _, p in ipairs(br.participants or {}) do
+                        local key = (p.characterName or ''):lower()
+                        if key ~= '' then serverByName[key] = p end
+                    end
+                end
+
                 local i = 1
                 while i <= #attendance.data do
                     local r = attendance.data[i]
-                    local line = string.format('%s (%s | %s/%s)',
-                        r.name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?')
-                    if is_self_row(r, selfKey) then
-                        imgui.TextColored(SELF_COLOR, line)
-                    else
-                        imgui.Text(line)
-                    end
-                    imgui.SameLine()
-                    if imgui.SmallButton('Remove##arRem' .. i) then
-                        table.remove(attendance.data, i)
-                    else
+                    local cleanName = (r.name or ''):gsub('^X%s+', '')
+                    local key = cleanName:lower()
+                    local serverP = serverByName[key]
+
+                    -- People currently on break disappear from the Attendance
+                    -- list — they show up in the Break Room instead.
+                    if serverP and serverP.isOnBreak then
                         i = i + 1
+                    else
+                        local isLocalSelf = is_self_row(r, selfKey)
+
+                        -- Per-row accumulated time + DKP. accumulatedHours from
+                        -- the server covers prior segments (pre-break); the
+                        -- live segment is from the latest resumeTime (or the
+                        -- original startTime, or the event commencement) to
+                        -- now. When the row has no matched server participant
+                        -- (e.g. a zone-scanned member who hasn't been posted
+                        -- yet) we fall back to the global event timer.
+                        local timeSuffix = ''
+                        local dkpSuffix  = globalDkpSuffix or ''
+                        if showPerRowMeta and serverP then
+                            local accumulated = tonumber(serverP.accumulatedHours) or 0
+                            local segmentStartEpoch = nil
+                            if type(serverP.resumeTime) == 'string' and serverP.resumeTime ~= '' then
+                                segmentStartEpoch = constants.parse_iso_utc_to_epoch(serverP.resumeTime)
+                            elseif type(serverP.startTime) == 'string' and serverP.startTime ~= '' then
+                                segmentStartEpoch = constants.parse_iso_utc_to_epoch(serverP.startTime)
+                            end
+                            segmentStartEpoch = segmentStartEpoch or eventCommencedEpoch
+                            local segmentHours = 0
+                            if segmentStartEpoch then
+                                segmentHours = math.max(0, (os.time() - segmentStartEpoch) / 3600)
+                            end
+                            local liveHours = math.max(0, accumulated + segmentHours)
+                            local h = math.floor(liveHours)
+                            local m = math.floor((liveHours - h) * 60)
+                            local s = math.floor(((liveHours - h) * 60 - m) * 60)
+                            timeSuffix = string.format(' [%02d:%02d:%02d]', h, m, s)
+                            if showRowDkp and eventRate and eventRate > 0 then
+                                local rounded = math.floor(liveHours * 4 + 0.5) / 4
+                                dkpSuffix = string.format(' [%g DKP]', rounded * eventRate)
+                            end
+                        end
+
+                        local line = string.format('%s (%s | %s/%s)%s%s',
+                            r.name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?',
+                            timeSuffix, dkpSuffix)
+                        if isLocalSelf then
+                            imgui.TextColored(SELF_COLOR, line)
+                        else
+                            imgui.Text(line)
+                        end
+
+                        -- Break/return action buttons live next to the name.
+                        -- Self: only the Take break button — Verify/Deny/Remove
+                        -- never apply to your own row (you can't moderate yourself
+                        -- or remove yourself from the local pre-post filter).
+                        -- Officers acting on others: Force break, plus Verify /
+                        -- Deny when the server has a pending self-return on file.
+                        if serverP then
+                            if serverP.isSelf then
+                                imgui.SameLine()
+                                if imgui.SmallButton('Take break##arBrk_' .. i) then
+                                    local _, err = api.take_break(state.linkedEventId, serverP.id)
+                                    if err then
+                                        state.lastSyncSummary = 'Break failed: ' .. tostring(err)
+                                    else
+                                        state.lastSyncSummary = 'On break.'
+                                        state.breakRoom.lastFetchAt = 0
+                                    end
+                                end
+                            elseif br.canModerate and not isLocalSelf then
+                                imgui.SameLine()
+                                if imgui.SmallButton('Force break##arFB_' .. i) then
+                                    local _, err = api.take_break(state.linkedEventId, serverP.id)
+                                    if err then
+                                        state.lastSyncSummary = 'Force break failed: ' .. tostring(err)
+                                    else
+                                        state.lastSyncSummary = 'Sent ' .. cleanName .. ' to break.'
+                                        state.breakRoom.lastFetchAt = 0
+                                    end
+                                end
+                            end
+
+                            if br.canModerate and not isLocalSelf and serverP.pendingReturnLedgerId then
+                                imgui.SameLine()
+                                if imgui.SmallButton('Verify##arV_' .. i) then
+                                    local _, err = api.verify_return(state.linkedEventId, serverP.pendingReturnLedgerId)
+                                    if err then
+                                        state.lastSyncSummary = 'Verify failed: ' .. tostring(err)
+                                    else
+                                        state.lastSyncSummary = "Verified " .. cleanName .. "'s return."
+                                        state.breakRoom.lastFetchAt = 0
+                                    end
+                                end
+                                imgui.SameLine()
+                                if imgui.SmallButton('Deny##arD_' .. i) then
+                                    local _, err = api.deny_return(state.linkedEventId, serverP.pendingReturnLedgerId)
+                                    if err then
+                                        state.lastSyncSummary = 'Deny failed: ' .. tostring(err)
+                                    else
+                                        state.lastSyncSummary = "Denied " .. cleanName .. "'s return."
+                                        state.breakRoom.lastFetchAt = 0
+                                    end
+                                end
+                            end
+                        end
+
+                        -- Remove never applies to the local player — you can't
+                        -- accidentally drop yourself from the pre-post roster.
+                        if isLocalSelf then
+                            i = i + 1
+                        else
+                            imgui.SameLine()
+                            if imgui.SmallButton('Remove##arRem' .. i) then
+                                table.remove(attendance.data, i)
+                            else
+                                i = i + 1
+                            end
+                        end
                     end
                 end
             end
@@ -839,79 +1063,134 @@ function ui.draw_launcher(is_open, state, callbacks)
                 end
             end
             imgui.EndChild()
+        end
 
-            -- Non-HNM action bar: a single right-aligned Start & Post (or
-            -- End Event, once live) button, mirroring where the HNM Post
-            -- buttons sit. Lives in the right column so it doesn't compete
-            -- with the Selected/Clear/Delete row in the left column.
-            if state.linkedEventId and not isHnmEvent then
-                local SINGLE_BTN_W = 280
-                local barWindowWidth = 600
-                pcall(function()
-                    local ww = imgui.GetWindowWidth()
-                    if type(ww) == 'number' then barWindowWidth = ww end
-                end)
+        -- Break Room: server-side participant list with break/return controls.
+        -- Self-actions are always allowed; force-actions and verify/deny are
+        -- gated to officers (state.breakRoom.canModerate, sourced from the
+        -- /participants response). Polling is handled in att.lua's d3d_present
+        -- hook every 10s, plus the launcher's top-row Refresh button forces a
+        -- repoll, so this section doesn't need its own Refresh control.
+        if state.linkedEventId and state.breakRoom and state.breakRoom.loaded then
+            local br = state.breakRoom
+            local onBreakCount = 0
+            local pendingCount = 0
+            for _, p in ipairs(br.participants) do
+                if p.isOnBreak then onBreakCount = onBreakCount + 1 end
+                if p.pendingReturnLedgerId then pendingCount = pendingCount + 1 end
+            end
 
-                local linkedLive = false
-                for _, ev in ipairs(state.webEvents or {}) do
-                    if ev.id == state.linkedEventId and ev.isLive then
-                        linkedLive = true
-                        break
+            -- CollapsingHeader gives the same red-accented preset-style header
+            -- the Event Presets section uses. We track the open/closed state
+            -- in br.expanded (default false) and force it onto imgui every
+            -- frame via SetNextItemOpen — that way the header reliably starts
+            -- collapsed each time the launcher opens, regardless of whatever
+            -- imgui.ini remembered from a prior session. The autoExpandRequested
+            -- one-shot flips br.expanded the first time someone goes on break
+            -- or has a pending return; manual clicks update it via the
+            -- CollapsingHeader return value.
+            if br.autoExpandRequested then
+                br.expanded = true
+                br.autoExpandRequested = false
+            end
+            pcall(imgui.SetNextItemOpen, br.expanded and true or false)
+            local header = string.format('Break Room (%d on break, %d pending)##brHeader',
+                onBreakCount, pendingCount)
+            local headerOpen = imgui.CollapsingHeader(header)
+            br.expanded = headerOpen and true or false
+
+            if headerOpen then
+                imgui.BeginChild('breakRoom', { 0, 110 }, true)
+                -- Only members currently on break belong here. Active members
+                -- and "return pending" rows render in the Attendance roster
+                -- above with their action buttons inline. The Break Room is
+                -- strictly the people who are AFK right now.
+                local onBreakList = {}
+                for _, p in ipairs(br.participants) do
+                    if p.isOnBreak then onBreakList[#onBreakList + 1] = p end
+                end
+                if #onBreakList == 0 then
+                    imgui.TextDisabled('No one is on break.')
+                else
+                    for _, p in ipairs(onBreakList) do
+                        local name = p.characterName or '?'
+                        local jobs = string.format('%s/%s', p.jobName or '?', p.subJobName or '?')
+                        local since = ''
+                        if type(p.pauseTime) == 'string' and p.pauseTime ~= '' then
+                            local t = constants.parse_iso_utc_to_epoch(p.pauseTime)
+                            if t then
+                                local mins = math.max(0, math.floor((os.time() - t) / 60))
+                                since = string.format(' (%dm)', mins)
+                            end
+                        end
+                        imgui.TextColored({ 1.0, 0.85, 0.2, 1.0 },
+                            string.format('%s (%s) - On break%s', name, jobs, since))
+
+                        -- Self -> Return; officers -> Force resume on anyone.
+                        if p.isSelf then
+                            imgui.SameLine()
+                            if imgui.SmallButton('Return##brSelfRet_' .. tostring(p.id)) then
+                                local _, err = api.return_from_break(state.linkedEventId, p.id)
+                                if err then
+                                    state.lastSyncSummary = 'Return failed: ' .. tostring(err)
+                                else
+                                    state.lastSyncSummary = 'Returned from break.'
+                                    br.lastFetchAt = 0
+                                end
+                            end
+                        elseif br.canModerate then
+                            imgui.SameLine()
+                            if imgui.SmallButton('Force resume##brFR_' .. tostring(p.id)) then
+                                local _, err = api.return_from_break(state.linkedEventId, p.id)
+                                if err then
+                                    state.lastSyncSummary = 'Force resume failed: ' .. tostring(err)
+                                else
+                                    state.lastSyncSummary = 'Resumed ' .. name .. '.'
+                                    br.lastFetchAt = 0
+                                end
+                            end
+                        end
                     end
                 end
+                imgui.EndChild()
+            end
+        end
 
-                imgui.SetCursorPosX(barWindowWidth - SINGLE_BTN_W - 16)
-                if linkedLive then
-                    if imgui.Button('End Event: ' .. (state.linkedEventName or '?') .. '##syncEndEvent', { SINGLE_BTN_W, 0 }) then
-                        if callbacks.on_end_event then
-                            callbacks.on_end_event()
-                        end
-                    end
-                else
-                    if imgui.Button('Start & Post: ' .. (state.linkedEventName or '?') .. '##syncStartPost', { SINGLE_BTN_W, 0 }) then
-                        if callbacks.on_start_and_post then
-                            local d = callbacks.event_defaults or {}
-                            state.lastSyncSummary = callbacks.on_start_and_post({
-                                eventId      = state.linkedEventId,
-                                eventName    = state.linkedEventName,
-                                isAutoCreate = false,
-                                csvOnStart   = state.launcherCsvOnStart,
-                                dkpPerHour   = tonumber(d.dkpPerHourRegular) or 0,
-                                dkpPerWindow = tonumber(d.dkpPerWindowHnm)   or 0,
-                            })
-                        end
-                    end
+        -- Action bar: lives below the Break Room so the End Event /
+        -- Start & Post / Post Window controls are anchored at the bottom
+        -- of the Attendance area, just above the Loot Pool separator.
+        -- Non-HNM events get a single right-aligned button (Start & Post
+        -- → End Event once live). HNM events get a two-row bar (Post per
+        -- window + End Event once at least one window has been posted).
+        -- Recompute isHnmEvent here because the outer do-block that scoped
+        -- the original local has already ended above.
+        local actionIsHnmEvent = (state.windowMax or 1) > 1
+        if state.linkedEventId and not actionIsHnmEvent then
+            local SINGLE_BTN_W = 280
+            local barWindowWidth = 600
+            pcall(function()
+                local ww = imgui.GetWindowWidth()
+                if type(ww) == 'number' then barWindowWidth = ww end
+            end)
+
+            local linkedLive = false
+            for _, ev in ipairs(state.webEvents or {}) do
+                if ev.id == state.linkedEventId and ev.isLive then
+                    linkedLive = true
+                    break
                 end
             end
 
-            -- HNM-only action area: Post / "All windows posted" hint on
-            -- the top row, End Event button on its own row below. Two
-            -- rows is more reliable than the SameLine + SetCursorPosX
-            -- side-by-side layout, and gives End Event a permanent
-            -- right-aligned anchor regardless of post-button state.
-            if isHnmEvent and state.linkedEventId then
-                local POST_BTN_W   = 220
-                local END_BTN_W    = 120
-                local barWindowWidth = 600
-                pcall(function()
-                    local ww = imgui.GetWindowWidth()
-                    if type(ww) == 'number' then barWindowWidth = ww end
-                end)
-
-                -- Row 1: Post button (still windows to post) OR
-                -- "All N windows posted." hint.
-                if windowSeq < windowMax then
-                    local nextSeq = windowSeq + 1
-                    -- First window starts the event AND posts; subsequent
-                    -- windows just post (the event is already live), so
-                    -- drop the "Start &" prefix from the second post on.
-                    local prefix = (nextSeq == 1) and 'Start & Post' or 'Post'
-                    local label = string.format('%s: %s (%d/%d)##postWindow',
-                        prefix,
-                        constants.window_label(state.linkedEventName, nextSeq),
-                        nextSeq, windowMax)
-                    imgui.SetCursorPosX(barWindowWidth - POST_BTN_W - 16)
-                    if imgui.Button(label, { POST_BTN_W, 0 }) and callbacks.on_start_and_post then
+            imgui.SetCursorPosX(barWindowWidth - SINGLE_BTN_W - 16)
+            if linkedLive then
+                if imgui.Button('End Event: ' .. (state.linkedEventName or '?') .. '##syncEndEvent', { SINGLE_BTN_W, 0 }) then
+                    if callbacks.on_end_event then
+                        callbacks.on_end_event()
+                    end
+                end
+            else
+                if imgui.Button('Start & Post: ' .. (state.linkedEventName or '?') .. '##syncStartPost', { SINGLE_BTN_W, 0 }) then
+                    if callbacks.on_start_and_post then
                         local d = callbacks.event_defaults or {}
                         state.lastSyncSummary = callbacks.on_start_and_post({
                             eventId      = state.linkedEventId,
@@ -922,24 +1201,56 @@ function ui.draw_launcher(is_open, state, callbacks)
                             dkpPerWindow = tonumber(d.dkpPerWindowHnm)   or 0,
                         })
                     end
-                else
-                    imgui.SetCursorPosX(barWindowWidth - POST_BTN_W - 16)
-                    imgui.TextDisabled(string.format('All %d windows posted.', windowMax))
                 end
+            end
+        end
 
-                -- Row 2: End Event button. Visible once the event has at
-                -- least one posted window (i.e. it is actually live on
-                -- the server). Right-aligned so it doesn't drift around.
-                if windowSeq > 0 then
-                    imgui.SetCursorPosX(barWindowWidth - END_BTN_W - 16)
-                    if imgui.Button('End Event##hnmEndEvent', { END_BTN_W, 0 }) then
-                        if callbacks.on_end_event then
-                            callbacks.on_end_event()
-                        end
+        if actionIsHnmEvent and state.linkedEventId then
+            local POST_BTN_W   = 220
+            local END_BTN_W    = 120
+            local barWindowWidth = 600
+            pcall(function()
+                local ww = imgui.GetWindowWidth()
+                if type(ww) == 'number' then barWindowWidth = ww end
+            end)
+
+            local windowMax     = state.windowMax or 1
+            local windowSeq     = state.windowSequence or 0
+
+            if windowSeq < windowMax then
+                local nextSeq = windowSeq + 1
+                local prefix = (nextSeq == 1) and 'Start & Post' or 'Post'
+                local label = string.format('%s: %s (%d/%d)##postWindow',
+                    prefix,
+                    constants.window_label(state.linkedEventName, nextSeq),
+                    nextSeq, windowMax)
+                imgui.SetCursorPosX(barWindowWidth - POST_BTN_W - 16)
+                if imgui.Button(label, { POST_BTN_W, 0 }) and callbacks.on_start_and_post then
+                    local d = callbacks.event_defaults or {}
+                    state.lastSyncSummary = callbacks.on_start_and_post({
+                        eventId      = state.linkedEventId,
+                        eventName    = state.linkedEventName,
+                        isAutoCreate = false,
+                        csvOnStart   = state.launcherCsvOnStart,
+                        dkpPerHour   = tonumber(d.dkpPerHourRegular) or 0,
+                        dkpPerWindow = tonumber(d.dkpPerWindowHnm)   or 0,
+                    })
+                end
+            else
+                imgui.SetCursorPosX(barWindowWidth - POST_BTN_W - 16)
+                imgui.TextDisabled(string.format('All %d windows posted.', windowMax))
+            end
+
+            if windowSeq > 0 then
+                imgui.SetCursorPosX(barWindowWidth - END_BTN_W - 16)
+                if imgui.Button('End Event##hnmEndEvent', { END_BTN_W, 0 }) then
+                    if callbacks.on_end_event then
+                        callbacks.on_end_event()
                     end
                 end
             end
         end
+
         imgui.Separator()
 
         -- Loot Pool panel: shows items detected in chat ("You find X on the
@@ -973,11 +1284,13 @@ function ui.draw_launcher(is_open, state, callbacks)
 
             imgui.Text(titleMonster .. ' Loot Pool')
 
-            -- Right-aligned Clear button on the title row. Wipes only the drops
-            -- for the active capture, never the parent ToD entry — clearing the
-            -- loot pool shouldn't make the matching ToD line disappear.
-            local hasDrops = activeCap and activeCap.lootDrops and #activeCap.lootDrops > 0
-            if hasDrops then
+            -- Right-aligned Clear button on the title row. Always visible
+            -- (mirrors the ToD Capture Clear) so the user has a consistent
+            -- spot to dismiss the section regardless of whether drops have
+            -- landed yet. Wipes only the drops for the active capture, never
+            -- the parent ToD entry — clearing the loot pool shouldn't make
+            -- the matching ToD line disappear.
+            do
                 local LOOT_CLEAR_W = 70
                 local lootWindowWidth = 600
                 pcall(function()
@@ -986,7 +1299,9 @@ function ui.draw_launcher(is_open, state, callbacks)
                 end)
                 imgui.SameLine(lootWindowWidth - LOOT_CLEAR_W - 16)
                 if imgui.Button('Clear##lootClear', { LOOT_CLEAR_W, 0 }) then
-                    activeCap.lootDrops = {}
+                    if activeCap then
+                        activeCap.lootDrops = {}
+                    end
                 end
             end
 
@@ -1046,17 +1361,28 @@ function ui.draw_launcher(is_open, state, callbacks)
                             imgui.PopItemWidth()
                             imgui.SameLine()
 
-                            local dkpLabel = (lootStruct == 'Hybrid') and 'Deduction %:' or 'DKP Spent:'
-                            imgui.Text(dkpLabel)
-                            imgui.SameLine()
-                            imgui.PushItemWidth(80)
-                            local dkpPtr = { tostring(drop.draft.dkpSpent or '') }
-                            if imgui.InputText(string.format('##dkp_%d_%d', activeIdx, dIdx),
-                                    dkpPtr, 16) then
-                                drop.draft.dkpSpent = dkpPtr[1] or ''
+                            -- DKP field varies by loot structure:
+                            --   * Loot Council → no DKP tracking at all, so
+                            --     the input row is omitted entirely; the
+                            --     server-side AdjustTodLootDkpAsync skips
+                            --     ledger writes for these linkshells anyway.
+                            --   * Percentage Based (server enum still 'Hybrid')
+                            --     → label as "Deduction %:" so the user knows
+                            --     to type 0-100, not a flat DKP amount.
+                            --   * DKP → flat DKP value as before.
+                            if lootStruct ~= 'LootCouncil' then
+                                local dkpLabel = (lootStruct == 'Hybrid') and 'Deduction %:' or 'DKP Spent:'
+                                imgui.Text(dkpLabel)
+                                imgui.SameLine()
+                                imgui.PushItemWidth(80)
+                                local dkpPtr = { tostring(drop.draft.dkpSpent or '') }
+                                if imgui.InputText(string.format('##dkp_%d_%d', activeIdx, dIdx),
+                                        dkpPtr, 16) then
+                                    drop.draft.dkpSpent = dkpPtr[1] or ''
+                                end
+                                imgui.PopItemWidth()
+                                imgui.SameLine()
                             end
-                            imgui.PopItemWidth()
-                            imgui.SameLine()
 
                             if drop.posting then
                                 imgui.TextDisabled('Saving...')
@@ -1087,12 +1413,7 @@ function ui.draw_launcher(is_open, state, callbacks)
                             -- when cap.posted is nil. From the UI's POV,
                             -- Post Loot is always available.
                             imgui.Text('  ' .. tostring(drop.itemName or '?'))
-                            local pcWidth = 600
-                            pcall(function()
-                                local ww = imgui.GetWindowWidth()
-                                if type(ww) == 'number' then pcWidth = ww end
-                            end)
-                            imgui.SameLine(pcWidth - 100)
+                            imgui.SameLine()
                             if imgui.Button(string.format('Post Loot##postLoot_%d_%d',
                                     activeIdx, dIdx), { 80, 0 }) then
                                 drop.draftOpen = true
@@ -1500,14 +1821,18 @@ function ui.draw_settings(is_open, state, callbacks)
         imgui.Text('Default DKP rates for events created from the addon:')
         imgui.Dummy({ 0, 6 })
 
-        imgui.Text('Regular events  -  DKP / Hour')
-        imgui.PushItemWidth(100)
+        -- Both DKP rate inputs share one row: label / input / spacer / label / input.
+        imgui.Text('Timed - DKP / Hour')
+        imgui.SameLine()
+        imgui.PushItemWidth(80)
         imgui.InputText('##settDkpHour', syncSettingsDkpHourPtr, 8)
         imgui.PopItemWidth()
-
-        imgui.Dummy({ 0, 6 })
-        imgui.Text('HNM events      -  DKP / Window')
-        imgui.PushItemWidth(100)
+        imgui.SameLine()
+        imgui.Dummy({ 16, 0 })
+        imgui.SameLine()
+        imgui.Text('HNM - DKP / Window')
+        imgui.SameLine()
+        imgui.PushItemWidth(80)
         imgui.InputText('##settDkpWindow', syncSettingsDkpWindowPtr, 8)
         imgui.PopItemWidth()
 
@@ -1517,7 +1842,7 @@ function ui.draw_settings(is_open, state, callbacks)
 
         imgui.Text('Display:')
         imgui.SameLine()
-        if imgui.Checkbox('Show event IDs in Queued / Active lists', syncSettingsShowIdsPtr) then
+        if imgui.Checkbox('Show Event IDs', syncSettingsShowIdsPtr) then
             -- bound directly; nothing else to do
         end
 

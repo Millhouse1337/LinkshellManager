@@ -550,7 +550,7 @@ public sealed class ActivityDataController : ControllerBase
         {
             return Unauthorized(new
             {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to load DKP history."
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to load DKP History."
             });
         }
 
@@ -1929,7 +1929,7 @@ public sealed class ActivityDataController : ControllerBase
             var requestedStructure = request.LootStructure.Trim();
             if (!IsValidLootStructure(requestedStructure))
             {
-                return BadRequest(new { error = "Loot structure must be Dkp, LootCouncil, or Hybrid." });
+                return BadRequest(new { error = "Loot Structure must be Dkp, LootCouncil, or Hybrid." });
             }
             linkshell.LootStructure = NormalizeLootStructure(requestedStructure);
         }
@@ -4516,6 +4516,12 @@ public sealed class ActivityDataController : ControllerBase
                 Sequence = currentSequence,
                 OccurredAt = occurredAtUtc,
                 CharacterName = winnerMembership.CharacterName,
+                // Surface the monster name in the Event/Context column. Without
+                // this the cell renders blank because ToD loot has no parent
+                // Event row to source it from. Type and location stay null so
+                // the discord activity's conditional subtitle stays hidden
+                // (otherwise it would render "Behemoth · ToD · Unknown location").
+                EventName = tod.MonsterName,
                 ItemName = detail.ItemName,
                 Details = detailsText
             });

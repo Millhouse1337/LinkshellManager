@@ -162,6 +162,20 @@ local state = {
     windowStateByEvent   = {},
     webEvents            = {},    -- cache of fetched events for the launcher dropdown
     webEventsLoadedAt    = 0,
+
+    -- Break-room: cached participant list for the currently-selected live event.
+    -- Auto-refreshed every BREAK_ROOM_REFRESH_SEC by the d3d_present hook while a
+    -- live event is selected. expanded snaps to true the first time anyone is on
+    -- break or has a pending self-return so officers see the panel without an
+    -- extra click; the user can collapse manually after that.
+    breakRoom            = {
+        participants     = {},
+        canModerate      = false,
+        loaded           = false,
+        lastFetchAt      = 0,
+        expanded         = false,
+        autoExpanded     = false,
+    },
     lastSyncSummary      = nil,   -- string shown in launcher after a sync attempt
     launcherCsvOnStart   = false, -- if true, Start & Post also writes the local CSV
     lastScannedFor       = nil,   -- name of event the launcher last scanned for (avoids re-scanning the same selection)
@@ -911,6 +925,62 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
         if io_ok and io then io.MouseDrawCursor = anyWindowOpen and true or false end
     end
 
+    -- Break-room auto-refresh. Polls the participants endpoint every 10s while
+    -- a live event is selected and the launcher is open. Cheap server call (one
+    -- query + one ledger lookup) so the cadence is fine; users see status
+    -- changes without manually hitting Refresh. Auto-expands the panel when
+    -- anyone first hits "on break" or has a pending self-return.
+    do
+        local BREAK_ROOM_REFRESH_SEC = 10
+        local linkedId = state.linkedEventId
+        local launcherOpen = state.isAttendLauncherOpen
+        if launcherOpen and linkedId and api.is_paired() then
+            local linkedLive = false
+            for _, ev in ipairs(state.webEvents or {}) do
+                if ev.id == linkedId and ev.isLive then linkedLive = true; break end
+            end
+            if linkedLive then
+                local now = os.time()
+                if (state.breakRoom.lastFetchAt or 0) + BREAK_ROOM_REFRESH_SEC <= now then
+                    state.breakRoom.lastFetchAt = now
+                    local result, err = api.list_participants(linkedId)
+                    if result then
+                        state.breakRoom.participants = result.participants or {}
+                        state.breakRoom.canModerate  = result.canModerateLiveEvent and true or false
+                        state.breakRoom.loaded       = true
+                        -- Auto-expand once when something needs attention.
+                        -- imgui's CollapsingHeader owns its open state, so we
+                        -- pass a one-shot via autoExpandRequested that ui.lua
+                        -- consumes with SetNextItemOpen on the next frame. The
+                        -- autoExpanded latch then prevents re-arming on every
+                        -- 10s poll, so a manual collapse stays sticky.
+                        if not state.breakRoom.autoExpanded then
+                            for _, p in ipairs(state.breakRoom.participants) do
+                                if p.isOnBreak or p.pendingReturnLedgerId then
+                                    state.breakRoom.autoExpandRequested = true
+                                    state.breakRoom.autoExpanded        = true
+                                    break
+                                end
+                            end
+                        end
+                    elseif err then
+                        -- Don't toast every poll on error; just leave the cache.
+                    end
+                end
+            else
+                -- Selected event isn't live (or not selected); reset the cache so
+                -- the next live selection starts clean and re-arms autoExpanded.
+                if state.breakRoom.loaded then
+                    state.breakRoom.participants = {}
+                    state.breakRoom.canModerate  = false
+                    state.breakRoom.loaded       = false
+                    state.breakRoom.autoExpanded = false
+                    state.breakRoom.lastFetchAt  = 0
+                end
+            end
+        end
+    end
+
     -- Pending Attend Launch
     if state.pendingAttend and os.clock() >= state.pendingAttend.fireAt then
         local lsFlag = state.pendingAttend.useLS2 and 'ls2' or 'ls'
@@ -1215,12 +1285,17 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
 
             -- 1. Make sure the event exists, then start it.
             if not eventId then
-                -- HNM events take per-window DKP; everything else takes
-                -- per-hour. Mirror the resolve done in on_preset_button.
-                local dkpRate = (state.selectedMode == 'HNM')
-                    and opts.dkpPerWindow
-                    or  opts.dkpPerHour
-                local created, cerr = api.create_event(eventName, state.selectedMode, nil, dkpRate)
+                -- HNM and Claim/Kill events both take per-window DKP and use
+                -- a multi-post pattern; everything else takes per-hour. The
+                -- Claim/Kill style is sent as type='HNM' with an explicit
+                -- windowCount=2 so the server-side filter still treats it
+                -- like a multi-post HNM.
+                local mode = state.selectedMode
+                local isMultiPost = (mode == 'HNM') or (mode == 'ClaimKill')
+                local dkpRate = isMultiPost and opts.dkpPerWindow or opts.dkpPerHour
+                local typeForServer = (mode == 'ClaimKill') and 'HNM' or mode
+                local windowCount = (mode == 'ClaimKill') and 2 or nil
+                local created, cerr = api.create_event(eventName, typeForServer, nil, dkpRate, windowCount)
                 if not created or not created.eventId then
                     return 'Create failed: ' .. tostring(cerr)
                 end
@@ -1480,8 +1555,17 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                 drop.postError = 'Pick a winner.'
                 return
             end
-            if not dkp or dkp <= 0 then
-                drop.postError = 'Enter a positive DKP value.'
+
+            -- Loot Council linkshells skip DKP entirely — the addon hides
+            -- the input and the server's AdjustTodLootDkpAsync no-ops the
+            -- ledger writes for them, so passing 0 here is safe and lets
+            -- the user record loot allocation (winner only) without a value.
+            local lootStruct = (state.rosterCache and state.rosterCache.lootStructure) or 'Dkp'
+            if lootStruct == 'LootCouncil' then
+                dkp = dkp or 0
+            elseif not dkp or dkp <= 0 then
+                local label = (lootStruct == 'Hybrid') and 'percentage' or 'DKP value'
+                drop.postError = 'Enter a positive ' .. label .. '.'
                 return
             end
 
@@ -1529,8 +1613,60 @@ ashita.events.register('d3d_present', 'att_present_cb', function()
                 print(chat.header('att') .. state.lastSyncSummary)
                 return
             end
+            -- The detailed "=== Event Ended ===" block below is sufficient
+            -- chat output; just update the launcher's status line so the
+            -- toast above the lists reflects the most recent action.
             state.lastSyncSummary = 'Ended: ' .. eventName
-            print(chat.header('att') .. state.lastSyncSummary)
+
+            -- Final summary: event details + per-participant DKP earned. Read
+            -- straight from the end-event response so what's printed is what
+            -- the server actually committed. JSON nulls round-trip as a
+            -- sentinel TABLE in this Lua JSON lib, so guard every field with
+            -- a string type-check before formatting — otherwise a missing
+            -- Location prints as "table: 0x...".
+            do
+                local hdr = chat.header('att')
+                local function asStr(v)
+                    if type(v) == 'string' and v ~= '' then return v end
+                    return nil
+                end
+                print(hdr .. '=== Event Ended ===')
+                print(hdr .. 'Event: ' .. (asStr(result.eventName) or tostring(eventName)))
+                local etype = asStr(result.eventType)
+                if etype then print(hdr .. 'Type: ' .. etype) end
+                local eloc = asStr(result.eventLocation)
+                if eloc then print(hdr .. 'Location: ' .. eloc) end
+                local startStr = asStr(result.commencementStartTime)
+                if startStr then
+                    local started = constants.parse_iso_utc_to_local_table(startStr)
+                    print(hdr .. 'Started: ' .. (constants.format_posted_at(started) or startStr))
+                end
+                local endStr = asStr(result.endTime)
+                if endStr then
+                    local ended = constants.parse_iso_utc_to_local_table(endStr)
+                    print(hdr .. 'Ended:   ' .. (constants.format_posted_at(ended) or endStr))
+                end
+                if tonumber(result.dkpPerHour) then
+                    print(hdr .. string.format('DKP rate: %g / hour', tonumber(result.dkpPerHour)))
+                end
+                local participants = (type(result.participants) == 'table') and result.participants or {}
+                if #participants == 0 then
+                    print(hdr .. 'Participants: <none>')
+                else
+                    print(hdr .. string.format('Participants (%d):', #participants))
+                    for _, p in ipairs(participants) do
+                        local jobs = string.format('%s/%s',
+                            asStr(p.jobName) or '?',
+                            asStr(p.subJobName) or '?')
+                        print(hdr .. string.format('  %s (%s) - %.2fh - %g DKP',
+                            asStr(p.characterName) or '?',
+                            jobs,
+                            tonumber(p.durationHours) or 0,
+                            tonumber(p.dkpEarned) or 0))
+                    end
+                end
+                print(hdr .. '====================')
+            end
 
             if state.windowStateByEvent then
                 state.windowStateByEvent[eventId] = nil

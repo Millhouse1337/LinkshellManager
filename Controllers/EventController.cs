@@ -1009,9 +1009,21 @@ public class EventController : Controller
     // (linkshell membership / management permission) before calling. This
     // helper writes the EventHistory + DkpLedgerEntry rows, removes the
     // related Jobs / AppUserEvents / EventLootDetails / Event, and saves.
-    internal static async Task EndEventCoreAsync(ApplicationDbContext dbContext, Event eventEntity)
+    internal sealed record EndEventParticipantSummary(
+        string? CharacterName,
+        string? JobName,
+        string? SubJobName,
+        double? DurationHours,
+        double? DkpEarned);
+
+    internal sealed record EndEventResult(
+        DateTime EndTimeUtc,
+        IReadOnlyList<EndEventParticipantSummary> Participants);
+
+    internal static async Task<EndEventResult> EndEventCoreAsync(ApplicationDbContext dbContext, Event eventEntity)
     {
         var endTimeUtc = DateTime.UtcNow;
+        var participantSummaries = new List<EndEventParticipantSummary>();
         var history = new EventHistory
         {
             LinkshellId = eventEntity.LinkshellId,
@@ -1052,6 +1064,13 @@ public class EventController : Controller
 
             participation.Duration = roundedDuration;
             participation.EventDkp = eventDkp;
+
+            participantSummaries.Add(new EndEventParticipantSummary(
+                participation.CharacterName,
+                participation.JobName,
+                participation.SubJobName,
+                roundedDuration,
+                eventDkp));
 
             history.AppUserEventHistories.Add(new AppUserEventHistory
             {
@@ -1148,6 +1167,8 @@ public class EventController : Controller
         dbContext.Jobs.RemoveRange(eventJobs);
         dbContext.Events.Remove(eventEntity);
         await dbContext.SaveChangesAsync();
+
+        return new EndEventResult(endTimeUtc, participantSummaries);
     }
 
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)

@@ -96,14 +96,6 @@
             <div class="stat-cell-label">Linkshell</div>
             <div class="stat-cell-value stat-cell-value--text">{{ dashboardLinkshell.name }}</div>
           </div>
-          <div class="stat-cell">
-            <div class="stat-cell-label">Members</div>
-            <div class="stat-cell-value">{{ selectedDashboardMembers().length }}</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-cell-label">Upcoming Events</div>
-            <div class="stat-cell-value">{{ selectedDashboardEvents().length }}</div>
-          </div>
           @if (dashboardLinkshell.settings?.enableItems) {
             <div class="stat-cell">
               <div class="stat-cell-label">Items</div>
@@ -116,6 +108,18 @@
               <div class="stat-cell-value">{{ dashboardLinkshell.revenue }}</div>
             </div>
           }
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming Events</div>
+            <div class="stat-cell-value">{{ selectedDashboardEvents().length }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming Auctions</div>
+            <div class="stat-cell-value">{{ upcomingDashboardAuctionsCount() }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming ToDs</div>
+            <div class="stat-cell-value">{{ upcomingDashboardTodsCount() }}</div>
+          </div>
         </div>
       }
 
@@ -422,6 +426,11 @@
                       {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
                     </button>
                   }
+                  @if (group.latest.lootCount > 0) {
+                    <button type="button" class="btn sm" (click)="toggleTodLoot(group.latest.id)">
+                      {{ isTodLootExpanded(group.latest.id) ? 'Hide loot' : 'View Loot (' + group.latest.lootCount + ')' }}
+                    </button>
+                  }
                   <button
                     type="button"
                     class="btn sm danger-outline"
@@ -430,6 +439,19 @@
                     {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
                   </button>
                 </div>
+                @if (isTodLootExpanded(group.latest.id)) {
+                  <div class="tod-loot-list">
+                    @for (loot of group.latest.lootDetails; track loot.id) {
+                      <div class="tod-loot-item">
+                        <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                        <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                        @if (loot.winningDkpSpent != null) {
+                          <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
                 @if (isTodGroupExpanded(group.key)) {
                   <div class="tod-history-list">
                     @for (hist of group.history; track hist.id) {
@@ -440,7 +462,25 @@
                         </div>
                         <div class="tod-history-meta">
                           <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
+                          @if (hist.lootCount > 0) {
+                            <button type="button" class="btn sm" (click)="toggleTodLoot(hist.id)">
+                              {{ isTodLootExpanded(hist.id) ? 'Hide loot' : 'View Loot' }}
+                            </button>
+                          }
                         </div>
+                        @if (isTodLootExpanded(hist.id)) {
+                          <div class="tod-loot-list">
+                            @for (loot of hist.lootDetails; track loot.id) {
+                              <div class="tod-loot-item">
+                                <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                                <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                                @if (loot.winningDkpSpent != null) {
+                                  <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
                       </div>
                     }
                   </div>
@@ -1341,6 +1381,11 @@
                     {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
                   </button>
                 }
+                @if (group.latest.lootCount > 0) {
+                  <button type="button" class="btn sm" (click)="toggleTodLoot(group.latest.id)">
+                    {{ isTodLootExpanded(group.latest.id) ? 'Hide loot' : 'View Loot (' + group.latest.lootCount + ')' }}
+                  </button>
+                }
                 <button type="button" class="btn sm" (click)="beginEditTod(group.latest)">Edit</button>
                 <button type="button" class="btn sm danger-outline"
                   [disabled]="activity.busyTodId() === group.latest.id"
@@ -1348,6 +1393,19 @@
                   {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
                 </button>
               </div>
+              @if (isTodLootExpanded(group.latest.id)) {
+                <div class="tod-loot-list">
+                  @for (loot of group.latest.lootDetails; track loot.id) {
+                    <div class="tod-loot-item">
+                      <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                      <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                      @if (loot.winningDkpSpent != null) {
+                        <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
               @if (isTodGroupExpanded(group.key)) {
                 <div class="tod-history-list">
                   @for (hist of group.history; track hist.id) {
@@ -1358,6 +1416,11 @@
                       </div>
                       <div class="tod-history-meta">
                         <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
+                        @if (hist.lootCount > 0) {
+                          <button type="button" class="btn sm" (click)="toggleTodLoot(hist.id)">
+                            {{ isTodLootExpanded(hist.id) ? 'Hide loot' : 'View Loot' }}
+                          </button>
+                        }
                         <button type="button" class="btn sm" (click)="beginEditTod(hist)">Edit</button>
                         <button type="button" class="btn sm danger-outline"
                           [disabled]="activity.busyTodId() === hist.id"
@@ -1365,6 +1428,19 @@
                           {{ activity.busyTodId() === hist.id ? 'Deleting...' : 'Delete' }}
                         </button>
                       </div>
+                      @if (isTodLootExpanded(hist.id)) {
+                        <div class="tod-loot-list">
+                          @for (loot of hist.lootDetails; track loot.id) {
+                            <div class="tod-loot-item">
+                              <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                              <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                              @if (loot.winningDkpSpent != null) {
+                                <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
                     </div>
                   }
                 </div>
@@ -1559,7 +1635,7 @@
   <!-- ============================================================ -->
   <!-- ===== ENDGAME TAB ===== -->
   <!-- ============================================================ -->
-  @if (activeTab() === 'endgame') {
+  @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
     <div class="panel-tab fade">
       <div class="section-head">
         <div>
@@ -1567,6 +1643,8 @@
           <div class="section-title">End Game</div>
         </div>
       </div>
+
+      <div class="coming-soon-banner">Feature Coming Soon!</div>
 
       <div class="card">
         <div class="card-head"><div class="card-title">End Game</div></div>
@@ -1603,7 +1681,7 @@
   <!-- ============================================================ -->
   <!-- ===== MISSIONS TAB ===== -->
   <!-- ============================================================ -->
-  @if (activeTab() === 'missions') {
+  @if (activeTab() === 'missions' && isFeatureEnabled('enableMissions')) {
     <div class="panel-tab fade">
       <div class="section-head">
         <div>
@@ -1611,6 +1689,8 @@
           <div class="section-title">Missions</div>
         </div>
       </div>
+
+      <div class="coming-soon-banner">Feature Coming Soon!</div>
 
       <div class="card">
         <div class="card-head"><div class="card-title">Missions</div></div>
@@ -1776,7 +1856,7 @@
                     [ngModel]="customizeDraft.lootStructure"
                     (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
                   <span>
-                    <strong>Hybrid</strong>
+                    <strong>Percentage Based</strong>
                     <span class="muted">DKP earned as usual; loot deducts a percentage of the winner's balance.</span>
                   </span>
                 </label>
@@ -1884,7 +1964,7 @@
               </select>
             }
             @if (canManageRolesForSelectedLinkshell() && !showNewRoleForm && editingRoleId === null) {
-              <button type="button" class="btn primary sm" (click)="beginCreateRole()">+ New Role</button>
+              <button type="button" class="btn primary sm" style="white-space:nowrap" (click)="beginCreateRole()">+ New Role</button>
             }
           </div>
         </div>

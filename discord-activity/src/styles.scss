@@ -1155,6 +1155,46 @@ app-activity-queue-panel {
   max-width: 240px;
 }
 
+// Native <select> styling inside the customize form. Drops the default OS
+// dropdown appearance and replaces the chevron with an inlined SVG so the
+// control matches the rest of the form fields (border, padding, focus ring).
+.customize-form__field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  height: 34px;
+  padding: 0 32px 0 10px;
+  font-size: 13px;
+  color: var(--fg);
+  background-color: var(--surface);
+  // SVG chevron, color-matched to fg-3, anchored to the right edge.
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.customize-form__field select:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.customize-form__field select:focus-visible {
+  border-color: var(--accent, #7c5cff);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+}
+
+.customize-form__field select option {
+  background: var(--surface, #1f1f23);
+  color: var(--fg, #e4e4e7);
+}
+
 .customize-form__toggles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1164,8 +1204,56 @@ app-activity-queue-panel {
 .customize-form__toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
+  cursor: pointer;
+}
+
+// Render the underlying checkbox as an iOS-style on/off toggle switch.
+// Keeping the native <input type="checkbox"> means [ngModel] still
+// two-way binds without any extra component plumbing — the visual is
+// purely CSS.
+.customize-form__toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    transition: transform 0.15s ease;
+  }
+
+  &:checked {
+    background: var(--accent, #7c5cff);
+    border-color: var(--accent, #7c5cff);
+  }
+
+  &:checked::before {
+    transform: translateX(14px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent, #7c5cff);
+    outline-offset: 2px;
+  }
 }
 
 .customize-form__actions {
@@ -3561,6 +3649,30 @@ body {
 }
 .panel-tab .data-table tbody tr:hover {
   background: var(--surface-2);
+}
+
+/* Active-auctions table: each auction is a group of consecutive rows.
+   The first row of each auction gets a thicker top border so groups
+   are visually delineated. Bid-history and close panels render as
+   full-width rows beneath the auction's items and inherit the group
+   without an extra delineator. */
+.panel-tab .auction-active-table tbody tr.auction-group-start > td {
+  border-top: 2px solid var(--border-strong, var(--border));
+}
+.panel-tab .auction-active-table tbody tr.auction-group-start:first-child > td {
+  border-top: none;
+}
+.panel-tab .auction-active-table tbody tr.auction-row-ended > td {
+  opacity: 0.7;
+}
+.panel-tab .auction-active-table tbody tr.auction-bid-history-row:hover,
+.panel-tab .auction-active-table tbody tr.auction-close-row:hover {
+  background: transparent;
+}
+.panel-tab .auction-active-table tbody tr.auction-bid-history-row > td,
+.panel-tab .auction-active-table tbody tr.auction-close-row > td {
+  background: var(--surface);
+  padding: 8px 14px;
 }
 
 /* ============================================================ */

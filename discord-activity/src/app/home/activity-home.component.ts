@@ -1357,6 +1357,29 @@ export class ActivityHomeComponent {
       });
   }
 
+  // Stat-strip counts: "upcoming" = anything not yet finished. Auctions
+  // whose status is still Pending/Live/Scheduled count; closed/archived/ended
+  // are dropped. ToDs count when their repop window is still in the future
+  // (or has no repop time and we treat the most recent one as pending).
+  protected upcomingDashboardAuctionsCount(): number {
+    const selectedId = this.selectedDashboardLinkshellId();
+    return this.activity.auctions()
+      .filter(a => a.linkshellId === selectedId)
+      .filter(a => {
+        const s = (a.status || '').toLowerCase();
+        return s !== 'closed' && s !== 'archived' && s !== 'ended';
+      }).length;
+  }
+
+  protected upcomingDashboardTodsCount(): number {
+    const now = Date.now();
+    return this.selectedDashboardTods().filter(tod => {
+      if (!tod.repopTime) return false;
+      const repop = new Date(tod.repopTime).getTime();
+      return Number.isFinite(repop) && repop > now;
+    }).length;
+  }
+
   protected readonly expandedTodGroups = signal<Set<string>>(new Set());
 
   protected groupedDashboardTods(): { key: string; latest: any; history: any[] }[] {
@@ -1381,6 +1404,21 @@ export class ActivityHomeComponent {
     const next = new Set(this.expandedTodGroups());
     if (next.has(key)) next.delete(key); else next.add(key);
     this.expandedTodGroups.set(next);
+  }
+
+  // Tracks which ToD entries (latest or history rows) currently have their
+  // posted loot expanded. Keyed by tod.id since both groups and individual
+  // history rows share the same id space. Session-only.
+  protected readonly expandedTodLoot = signal<Set<number>>(new Set());
+
+  protected isTodLootExpanded(todId: number): boolean {
+    return this.expandedTodLoot().has(todId);
+  }
+
+  protected toggleTodLoot(todId: number): void {
+    const next = new Set(this.expandedTodLoot());
+    if (next.has(todId)) next.delete(todId); else next.add(todId);
+    this.expandedTodLoot.set(next);
   }
 
   // Tracks which live-event cards are currently EXPANDED. Default empty

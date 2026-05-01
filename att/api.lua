@@ -294,12 +294,16 @@ function api.list_events()
     return result.events or {}
 end
 
-function api.create_event(name, etype, location, dkpPerHour)
+function api.create_event(name, etype, location, dkpPerHour, windowCount)
     return request('POST', '/api/addon/events', {
-        name       = name,
-        type       = etype,
-        location   = location,
-        dkpPerHour = tonumber(dkpPerHour)
+        name        = name,
+        type        = etype,
+        location    = location,
+        dkpPerHour  = tonumber(dkpPerHour),
+        -- Optional. Set by the launcher's "Claim/Kill" style so user-named
+        -- events get the 2-post UI without the server having to recognise
+        -- the name. Server treats any value <=1 as "no override".
+        windowCount = tonumber(windowCount)
     })
 end
 
@@ -318,6 +322,38 @@ end
 -- if the event is already live.
 function api.cancel_event(eventId)
     return request('DELETE', '/api/addon/events/' .. tostring(eventId))
+end
+
+-- Break-room support. Mirrors the activity flow: any participant can act on
+-- themselves; only token issuers with CanModerateLiveEvent can act on others
+-- or verify/deny pending self-returns. The server enforces both rules — these
+-- helpers just shape the request bodies.
+
+-- Returns { canModerateLiveEvent, participants } where each participant has
+-- id / characterName / jobName / subJobName / isOnBreak / pauseTime / resumeTime
+-- / isSelf / pendingReturnLedgerId / pendingReturnAt.
+function api.list_participants(eventId)
+    return request('GET', '/api/addon/events/' .. tostring(eventId) .. '/participants')
+end
+
+function api.take_break(eventId, participantId)
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/break',
+        { participantId = tonumber(participantId) })
+end
+
+function api.return_from_break(eventId, participantId)
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/break/return',
+        { participantId = tonumber(participantId) })
+end
+
+function api.verify_return(eventId, ledgerEntryId)
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/verify-return',
+        { ledgerEntryId = tonumber(ledgerEntryId) })
+end
+
+function api.deny_return(eventId, ledgerEntryId)
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/deny-return',
+        { ledgerEntryId = tonumber(ledgerEntryId) })
 end
 
 -- Fetches a single event including its posted HNM attendance windows + attendees.

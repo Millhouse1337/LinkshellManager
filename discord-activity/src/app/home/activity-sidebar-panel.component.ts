@@ -91,6 +91,12 @@ export class ActivitySidebarPanelComponent {
   protected selectedDkpHistoryAppUserId = '';
   protected dkpSearchTerm = '';
   protected dkpMemberSearchTerm = '';
+
+  // Pagination for the DKP ledger table. Page is a signal so OnPush picks
+  // up clicks on the Prev/Next buttons; size is a small constant chosen so
+  // a typical screen shows ~one viewport with no scroll inside the table.
+  protected readonly dkpPage = signal(0);
+  protected readonly dkpPageSize = 15;
   protected isDkpAuditOpen = false;
   protected readonly dkpAuditModel: {
     mode: 'Adjust' | 'Misc';
@@ -778,6 +784,99 @@ export class ActivitySidebarPanelComponent {
     return this.activity.auctionHistory();
   }
 
+  // Auction history is rendered as a flat table — one row per item across
+  // all closed auctions, paginated. Page is a signal so OnPush picks up
+  // Prev/Next clicks. Page size chosen to roughly fill the panel without
+  // an inner scrollbar; tweak if the layout changes.
+  protected readonly auctionHistoryPage = signal(0);
+  protected readonly auctionHistoryPageSize = 20;
+
+  // Active-auctions table pagination. Page is by *auction* (not item row)
+  // so a multi-item auction never gets split across pages — keeps the
+  // grouped header rendering consistent.
+  protected readonly auctionsActivePage = signal(0);
+  protected readonly auctionsActivePageSize = 15;
+
+  protected pagedActiveAuctions() {
+    const all = this.auctions();
+    const size = this.auctionsActivePageSize;
+    const totalPages = Math.max(1, Math.ceil(all.length / size));
+    if (this.auctionsActivePage() >= totalPages) {
+      this.auctionsActivePage.set(totalPages - 1);
+    }
+    const start = this.auctionsActivePage() * size;
+    return all.slice(start, start + size);
+  }
+
+  protected auctionsActivePageCount(): number {
+    return Math.max(1, Math.ceil(this.auctions().length / this.auctionsActivePageSize));
+  }
+
+  protected auctionsActiveNextPage(): void {
+    const next = this.auctionsActivePage() + 1;
+    if (next < this.auctionsActivePageCount()) this.auctionsActivePage.set(next);
+  }
+
+  protected auctionsActivePrevPage(): void {
+    const current = this.auctionsActivePage();
+    if (current > 0) this.auctionsActivePage.set(current - 1);
+  }
+
+  protected auctionRowSpan(auction: { items: { id: number }[] }): number {
+    return Math.max(1, auction.items.length);
+  }
+
+  protected auctionHistoryRows(): {
+    auctionId: number;
+    auctionTitle: string;
+    closedAt: string;
+    windowLabel: string;
+    item: any;
+  }[] {
+    const rows: { auctionId: number; auctionTitle: string; closedAt: string; windowLabel: string; item: any }[] = [];
+    for (const h of this.auctionHistory()) {
+      const title = h.title || 'Auction history';
+      const windowLabel = this.auctionTimeWindowLabel(h);
+      for (const item of h.items) {
+        rows.push({
+          auctionId: h.id,
+          auctionTitle: title,
+          closedAt: h.closedAt,
+          windowLabel,
+          item
+        });
+      }
+    }
+    return rows;
+  }
+
+  protected pagedAuctionHistoryRows(): ReturnType<ActivitySidebarPanelComponent['auctionHistoryRows']> {
+    const all = this.auctionHistoryRows();
+    const size = this.auctionHistoryPageSize;
+    const totalPages = Math.max(1, Math.ceil(all.length / size));
+    // Clamp current page so deletes that shrink the dataset can't strand
+    // the user on a now-empty page.
+    if (this.auctionHistoryPage() >= totalPages) {
+      this.auctionHistoryPage.set(totalPages - 1);
+    }
+    const start = this.auctionHistoryPage() * size;
+    return all.slice(start, start + size);
+  }
+
+  protected auctionHistoryPageCount(): number {
+    return Math.max(1, Math.ceil(this.auctionHistoryRows().length / this.auctionHistoryPageSize));
+  }
+
+  protected auctionHistoryNextPage(): void {
+    const next = this.auctionHistoryPage() + 1;
+    if (next < this.auctionHistoryPageCount()) this.auctionHistoryPage.set(next);
+  }
+
+  protected auctionHistoryPrevPage(): void {
+    const current = this.auctionHistoryPage();
+    if (current > 0) this.auctionHistoryPage.set(current - 1);
+  }
+
   protected auctionBids(itemId: number) {
     return this.activity.auctionBids()[itemId] ?? [];
   }
@@ -1011,12 +1110,37 @@ export class ActivitySidebarPanelComponent {
     });
   }
 
+  protected pagedDkpEntries() {
+    const all = this.filteredDkpEntries();
+    const size = this.dkpPageSize;
+    const totalPages = Math.max(1, Math.ceil(all.length / size));
+    if (this.dkpPage() >= totalPages) {
+      this.dkpPage.set(totalPages - 1);
+    }
+    const start = this.dkpPage() * size;
+    return all.slice(start, start + size);
+  }
+
+  protected dkpPageCount(): number {
+    return Math.max(1, Math.ceil(this.filteredDkpEntries().length / this.dkpPageSize));
+  }
+
+  protected dkpNextPage(): void {
+    const next = this.dkpPage() + 1;
+    if (next < this.dkpPageCount()) this.dkpPage.set(next);
+  }
+
+  protected dkpPrevPage(): void {
+    const current = this.dkpPage();
+    if (current > 0) this.dkpPage.set(current - 1);
+  }
+
   protected dkpEntryTypeLabel(entryType: string): string {
     switch (entryType) {
       case 'LootSpent':
-        return 'Loot spent';
+        return 'Loot Spent';
       case 'EventEarned':
-        return 'Event earned';
+        return 'Event Earned';
       case 'AuditAdjustment':
         return 'Audit · Adjustment';
       case 'AuditMisc':
@@ -1026,6 +1150,15 @@ export class ActivitySidebarPanelComponent {
     }
   }
 
+  // Canonical event-type ordering. Anything not in this list (e.g. blank
+  // entries that get bucketed as "Unspecified", or future custom types)
+  // sorts to the bottom in alphabetical order.
+  private static readonly DKP_EVENT_TYPE_ORDER: readonly string[] = [
+    'Sky', 'Sea', 'Dynamis', 'Limbus',
+    'HNM', 'HENM', 'NM', 'BCNM', 'KSNM',
+    'Other'
+  ];
+
   protected dkpEarnedByEventType(): { eventType: string; amount: number }[] {
     const entries = this.dkpHistory()?.entries ?? [];
     const totals = new Map<string, number>();
@@ -1034,9 +1167,18 @@ export class ActivitySidebarPanelComponent {
       const key = (entry.eventType ?? '').trim() || 'Unspecified';
       totals.set(key, (totals.get(key) ?? 0) + entry.amount);
     }
+    const orderIndex = (eventType: string): number => {
+      const idx = ActivitySidebarPanelComponent.DKP_EVENT_TYPE_ORDER.indexOf(eventType);
+      return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+    };
     return [...totals.entries()]
       .map(([eventType, amount]) => ({ eventType, amount: Math.round(amount * 100) / 100 }))
-      .sort((a, b) => b.amount - a.amount);
+      .sort((a, b) => {
+        const ai = orderIndex(a.eventType);
+        const bi = orderIndex(b.eventType);
+        if (ai !== bi) return ai - bi;
+        return a.eventType.localeCompare(b.eventType);
+      });
   }
 
   protected canAuditSelectedLinkshell(): boolean {

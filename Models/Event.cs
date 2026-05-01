@@ -43,6 +43,12 @@ public class Event
     [MaxLength(32)]
     public string? CreationSource { get; set; }
 
+    // Forces the post-by-window count for events whose name isn't in
+    // HnmConfig's curated 24/2/2 lookups. The addon's "Claim/Kill" style
+    // sets this to 2 so a user-named event gets the same 2-post UI as a
+    // ShortWindowHnm. Null = fall back to name-based detection (default).
+    public int? WindowCountOverride { get; set; }
+
     public ICollection<Job> Jobs { get; set; } = new List<Job>();
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();

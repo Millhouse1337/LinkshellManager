@@ -69,8 +69,17 @@ public static class HnmConfig
         return 1;
     }
 
-    public static string? GetDefaultWindowLabel(string? eventName, int sequenceNumber)
+    public static string? GetDefaultWindowLabel(string? eventName, int sequenceNumber, int? effectiveWindowCount = null)
     {
+        // Explicit-override path: the addon's "Claim/Kill" style sets a
+        // custom 2-window count on a user-named event that won't match any
+        // of the curated HNM lookups below. Use the same labels the
+        // ShortWindowHnms cohort uses.
+        if (effectiveWindowCount == 2)
+        {
+            return sequenceNumber == 1 ? "On Time" : "Claim/Kill";
+        }
+
         if (string.IsNullOrWhiteSpace(eventName)) return null;
         var trimmed = eventName.Trim();
         if (ShortWindowHnms.Contains(trimmed) || TestingHnms.Contains(trimmed))

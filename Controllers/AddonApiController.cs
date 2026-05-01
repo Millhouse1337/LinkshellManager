@@ -74,11 +74,15 @@ public sealed class AddonApiController : ControllerBase
             issuedToCharacterName = membership?.CharacterName;
         }
 
+        var canModerate = await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken);
+
         return Ok(new
         {
             linkshellId = token.LinkshellId,
             linkshellName = linkshell?.LinkshellName,
             issuedToCharacterName,
+            issuedToAppUserId = token.IssuedToAppUserId,
+            canModerateLiveEvent = canModerate,
             label = token.Label
         });
     }
@@ -103,6 +107,8 @@ public sealed class AddonApiController : ControllerBase
                 startTime = evt.StartTime,
                 commencementStartTime = evt.CommencementStartTime,
                 isLive = evt.CommencementStartTime != null && evt.EndTime == null,
+                dkpPerHour = evt.DkpPerHour,
+                windowCountOverride = evt.WindowCountOverride,
                 creationSource = evt.CreationSource,
                 details = evt.Details
             })
@@ -123,7 +129,10 @@ public sealed class AddonApiController : ControllerBase
             evt.startTime,
             evt.commencementStartTime,
             evt.isLive,
-            windowCount = HnmConfig.GetWindowCount(evt.name),
+            evt.dkpPerHour,
+            // Explicit per-event override beats the name-based lookup so a
+            // user-named event flagged as "Claim/Kill" reports 2 windows.
+            windowCount = evt.windowCountOverride ?? HnmConfig.GetWindowCount(evt.name),
             createdFromAddon = evt.creationSource == "Addon"
                 || (evt.creationSource is null
                     && (evt.details ?? string.Empty)
@@ -161,6 +170,10 @@ public sealed class AddonApiController : ControllerBase
             DkpPerHour = request.DkpPerHour,
             Details = string.IsNullOrWhiteSpace(request.Details) ? "Created from att addon." : request.Details.Trim(),
             CreationSource = "Addon",
+            // Persist explicit window-count override only when the addon
+            // actually picked a multi-post style. Storing >=2 keeps the
+            // column meaningful (1 = default, no need to record).
+            WindowCountOverride = request.WindowCount is > 1 ? request.WindowCount : null,
             TimeStamp = nowUtc
         };
 
@@ -265,13 +278,318 @@ public sealed class AddonApiController : ControllerBase
             return Forbid();
         }
 
-        await EventController.EndEventCoreAsync(_dbContext, eventEntity);
+        var result = await EventController.EndEventCoreAsync(_dbContext, eventEntity);
 
         return Ok(new
         {
-            eventId   = eventId,
-            eventName = eventEntity.EventName
+            eventId               = eventId,
+            eventName             = eventEntity.EventName,
+            eventType             = eventEntity.EventType,
+            eventLocation         = eventEntity.EventLocation,
+            commencementStartTime = eventEntity.CommencementStartTime,
+            endTime               = result.EndTimeUtc,
+            dkpPerHour            = eventEntity.DkpPerHour,
+            participants          = result.Participants.Select(p => new
+            {
+                characterName = p.CharacterName,
+                jobName       = p.JobName,
+                subJobName    = p.SubJobName,
+                durationHours = p.DurationHours,
+                dkpEarned     = p.DkpEarned
+            })
         });
+    }
+
+    // Break-room support — mirrors the activity endpoints (TakeBreak / ForceBreak /
+    // ReturnFromBreak / ForceResume / VerifyReturn / DenyReturn) with the same
+    // permission rules: a participant can act on themselves; only token issuers
+    // whose linkshell membership has CanModerateLiveEvent can act on someone else
+    // or verify/deny pending self-returns. Self is identified by matching the
+    // participant's AppUserId to the token's IssuedToAppUserId.
+
+    [HttpGet("events/{eventId:int}/participants")]
+    [AddonApiAuth]
+    public async Task<IActionResult> ListParticipantsAsync(int eventId, CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+        var eventEntity = await _dbContext.Events
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null) return NotFound(new { error = "Event not found." });
+        if (eventEntity.LinkshellId != token.LinkshellId) return Forbid();
+
+        var participations = await _dbContext.AppUserEvents
+            .Where(p => p.EventId == eventId)
+            .OrderBy(p => p.CharacterName)
+            .ToListAsync(cancellationToken);
+
+        // One DB hit for all pending self-return ledger entries on this event.
+        var pendingByParticipantId = await _dbContext.AppUserEventStatusLedgers
+            .Where(l => l.EventId == eventId
+                && l.ActionType == "BreakReturn"
+                && l.RequiresVerification
+                && l.VerifiedAt == null
+                && l.DeniedAt == null)
+            .ToListAsync(cancellationToken);
+        var pendingMap = pendingByParticipantId
+            .GroupBy(l => l.AppUserEventId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(l => l.OccurredAt).First());
+
+        var canModerate = await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken);
+
+        // Pull commencement once for the addon's per-row live timer math —
+        // accumulatedHours covers prior breaks, and the addon adds the live
+        // segment (now - resumeTime/startTime/commencement) when not on break.
+        var rows = participations.Select(p => new
+        {
+            id = p.Id,
+            characterName = p.CharacterName,
+            jobName = p.JobName,
+            subJobName = p.SubJobName,
+            isOnBreak = p.IsOnBreak == true,
+            startTime = p.StartTime,
+            pauseTime = p.PauseTime,
+            resumeTime = p.ResumeTime,
+            accumulatedHours = p.Duration,
+            isSelf = !string.IsNullOrEmpty(token.IssuedToAppUserId)
+                && string.Equals(p.AppUserId, token.IssuedToAppUserId, StringComparison.OrdinalIgnoreCase),
+            pendingReturnLedgerId = pendingMap.TryGetValue(p.Id, out var pending) ? pending.Id : (int?)null,
+            pendingReturnAt = pendingMap.TryGetValue(p.Id, out var pendingAt) ? pendingAt.OccurredAt : (DateTime?)null
+        }).ToList();
+
+        return Ok(new { canModerateLiveEvent = canModerate, participants = rows });
+    }
+
+    [HttpPost("events/{eventId:int}/break")]
+    [AddonApiAuth]
+    public async Task<IActionResult> BreakAsync(
+        int eventId,
+        [FromBody] AddonBreakRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ctx = await ResolveBreakContextAsync(eventId, request.ParticipantId, cancellationToken);
+        if (ctx.Error is not null) return ctx.Error;
+
+        var participation = ctx.Participation!;
+        var eventEntity = ctx.EventEntity!;
+        if (participation.IsOnBreak == true)
+        {
+            return BadRequest(new { error = "That participant is already on break." });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        participation.Duration = EventController.CalculateAccumulatedDurationHours(
+            participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.IsOnBreak = true;
+        participation.PauseTime = nowUtc;
+        participation.ResumeTime = null;
+        _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEventId = participation.Id,
+            EventId = eventId,
+            AppUserId = participation.AppUserId,
+            ActionType = "BreakStart",
+            OccurredAt = nowUtc,
+            RequiresVerification = false
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/break/return")]
+    [AddonApiAuth]
+    public async Task<IActionResult> ReturnFromBreakAsync(
+        int eventId,
+        [FromBody] AddonBreakRequest request,
+        CancellationToken cancellationToken)
+    {
+        var ctx = await ResolveBreakContextAsync(eventId, request.ParticipantId, cancellationToken);
+        if (ctx.Error is not null) return ctx.Error;
+
+        var participation = ctx.Participation!;
+        if (participation.IsOnBreak != true)
+        {
+            return BadRequest(new { error = "That participant is not on break." });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        participation.IsOnBreak = false;
+        participation.PauseTime = null;
+        participation.ResumeTime = nowUtc;
+
+        // Officer-driven returns auto-verify any pending self-return ledger entries
+        // for this participant, mirroring ForceResumeAsync. Self-driven returns
+        // create a new RequiresVerification entry so an officer can confirm.
+        if (ctx.IsModeratorAction)
+        {
+            var pendingReturns = await _dbContext.AppUserEventStatusLedgers
+                .Where(entry => entry.AppUserEventId == participation.Id
+                    && entry.ActionType == "BreakReturn"
+                    && entry.RequiresVerification
+                    && entry.VerifiedAt == null
+                    && entry.DeniedAt == null)
+                .ToListAsync(cancellationToken);
+            var verifierName = await ResolveTokenIssuerNameAsync(ctx.Token!, cancellationToken);
+            foreach (var pending in pendingReturns)
+            {
+                pending.VerifiedAt = nowUtc;
+                pending.VerifiedBy = verifierName;
+                pending.RequiresVerification = false;
+            }
+            _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+            {
+                AppUserEventId = participation.Id,
+                EventId = eventId,
+                AppUserId = participation.AppUserId,
+                ActionType = "BreakReturn",
+                OccurredAt = nowUtc,
+                RequiresVerification = false,
+                VerifiedAt = nowUtc,
+                VerifiedBy = verifierName
+            });
+        }
+        else
+        {
+            _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+            {
+                AppUserEventId = participation.Id,
+                EventId = eventId,
+                AppUserId = participation.AppUserId,
+                ActionType = "BreakReturn",
+                OccurredAt = nowUtc,
+                RequiresVerification = true
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/verify-return")]
+    [AddonApiAuth]
+    public async Task<IActionResult> VerifyReturnAsync(
+        int eventId,
+        [FromBody] AddonVerifyReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+        var eventEntity = await _dbContext.Events
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null) return NotFound(new { error = "Event not found." });
+        if (eventEntity.LinkshellId != token.LinkshellId) return Forbid();
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken)) return Forbid();
+
+        var entry = await _dbContext.AppUserEventStatusLedgers
+            .FirstOrDefaultAsync(item => item.Id == request.LedgerEntryId
+                && item.EventId == eventId
+                && item.ActionType == "BreakReturn", cancellationToken);
+        if (entry is null) return NotFound(new { error = "Ledger entry not found." });
+        if (!entry.RequiresVerification || entry.VerifiedAt.HasValue)
+        {
+            return BadRequest(new { error = "That break return has already been verified." });
+        }
+
+        entry.VerifiedAt = DateTime.UtcNow;
+        entry.VerifiedBy = await ResolveTokenIssuerNameAsync(token, cancellationToken);
+        entry.RequiresVerification = false;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/deny-return")]
+    [AddonApiAuth]
+    public async Task<IActionResult> DenyReturnAsync(
+        int eventId,
+        [FromBody] AddonVerifyReturnRequest request,
+        CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+        var eventEntity = await _dbContext.Events
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null) return NotFound(new { error = "Event not found." });
+        if (eventEntity.LinkshellId != token.LinkshellId) return Forbid();
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken)) return Forbid();
+
+        var entry = await _dbContext.AppUserEventStatusLedgers
+            .FirstOrDefaultAsync(item => item.Id == request.LedgerEntryId
+                && item.EventId == eventId
+                && item.ActionType == "BreakReturn", cancellationToken);
+        if (entry is null) return NotFound(new { error = "Ledger entry not found." });
+        if (!entry.RequiresVerification || entry.VerifiedAt.HasValue || entry.DeniedAt.HasValue)
+        {
+            return BadRequest(new { error = "That break return is no longer pending." });
+        }
+
+        entry.DeniedAt = DateTime.UtcNow;
+        entry.DeniedBy = await ResolveTokenIssuerNameAsync(token, cancellationToken);
+        entry.RequiresVerification = false;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    private sealed class BreakActionContext
+    {
+        public AddonApiToken? Token { get; set; }
+        public Event? EventEntity { get; set; }
+        public AppUserEvent? Participation { get; set; }
+        public bool IsModeratorAction { get; set; }
+        public IActionResult? Error { get; set; }
+    }
+
+    private async Task<BreakActionContext> ResolveBreakContextAsync(
+        int eventId, int participantId, CancellationToken cancellationToken)
+    {
+        var ctx = new BreakActionContext { Token = AddonApiAuthAttribute.GetToken(HttpContext) };
+        var eventEntity = await _dbContext.Events
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null) { ctx.Error = NotFound(new { error = "Event not found." }); return ctx; }
+        if (eventEntity.LinkshellId != ctx.Token!.LinkshellId) { ctx.Error = Forbid(); return ctx; }
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            ctx.Error = BadRequest(new { error = "Break status is only available after the event has started." });
+            return ctx;
+        }
+
+        var participation = await _dbContext.AppUserEvents
+            .FirstOrDefaultAsync(p => p.Id == participantId && p.EventId == eventId, cancellationToken);
+        if (participation is null) { ctx.Error = NotFound(new { error = "Participant not found." }); return ctx; }
+
+        var isSelf = !string.IsNullOrEmpty(ctx.Token.IssuedToAppUserId)
+            && string.Equals(participation.AppUserId, ctx.Token.IssuedToAppUserId, StringComparison.OrdinalIgnoreCase);
+        var canModerate = await TokenIssuerCanModerateAsync(ctx.Token, eventEntity.LinkshellId, cancellationToken);
+        if (!isSelf && !canModerate) { ctx.Error = Forbid(); return ctx; }
+
+        ctx.EventEntity = eventEntity;
+        ctx.Participation = participation;
+        ctx.IsModeratorAction = !isSelf && canModerate;
+        return ctx;
+    }
+
+    private async Task<bool> TokenIssuerCanModerateAsync(
+        AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return false;
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
+        if (membership is null) return false;
+        var rank = string.IsNullOrWhiteSpace(membership.Rank) ? "Member" : membership.Rank.Trim();
+        var role = await _dbContext.LinkshellRoles
+            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rank, cancellationToken);
+        if (role is null)
+        {
+            role = await _dbContext.LinkshellRoles
+                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == "Member", cancellationToken);
+        }
+        return role?.CanModerateLiveEvent == true;
+    }
+
+    private async Task<string?> ResolveTokenIssuerNameAsync(
+        AddonApiToken token, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return token.Label;
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
+        return membership?.CharacterName ?? token.Label;
     }
 
     [HttpPost("events/{eventId:int}/attendance")]
@@ -331,7 +649,7 @@ public sealed class AddonApiController : ControllerBase
                 {
                     EventId = eventId,
                     SequenceNumber = windowSequence,
-                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence),
+                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, eventEntity.WindowCountOverride),
                     PostedAt = nowUtc,
                     PostedBySource = AddonSource
                 };
@@ -928,12 +1246,17 @@ public sealed class AddonApiController : ControllerBase
         string? Location,
         DateTime? StartUtc,
         int? DkpPerHour,
-        string? Details);
+        string? Details,
+        int? WindowCount = null);
 
     public sealed record AddonAttendanceRequest(
         DateTime? RecordedAtUtc,
         List<AddonAttendanceEntry> Entries,
         int? WindowSequence = null);
+
+    public sealed record AddonBreakRequest(int ParticipantId);
+
+    public sealed record AddonVerifyReturnRequest(int LedgerEntryId);
 
     public sealed record AddonAttendanceEntry(
         string CharacterName,
