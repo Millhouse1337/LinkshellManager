@@ -813,6 +813,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("CommencementStartTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CreationSource")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("CreatorUserId")
                         .HasColumnType("text");
 
@@ -848,6 +852,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("TimeStamp")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("WindowCountOverride")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
