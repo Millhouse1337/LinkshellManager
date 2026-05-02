@@ -108,7 +108,7 @@ var mvcBuilder = builder.Services.AddControllersWithViews(options =>
 {
     // Cookie-authenticated POST/PUT/DELETE requests must carry an antiforgery
     // token. Bearer-authenticated requests (Discord Activity SPA, addon) bypass
-    // this — see CookieAuthAntiforgeryFilter for the rationale.
+    // this - see CookieAuthAntiforgeryFilter for the rationale.
     options.Filters.Add<CookieAuthAntiforgeryFilter>();
 });
 var razorPagesBuilder = builder.Services.AddRazorPages();
@@ -174,7 +174,7 @@ var isDevelopment = builder.Environment.IsDevelopment();
 
 // Discord proxies activities under https://<application_id>.discordsays.com.
 // Restrict CORS to that exact host (plus discord.com itself for SDK callbacks)
-// — the previous wildcard *.discordsays.com allowed every other Discord
+// - the previous wildcard *.discordsays.com allowed every other Discord
 // activity to call this API on behalf of an authenticated user.
 var activityHost = $"{discordClientId}.discordsays.com";
 
@@ -263,6 +263,13 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+if (!app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
 
 app.UseForwardedHeaders();
 

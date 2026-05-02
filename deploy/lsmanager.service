@@ -1,0 +1,26 @@
+[Unit]
+Description=LSManager (LinkshellManagerDiscordApp)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=lsmanager
+Group=lsmanager
+WorkingDirectory=/var/www/lsmanager
+ExecStart=/usr/bin/dotnet /var/www/lsmanager/LinkshellManagerDiscordApp.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=lsmanager
+EnvironmentFile=/etc/lsmanager/env
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/lsmanager /var/log/lsmanager
+
+[Install]
+WantedBy=multi-user.target
