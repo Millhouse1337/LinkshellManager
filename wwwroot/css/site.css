@@ -1047,7 +1047,7 @@ table.themed .num {
 .tod-tracker-time .num { font-weight: 500; }
 .tod-tracker-sub { font-size: 11px; color: var(--fg-3); font-family: var(--font-sans); margin-top: 2px; }
 
-/* HNM claims donut */
+/* HNM Claims donut */
 .donut-wrap {
   display: grid;
   grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);

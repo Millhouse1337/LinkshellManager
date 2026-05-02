@@ -14,6 +14,7 @@ import {
   selector: 'app-configurations-tab',
   imports: [CommonModule, FormsModule],
   templateUrl: './configurations-tab.component.html',
+  styleUrl: './configurations-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ConfigurationsTabComponent {

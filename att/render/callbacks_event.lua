@@ -29,12 +29,16 @@ function M.install(out, state, deps)
             -- a multi-post pattern; everything else takes per-hour. The
             -- Claim/Kill style is sent as type='HNM' with an explicit
             -- windowCount=2 so the server-side filter still treats it
-            -- like a multi-post HNM.
+            -- like a multi-post HNM. HNM Style sends windowCount=24 so
+            -- user-named long-pop events get the full 24-slot setup
+            -- without depending on the server's curated name list.
             local mode = state.selectedMode
             local isMultiPost = (mode == 'HNM') or (mode == 'ClaimKill')
             local dkpRate = isMultiPost and opts.dkpPerWindow or opts.dkpPerHour
             local typeForServer = (mode == 'ClaimKill') and 'HNM' or mode
-            local windowCount = (mode == 'ClaimKill') and 2 or nil
+            local windowCount = nil
+            if mode == 'HNM' then windowCount = 24
+            elseif mode == 'ClaimKill' then windowCount = 2 end
             local created, cerr = api.create_event(eventName, typeForServer, nil, dkpRate, windowCount)
             if not created or not created.eventId then
                 return 'Create failed: ' .. tostring(cerr)
@@ -91,6 +95,31 @@ function M.install(out, state, deps)
                     if #unmatched > 5 then syncSummary = syncSummary .. ', ...' end
                 end
 
+                -- For windowed events: print a per-attendee DKP summary so
+                -- members get the same "you earned X DKP" feedback that timed
+                -- events get at end-of-event. Server returns creditedAttendees
+                -- (only the ones newly credited for THIS window — already-
+                -- credited re-posts are excluded) plus the per-window rate.
+                local credited = (type(result.creditedAttendees) == 'table')
+                    and result.creditedAttendees or {}
+                local rate = tonumber(result.dkpPerWindow)
+                if nextSequence and rate and #credited > 0 then
+                    local hdr = chat.header('att')
+                    print(hdr .. string.format('Window %d posted - %g DKP awarded to %d:',
+                        nextSequence, rate, #credited))
+                    for _, c in ipairs(credited) do
+                        local function asStr(v)
+                            if type(v) == 'string' and v ~= '' then return v end
+                            return nil
+                        end
+                        print(hdr .. string.format('  %s (%s/%s) +%g DKP',
+                            asStr(c.characterName) or '?',
+                            asStr(c.jobName) or '?',
+                            asStr(c.subJobName) or '?',
+                            tonumber(c.dkpEarned) or rate))
+                    end
+                end
+
                 -- For HNMs: snapshot the just-posted roster into windowRosters,
                 -- bump the sequence, and clear the live roster so the next /sea
                 -- builds the next window from scratch.
@@ -127,9 +156,18 @@ function M.install(out, state, deps)
             end
         end
 
-        -- 5. Optional CSV.
+        -- 5. Optional CSV. Surface any write_file error inline so a missing
+        -- "HNM Logs\" / "Event Logs\" folder or other I/O failure isn't
+        -- swallowed (the other write_file call sites already log; this one
+        -- used to silently drop the result).
         if opts.csvOnStart and #entries > 0 then
-            attendance.write_file(addon.path, state.selectedMode, eventName)
+            local count, csvMsg = attendance.write_file(addon.path, state.selectedMode, eventName)
+            if not count then
+                local hdr = chat.header('att')
+                print(hdr .. 'CSV export failed: ' .. tostring(csvMsg or 'unknown error'))
+                state.lastSyncSummary = (state.lastSyncSummary or '')
+                    .. ' | CSV export failed.'
+            end
         end
 
         -- 6. Refresh the cached events list so the launcher's Queued/Active
@@ -217,26 +255,67 @@ function M.install(out, state, deps)
                 local ended = constants.parse_iso_utc_to_local_table(endStr)
                 print(hdr .. 'Ended:   ' .. (constants.format_posted_at(ended) or endStr))
             end
-            if tonumber(result.dkpPerHour) then
+            -- Windowed events (HNM Style / Claim/Kill) report DKP per window
+            -- attended; timed events report DKP per hour. Server tells us
+            -- which mode applies via windowCount and the dkpPerWindow /
+            -- dkpPerHour fields (only one is non-null at a time).
+            local windowCount = tonumber(result.windowCount) or 1
+            local isWindowed = windowCount > 1
+            if isWindowed and tonumber(result.dkpPerWindow) then
+                print(hdr .. string.format('DKP rate: %g / window (%d windows)',
+                    tonumber(result.dkpPerWindow), windowCount))
+            elseif tonumber(result.dkpPerHour) then
                 print(hdr .. string.format('DKP rate: %g / hour', tonumber(result.dkpPerHour)))
             end
             local participants = (type(result.participants) == 'table') and result.participants or {}
             if #participants == 0 then
                 print(hdr .. 'Participants: <none>')
             else
+                local totalDkp = 0
                 print(hdr .. string.format('Participants (%d):', #participants))
                 for _, p in ipairs(participants) do
                     local jobs = string.format('%s/%s',
                         asStr(p.jobName) or '?',
                         asStr(p.subJobName) or '?')
-                    print(hdr .. string.format('  %s (%s) - %.2fh - %g DKP',
-                        asStr(p.characterName) or '?',
-                        jobs,
-                        tonumber(p.durationHours) or 0,
-                        tonumber(p.dkpEarned) or 0))
+                    local earned = tonumber(p.dkpEarned) or 0
+                    totalDkp = totalDkp + earned
+                    if isWindowed then
+                        print(hdr .. string.format('  %s (%s) - %d window(s) - %g DKP',
+                            asStr(p.characterName) or '?',
+                            jobs,
+                            tonumber(p.windowsAttended) or 0,
+                            earned))
+                    else
+                        print(hdr .. string.format('  %s (%s) - %.2fh - %g DKP',
+                            asStr(p.characterName) or '?',
+                            jobs,
+                            tonumber(p.durationHours) or 0,
+                            earned))
+                    end
+                end
+                if isWindowed then
+                    print(hdr .. string.format('Total DKP awarded: %g', totalDkp))
                 end
             end
             print(hdr .. '====================')
+        end
+
+        -- End-of-event CSV: gated on the same CSV Export checkbox the per-post
+        -- write uses. Source is the server's end-event response (the chat
+        -- block above prints the same data) so the file matches what got
+        -- committed. We capture selectedMode BEFORE the cleanup block below
+        -- nukes it so HNM events still route to "HNM Logs\".
+        if state.launcherCsvOnStart then
+            local modeForCsv = state.selectedMode
+            local count, csvMsg = attendance.write_end_event_file(
+                addon.path, modeForCsv, eventName, result)
+            local hdr = chat.header('att')
+            if count then
+                print(hdr .. string.format('CSV summary: %d row(s). %s',
+                    count, tostring(csvMsg or '')))
+            else
+                print(hdr .. 'CSV summary failed: ' .. tostring(csvMsg or 'unknown error'))
+            end
         end
 
         if state.windowStateByEvent then

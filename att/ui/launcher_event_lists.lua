@@ -54,21 +54,6 @@ function M.draw(state, callbacks)
             end
         end
 
-        -- Testing presets: hardcoded so they don't pollute
-        -- resources/creditnames.txt. Goblin Pathfinder routes through
-        -- the Regular flow; Goblin Furrier through the HNM-Style
-        -- (post-by-window) flow. The category 'Testing' is handled
-        -- by on_preset_button alongside the production categories.
-        local TESTING_PRESETS = { 'Goblin Pathfinder', 'Goblin Smithy', 'Goblin Furrier', 'Goblin Shaman' }
-        if imgui.CollapsingHeader(string.format('Testing (%d)', #TESTING_PRESETS)) then
-            for _, ev in ipairs(TESTING_PRESETS) do
-                if imgui.Button(string.format('%s##btn_%s', ev, ev)) then
-                    if callbacks.on_preset_button then
-                        callbacks.on_preset_button(ev, 'Testing', presetDkpOpts())
-                    end
-                end
-            end
-        end
         imgui.EndChild()
     end
 
@@ -185,7 +170,7 @@ function M.draw(state, callbacks)
     -- Queued Events: events that haven't been started yet (cancellable).
     imgui.Dummy({ 0, 6 })
     imgui.Text('Queued Events')
-    imgui.BeginChild('syncQueued', { 0, 100 }, true)
+    imgui.BeginChild('syncQueued', { 0, 160 }, true)
     if #queued == 0 then
         imgui.TextDisabled('No Queued Events')
     else
@@ -266,7 +251,7 @@ function M.draw(state, callbacks)
     -- Active Events: events that have been started (live; not cancellable).
     imgui.Dummy({ 0, 6 })
     imgui.Text('Active Events')
-    imgui.BeginChild('syncActive', { 0, 80 }, true)
+    imgui.BeginChild('syncActive', { 0, 140 }, true)
     if #active == 0 then
         imgui.TextDisabled('No Active Events')
     else

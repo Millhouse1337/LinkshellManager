@@ -417,16 +417,34 @@ public partial class EventController
         string? JobName,
         string? SubJobName,
         double? DurationHours,
-        double? DkpEarned);
+        double? DkpEarned,
+        int? WindowsAttended);
 
     internal sealed record EndEventResult(
         DateTime EndTimeUtc,
-        IReadOnlyList<EndEventParticipantSummary> Participants);
+        IReadOnlyList<EndEventParticipantSummary> Participants,
+        int WindowCount);
 
     internal static async Task<EndEventResult> EndEventCoreAsync(ApplicationDbContext dbContext, Event eventEntity)
     {
         var endTimeUtc = DateTime.UtcNow;
         var participantSummaries = new List<EndEventParticipantSummary>();
+
+        // Windowed events (HNM Style / Claim/Kill) award DKP per window attended,
+        // not per hour of presence: the DkpPerHour column is reused as
+        // DkpPerWindow when WindowCount > 1, and the per-participation total is
+        // (windowsAttended * dkpPerWindow). Count windows attended once up front
+        // so the per-participation loop below can read from a dictionary.
+        var windowCount = eventEntity.WindowCountOverride
+            ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventEntity.EventName);
+        var isWindowed = windowCount > 1;
+        Dictionary<int, int> windowsAttendedByParticipationId = isWindowed
+            ? await dbContext.AppUserEventWindows
+                .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id)
+                .GroupBy(w => w.AppUserEventId)
+                .Select(g => new { ParticipationId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.ParticipationId, x => x.Count)
+            : new Dictionary<int, int>();
         var history = new EventHistory
         {
             LinkshellId = eventEntity.LinkshellId,
@@ -463,7 +481,12 @@ public partial class EventController
         {
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
             var roundedDuration = Math.Round(durationHours * 4) / 4;
-            var eventDkp = roundedDuration * (eventEntity.DkpPerHour ?? 0);
+            int? windowsAttended = isWindowed
+                ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
+                : (int?)null;
+            var eventDkp = isWindowed
+                ? (windowsAttended ?? 0) * (eventEntity.DkpPerHour ?? 0)
+                : roundedDuration * (eventEntity.DkpPerHour ?? 0);
 
             participation.Duration = roundedDuration;
             participation.EventDkp = eventDkp;
@@ -473,7 +496,8 @@ public partial class EventController
                 participation.JobName,
                 participation.SubJobName,
                 roundedDuration,
-                eventDkp));
+                eventDkp,
+                windowsAttended));
 
             history.AppUserEventHistories.Add(new AppUserEventHistory
             {
@@ -571,6 +595,6 @@ public partial class EventController
         dbContext.Events.Remove(eventEntity);
         await dbContext.SaveChangesAsync();
 
-        return new EndEventResult(endTimeUtc, participantSummaries);
+        return new EndEventResult(endTimeUtc, participantSummaries, windowCount);
     }
 }

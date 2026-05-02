@@ -49,33 +49,24 @@ function M.tick(state, deps)
                         state.breakRoom.participants = result.participants or {}
                         state.breakRoom.canModerate  = result.canModerateLiveEvent and true or false
                         state.breakRoom.loaded       = true
-                        -- Auto-expand once when something needs attention.
-                        -- imgui's CollapsingHeader owns its open state, so we
-                        -- pass a one-shot via autoExpandRequested that ui.lua
-                        -- consumes with SetNextItemOpen on the next frame. The
-                        -- autoExpanded latch then prevents re-arming on every
-                        -- 10s poll, so a manual collapse stays sticky.
-                        if not state.breakRoom.autoExpanded then
-                            for _, p in ipairs(state.breakRoom.participants) do
-                                if p.isOnBreak or p.pendingReturnLedgerId then
-                                    state.breakRoom.autoExpandRequested = true
-                                    state.breakRoom.autoExpanded        = true
-                                    break
-                                end
-                            end
-                        end
+                        -- Auto-expand intentionally disabled: user wants the
+                        -- Break Room to stay collapsed by default for every
+                        -- event so the Action bar position stays put. Manual
+                        -- clicks on the CollapsingHeader still toggle it.
                     elseif err then
                         -- Don't toast every poll on error; just leave the cache.
                     end
                 end
             else
-                -- Selected event isn't live (or not selected); reset the cache so
-                -- the next live selection starts clean and re-arms autoExpanded.
+                -- Selected event isn't live (or not selected); reset the cache
+                -- so the next live selection starts clean. expanded is also
+                -- reset so each new event begins with the Break Room collapsed
+                -- regardless of whether the user opened it on the last event.
                 if state.breakRoom.loaded then
                     state.breakRoom.participants = {}
                     state.breakRoom.canModerate  = false
                     state.breakRoom.loaded       = false
-                    state.breakRoom.autoExpanded = false
+                    state.breakRoom.expanded     = false
                     state.breakRoom.lastFetchAt  = 0
                 end
             end

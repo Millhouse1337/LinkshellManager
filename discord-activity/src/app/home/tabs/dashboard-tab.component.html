@@ -221,13 +221,13 @@
         </div>
       }
 
-      <!-- News & Updates (left) + Upcoming events (right) -->
+      <!-- News & Updates (left) + Upcoming Events (right) -->
       @if (selectedDashboardLinkshell()) {
         <div class="dash-row">
           <!-- News & Updates -->
           <div class="card">
             <div class="card-head">
-              <div class="card-title">News &amp; updates</div>
+              <div class="card-title">News &amp; Updates</div>
             </div>
             @if (dashboardNewsUpdates().length > 0) {
               <div class="news-list">
@@ -254,10 +254,10 @@
             }
           </div>
 
-          <!-- Upcoming events -->
+          <!-- Upcoming Events -->
           <div class="card">
             <div class="card-head">
-              <div class="card-title">Upcoming events</div>
+              <div class="card-title">Upcoming Events</div>
               <button type="button" class="card-link" (click)="setActiveTab('events')">View all</button>
             </div>
             @if (dashboardUpcomingEvents().length > 0) {
@@ -297,7 +297,7 @@
         </div>
       }
 
-      <!-- ToD Tracker + HNM claims (dashboard view) -->
+      <!-- ToD Tracker + HNM Claims (dashboard view) -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
         <div class="dash-row dash-row--equal">
         <div class="card card--tod-fixed">
@@ -413,10 +413,10 @@
           </div>
         </div>
 
-        <!-- HNM claims donut -->
+        <!-- HNM Claims donut -->
         <div class="card">
           <div class="card-head">
-            <div class="card-title">HNM claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>
+            <div class="card-title">HNM Claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>
             <div class="card-head-right">
               <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === '7d'" (click)="dashboardHnmWindow = '7d'">7d</button>
               <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === '30d'" (click)="dashboardHnmWindow = '30d'">30d</button>
@@ -452,7 +452,7 @@
             </div>
           } @else {
             <div class="empty-state empty-state--compact">
-              <div class="empty-state-desc">No HNM claims in this window yet.</div>
+              <div class="empty-state-desc">No HNM Claims in this window yet.</div>
             </div>
           }
         </div>

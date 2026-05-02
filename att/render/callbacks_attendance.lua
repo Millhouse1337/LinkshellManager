@@ -145,15 +145,25 @@ function M.install(out, state, deps)
         state.pendingEventName = eventName
         state.scanNextLetter = nil
         -- HNM Style (post-by-window attendance) engages for the HNMS
-        -- preset category. NMS / HENMs / Events keep single-window
-        -- (regular) attendance even when the event name appears in the
-        -- HNM window-count table. The Testing category opts in
-        -- per-monster via TESTING_MONSTERS so QA presets can exercise
-        -- both flows from the same UI.
+        -- preset category. NMS uses the same multi-post flow but is
+        -- pinned to 2 windows ("On Time" / "Claim/Kill") regardless
+        -- of what the per-name window-count table says — the resource
+        -- list defines the policy, not the curated HnmConfig table.
+        -- HENMs / Events keep single-window (regular) attendance.
+        -- The Testing category opts in per-monster via TESTING_MONSTERS
+        -- so QA presets can exercise both flows from the same UI.
         local testStyle = constants.testing_style_for(eventName) -- 'HNM' / 'Regular' / nil
+        local isNmCategory = (category == 'NMS')
         local isHnmCategory = (category == 'HNMS')
+            or isNmCategory
             or (category == 'Testing' and testStyle == 'HNM')
-        state.windowMax = isHnmCategory and constants.window_count_for(eventName) or 1
+        if isNmCategory then
+            state.windowMax = 2
+        elseif isHnmCategory then
+            state.windowMax = constants.window_count_for(eventName)
+        else
+            state.windowMax = 1
+        end
         state.windowSequence = 0
         state.windowRosters = {}
 
@@ -191,17 +201,40 @@ function M.install(out, state, deps)
         -- from the visible DKP / Hour and DKP / Window text fields.
         local dkpRate = isHnmCategory and opts.dkpPerWindow or opts.dkpPerHour
 
-        -- 1. Create on the web app if paired.
-        if api.is_paired() then
-            local created, err = api.create_event(eventName, resolvedType, nil, dkpRate)
+        -- 1. Create on the web app if paired. Pass an explicit windowCount
+        -- when the local windowMax differs from the server's name-based
+        -- default so the server stores WindowCountOverride and accepts
+        -- per-window attendance posts beyond window 1.
+        local serverWindowCount = (state.windowMax and state.windowMax > 1) and state.windowMax or nil
+        if not api.is_paired() then
+            -- Surface the no-pairing case in the launcher toast too so the
+            -- user isn't left wondering why nothing showed up in Queued
+            -- Events after a preset click.
+            state.lastSyncSummary = 'Not paired with web. Use /att link <code>.'
+            print(chat.header('att') .. state.lastSyncSummary)
+        else
+            local created, err = api.create_event(eventName, resolvedType, nil, dkpRate, serverWindowCount)
             if created and created.eventId then
                 state.linkedEventId = created.eventId
                 state.linkedEventName = created.name or eventName
+                state.lastSyncSummary = string.format('Queued: %s (id %d)',
+                    created.name or eventName, created.eventId)
                 print(chat.header('att') .. 'Created event: ' .. (created.name or eventName)
                     .. ' (id ' .. tostring(created.eventId) .. ')')
                 -- Refresh the events list so the new event appears in Queued Events.
-                local events = api.list_events()
-                if events then state.webEvents = events end
+                local events, listErr = api.list_events()
+                if events then
+                    state.webEvents = events
+                else
+                    -- The create succeeded but the follow-up list call didn't.
+                    -- Keep the "Queued: ..." toast (the event IS on the server)
+                    -- but also surface the refresh failure so the user knows
+                    -- to hit Refresh manually.
+                    state.lastSyncSummary = state.lastSyncSummary
+                        .. ' | Refresh failed: ' .. tostring(listErr or 'unknown')
+                    print(chat.header('att') .. 'List events failed after create: '
+                        .. tostring(listErr or 'unknown'))
+                end
             else
                 state.lastSyncSummary = 'Create failed: ' .. tostring(err)
                 print(chat.header('att') .. state.lastSyncSummary)

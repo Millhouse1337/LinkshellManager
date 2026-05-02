@@ -350,7 +350,7 @@ public sealed partial class ActivityDataController
                     job.Quantity,
                     job.SignedUp,
                     job.Enlisted)).ToList(),
-                HnmConfig.GetWindowCount(evt.EventName),
+                evt.WindowCountOverride ?? HnmConfig.GetWindowCount(evt.EventName),
                 evt.AttendanceWindows
                     .OrderBy(window => window.SequenceNumber)
                     .Select(window => new ActivityAttendanceWindowDto(

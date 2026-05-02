@@ -204,6 +204,9 @@ public sealed partial class AddonApiController
 
         var result = await EventController.EndEventCoreAsync(_dbContext, eventEntity);
 
+        // For windowed events DkpPerHour is reused as DkpPerWindow (same column,
+        // different semantic). Surface both names so the addon can format the
+        // chat output correctly without inferring from windowCount alone.
         return Ok(new
         {
             eventId               = eventId,
@@ -212,14 +215,17 @@ public sealed partial class AddonApiController
             eventLocation         = eventEntity.EventLocation,
             commencementStartTime = eventEntity.CommencementStartTime,
             endTime               = result.EndTimeUtc,
-            dkpPerHour            = eventEntity.DkpPerHour,
+            dkpPerHour            = result.WindowCount > 1 ? (int?)null : eventEntity.DkpPerHour,
+            dkpPerWindow          = result.WindowCount > 1 ? eventEntity.DkpPerHour : (int?)null,
+            windowCount           = result.WindowCount,
             participants          = result.Participants.Select(p => new
             {
-                characterName = p.CharacterName,
-                jobName       = p.JobName,
-                subJobName    = p.SubJobName,
-                durationHours = p.DurationHours,
-                dkpEarned     = p.DkpEarned
+                characterName    = p.CharacterName,
+                jobName          = p.JobName,
+                subJobName       = p.SubJobName,
+                durationHours    = p.DurationHours,
+                windowsAttended  = p.WindowsAttended,
+                dkpEarned        = p.DkpEarned
             })
         });
     }
@@ -251,7 +257,7 @@ public sealed partial class AddonApiController
             startTime = eventEntity.StartTime,
             commencementStartTime = eventEntity.CommencementStartTime,
             isLive = eventEntity.CommencementStartTime != null && eventEntity.EndTime == null,
-            windowCount = HnmConfig.GetWindowCount(eventEntity.EventName),
+            windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName),
             windows = eventEntity.AttendanceWindows
                 .OrderBy(w => w.SequenceNumber)
                 .Select(w => new

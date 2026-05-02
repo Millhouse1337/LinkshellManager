@@ -9,7 +9,7 @@
   .panel-tab .dash-row { grid-template-columns: 1fr; }
 }
 
-/* ===== Upcoming events list ===== */
+/* ===== Upcoming Events list ===== */
 .panel-tab .upcoming-list {
   display: flex;
   flex-direction: column;
@@ -110,7 +110,7 @@
   margin-top: 2px;
 }
 
-/* ===== HNM claims donut ===== */
+/* ===== HNM Claims donut ===== */
 .panel-tab .donut-wrap {
   display: grid;
   grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);

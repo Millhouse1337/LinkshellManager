@@ -81,7 +81,6 @@ function M.draw(is_open, state, callbacks)
 
         local builtInHnms     = (callbacks and callbacks.built_in_hnms)    or {}
         local builtInSky      = (callbacks and callbacks.built_in_sky)     or {}
-        local builtInTesting  = (callbacks and callbacks.built_in_testing) or {}
         local customMonsters  = (callbacks and callbacks.custom_monsters)  or {}
 
         -- Helper: render a list of monster names in a 3-column grid using
@@ -119,16 +118,6 @@ function M.draw(is_open, state, callbacks)
         if #skyNames > 0 then
             imgui.TextColored({ 0.7, 1.0, 0.7, 1.0 }, 'Built-in Sky NMs:')
             render_monster_grid(skyNames)
-            imgui.Dummy({ 0, 4 })
-        end
-
-        -- Built-in Testing monsters.
-        local testNames = {}
-        for n, _ in pairs(builtInTesting) do testNames[#testNames + 1] = n end
-        table.sort(testNames)
-        if #testNames > 0 then
-            imgui.TextColored({ 0.85, 0.85, 0.85, 1.0 }, 'Built-in Testing:')
-            render_monster_grid(testNames)
             imgui.Dummy({ 0, 4 })
         end
 

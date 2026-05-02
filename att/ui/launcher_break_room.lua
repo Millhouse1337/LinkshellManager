@@ -27,14 +27,13 @@ function M.draw(state, callbacks)
         -- in br.expanded (default false) and force it onto imgui every
         -- frame via SetNextItemOpen — that way the header reliably starts
         -- collapsed each time the launcher opens, regardless of whatever
-        -- imgui.ini remembered from a prior session. The autoExpandRequested
-        -- one-shot flips br.expanded the first time someone goes on break
-        -- or has a pending return; manual clicks update it via the
-        -- CollapsingHeader return value.
-        if br.autoExpandRequested then
-            br.expanded = true
-            br.autoExpandRequested = false
-        end
+        -- imgui.ini remembered from a prior session.
+        --
+        -- Auto-expand is intentionally disabled: the user wants the Break
+        -- Room collapsed by default for every event so it never shifts the
+        -- Action bar around when someone clicks Take break. Manual clicks
+        -- still toggle via the CollapsingHeader return value.
+        br.autoExpandRequested = false
         pcall(imgui.SetNextItemOpen, br.expanded and true or false)
         local header = string.format('Break Room (%d on break, %d pending)##brHeader',
             onBreakCount, pendingCount)

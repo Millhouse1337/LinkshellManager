@@ -141,7 +141,10 @@ function M.draw(state, callbacks, ctx)
                     -- Style determines window count and DKP rate semantics;
                     -- the user-chosen Event Type from the dropdown is what
                     -- gets sent to the server's EventType field verbatim.
-                    local windowCount = (mode == 'ClaimKill') and 2 or nil
+                    -- HNM Style => 24 windows (long pop), Claim/Kill => 2.
+                    local windowCount = nil
+                    if mode == 'HNM' then windowCount = 24
+                    elseif mode == 'ClaimKill' then windowCount = 2 end
                     local created, err = api.create_event(trimmedName, syncNewEventType[1], nil, dkp, windowCount)
                     if created and created.eventId then
                         state.lastSyncSummary = 'Created event: ' .. (created.name or trimmedName)

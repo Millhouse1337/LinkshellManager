@@ -2,7 +2,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,12 +14,11 @@ public sealed partial class AddonApiController
     // Activity's Attendance Windows card both call this with the AppUserEventWindow
     // row id (exposed via their respective view models / DTOs).
     [HttpDelete("management/window-attendees/{id:int}")]
-    [Authorize]
     public async Task<IActionResult> RemoveWindowAttendeeManagementAsync(
         int id, CancellationToken cancellationToken)
     {
-        var appUser = await _userManager.GetUserAsync(User);
-        if (appUser is null) return Unauthorized();
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
         var attendee = await _dbContext.AppUserEventWindows
             .Include(a => a.EventAttendanceWindow)
@@ -42,7 +40,6 @@ public sealed partial class AddonApiController
     }
 
     [HttpPost("management/pairing-code")]
-    [Authorize]
     public async Task<IActionResult> CreatePairingCodeAsync(
         [FromBody] CreatePairingCodeRequest request,
         CancellationToken cancellationToken)
@@ -52,11 +49,8 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Linkshell is required." });
         }
 
-        var appUser = await _userManager.GetUserAsync(User);
-        if (appUser is null)
-        {
-            return Unauthorized();
-        }
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
         var membership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(
@@ -79,7 +73,6 @@ public sealed partial class AddonApiController
     }
 
     [HttpGet("management/tokens")]
-    [Authorize]
     public async Task<IActionResult> ListTokensAsync(
         [FromQuery] int linkshellId,
         CancellationToken cancellationToken)
@@ -89,8 +82,8 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Linkshell is required." });
         }
 
-        var appUser = await _userManager.GetUserAsync(User);
-        if (appUser is null) return Unauthorized();
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
         var membership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(
@@ -118,7 +111,6 @@ public sealed partial class AddonApiController
     }
 
     [HttpPost("management/tokens/{tokenId:int}/revoke")]
-    [Authorize]
     public async Task<IActionResult> RevokeTokenAsync(
         int tokenId,
         [FromQuery] int linkshellId,
@@ -129,8 +121,8 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Linkshell is required." });
         }
 
-        var appUser = await _userManager.GetUserAsync(User);
-        if (appUser is null) return Unauthorized();
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
         var membership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(

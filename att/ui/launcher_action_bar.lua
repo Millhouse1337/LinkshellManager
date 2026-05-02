@@ -73,7 +73,7 @@ function M.draw(state, callbacks)
             local prefix = (nextSeq == 1) and 'Start & Post' or 'Post'
             local label = string.format('%s: %s (%d/%d)##postWindow',
                 prefix,
-                constants.window_label(state.linkedEventName, nextSeq),
+                constants.window_label(state.linkedEventName, nextSeq, windowMax),
                 nextSeq, windowMax)
             imgui.SetCursorPosX(barWindowWidth - POST_BTN_W - 16)
             if imgui.Button(label, { POST_BTN_W, 0 }) and callbacks.on_start_and_post then

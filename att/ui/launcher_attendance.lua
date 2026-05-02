@@ -85,8 +85,10 @@ function M.draw(state, callbacks)
             -- when individuals take breaks.
             local linkedEv, eventRate, eventCommencedEpoch
             local showPerRowMeta = false
+            local windowMaxLive = state.windowMax or 1
+            local isWindowedLive = windowMaxLive > 1
             if state.linkedEventId and state.webEvents
-               and (state.windowMax or 1) <= 1 then
+               and not isWindowedLive then
                 for _, ev in ipairs(state.webEvents) do
                     if ev.id == state.linkedEventId then linkedEv = ev; break end
                 end
@@ -114,6 +116,26 @@ function M.draw(state, callbacks)
                 local hours = math.max(0, (os.time() - eventCommencedEpoch) / 3600)
                 local rounded = math.floor(hours * 4 + 0.5) / 4
                 globalDkpSuffix = string.format(' [%g DKP]', rounded * eventRate)
+            end
+
+            -- Windowed events (HNM Style / Claim/Kill / NMs) award a flat
+            -- per-window rate at post time, not duration × rate. Surface that
+            -- on the live roster too so members see the credit they're about
+            -- to earn before the post button is clicked. dkpPerHour is reused
+            -- as DkpPerWindow for windowed events (server keeps both names
+            -- straight; the addon's cached row only carries dkpPerHour).
+            local windowedDkpSuffix
+            if isWindowedLive and showRowDkp and state.linkedEventId
+               and state.webEvents then
+                for _, ev in ipairs(state.webEvents) do
+                    if ev.id == state.linkedEventId then
+                        local rate = tonumber(ev.dkpPerHour)
+                        if rate and rate > 0 then
+                            windowedDkpSuffix = string.format(' [+%g DKP]', rate)
+                        end
+                        break
+                    end
+                end
             end
 
             -- Build a name -> server participant index so we can fold
@@ -151,7 +173,7 @@ function M.draw(state, callbacks)
                     -- (e.g. a zone-scanned member who hasn't been posted
                     -- yet) we fall back to the global event timer.
                     local timeSuffix = ''
-                    local dkpSuffix  = globalDkpSuffix or ''
+                    local dkpSuffix  = windowedDkpSuffix or globalDkpSuffix or ''
                     if showPerRowMeta and serverP then
                         local accumulated = tonumber(serverP.accumulatedHours) or 0
                         local segmentStartEpoch = nil
@@ -256,6 +278,22 @@ function M.draw(state, callbacks)
             end
         end
 
+        -- Per-window DKP rate for the active event. For windowed events the
+        -- server reuses the dkpPerHour column as DkpPerWindow (same column,
+        -- different semantic), so we read it straight off the cached event
+        -- row. Nil/0 → don't append the "+N DKP" suffix to roster rows.
+        local function dkp_per_window_for_active_event()
+            if not state.linkedEventId or not state.webEvents then return nil end
+            for _, ev in ipairs(state.webEvents) do
+                if ev.id == state.linkedEventId then
+                    local n = tonumber(ev.dkpPerHour)
+                    if n and n > 0 then return n end
+                    return nil
+                end
+            end
+            return nil
+        end
+
         -- Frozen roster for a posted window. Each row gets a Remove button so
         -- accidental posts can be undone server-side; the local snapshot is
         -- pruned in lock-step so the UI reflects the change immediately.
@@ -264,6 +302,7 @@ function M.draw(state, callbacks)
                 imgui.TextDisabled('No entries posted for this window.')
                 return
             end
+            local dkpPerWindow = dkp_per_window_for_active_event()
             local i = 1
             while i <= #snapshot do
                 local r = snapshot[i]
@@ -271,8 +310,10 @@ function M.draw(state, callbacks)
                 -- "X "-prefixed entries are local-only ignores; treat the bare name
                 -- as the canonical character name when calling the server.
                 local cleanName = name:gsub('^X%s+', '')
-                imgui.Text(string.format('%s (%s | %s/%s)',
-                    name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?'))
+                local dkpSuffix = dkpPerWindow
+                    and string.format('  +%g DKP', dkpPerWindow) or ''
+                imgui.Text(string.format('%s (%s | %s/%s)%s',
+                    name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?', dkpSuffix))
                 imgui.SameLine()
                 if imgui.SmallButton(string.format('Remove##winrm_%d_%d', seq, i)) then
                     local _, perr = api.remove_window_attendee(state.linkedEventId, seq, cleanName)
@@ -327,7 +368,7 @@ function M.draw(state, callbacks)
                 end
                 local isInProg = hasInProgress and (tabIdx == totalTabs)
                 local seqForLabel = isInProg and (windowSeq + 1) or tabIdx
-                local labelText = constants.window_label(state.linkedEventName, seqForLabel)
+                local labelText = constants.window_label(state.linkedEventName, seqForLabel, windowMax)
                 local idSuffix  = isInProg and 'inprog' or tostring(tabIdx)
                 local isActive  = isInProg
                     and (state.activeWindowTab == 'inprog')
@@ -353,7 +394,17 @@ function M.draw(state, callbacks)
                 if stamp then
                     imgui.TextDisabled('Posted at ' .. stamp)
                 end
-                render_frozen_roster(active, state.windowRosters[active])
+                -- Per-window DKP summary: per-attendee rate × posted entries.
+                -- Mirrors the per-attendee "+N DKP" suffix below so users see
+                -- both the unit rate and the window's total at a glance.
+                local snap = state.windowRosters[active]
+                local rate = dkp_per_window_for_active_event()
+                if rate and snap and #snap > 0 then
+                    imgui.TextDisabled(string.format(
+                        '%g DKP / attendee × %d = %g DKP awarded this window',
+                        rate, #snap, rate * #snap))
+                end
+                render_frozen_roster(active, snap)
             end
         end
         imgui.EndChild()

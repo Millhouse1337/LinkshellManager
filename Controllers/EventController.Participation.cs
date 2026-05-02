@@ -101,7 +101,7 @@ public partial class EventController
             EventLootDetails = eventToStart.EventLootDetails.OrderByDescending(item => item.Id).ToList(),
             LinkshellMembers = eventToStart.AppUserEvents.Select(item => item.CharacterName ?? string.Empty).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().OrderBy(name => name).ToList(),
             CommencementStartTime = ConvertUtcToUserTimeZone(eventToStart.CommencementStartTime, user.TimeZone),
-            WindowCount = LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventToStart.EventName),
+            WindowCount = eventToStart.WindowCountOverride ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventToStart.EventName),
             AttendanceWindows = eventToStart.AttendanceWindows
                 .OrderBy(window => window.SequenceNumber)
                 .Select(window => new EventAttendanceWindowViewModel

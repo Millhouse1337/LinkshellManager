@@ -1,4 +1,5 @@
-﻿using LinkshellManagerDiscordApp.Authorization;
+﻿using System.Net.Http.Headers;
+using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -18,15 +19,78 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly ApplicationDbContext _dbContext;
     private readonly AddonApiAuthService _auth;
     private readonly UserManager<AppUser> _userManager;
+    private readonly DiscordIdentityService _discordIdentityService;
+    private readonly IHostEnvironment _environment;
 
     public AddonApiController(
         ApplicationDbContext dbContext,
         AddonApiAuthService auth,
-        UserManager<AppUser> userManager)
+        UserManager<AppUser> userManager,
+        DiscordIdentityService discordIdentityService,
+        IHostEnvironment environment)
     {
         _dbContext = dbContext;
         _auth = auth;
         _userManager = userManager;
+        _discordIdentityService = discordIdentityService;
+        _environment = environment;
+    }
+
+    // Dual-auth resolver for the management endpoints: tries the Discord OAuth
+    // bearer token first (so the Activity SPA can call them) and falls back to
+    // ASP.NET Identity cookie auth (used by the MVC web app's Customize page).
+    private async Task<AppUser?> ResolveManagementUserAsync(CancellationToken cancellationToken)
+    {
+        if (TryGetManagementBearerToken(out var accessToken))
+        {
+            try
+            {
+                var localUser = await _discordIdentityService.GetCurrentLocalUserAsync(accessToken, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(localUser.AppUser?.Id))
+                {
+                    return await _userManager.FindByIdAsync(localUser.AppUser.Id);
+                }
+            }
+            catch (DiscordApiException)
+            {
+                // Fall through to cookie auth.
+            }
+        }
+
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            return await _userManager.GetUserAsync(User);
+        }
+
+        return null;
+    }
+
+    private bool TryGetManagementBearerToken(out string accessToken)
+    {
+        accessToken = string.Empty;
+
+        if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var headerValue))
+        {
+            return false;
+        }
+        if (!"Bearer".Equals(headerValue.Scheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(headerValue.Parameter))
+        {
+            return false;
+        }
+
+        // Skip addon att_ tokens — those are handled by [AddonApiAuth] on
+        // separate endpoints. Only Discord OAuth tokens flow through here.
+        if (headerValue.Parameter.StartsWith("att_", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        accessToken = headerValue.Parameter;
+        return true;
     }
 
     private sealed class BreakActionContext

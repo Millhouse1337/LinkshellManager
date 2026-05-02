@@ -278,7 +278,7 @@ public sealed partial class AddonApiController
         EventAttendanceWindow? attendanceWindow = null;
         if (request.WindowSequence is int windowSequence)
         {
-            var maxWindows = HnmConfig.GetWindowCount(eventEntity.EventName);
+            var maxWindows = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
             if (windowSequence < 1 || windowSequence > maxWindows)
             {
                 return BadRequest(new { error = $"Window sequence {windowSequence} is out of range for this event (max {maxWindows})." });
@@ -295,7 +295,7 @@ public sealed partial class AddonApiController
                 {
                     EventId = eventId,
                     SequenceNumber = windowSequence,
-                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, eventEntity.WindowCountOverride),
+                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, maxWindows),
                     PostedAt = nowUtc,
                     PostedBySource = AddonSource
                 };
@@ -310,6 +310,10 @@ public sealed partial class AddonApiController
         var alreadyVerified = 0;
         var unmatched = new List<string>();
         var ledgerIds = new List<int>();
+        // Per-attendee credit info so the addon can print a "+N DKP" line per
+        // user immediately after a window post. Only populated for windowed
+        // events (single-window events award DKP at end-of-event, not per post).
+        var creditedAttendees = new List<object>();
 
         // Pre-load all linkshell memberships in one query so we can match without a roundtrip per entry.
         var memberships = await _dbContext.AppUserLinkshells
@@ -408,6 +412,14 @@ public sealed partial class AddonApiController
                     VerifiedBy = verifiedBy,
                     Zone = string.IsNullOrWhiteSpace(entry.Zone) ? null : entry.Zone.Trim()
                 });
+
+                creditedAttendees.Add(new
+                {
+                    characterName = participation.CharacterName,
+                    jobName       = participation.JobName,
+                    subJobName    = participation.SubJobName,
+                    dkpEarned     = eventEntity.DkpPerHour ?? 0
+                });
             }
 
             matched++;
@@ -438,7 +450,9 @@ public sealed partial class AddonApiController
             ledgerEntryIds = ledgerIds,
             windowSequence = attendanceWindow?.SequenceNumber,
             windowId = attendanceWindow?.Id,
-            windowLabel = attendanceWindow?.Label
+            windowLabel = attendanceWindow?.Label,
+            dkpPerWindow = attendanceWindow is not null ? eventEntity.DkpPerHour : null,
+            creditedAttendees
         });
     }
 

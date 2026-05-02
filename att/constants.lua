@@ -85,9 +85,14 @@ function constants.window_count_for(name)
     return 1
 end
 
--- "On Time" / "Claim/Kill" for 2-window HNMs; numbered ("Window N") for everything else.
-function constants.window_label(name, sequence)
-    local count = constants.window_count_for(name)
+-- "On Time" / "Claim/Kill" for any 2-window event; numbered ("Window N") for
+-- everything else. Callers that already know the effective window count (e.g.
+-- the launcher knows it via state.windowMax, which is set from the server's
+-- WindowCountOverride or the resource-driven preset rules) should pass it as
+-- the optional third arg so user-named NM/Claim-Kill events get the right
+-- labels even when their name isn't in the curated HNM_WINDOW_COUNTS table.
+function constants.window_label(name, sequence, explicitCount)
+    local count = tonumber(explicitCount) or constants.window_count_for(name)
     if count == 2 then
         return sequence == 1 and 'On Time' or 'Claim/Kill'
     end

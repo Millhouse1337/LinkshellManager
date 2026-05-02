@@ -171,11 +171,20 @@ function attendance.write_file(addon_path, mode, eventName)
         msg = string.format(messages.EVENT_TAKEN, eventName)
     end
 
+    -- io.open with mode 'a' will not create parent folders on Windows; if the
+    -- "HNM Logs\" / "Event Logs\" directory is missing (fresh addon install,
+    -- or folders deleted manually) the open silently fails. Match the same
+    -- best-effort mkdir pattern api.lua uses for the temp dir so the first
+    -- enable of CSV Export works without manual setup. The 2>nul swallows
+    -- the "already exists" stderr line on subsequent runs.
+    os.execute('mkdir "' .. dir:gsub('\\$', '') .. '" 2>nul')
+
     local filePath = dir .. dateStr .. ' ' .. timeStr .. '.csv'
-    
-    local f = io.open(filePath, 'a')
+
+    local f, openErr = io.open(filePath, 'a')
     if not f then
-        return nil, 'Could not open file: ' .. filePath
+        return nil, string.format('Could not open file: %s (%s)',
+            filePath, tostring(openErr or 'unknown error'))
     end
 
     local count = 0
@@ -194,8 +203,93 @@ function attendance.write_file(addon_path, mode, eventName)
         end
     end
     f:close()
-    
+
     return count, msg
+end
+
+-- End-of-event summary CSV: written when the user clicks End Event with CSV
+-- Export enabled. Source of truth is the server's end-event response (already
+-- committed to EventHistory + DkpLedgerEntry) so the rows match what the web /
+-- Discord views show. Goes to the same HNM Logs / Event Logs folder split as
+-- write_file but uses a "<event> Summary" filename so it doesn't collide with
+-- the per-post roster snapshots.
+function attendance.write_end_event_file(addon_path, mode, eventName, result)
+    if type(result) ~= 'table' then
+        return nil, 'No end-event payload to summarize.'
+    end
+
+    local function asStr(v)
+        if type(v) == 'string' and v ~= '' then return v end
+        return ''
+    end
+
+    local dir
+    if mode == 'HNM' then
+        dir = addon_path .. 'HNM Logs\\'
+    else
+        dir = addon_path .. 'Event Logs\\'
+    end
+
+    -- io.open won't create parent folders on Windows; mkdir ahead of time so a
+    -- fresh install / deleted folder doesn't silently swallow the write.
+    os.execute('mkdir "' .. dir:gsub('\\$', '') .. '" 2>nul')
+
+    -- Sanitize event name for the filename: drop characters Windows rejects in
+    -- file names (\ / : * ? " < > |) and trim trailing whitespace/dots.
+    local safeName = (asStr(result.eventName) ~= '' and asStr(result.eventName))
+        or eventName or 'Event'
+    safeName = safeName:gsub('[\\/:*?"<>|]', '_'):gsub('[%s%.]+$', '')
+    if safeName == '' then safeName = 'Event' end
+
+    local dateStr = os.date('%A %d %B %Y')
+    local timeStr = os.date('%H.%M.%S')
+    local filePath = string.format('%s%s Summary %s %s.csv',
+        dir, safeName, dateStr, timeStr)
+
+    local f, openErr = io.open(filePath, 'w')
+    if not f then
+        return nil, string.format('Could not open file: %s (%s)',
+            filePath, tostring(openErr or 'unknown error'))
+    end
+
+    -- Header row + event-level metadata block, then the per-participant table.
+    -- Two sections in one file keeps the audit self-contained: who hosted what
+    -- at which rate, then exactly who got credited and for how much.
+    local windowCount = tonumber(result.windowCount) or 1
+    local isWindowed  = windowCount > 1
+    local rateUnit    = isWindowed and 'window' or 'hour'
+    local rate        = isWindowed
+        and (tonumber(result.dkpPerWindow) or 0)
+        or  (tonumber(result.dkpPerHour) or 0)
+
+    f:write('Event,Type,Location,Started,Ended,DKPRate,RateUnit,WindowCount\n')
+    f:write(string.format('%s,%s,%s,%s,%s,%g,%s,%d\n',
+        asStr(result.eventName),
+        asStr(result.eventType),
+        asStr(result.eventLocation),
+        asStr(result.commencementStartTime),
+        asStr(result.endTime),
+        rate,
+        rateUnit,
+        windowCount))
+    f:write('\n')
+    f:write('CharacterName,MainJob,SubJob,DurationHours,WindowsAttended,DKPEarned\n')
+
+    local count = 0
+    local participants = (type(result.participants) == 'table') and result.participants or {}
+    for _, p in ipairs(participants) do
+        f:write(string.format('%s,%s,%s,%s,%s,%g\n',
+            asStr(p.characterName),
+            asStr(p.jobName),
+            asStr(p.subJobName),
+            tostring(tonumber(p.durationHours) or 0),
+            tostring(tonumber(p.windowsAttended) or 0),
+            tonumber(p.dkpEarned) or 0))
+        count = count + 1
+    end
+    f:close()
+
+    return count, 'Wrote end-event summary: ' .. filePath
 end
 
 function attendance.resolve_events_for_zone(zid)
