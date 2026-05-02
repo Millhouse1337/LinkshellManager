@@ -42,6 +42,9 @@ public sealed partial class ActivityDataController
             appUser,
             request.CharacterName,
             normalizedTimeZone,
+            request.AltCharacterName1,
+            request.AltCharacterName2,
+            preserveExistingAlts: false,
             cancellationToken);
 
         if (!result.Succeeded)

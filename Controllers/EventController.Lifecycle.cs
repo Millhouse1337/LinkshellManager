@@ -309,6 +309,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> StartEvent(int eventId)
     {
         var user = await RequireCurrentUserAsync();
@@ -344,6 +345,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SubmitLootDetails(int eventId, string itemName, string itemWinner, int winningDkpSpent)
     {
         var user = await RequireCurrentUserAsync();
@@ -364,11 +366,43 @@ public partial class EventController
             return Forbid();
         }
 
+        const int MaxItemNameLength = 200;
+        const int MaxLootDkp = 1_000_000;
+
+        var trimmedItemName = (itemName ?? string.Empty).Trim();
+        var trimmedWinner = (itemWinner ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(trimmedItemName) || trimmedItemName.Length > MaxItemNameLength)
+        {
+            return BadRequest("Item name is required and must be 200 characters or fewer.");
+        }
+        if (string.IsNullOrEmpty(trimmedWinner) || trimmedWinner.Length > MaxItemNameLength)
+        {
+            return BadRequest("Item winner is required and must be 200 characters or fewer.");
+        }
+        if (winningDkpSpent < 0 || winningDkpSpent > MaxLootDkp)
+        {
+            return BadRequest($"Winning DKP must be between 0 and {MaxLootDkp:N0}.");
+        }
+
+        // Winner must be a current linkshell member (case-insensitive match on the
+        // trimmed CharacterName) so an officer can't accidentally — or maliciously —
+        // assign loot to a non-roster name.
+        var rosterMatch = await _context.AppUserLinkshells
+            .Where(link => link.LinkshellId == eventEntity.LinkshellId
+                        && link.CharacterName != null
+                        && link.CharacterName.ToLower() == trimmedWinner.ToLower())
+            .Select(link => link.CharacterName!)
+            .FirstOrDefaultAsync();
+        if (rosterMatch is null)
+        {
+            return BadRequest("Winner must be a current linkshell member.");
+        }
+
         _context.EventLootDetails.Add(new EventLootDetail
         {
             EventId = eventId,
-            ItemName = itemName,
-            ItemWinner = itemWinner,
+            ItemName = trimmedItemName,
+            ItemWinner = rosterMatch,
             WinningDkpSpent = winningDkpSpent
         });
 

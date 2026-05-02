@@ -78,6 +78,11 @@ public sealed partial class AddonApiController
         }
 
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
+        if (!await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var nowUtc = DateTime.UtcNow;
 
         // Note: CommencementStartTime is intentionally null on create so the event
@@ -132,6 +137,10 @@ public sealed partial class AddonApiController
         {
             return Forbid();
         }
+        if (!await TokenIssuerCanModerateAsync(token, eventToDelete.LinkshellId, cancellationToken))
+        {
+            return Forbid();
+        }
         if (eventToDelete.CommencementStartTime.HasValue)
         {
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
@@ -159,6 +168,10 @@ public sealed partial class AddonApiController
             return NotFound(new { error = "Event not found." });
         }
         if (eventEntity.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
             return Forbid();
         }
@@ -198,6 +211,10 @@ public sealed partial class AddonApiController
             return NotFound(new { error = "Event not found." });
         }
         if (eventEntity.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
             return Forbid();
         }

@@ -1,5 +1,6 @@
 @using System.Globalization
 @using System.Security.Claims
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @model EventViewModel
 @{
     ViewData["Title"] = "Active event";
@@ -11,6 +12,7 @@
     // HNM-typed events get the multi-window roster card and a slimmer Participants table
     // (Timer + Progress columns are not meaningful per-spawn-window).
     var isHnmEvent = string.Equals(Model.Event.EventType, "HNM", StringComparison.OrdinalIgnoreCase);
+    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
 }
 
 <div class="page-head fade d1">
@@ -330,7 +332,7 @@
                 <div class="form-grid">
                     <div class="field">
                         <label>Main job</label>
-                        <select class="form-select" name="jobName">
+                        <select class="form-select" name="jobName" required>
                             <option value="">Select main job</option>
                             @foreach (var jobOption in mainJobOptions)
                             {
@@ -340,7 +342,7 @@
                     </div>
                     <div class="field">
                         <label>Sub job</label>
-                        <select class="form-select" name="subJobName">
+                        <select class="form-select" name="subJobName" required>
                             <option value="">Select sub job</option>
                             @foreach (var jobOption in subJobOptions)
                             {
@@ -350,7 +352,7 @@
                     </div>
                     <div class="field">
                         <label>Role</label>
-                        <select class="form-select" name="jobType">
+                        <select class="form-select" name="jobType" required>
                             <option value="">Select role</option>
                             @foreach (var jobTypeOption in jobTypeOptions)
                             {
@@ -370,10 +372,10 @@
             <form asp-action="SubmitLootDetails" method="post" style="padding:4px 16px 12px;border-bottom:1px solid var(--border)">
                 <input type="hidden" name="eventId" value="@Model.Event.Id" />
                 <div class="form-grid">
-                    <div class="field"><label>Item</label><input class="form-control" name="itemName" /></div>
+                    <div class="field"><label>Item</label><input class="form-control" name="itemName" required maxlength="200" /></div>
                     <div class="field">
                         <label>Winner</label>
-                        <select class="form-select" name="itemWinner">
+                        <select class="form-select" name="itemWinner" required>
                             <option value="">Select event member</option>
                             @foreach (var participantName in Model.AppUserEvents
                                 .Select(item => item.CharacterName)
@@ -385,7 +387,7 @@
                             }
                         </select>
                     </div>
-                    <div class="field"><label>DKP spent</label><input class="form-control" name="winningDkpSpent" type="number" value="0" /></div>
+                    <div class="field"><label>DKP spent</label><input class="form-control" name="winningDkpSpent" type="number" min="0" step="1" value="0" required /></div>
                 </div>
                 <button class="btn ghost sm" type="submit" style="margin-top:12px">+ Add loot</button>
             </form>
@@ -467,7 +469,8 @@
                         try {
                             const res = await fetch(`/api/addon/management/window-attendees/${id}`, {
                                 method: 'DELETE',
-                                credentials: 'same-origin'
+                                credentials: 'same-origin',
+                                headers: { '@antiforgeryTokens.HeaderName': '@antiforgeryTokens.RequestToken' }
                             });
                             if (res.ok) {
                                 const row = btn.closest('[data-window-attendee-row]');
@@ -544,6 +547,13 @@
 
             update();
             window.setInterval(update, 1000);
+
+            // Background tabs throttle setInterval down to ~once per minute, so
+            // re-sync the timers whenever the tab regains visibility — otherwise
+            // the elapsed clock visibly skips when the user comes back.
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') { update(); }
+            });
         })();
     </script>
 }

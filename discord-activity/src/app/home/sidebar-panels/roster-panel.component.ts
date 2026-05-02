@@ -1,22 +1,25 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateLinkshellInput,
   ActivityLinkshellRole,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
+import { formatAlts } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-roster-panel',
   imports: [CommonModule, FormsModule],
   templateUrl: './roster-panel.component.html',
+  styleUrl: './roster-panel.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RosterPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly formatAlts = formatAlts;
 
-  @Input({ required: true }) selectedLinkshellId!: number;
+  readonly selectedLinkshellId = input.required<number>();
   @Input({ required: true }) selectLinkshell!: (linkshellId: number) => Promise<void> | void;
   @Input({ required: true }) onPrimaryLinkshellChanged!: () => void;
 
@@ -31,6 +34,17 @@ export class RosterPanelComponent {
   protected memberRoleFilter: 'all' | 'leader' | 'officer' | 'member' = 'all';
   protected selectedJoinLinkshellId = 0;
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
+
+  // Discord Activities run in a sandboxed iframe without `allow-modals`, so
+  // window.confirm() returns false silently and destructive actions never
+  // run. Drive confirmations through this signal + an in-app modal instead.
+  protected readonly pendingConfirm = signal<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger: boolean;
+    confirm: () => Promise<void> | void;
+  } | null>(null);
 
   public constructor() {
     effect(() => {
@@ -56,6 +70,18 @@ export class RosterPanelComponent {
       if (!availableLinkshells.some(linkshell => linkshell.id === this.selectedJoinLinkshellId)) {
         this.selectedJoinLinkshellId = availableLinkshells[0].id;
       }
+    });
+
+    // Eagerly load the role list for the currently-selected linkshell when
+    // the user can manage members. Doing this in an effect (instead of from
+    // a template-render-time getter) avoids kicking off fetches during change
+    // detection and the duplicate-fetch races that pattern produces.
+    effect(() => {
+      const selectedId = this.selectedLinkshellId();
+      if (!selectedId || !this.canManageMembers()) {
+        return;
+      }
+      void this.ensureRolesLoaded(selectedId);
     });
   }
 
@@ -90,11 +116,12 @@ export class RosterPanelComponent {
   }
 
   protected canManageMembers(): boolean {
-    if (!this.selectedLinkshellId) {
+    const selectedId = this.selectedLinkshellId();
+    if (!selectedId) {
       return false;
     }
 
-    const currentMembership = this.linkshellMemberships().find(link => link.id === this.selectedLinkshellId);
+    const currentMembership = this.linkshellMemberships().find(link => link.id === selectedId);
     return (currentMembership?.rank ?? '').toLowerCase() === 'leader';
   }
 
@@ -103,7 +130,7 @@ export class RosterPanelComponent {
   }
 
   protected selectedLinkshell() {
-    const selectedId = this.selectedLinkshellId;
+    const selectedId = this.selectedLinkshellId();
     const primary = this.activity.overview()?.primaryLinkshell;
 
     if (primary && primary.id === selectedId) {
@@ -121,11 +148,12 @@ export class RosterPanelComponent {
   }
 
   protected primaryLinkshellActiveEventCount(): number {
-    if (!this.selectedLinkshellId) {
+    const selectedId = this.selectedLinkshellId();
+    if (!selectedId) {
       return 0;
     }
 
-    return (this.activity.overview()?.activeEvents ?? []).filter(event => event.linkshellId === this.selectedLinkshellId).length;
+    return (this.activity.overview()?.activeEvents ?? []).filter(event => event.linkshellId === selectedId).length;
   }
 
   protected canDeletePrimaryLinkshell(): boolean {
@@ -266,20 +294,49 @@ export class RosterPanelComponent {
     }
   }
 
-  protected async confirmDeleteLinkshell(linkshellId: number, linkshellName: string): Promise<void> {
-    if (!window.confirm(`Delete ${linkshellName}? This removes its events, history, invites, and memberships.`)) {
-      return;
-    }
-
-    await this.activity.deleteLinkshell(linkshellId);
+  protected confirmDeleteLinkshell(linkshellId: number, linkshellName: string): void {
+    this.pendingConfirm.set({
+      title: `Delete ${linkshellName}?`,
+      message: `This removes ${linkshellName}'s events, history, invites, and memberships.`,
+      confirmLabel: 'Delete',
+      danger: true,
+      confirm: () => this.activity.deleteLinkshell(linkshellId)
+    });
   }
 
-  protected async confirmLeaveLinkshell(linkshellId: number, linkshellName: string): Promise<void> {
-    if (!window.confirm(`Leave ${linkshellName}?`)) {
-      return;
-    }
+  protected confirmLeaveLinkshell(linkshellId: number, linkshellName: string): void {
+    this.pendingConfirm.set({
+      title: `Leave ${linkshellName}?`,
+      message: `You'll lose access to this linkshell and need a new invite to rejoin.`,
+      confirmLabel: 'Leave',
+      danger: true,
+      confirm: () => this.activity.leaveLinkshell(linkshellId)
+    });
+  }
 
-    await this.activity.leaveLinkshell(linkshellId);
+  protected confirmRemoveMember(linkshellId: number, memberId: number, characterName: string): void {
+    this.pendingConfirm.set({
+      title: `Remove ${characterName}?`,
+      message: `Remove ${characterName} from the linkshell? They'll lose all access until re-invited.`,
+      confirmLabel: 'Remove',
+      danger: true,
+      confirm: () => this.activity.removeLinkshellMember(linkshellId, memberId)
+    });
+  }
+
+  protected cancelPendingConfirm(): void {
+    this.pendingConfirm.set(null);
+  }
+
+  protected async runPendingConfirm(): Promise<void> {
+    const pending = this.pendingConfirm();
+    if (!pending) return;
+    this.pendingConfirm.set(null);
+    try {
+      await pending.confirm();
+    } catch {
+      // Action errors are surfaced via activity.actionError.
+    }
   }
 
   protected selectedJoinLinkshell() {
@@ -306,18 +363,21 @@ export class RosterPanelComponent {
   }
 
   protected availableRolesForLinkshell(linkshellId: number): ActivityLinkshellRole[] {
-    void this.ensureRolesLoaded(linkshellId);
     return this.rolesByLinkshell()[linkshellId] ?? [];
   }
 
-  protected async changeMemberRole(linkshellId: number, memberId: number, characterName: string, newRole: string): Promise<void> {
-    const trimmed = newRole?.trim();
+  protected changeMemberRole(linkshellId: number, memberId: number, characterName: string, newRole: string): void {
+    const trimmed = newRole.trim();
     if (!trimmed) return;
     const promoteToLeader = trimmed.toLowerCase() === 'leader';
-    const confirmation = promoteToLeader
-      ? `Transfer linkshell leadership to ${characterName}? You will become an officer.`
-      : `Change ${characterName}'s role to ${trimmed}?`;
-    if (!window.confirm(confirmation)) return;
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, trimmed, characterName);
+    this.pendingConfirm.set({
+      title: promoteToLeader ? `Transfer leadership?` : `Change role?`,
+      message: promoteToLeader
+        ? `Transfer linkshell leadership to ${characterName}? You will become an officer.`
+        : `Change ${characterName}'s role to ${trimmed}?`,
+      confirmLabel: promoteToLeader ? 'Transfer' : 'Change',
+      danger: promoteToLeader,
+      confirm: () => this.activity.updateLinkshellMemberRole(linkshellId, memberId, trimmed, characterName)
+    });
   }
 }

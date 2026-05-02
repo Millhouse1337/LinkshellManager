@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed record ActivityOverviewDto(
@@ -17,6 +19,8 @@ public sealed record ActivityAppUserDto(
     string Id,
     string UserName,
     string? CharacterName,
+    string? AltCharacterName1,
+    string? AltCharacterName2,
     string? TimeZone,
     int? PrimaryLinkshellId,
     string? PrimaryLinkshellName);
@@ -137,6 +141,8 @@ public sealed record ActivityMemberDto(
     int Id,
     string? AppUserId,
     string CharacterName,
+    string? AltCharacterName1,
+    string? AltCharacterName2,
     string? Rank,
     string? Status,
     double? LinkshellDkp);
@@ -449,9 +455,9 @@ public sealed record ActivityEventSignupRequest(
     string? JobType = null);
 
 public sealed record ActivityQuickJoinRequest(
-    string? JobName,
-    string? SubJobName,
-    string? JobType);
+    [Required, StringLength(64, MinimumLength = 1)] string? JobName,
+    [StringLength(64)] string? SubJobName,
+    [StringLength(64)] string? JobType);
 
 public sealed record ActivityCreateEventRequest(
     int LinkshellId,
@@ -537,7 +543,11 @@ public sealed record ActivityCreateTodLootRequest(
 
 public sealed record ActivityUpdateMemberRoleRequest(string Role);
 
-public sealed record ActivityUpdateProfileRequest(string CharacterName, string? TimeZone);
+public sealed record ActivityUpdateProfileRequest(
+    string CharacterName,
+    string? TimeZone,
+    string? AltCharacterName1 = null,
+    string? AltCharacterName2 = null);
 
 public sealed record ActivityAuctionItemInput(
     int Id,

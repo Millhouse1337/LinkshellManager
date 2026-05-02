@@ -2,9 +2,13 @@
 @model LinkshellManagerDiscordApp.Areas.Identity.Pages.Account.LoginModel
 @{
     ViewData["Title"] = "Sign in";
-    var returnUrl = Model.ReturnUrl ?? "/";
-    var discordLoginHref = $"/auth/discord/login?returnUrl={Uri.EscapeDataString(returnUrl)}";
-    var registerHref = string.IsNullOrWhiteSpace(Model.ReturnUrl)
+    // Defense in depth: validate returnUrl is local before reflecting it into
+    // the OAuth round-trip URL. The downstream callback also checks
+    // Url.IsLocalUrl, but rejecting external URLs here keeps them out of
+    // the visible /auth/discord/login href.
+    var safeReturnUrl = Url.IsLocalUrl(Model.ReturnUrl) ? Model.ReturnUrl! : "/";
+    var discordLoginHref = $"/auth/discord/login?returnUrl={Uri.EscapeDataString(safeReturnUrl)}";
+    var registerHref = string.IsNullOrWhiteSpace(Model.ReturnUrl) || !Url.IsLocalUrl(Model.ReturnUrl)
         ? "/Identity/Account/Register"
         : $"/Identity/Account/Register?returnUrl={Uri.EscapeDataString(Model.ReturnUrl)}";
 }
@@ -23,6 +27,16 @@
     @if (TempData["Error"] is string errorMessage)
     {
         <div class="alert alert-danger" role="alert">@errorMessage</div>
+    }
+
+    @if (HttpContext.Request.Query.ContainsKey("expired"))
+    {
+        <div class="alert alert-warning" role="alert">Your session has expired. Sign in again to continue.</div>
+    }
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
     }
 
     <div class="auth-actions">

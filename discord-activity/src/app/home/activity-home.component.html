@@ -1,4 +1,23 @@
 <main class="activity-shell">
+  <!-- ===== Connection status banner ===== -->
+  @if (activity.status() === 'error') {
+    <section class="flash flash--error" role="alert" aria-live="assertive">
+      <div>
+        <strong>{{ activity.phase() }}</strong>
+        @if (activity.error(); as message) {
+          <p>{{ message }}</p>
+        }
+      </div>
+      <button
+        type="button"
+        class="action-button"
+        [disabled]="reconnecting()"
+        (click)="reconnect()">
+        {{ reconnecting() ? 'Reconnecting…' : 'Reconnect to Discord' }}
+      </button>
+    </section>
+  }
+
   <!-- ===== Identity bar ===== -->
   <div class="identity">
     <div class="identity-left">
@@ -27,45 +46,113 @@
   </div>
 
   <!-- ===== Tab bar ===== -->
-  <div class="tabs" role="tablist">
-    <button type="button" class="tab" [class.active]="activeTab() === 'dashboard'" (click)="setActiveTab('dashboard')">Dashboard</button>
-    @if (isFeatureEnabled('enableMissions')) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'missions'" (click)="setActiveTab('missions')">Missions</button>
+  <div class="tabs" role="tablist" aria-label="Activity sections" (keydown)="onTabKeydown($event)">
+    @if (hasOverview()) {
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('dashboard')"
+              [attr.aria-controls]="panelId('dashboard')"
+              [attr.aria-selected]="activeTab() === 'dashboard'"
+              [attr.tabindex]="activeTab() === 'dashboard' ? 0 : -1"
+              [class.active]="activeTab() === 'dashboard'"
+              (click)="setActiveTab('dashboard')">Dashboard</button>
+      @if (isFeatureEnabled('enableMissions')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('missions')"
+                [attr.aria-controls]="panelId('missions')"
+                [attr.aria-selected]="activeTab() === 'missions'"
+                [attr.tabindex]="activeTab() === 'missions' ? 0 : -1"
+                [class.active]="activeTab() === 'missions'"
+                (click)="setActiveTab('missions')">Missions</button>
+      }
+      @if (isFeatureEnabled('enableEndgame')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('endgame')"
+                [attr.aria-controls]="panelId('endgame')"
+                [attr.aria-selected]="activeTab() === 'endgame'"
+                [attr.tabindex]="activeTab() === 'endgame' ? 0 : -1"
+                [class.active]="activeTab() === 'endgame'"
+                (click)="setActiveTab('endgame')">Endgame</button>
+      }
+      @if (isFeatureEnabled('enableAuctions') && isDkpModeEnabled()) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('auctions')"
+                [attr.aria-controls]="panelId('auctions')"
+                [attr.aria-selected]="activeTab() === 'auctions'"
+                [attr.tabindex]="activeTab() === 'auctions' ? 0 : -1"
+                [class.active]="activeTab() === 'auctions'"
+                (click)="setActiveTab('auctions')">
+          Auctions
+          @if (liveAuctionCount() > 0) {
+            <span class="tab-badge live">{{ liveAuctionCount() }}</span>
+          }
+        </button>
+      }
+      @if (isFeatureEnabled('enableEvents')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('events')"
+                [attr.aria-controls]="panelId('events')"
+                [attr.aria-selected]="activeTab() === 'events'"
+                [attr.tabindex]="activeTab() === 'events' ? 0 : -1"
+                [class.active]="activeTab() === 'events'"
+                (click)="setActiveTab('events')">
+          Events
+          @if (openEventsCount() > 0) {
+            <span class="tab-badge default">{{ openEventsCount() }}</span>
+          }
+        </button>
+      }
+      @if (isFeatureEnabled('enableToDs')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('tods')"
+                [attr.aria-controls]="panelId('tods')"
+                [attr.aria-selected]="activeTab() === 'tods'"
+                [attr.tabindex]="activeTab() === 'tods' ? 0 : -1"
+                [class.active]="activeTab() === 'tods'"
+                (click)="setActiveTab('tods')">
+          ToDs
+          @if (openTodCount() > 0) {
+            <span class="tab-badge warn">{{ openTodCount() }}</span>
+          }
+        </button>
+      }
+      @if (isFeatureEnabled('enableDkp') && isDkpModeEnabled()) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('dkp')"
+                [attr.aria-controls]="panelId('dkp')"
+                [attr.aria-selected]="activeTab() === 'dkp'"
+                [attr.tabindex]="activeTab() === 'dkp' ? 0 : -1"
+                [class.active]="activeTab() === 'dkp'"
+                (click)="setActiveTab('dkp')">DKP</button>
+      }
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('linkshell')"
+              [attr.aria-controls]="panelId('linkshell')"
+              [attr.aria-selected]="activeTab() === 'linkshell'"
+              [attr.tabindex]="activeTab() === 'linkshell' ? 0 : -1"
+              [class.active]="activeTab() === 'linkshell'"
+              (click)="setActiveTab('linkshell')">Management</button>
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('profile')"
+              [attr.aria-controls]="panelId('profile')"
+              [attr.aria-selected]="activeTab() === 'profile'"
+              [attr.tabindex]="activeTab() === 'profile' ? 0 : -1"
+              [class.active]="activeTab() === 'profile'"
+              (click)="setActiveTab('profile')">Profile</button>
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('messages')"
+              [attr.aria-controls]="panelId('messages')"
+              [attr.aria-selected]="activeTab() === 'messages'"
+              [attr.tabindex]="activeTab() === 'messages' ? 0 : -1"
+              [class.active]="activeTab() === 'messages'"
+              (click)="setActiveTab('messages')">Messages</button>
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('configurations')"
+              [attr.aria-controls]="panelId('configurations')"
+              [attr.aria-selected]="activeTab() === 'configurations'"
+              [attr.tabindex]="activeTab() === 'configurations' ? 0 : -1"
+              [class.active]="activeTab() === 'configurations'"
+              (click)="setActiveTab('configurations')">Configurations</button>
     }
-    @if (isFeatureEnabled('enableEndgame')) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'endgame'" (click)="setActiveTab('endgame')">Endgame</button>
-    }
-    @if (isFeatureEnabled('enableAuctions') && isDkpModeEnabled()) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'auctions'" (click)="setActiveTab('auctions')">
-        Auctions
-        @if (liveAuctionCount() > 0) {
-          <span class="tab-badge live">{{ liveAuctionCount() }}</span>
-        }
-      </button>
-    }
-    @if (isFeatureEnabled('enableEvents')) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'events'" (click)="setActiveTab('events')">
-        Events
-        @if (openEventsCount() > 0) {
-          <span class="tab-badge default">{{ openEventsCount() }}</span>
-        }
-      </button>
-    }
-    @if (isFeatureEnabled('enableToDs')) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'tods'" (click)="setActiveTab('tods')">
-        ToDs
-        @if (openTodCount() > 0) {
-          <span class="tab-badge warn">{{ openTodCount() }}</span>
-        }
-      </button>
-    }
-    @if (isFeatureEnabled('enableDkp') && isDkpModeEnabled()) {
-      <button type="button" class="tab" [class.active]="activeTab() === 'dkp'" (click)="setActiveTab('dkp')">DKP</button>
-    }
-    <button type="button" class="tab" [class.active]="activeTab() === 'linkshell'" (click)="setActiveTab('linkshell')">Management</button>
-    <button type="button" class="tab" [class.active]="activeTab() === 'profile'" (click)="setActiveTab('profile')">Profile</button>
-    <button type="button" class="tab" [class.active]="activeTab() === 'messages'" (click)="setActiveTab('messages')">Messages</button>
-    <button type="button" class="tab" [class.active]="activeTab() === 'configurations'" (click)="setActiveTab('configurations')">Configurations</button>
   </div>
 
   <!-- ===== Flash messages (global) ===== -->
@@ -78,12 +165,18 @@
 
   <!-- ===== DASHBOARD TAB ===== -->
   @if (activeTab() === 'dashboard') {
-    <app-dashboard-tab [deleteTodFn]="deleteTodFn" [setActiveTabFn]="setActiveTabFn" />
+    <div role="tabpanel" [id]="panelId('dashboard')" [attr.aria-labelledby]="tabId('dashboard')">
+      <app-dashboard-tab
+        [deleteTodFn]="deleteTodFn"
+        [setActiveTabFn]="setActiveTabFn"
+        [rosterSearchValue]="dashboardRosterSearch"
+        [rosterSearchChange]="setDashboardRosterSearch" />
+    </div>
   }
 
   <!-- ===== PROFILE TAB ===== -->
   @if (activeTab() === 'profile') {
-    <div class="panel-tab fade">
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('profile')" [attr.aria-labelledby]="tabId('profile')">
       <div class="section-head">
         <div>
           <div class="section-label">Account</div>
@@ -97,38 +190,44 @@
 
   <!-- ===== LINKSHELL TAB ===== -->
   @if (activeTab() === 'linkshell') {
-    <app-linkshell-tab
-      [rosterSearchValue]="dashboardRosterSearch"
-      [rosterSearchChange]="setDashboardRosterSearch" />
+    <div role="tabpanel" [id]="panelId('linkshell')" [attr.aria-labelledby]="tabId('linkshell')">
+      <app-linkshell-tab
+        [rosterSearchValue]="dashboardRosterSearch"
+        [rosterSearchChange]="setDashboardRosterSearch" />
+    </div>
   }
 
   <!-- ===== EVENTS TAB ===== -->
   @if (activeTab() === 'events') {
-    <app-events-tab />
+    <div role="tabpanel" [id]="panelId('events')" [attr.aria-labelledby]="tabId('events')">
+      <app-events-tab />
+    </div>
   }
 
   <!-- ===== TODS TAB ===== -->
   @if (activeTab() === 'tods') {
-    <app-tods-tab [deleteTodFn]="deleteTodFn" />
+    <div role="tabpanel" [id]="panelId('tods')" [attr.aria-labelledby]="tabId('tods')">
+      <app-tods-tab [deleteTodFn]="deleteTodFn" />
+    </div>
   }
 
   <!-- ===== AUCTIONS TAB ===== -->
   @if (activeTab() === 'auctions') {
-    <div class="panel-tab fade">
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('auctions')" [attr.aria-labelledby]="tabId('auctions')">
       <app-activity-sidebar-panel [visibleSections]="['auctions']" />
     </div>
   }
 
   <!-- ===== DKP TAB ===== -->
   @if (activeTab() === 'dkp') {
-    <div class="panel-tab fade">
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
       <app-activity-sidebar-panel [visibleSections]="['dkp']" />
     </div>
   }
 
   <!-- ===== ENDGAME TAB ===== -->
   @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
-    <div class="panel-tab fade">
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('endgame')" [attr.aria-labelledby]="tabId('endgame')">
       <div class="section-head">
         <div>
           <div class="section-label">Content</div>
@@ -149,28 +248,9 @@
     </div>
   }
 
-  <!-- ===== HNM TAB ===== -->
-  @if (activeTab() === 'hnm') {
-    <div class="panel-tab fade">
-      <div class="section-head">
-        <div>
-          <div class="section-label">Content</div>
-          <div class="section-title">HNM</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><div class="card-title">HNM</div></div>
-        <div class="empty-state empty-state--compact">
-          <div class="empty-state-desc">HNM tooling coming soon.</div>
-        </div>
-      </div>
-    </div>
-  }
-
   <!-- ===== MISSIONS TAB ===== -->
   @if (activeTab() === 'missions' && isFeatureEnabled('enableMissions')) {
-    <div class="panel-tab fade">
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('missions')" [attr.aria-labelledby]="tabId('missions')">
       <div class="section-head">
         <div>
           <div class="section-label">Content</div>
@@ -191,7 +271,7 @@
 
   <!-- ===== MESSAGES TAB ===== -->
   @if (activeTab() === 'messages') {
-    <div class="panel-tab fade">
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('messages')" [attr.aria-labelledby]="tabId('messages')">
       <div class="section-head">
         <div>
           <div class="section-label">Inbox</div>
@@ -210,7 +290,9 @@
 
   <!-- ===== CONFIGURATIONS TAB ===== -->
   @if (activeTab() === 'configurations') {
-    <app-configurations-tab />
+    <div role="tabpanel" [id]="panelId('configurations')" [attr.aria-labelledby]="tabId('configurations')">
+      <app-configurations-tab />
+    </div>
   }
 </main>
 

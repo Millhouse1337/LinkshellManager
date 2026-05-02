@@ -266,6 +266,11 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         // Auto-commence the event if it hasn't started yet (so attendance has a meaningful base time).
         if (eventEntity.CommencementStartTime is null)
         {
@@ -309,7 +314,7 @@ public sealed partial class AddonApiController
         var matched = 0;
         var alreadyVerified = 0;
         var unmatched = new List<string>();
-        var ledgerIds = new List<int>();
+        var pendingLedgers = new List<AppUserEventStatusLedger>();
         // Per-attendee credit info so the addon can print a "+N DKP" line per
         // user immediately after a window post. Only populated for windowed
         // events (single-window events award DKP at end-of-event, not per post).
@@ -317,6 +322,7 @@ public sealed partial class AddonApiController
 
         // Pre-load all linkshell memberships in one query so we can match without a roundtrip per entry.
         var memberships = await _dbContext.AppUserLinkshells
+            .AsNoTracking()
             .Where(m => m.LinkshellId == token.LinkshellId && m.AppUserId != null)
             .ToListAsync(cancellationToken);
 
@@ -325,6 +331,9 @@ public sealed partial class AddonApiController
             .GroupBy(m => m.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
+        // Resolve every entry to a membership up-front so we can pre-load existing
+        // participations and per-window credits in single queries instead of per-row.
+        var resolvedEntries = new List<(AddonAttendanceEntry Entry, AppUserLinkshell Membership, string Name)>(request.Entries.Count);
         foreach (var entry in request.Entries)
         {
             if (string.IsNullOrWhiteSpace(entry.CharacterName)) continue;
@@ -336,15 +345,34 @@ public sealed partial class AddonApiController
                 continue;
             }
 
-            var existing = await _dbContext.AppUserEvents
-                .FirstOrDefaultAsync(
-                    ue => ue.EventId == eventId && ue.AppUserId == membership.AppUserId,
-                    cancellationToken);
+            resolvedEntries.Add((entry, membership, name));
+        }
 
-            // For windowed events we count "matched" per posted window so re-posting
-            // the same name to a different window still bumps the count.
-            // For non-windowed events we keep the legacy "first verify wins" behavior.
-            var firstTimeVerified = existing is null || existing.IsVerified != true;
+        var resolvedAppUserIds = resolvedEntries
+            .Select(r => r.Membership.AppUserId!)
+            .Distinct()
+            .ToList();
+
+        var existingByAppUserId = resolvedAppUserIds.Count == 0
+            ? new Dictionary<string, AppUserEvent>(StringComparer.Ordinal)
+            : await _dbContext.AppUserEvents
+                .Where(ue => ue.EventId == eventId && resolvedAppUserIds.Contains(ue.AppUserId!))
+                .ToDictionaryAsync(ue => ue.AppUserId!, cancellationToken);
+
+        // Pre-load all per-window credits for participants we already know about so the
+        // "already attended this window" check becomes an in-memory lookup.
+        var existingWindowCreditPairs = attendanceWindow is null || existingByAppUserId.Count == 0
+            ? new HashSet<int>()
+            : (await _dbContext.AppUserEventWindows
+                .Where(w => w.EventAttendanceWindowId == attendanceWindow.Id
+                    && existingByAppUserId.Values.Select(v => v.Id).Contains(w.AppUserEventId))
+                .Select(w => w.AppUserEventId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+        foreach (var (entry, membership, _) in resolvedEntries)
+        {
+            existingByAppUserId.TryGetValue(membership.AppUserId!, out var existing);
 
             AppUserEvent participation;
             if (existing is null)
@@ -362,7 +390,7 @@ public sealed partial class AddonApiController
                     IsVerified = true
                 };
                 _dbContext.AppUserEvents.Add(participation);
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                existingByAppUserId[membership.AppUserId!] = participation;
             }
             else
             {
@@ -392,13 +420,7 @@ public sealed partial class AddonApiController
             // Per-window join row: silently skip if the user was already credited for this window.
             if (attendanceWindow is not null)
             {
-                var alreadyAttendedThisWindow = await _dbContext.AppUserEventWindows
-                    .AnyAsync(
-                        w => w.AppUserEventId == participation.Id
-                          && w.EventAttendanceWindowId == attendanceWindow.Id,
-                        cancellationToken);
-
-                if (alreadyAttendedThisWindow)
+                if (participation.Id != 0 && existingWindowCreditPairs.Contains(participation.Id))
                 {
                     alreadyVerified++;
                     continue;
@@ -406,8 +428,8 @@ public sealed partial class AddonApiController
 
                 _dbContext.AppUserEventWindows.Add(new AppUserEventWindow
                 {
-                    AppUserEventId = participation.Id,
-                    EventAttendanceWindowId = attendanceWindow.Id,
+                    AppUserEvent = participation,
+                    EventAttendanceWindow = attendanceWindow,
                     VerifiedAt = nowUtc,
                     VerifiedBy = verifiedBy,
                     Zone = string.IsNullOrWhiteSpace(entry.Zone) ? null : entry.Zone.Trim()
@@ -426,7 +448,7 @@ public sealed partial class AddonApiController
 
             var ledger = new AppUserEventStatusLedger
             {
-                AppUserEventId = participation.Id,
+                AppUserEvent = participation,
                 EventId = eventId,
                 AppUserId = membership.AppUserId,
                 ActionType = "Verify",
@@ -435,12 +457,15 @@ public sealed partial class AddonApiController
                 VerifiedAt = nowUtc,
                 VerifiedBy = verifiedBy,
                 Source = AddonSource,
-                EventAttendanceWindowId = attendanceWindow?.Id
+                EventAttendanceWindow = attendanceWindow
             };
             _dbContext.AppUserEventStatusLedgers.Add(ledger);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            ledgerIds.Add(ledger.Id);
+            pendingLedgers.Add(ledger);
         }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var ledgerIds = pendingLedgers.Select(l => l.Id).ToList();
 
         return Ok(new
         {
@@ -480,6 +505,10 @@ public sealed partial class AddonApiController
         {
             return Forbid();
         }
+        if (!await TokenIssuerCanModerateAsync(token, attendanceWindow.Event.LinkshellId, cancellationToken))
+        {
+            return Forbid();
+        }
 
         var trimmed = (characterName ?? string.Empty).Trim();
         var attendee = attendanceWindow.Attendees.FirstOrDefault(a =>
@@ -505,16 +534,38 @@ public sealed partial class AddonApiController
         var linkshell = await _dbContext.Linkshells
             .FirstOrDefaultAsync(ls => ls.Id == token.LinkshellId, cancellationToken);
 
-        var characterNames = await _dbContext.AppUserLinkshells
+        var memberRows = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == token.LinkshellId
                         && !string.IsNullOrWhiteSpace(link.CharacterName))
-            .Select(link => link.CharacterName!)
-            .OrderBy(n => n)
+            .Select(link => new
+            {
+                CharacterName = link.CharacterName!,
+                Alt1 = link.AppUser != null ? link.AppUser.AltCharacterName1 : null,
+                Alt2 = link.AppUser != null ? link.AppUser.AltCharacterName2 : null
+            })
+            .OrderBy(row => row.CharacterName)
             .ToListAsync(cancellationToken);
+
+        var characterNames = memberRows.Select(row => row.CharacterName).ToList();
+
+        var roster = memberRows
+            .Select(row =>
+            {
+                var alts = new List<string>(2);
+                if (!string.IsNullOrWhiteSpace(row.Alt1)) alts.Add(row.Alt1!.Trim());
+                if (!string.IsNullOrWhiteSpace(row.Alt2)) alts.Add(row.Alt2!.Trim());
+                return new
+                {
+                    characterName = row.CharacterName,
+                    alts
+                };
+            })
+            .ToList();
 
         return Ok(new
         {
             characterNames,
+            roster,
             lootStructure = ActivityDataController.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp")
         });
     }
@@ -552,9 +603,13 @@ public sealed partial class AddonApiController
             .Include(t => t.Linkshell)
             .Include(t => t.TodLootDetails)
             .FirstOrDefaultAsync(t => t.Id == todId, cancellationToken);
-        if (tod is null || tod.LinkshellId != token.LinkshellId)
+        if (tod is null)
         {
             return NotFound(new { error = "Tod not found." });
+        }
+        if (tod.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
         }
 
         var lootStructure = ActivityDataController.NormalizeLootStructure(tod.Linkshell?.LootStructure ?? "Dkp");

@@ -99,3 +99,9 @@ export function formatDkp(totalMilliseconds: number, dkpPerHour?: number | null)
   const rate = dkpPerHour ?? 0;
   return ((totalMilliseconds / 3600000) * rate).toFixed(2);
 }
+
+export function formatAlts(alt1?: string | null, alt2?: string | null): string {
+  return [alt1, alt2]
+    .filter((value): value is string => !!value && value.trim() !== '')
+    .join(', ');
+}

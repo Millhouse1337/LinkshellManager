@@ -5,6 +5,7 @@ using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
@@ -12,6 +13,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed partial class AddonApiController
 {
     [HttpPost("pair")]
+    [EnableRateLimiting("addon-pair")]
     public async Task<IActionResult> PairAsync([FromBody] PairRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Code))
@@ -19,6 +21,17 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Pairing code is required." });
         }
 
+        if (request.Code.Length > 64)
+        {
+            return BadRequest(new { error = "Pairing code is malformed." });
+        }
+
+        // The addon is an in-game Lua process and cannot provide an HTTP
+        // session credential — the pairing code itself is the credential. We
+        // protect against leaked-code abuse with: (1) a short TTL on the
+        // pairing code, (2) a per-IP rate limit on this endpoint (see
+        // [EnableRateLimiting]), and (3) a 32-char alphabet × 8-char length
+        // search space (~1.1e12). Users are warned not to share pairing codes.
         var result = await _auth.RedeemPairingCodeAsync(request.Code, cancellationToken);
         if (result is null)
         {

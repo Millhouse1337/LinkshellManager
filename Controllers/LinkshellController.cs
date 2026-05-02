@@ -106,6 +106,9 @@ public class LinkshellController : Controller
             .ThenInclude(link => link.AppUser)
             .FirstOrDefaultAsync(ls => ls.Id == id);
 
+        ViewBag.CanEditLinkshell = CanManageLinkshell(membership);
+        ViewBag.CanDeleteLinkshell = IsLeader(membership);
+
         return linkshell is null ? NotFound() : View(linkshell);
     }
     public async Task<IActionResult> Edit(int id)

@@ -85,6 +85,7 @@ export type {
   ActivityRevenueInput,
   ActivityRule,
   ActivityStatusLedgerEntry,
+  ActivityTodEntry,
   ActivityTodLootInput,
   ActivityUpdateProfileInput,
   ActivityUpdateTodInput,
@@ -183,6 +184,22 @@ export class DiscordActivityService {
 
     this.initializationPromise = this.initializeInternal();
     return this.initializationPromise;
+  }
+
+  // Used by the error UI to retry initialization after a permanent failure
+  // (the cached `initializationPromise` would otherwise re-resolve immediately
+  // with the same error). Resets the SDK handle and clears overview state so
+  // the retry starts from a clean slate.
+  async reconnect(): Promise<void> {
+    this.initializationPromise = null;
+    this.sdk = null;
+    this.auth.session.set(null);
+    this.auth.localUser.set(null);
+    this.auth.overview.set(null);
+    this.participants.set([]);
+    this.context.set(null);
+    this.error.set(null);
+    return this.initialize();
   }
 
   private async initializeInternal(): Promise<void> {
@@ -424,6 +441,10 @@ export class DiscordActivityService {
     this.historyDetail.set(null);
   }
 
+  clearHistoryList(): void {
+    this.historyList.set([]);
+  }
+
   clearActionState(): void {
     this.auth.clearActionState();
   }
@@ -437,7 +458,9 @@ export class DiscordActivityService {
     try {
       await this.http.postActivityAction('/api/activity/profile', {
         characterName: input.characterName,
-        timeZone: input.timeZone || null
+        timeZone: input.timeZone || null,
+        altCharacterName1: input.altCharacterName1 || null,
+        altCharacterName2: input.altCharacterName2 || null
       });
       await this.auth.refreshOverview();
 

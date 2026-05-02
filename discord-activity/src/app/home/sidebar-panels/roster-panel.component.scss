@@ -1,0 +1,35 @@
+/* Confirm modal — destructive linkshell actions (delete / leave / role
+   change). window.confirm() is silently false inside the Discord Activity
+   sandboxed iframe, so we render an in-app dialog instead. Same shape as the
+   ToD-delete modal in activity-home and the addon pairing modal in
+   configurations-tab. */
+.addon-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+.addon-modal-dialog {
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.addon-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 14px;
+}
+.addon-modal-body {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.addon-modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  padding-top: 12px;
+}

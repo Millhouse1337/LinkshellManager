@@ -1,7 +1,9 @@
 @model LinkshellCustomizeViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Customize Linkshell";
     var savedMessage = TempData["CustomizeSaved"] as string;
+    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
 }
 
 <div class="page-head fade d1">
@@ -135,7 +137,10 @@
 
 <!-- Game Addon (att) pairing card. Lives outside the customize form because tokens
      are managed via separate XHR endpoints (no full-form post). -->
-<div class="card fade d2" id="addonTokenCard" style="margin-top:16px" data-linkshellid="@Model.LinkshellId">
+<div class="card fade d2" id="addonTokenCard" style="margin-top:16px"
+     data-linkshellid="@Model.LinkshellId"
+     data-csrf-header="@antiforgeryTokens.HeaderName"
+     data-csrf-token="@antiforgeryTokens.RequestToken">
     <div class="card-head">
         <div>
             <div class="card-title">Game Addon (att)</div>
@@ -221,6 +226,20 @@
             var addonCard = document.getElementById('addonTokenCard');
             if (!addonCard) return;
 
+            // Read CSRF header/token from data-* attributes so the token never
+            // gets interpolated as a JS string literal — the runtime parses it
+            // as plain text from the DOM, which keeps it out of the script body
+            // and is safe under the strict CSP nonce policy.
+            var antiforgeryHeader = addonCard.dataset.csrfHeader || '';
+            var antiforgeryToken = addonCard.dataset.csrfToken || '';
+            function withCsrf(headers) {
+                headers = headers || {};
+                if (antiforgeryHeader && antiforgeryToken) {
+                    headers[antiforgeryHeader] = antiforgeryToken;
+                }
+                return headers;
+            }
+
             function openModal(id) {
                 var el = document.getElementById(id);
                 if (el) { el.classList.add('mt-modal--open'); document.body.style.overflow = 'hidden'; }
@@ -283,7 +302,8 @@
                         btn.disabled = true;
                         fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
                             method: 'POST',
-                            credentials: 'same-origin'
+                            credentials: 'same-origin',
+                            headers: withCsrf()
                         }).then(function (res) {
                             if (!res.ok) { btn.disabled = false; return; }
                             loadTokens();
@@ -337,7 +357,7 @@
                 fetch('/api/addon/management/pairing-code', {
                     method: 'POST',
                     credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: withCsrf({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ linkshellId: addonLinkshellId, label: label || null })
                 }).then(function (res) {
                     if (!res.ok) {

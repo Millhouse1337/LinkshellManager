@@ -38,6 +38,9 @@ public class AccountController : Controller
 
     [AllowAnonymous]
     public IActionResult Register() => Redirect("/Identity/Account/Login");
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
         await _signInManager.SignOutAsync();
@@ -54,6 +57,8 @@ public class AccountController : Controller
         return View(new ProfileViewModel
         {
             CharacterName = user.CharacterName,
+            AltCharacterName1 = user.AltCharacterName1,
+            AltCharacterName2 = user.AltCharacterName2,
             TimeZone = user.TimeZone,
             ProfileImageData = user.ProfileImage
         });
@@ -80,7 +85,10 @@ public class AccountController : Controller
         var result = await _appUserProfileService.UpdateProfileAsync(
             user,
             model.CharacterName,
-            normalizedTimeZone);
+            normalizedTimeZone,
+            model.AltCharacterName1,
+            model.AltCharacterName2,
+            preserveExistingAlts: false);
 
         if (!result.Succeeded)
         {
@@ -126,11 +134,27 @@ public class AccountController : Controller
             return Challenge();
         }
 
-        var selectedLinkshell = await _context.Linkshells
-            .FirstOrDefaultAsync(linkshell => linkshell.Id == model.SelectedLinkshellId);
+        if (model.SelectedLinkshellId.HasValue)
+        {
+            var selectedLinkshell = await _context.AppUserLinkshells
+                .Where(link => link.AppUserId == user.Id && link.LinkshellId == model.SelectedLinkshellId.Value)
+                .Select(link => link.Linkshell)
+                .FirstOrDefaultAsync();
 
-        user.PrimaryLinkshellId = selectedLinkshell?.Id;
-        user.PrimaryLinkshellName = selectedLinkshell?.LinkshellName;
+            if (selectedLinkshell is null)
+            {
+                return Forbid();
+            }
+
+            user.PrimaryLinkshellId = selectedLinkshell.Id;
+            user.PrimaryLinkshellName = selectedLinkshell.LinkshellName;
+        }
+        else
+        {
+            user.PrimaryLinkshellId = null;
+            user.PrimaryLinkshellName = null;
+        }
+
         await _userManager.UpdateAsync(user);
 
         return RedirectToAction(nameof(Settings));

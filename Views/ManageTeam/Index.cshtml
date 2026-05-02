@@ -1,8 +1,10 @@
 @model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Manage Team";
     var message = ViewBag.Message as string;
     var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
+    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
 }
 
 <div class="page-head fade d1">
@@ -228,5 +230,9 @@ else
         </div>
     </div>
 
+    <script nonce="@Html.CspNonce()">
+        window.LSM_CSRF_HEADER = '@antiforgeryTokens.HeaderName';
+        window.LSM_CSRF_TOKEN = '@antiforgeryTokens.RequestToken';
+    </script>
     <script src="~/js/manage-team.js" asp-append-version="true" defer></script>
 }

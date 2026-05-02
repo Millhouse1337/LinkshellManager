@@ -12,6 +12,9 @@ public sealed class AddonApiAuthService
     private const int TokenBodyLength = 36;
     private const int PairingCodeLength = 8;
     private const int PairingCodeTtlMinutes = 10;
+    // Issued tokens expire after this many days of inactivity. The addon will
+    // need to re-pair after a long quiet period.
+    private const int TokenInactivityExpiryDays = 90;
     // Throttle LastUsedAt writes so a polling addon doesn't issue a DB write per request.
     private const int LastUsedAtThrottleSeconds = 60;
 
@@ -129,6 +132,18 @@ public sealed class AddonApiAuthService
         if (record.RevokedAt is not null) return null;
 
         var now = DateTime.UtcNow;
+
+        // Inactivity expiry — tokens unused for more than the configured window
+        // are treated as revoked. Anchored to LastUsedAt when set, otherwise to
+        // CreatedAt so brand-new tokens can still be redeemed before first use.
+        var inactivityAnchor = record.LastUsedAt ?? record.CreatedAt;
+        if ((now - inactivityAnchor).TotalDays >= TokenInactivityExpiryDays)
+        {
+            record.RevokedAt = now;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
         if (record.LastUsedAt is null
             || (now - record.LastUsedAt.Value).TotalSeconds >= LastUsedAtThrottleSeconds)
         {

@@ -37,8 +37,12 @@ public sealed partial class AddonApiController : ControllerBase
     }
 
     // Dual-auth resolver for the management endpoints: tries the Discord OAuth
-    // bearer token first (so the Activity SPA can call them) and falls back to
-    // ASP.NET Identity cookie auth (used by the MVC web app's Customize page).
+    // bearer token first (so the Activity SPA can call them) and otherwise
+    // uses ASP.NET Identity cookie auth (used by the MVC web app's Customize
+    // page). When a bearer token is presented but fails validation, the
+    // request is rejected — we do NOT silently downgrade to cookie auth, since
+    // an attacker who can disrupt outbound calls to discord.com would
+    // otherwise be able to force the cookie path and exploit any CSRF gap.
     private async Task<AppUser?> ResolveManagementUserAsync(CancellationToken cancellationToken)
     {
         if (TryGetManagementBearerToken(out var accessToken))
@@ -53,8 +57,10 @@ public sealed partial class AddonApiController : ControllerBase
             }
             catch (DiscordApiException)
             {
-                // Fall through to cookie auth.
+                // Hard reject — never fall through to cookie auth when a
+                // bearer token is presented.
             }
+            return null;
         }
 
         if (User.Identity?.IsAuthenticated == true)

@@ -401,9 +401,11 @@ function api.post_tod(monsterName, defeatedAtEpochSec, capturedMessage)
     })
 end
 
--- Returns { characterNames = {...}, lootStructure = 'Dkp' | 'Hybrid' | 'LootCouncil' }
--- for the linkshell the addon is paired to. Used to populate the Winner combo
--- on the Loot Pool panel and to label the DKP field correctly per structure.
+-- Returns { characterNames = {...}, roster = { { characterName, alts = {...} }, ... },
+--           lootStructure = 'Dkp' | 'Hybrid' | 'LootCouncil' }
+-- for the linkshell the addon is paired to. `roster` carries each member's
+-- linked alt character names (max 2, account-level). Older addon installs
+-- can keep using the flat `characterNames` list; newer code prefers `roster`.
 function api.list_roster()
     return request('GET', '/api/addon/roster')
 end

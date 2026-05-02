@@ -180,9 +180,17 @@ public partial class AuctionController
         return RedirectToAction(nameof(Index));
     }
 
+    public sealed class AuctionAddItemInput
+    {
+        public string? ItemName { get; set; }
+        public string? ItemType { get; set; }
+        public int? StartingBidDkp { get; set; }
+        public string? Notes { get; set; }
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddItem(AuctionItem newItem, int auctionId)
+    public async Task<IActionResult> AddItem(AuctionAddItemInput newItem, int auctionId)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -291,6 +299,19 @@ public partial class AuctionController
         if (HasAuctionEnded(auctionItem.Auction, nowUtc))
         {
             TempData["AuctionError"] = "This auction has already ended.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (bidAmount <= 0)
+        {
+            TempData["AuctionError"] = "Bid amount must be a positive number.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        const int MaxBidAmount = 1_000_000;
+        if (bidAmount > MaxBidAmount)
+        {
+            TempData["AuctionError"] = $"Bid amount cannot exceed {MaxBidAmount:N0}.";
             return RedirectToAction(nameof(Index));
         }
 

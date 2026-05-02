@@ -82,9 +82,32 @@ function M.install(out, state, deps)
             state.rosterError = tostring(err or 'roster fetch failed')
             return
         end
+        local altsByName = {}
+        if type(result.roster) == 'table' then
+            for _, entry in ipairs(result.roster) do
+                if type(entry) == 'table'
+                   and type(entry.characterName) == 'string'
+                   and entry.characterName ~= '' then
+                    local key = entry.characterName:lower()
+                    local alts = {}
+                    if type(entry.alts) == 'table' then
+                        for _, alt in ipairs(entry.alts) do
+                            if type(alt) == 'string' and alt ~= '' then
+                                alts[#alts + 1] = alt
+                            end
+                        end
+                    end
+                    if #alts > 0 then
+                        altsByName[key] = alts
+                    end
+                end
+            end
+        end
+
         state.rosterCache = {
             fetchedAt     = os.time(),
             names         = result.characterNames or {},
+            altsByName    = altsByName,
             lootStructure = result.lootStructure or 'Dkp',
         }
     end

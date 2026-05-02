@@ -364,6 +364,17 @@ public sealed partial class ActivityDataController
         }
 
         var bidAmount = request.BidAmount;
+        if (bidAmount <= 0)
+        {
+            return BadRequest(new { error = "Bid amount must be a positive number." });
+        }
+
+        const int MaxBidAmount = 1_000_000;
+        if (bidAmount > MaxBidAmount)
+        {
+            return BadRequest(new { error = $"Bid amount cannot exceed {MaxBidAmount:N0}." });
+        }
+
         var minimumBid = Math.Max(auctionItem.StartingBidDkp ?? 0, auctionItem.CurrentHighestBid ?? 0);
         if (bidAmount <= minimumBid)
         {
@@ -562,6 +573,12 @@ public sealed partial class ActivityDataController
         {
             return Forbid();
         }
+        // Auction-history status changes are an officer-level action — only
+        // members with CanManageAuctions can flip "Closed" ↔ "Received".
+        if (!await CanAsync(membership, role => role.CanManageAuctions, cancellationToken))
+        {
+            return Forbid();
+        }
 
         item.Status = "Received";
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -588,6 +605,10 @@ public sealed partial class ActivityDataController
 
         var membership = await GetMembershipAsync(appUser.Id, item.AuctionHistory.LinkshellId, cancellationToken);
         if (membership is null)
+        {
+            return Forbid();
+        }
+        if (!await CanAsync(membership, role => role.CanManageAuctions, cancellationToken))
         {
             return Forbid();
         }

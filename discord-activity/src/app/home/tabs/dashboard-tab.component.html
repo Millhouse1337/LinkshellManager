@@ -203,6 +203,11 @@
                   <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
                   <div class="ac-roster-name-cell">
                     <div class="ac-roster-name">{{ member.characterName }}</div>
+                    @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
+                      @if (alts) {
+                        <div class="ac-roster-name-sub">Alts: {{ alts }}</div>
+                      }
+                    }
                   </div>
                   <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
                   <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
@@ -231,7 +236,7 @@
             </div>
             @if (dashboardNewsUpdates().length > 0) {
               <div class="news-list">
-                @for (item of dashboardNewsUpdates(); track $index) {
+                @for (item of dashboardNewsUpdates(); track item.when + '|' + item.title) {
                   <div class="news-row">
                     <div class="news-thumb"></div>
                     <div class="news-main">
@@ -477,7 +482,7 @@
           </div>
           @if (dashboardRecentActivity().length > 0) {
             <div class="activity-feed">
-              @for (item of dashboardRecentActivity(); track $index) {
+              @for (item of dashboardRecentActivity(); track item.when + '|' + item.kind + '|' + item.name) {
                 <div class="activity-row">
                   <div class="activity-when">{{ item.relative }}</div>
                   <div class="activity-dot-cell">

@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DiscordActivityService } from '../../discord/discord-activity.service';
-import { formatElapsed, parseDate } from '../activity-home.helpers';
+import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
+import { formatAlts, formatElapsed, parseDate } from '../activity-home.helpers';
 import type { TabName } from '../activity-home.types';
 
 @Component({
@@ -13,6 +13,7 @@ import type { TabName } from '../activity-home.types';
 })
 export class DashboardTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly formatAlts = formatAlts;
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
 
@@ -20,6 +21,14 @@ export class DashboardTabComponent {
   // single instance is shared between the Dashboard and ToDs tabs.
   @Input({ required: true }) deleteTodFn!: (todId: number, monsterName: string) => void;
   @Input({ required: true }) setActiveTabFn!: (tab: TabName) => void;
+
+  // Roster search is shared with the linkshell tab via the parent component
+  // so the value persists when the user hops between tabs.
+  @Input({ required: true }) rosterSearchValue!: string;
+  @Input({ required: true }) rosterSearchChange!: (value: string) => void;
+
+  protected get dashboardRosterSearch(): string { return this.rosterSearchValue; }
+  protected set dashboardRosterSearch(value: string) { this.rosterSearchChange(value); }
 
   public constructor() {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
@@ -91,8 +100,6 @@ export class DashboardTabComponent {
       left.characterName.localeCompare(right.characterName)
     );
   }
-
-  protected dashboardRosterSearch = '';
 
   protected filteredDashboardMembers() {
     const term = this.dashboardRosterSearch.trim().toLowerCase();
@@ -563,8 +570,8 @@ export class DashboardTabComponent {
 
   protected readonly expandedTodGroups = signal<Set<string>>(new Set());
 
-  protected groupedDashboardTods(): { key: string; latest: any; history: any[] }[] {
-    const groups = new Map<string, any[]>();
+  protected groupedDashboardTods(): { key: string; latest: ActivityTodEntry; history: ActivityTodEntry[] }[] {
+    const groups = new Map<string, ActivityTodEntry[]>();
     for (const tod of this.selectedDashboardTods()) {
       const key = (tod.monsterName ?? '').trim().toLowerCase() || `__${tod.id}`;
       if (!groups.has(key)) groups.set(key, []);

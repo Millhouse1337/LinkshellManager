@@ -7,7 +7,7 @@ import {
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
-import type { TabName } from './activity-home.types';
+import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
@@ -33,11 +33,78 @@ import { TodsTabComponent } from './tabs/tods-tab.component';
 export class ActivityHomeComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly activeTab = signal<TabName>('dashboard');
+  protected readonly reconnecting = signal(false);
+
+  protected async reconnect(): Promise<void> {
+    if (this.reconnecting()) return;
+    this.reconnecting.set(true);
+    try {
+      await this.activity.reconnect();
+    } finally {
+      this.reconnecting.set(false);
+    }
+  }
 
   protected setActiveTab(tab: TabName): void {
     this.activeTab.set(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
+  // True once the first overview load has resolved. We use it to keep the tab
+  // strip empty during the very first render so feature-gated tabs (Auctions,
+  // DKP, etc.) don't flash visible before settings arrive.
+  protected hasOverview(): boolean {
+    return this.activity.overview() != null;
+  }
+
+  // Keyboard tablist semantics: Left/Right cycle through visible tabs, Home/End
+  // jump to the ends. We compute the visible list at click-time so the order
+  // matches what's actually rendered.
+  protected onTabKeydown(event: KeyboardEvent): void {
+    const key = event.key;
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') {
+      return;
+    }
+
+    const tabStrip = (event.currentTarget as HTMLElement) ?? null;
+    if (!tabStrip) return;
+
+    const visibleTabs = Array.from(
+      tabStrip.querySelectorAll<HTMLButtonElement>('button.tab[role="tab"]')
+    );
+    if (visibleTabs.length === 0) return;
+
+    const activeEl = document.activeElement as HTMLButtonElement | null;
+    const currentIndex = activeEl ? visibleTabs.indexOf(activeEl) : -1;
+    let nextIndex = currentIndex;
+
+    if (key === 'ArrowLeft') {
+      nextIndex = currentIndex <= 0 ? visibleTabs.length - 1 : currentIndex - 1;
+    } else if (key === 'ArrowRight') {
+      nextIndex = currentIndex < 0 || currentIndex >= visibleTabs.length - 1 ? 0 : currentIndex + 1;
+    } else if (key === 'Home') {
+      nextIndex = 0;
+    } else if (key === 'End') {
+      nextIndex = visibleTabs.length - 1;
+    }
+
+    const next = visibleTabs[nextIndex];
+    if (!next) return;
+
+    event.preventDefault();
+    next.focus();
+    next.click();
+  }
+
+  protected tabId(tab: TabName): string {
+    return `activity-tab-${tab}`;
+  }
+
+  protected panelId(tab: TabName): string {
+    return `activity-tabpanel-${tab}`;
+  }
+
+  protected readonly TAB_NAMES = TAB_NAMES;
 
   // Stable callback bindings handed to child tabs. Defining them as bound
   // arrow-property fields keeps `this` correct without re-allocating in the
@@ -137,8 +204,10 @@ export class ActivityHomeComponent {
   }
 
   protected liveAuctionCount(): number {
-    const auctions = (this.activity.overview() as any)?.auctions ?? [];
-    return auctions.filter((a: any) => a?.status === 'Live' || a?.status === 'live').length;
+    return this.activity.auctions().filter(auction => {
+      const status = (auction.status ?? '').toLowerCase();
+      return status === 'live';
+    }).length;
   }
 
   private liveEvents() {

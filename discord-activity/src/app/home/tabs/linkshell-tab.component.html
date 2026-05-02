@@ -38,6 +38,11 @@
                   <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
                   <div class="ac-roster-name-cell">
                     <div class="ac-roster-name">{{ member.characterName }}</div>
+                    @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
+                      @if (alts) {
+                        <div class="ac-roster-name-sub">Alts: {{ alts }}</div>
+                      }
+                    }
                   </div>
                   <div class="ac-roster-rank">
                     @if (editingRankMemberId() === member.id) {
@@ -45,8 +50,8 @@
                         [(ngModel)]="editingRankValue"
                         [name]="'rankEdit_' + member.id"
                         [disabled]="activity.busyMemberId() === member.id">
-                        @for (rank of rankOptions; track rank) {
-                          <option [value]="rank">{{ rank }}</option>
+                        @for (rank of rankOptions(); track rank.id) {
+                          <option [value]="rank.name">{{ rank.name }}</option>
                         }
                       </select>
                     } @else {

@@ -23,7 +23,9 @@ export class ActivitySidebarPanelComponent {
 
   protected readonly profileModel = {
     characterName: '',
-    timeZone: ''
+    timeZone: '',
+    altCharacterName1: '',
+    altCharacterName2: ''
   };
 
   protected selectedLinkshellId = 0;
@@ -60,6 +62,12 @@ export class ActivitySidebarPanelComponent {
   // primary linkshell (matches pre-refactor behavior).
   protected readonly invitePrimaryResetTick = signal(0);
 
+  // Latest-write-wins guard. Each linkshell-selection change bumps this
+  // counter; in-flight loads from a previous selection capture the older
+  // value and bail before mutating state, so a slow detail/auction load
+  // can't overwrite data for the user's current selection.
+  private selectionGen = 0;
+
   // Stable arrow bindings for child component callback @Inputs — wrapping
   // the methods avoids `this` binding issues when the references are passed
   // into `[selectLinkshell]` etc.
@@ -76,7 +84,9 @@ export class ActivitySidebarPanelComponent {
 
       const nextCharacterName = appUser.characterName ?? '';
       const nextTimeZone = appUser.timeZone ?? this.browserTimeZone;
-      const nextSeed = `${appUser.id}|${nextCharacterName}|${nextTimeZone}`;
+      const nextAlt1 = appUser.altCharacterName1 ?? '';
+      const nextAlt2 = appUser.altCharacterName2 ?? '';
+      const nextSeed = `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}`;
 
       if (nextSeed === this.profileSeed) {
         return;
@@ -85,6 +95,8 @@ export class ActivitySidebarPanelComponent {
       this.profileSeed = nextSeed;
       this.profileModel.characterName = nextCharacterName;
       this.profileModel.timeZone = nextTimeZone;
+      this.profileModel.altCharacterName1 = nextAlt1;
+      this.profileModel.altCharacterName2 = nextAlt2;
     });
 
     effect(() => {
@@ -120,17 +132,25 @@ export class ActivitySidebarPanelComponent {
         return;
       }
 
-      void this.activity.loadLinkshellDetail(selectedLinkshellId);
-      void this.reloadDkpHistory();
-      void this.activity.loadAuctions(selectedLinkshellId);
-      void this.activity.loadAuctionHistory(selectedLinkshellId);
+      const gen = ++this.selectionGen;
+      const isStale = (): boolean => gen !== this.selectionGen;
+
+      void (async () => {
+        await this.activity.loadLinkshellDetail(selectedLinkshellId);
+        if (isStale()) return;
+        await this.reloadDkpHistory();
+        if (isStale()) return;
+        await this.activity.loadAuctions(selectedLinkshellId);
+        if (isStale()) return;
+        await this.activity.loadAuctionHistory(selectedLinkshellId);
+      })();
     });
 
     effect(() => {
       const overview = this.activity.overview();
       if (!overview) {
         this.historySeed = '';
-        this.activity.historyList.set([]);
+        this.activity.clearHistoryList();
         this.activity.clearHistoryDetail();
         return;
       }
@@ -197,7 +217,9 @@ export class ActivitySidebarPanelComponent {
   protected async submitProfile(): Promise<void> {
     await this.activity.updateProfile({
       characterName: this.profileModel.characterName.trim(),
-      timeZone: this.profileModel.timeZone.trim() || null
+      timeZone: this.profileModel.timeZone.trim() || null,
+      altCharacterName1: this.profileModel.altCharacterName1.trim() || null,
+      altCharacterName2: this.profileModel.altCharacterName2.trim() || null
     });
   }
 
@@ -312,10 +334,14 @@ export class ActivitySidebarPanelComponent {
     const all = this.filteredDkpEntries();
     const size = this.dkpPageSize;
     const totalPages = Math.max(1, Math.ceil(all.length / size));
-    if (this.dkpPage() >= totalPages) {
-      this.dkpPage.set(totalPages - 1);
+    const currentPage = this.dkpPage();
+    const clamped = currentPage >= totalPages ? totalPages - 1 : currentPage;
+    if (clamped !== currentPage) {
+      // Defer corrective set so we don't synchronously mutate during change
+      // detection — same pattern as historyPageItems above.
+      queueMicrotask(() => this.dkpPage.set(clamped));
     }
-    const start = this.dkpPage() * size;
+    const start = clamped * size;
     return all.slice(start, start + size);
   }
 

@@ -44,6 +44,32 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Use the website membership tools to leave your own primary linkshell." });
         }
 
+        // Only a Leader may remove another Leader. Officers (with CanManageMembers)
+        // must not be able to oust the Leader, otherwise they could leave the
+        // linkshell leaderless and escalate themselves into the role.
+        var targetIsLeader = string.Equals(targetMembership.Rank, "Leader", StringComparison.OrdinalIgnoreCase);
+        var actorIsLeader = string.Equals(currentMembership!.Rank, "Leader", StringComparison.OrdinalIgnoreCase);
+        if (targetIsLeader && !actorIsLeader)
+        {
+            return Forbid();
+        }
+
+        if (targetIsLeader)
+        {
+            var otherLeaderExists = await _dbContext.AppUserLinkshells
+                .AnyAsync(link =>
+                    link.LinkshellId == linkshellId &&
+                    link.Id != targetMembership.Id &&
+                    link.Rank != null &&
+                    link.Rank.ToLower() == "leader",
+                    cancellationToken);
+
+            if (!otherLeaderExists)
+            {
+                return BadRequest(new { error = "Promote another member to Leader before removing the current Leader." });
+            }
+        }
+
         _dbContext.AppUserLinkshells.Remove(targetMembership);
 
         if (!string.IsNullOrWhiteSpace(targetMembership.AppUserId))

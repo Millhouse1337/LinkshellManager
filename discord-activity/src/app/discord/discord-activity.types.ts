@@ -70,6 +70,8 @@ export interface ActivityAppUser {
   id: string;
   userName: string;
   characterName?: string | null;
+  altCharacterName1?: string | null;
+  altCharacterName2?: string | null;
   timeZone?: string | null;
   primaryLinkshellId?: number | null;
   primaryLinkshellName?: string | null;
@@ -251,6 +253,8 @@ export interface ActivityMember {
   id: number;
   appUserId?: string | null;
   characterName: string;
+  altCharacterName1?: string | null;
+  altCharacterName2?: string | null;
   rank?: string | null;
   status?: string | null;
   linkshellDkp?: number | null;
@@ -658,6 +662,8 @@ export interface ActivityCreateAuctionInput {
 export interface ActivityUpdateProfileInput {
   characterName: string;
   timeZone?: string | null;
+  altCharacterName1?: string | null;
+  altCharacterName2?: string | null;
 }
 
 export interface DiscordRpcErrorLike {

@@ -13,6 +13,11 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
+    // When a bearer token is presented, validate it strictly. Do NOT silently
+    // downgrade to cookie auth when the bearer fails — that would let an
+    // attacker who can disrupt outbound calls to discord.com (or who supplies
+    // a bogus bearer to suppress preflight CSRF protection) coerce the
+    // request into the cookie-auth path.
     private async Task<AppUser?> ResolveAppUserAsync(CancellationToken cancellationToken)
     {
         if (TryGetBearerToken(out var accessToken))
@@ -25,14 +30,11 @@ public sealed partial class ActivityDataController
                     return await _userManager.FindByIdAsync(localUser.AppUser.Id);
                 }
             }
-            catch (DiscordApiException) when (!_environment.IsDevelopment())
-            {
-                return null;
-            }
             catch (DiscordApiException)
             {
-                return null;
+                // Hard reject — never fall through to cookie auth.
             }
+            return null;
         }
 
         if (User.Identity?.IsAuthenticated == true)
@@ -119,81 +121,124 @@ public sealed partial class ActivityDataController
 
     private async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
     {
+        var seeded = await EnsureDefaultRolesForLinkshellsAsync(new[] { linkshellId }, cancellationToken);
+        return seeded.TryGetValue(linkshellId, out var roles) ? roles : new List<LinkshellRole>();
+    }
+
+    // Batch variant: seeds missing default roles for every supplied linkshell in two
+    // round-trips total (one SELECT, one INSERT) instead of N pairs from a foreach.
+    private async Task<Dictionary<int, List<LinkshellRole>>> EnsureDefaultRolesForLinkshellsAsync(
+        IReadOnlyCollection<int> linkshellIds,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, List<LinkshellRole>>();
+        if (linkshellIds.Count == 0)
+        {
+            return result;
+        }
+
         var existing = await _dbContext.LinkshellRoles
-            .Where(r => r.LinkshellId == linkshellId)
+            .Where(r => linkshellIds.Contains(r.LinkshellId))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        var existingByName = existing.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
-        var added = new List<LinkshellRole>();
+        var existingByLinkshell = existing
+            .GroupBy(r => r.LinkshellId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        if (!existingByName.ContainsKey("Leader"))
+        var toAdd = new List<LinkshellRole>();
+        foreach (var linkshellId in linkshellIds)
         {
-            added.Add(new LinkshellRole
+            existingByLinkshell.TryGetValue(linkshellId, out var rolesForLinkshell);
+            rolesForLinkshell ??= new List<LinkshellRole>();
+
+            var existingNames = new HashSet<string>(rolesForLinkshell.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var defaultRole in BuildDefaultRoles(linkshellId))
             {
-                LinkshellId = linkshellId,
-                Name = "Leader",
-                IsSystem = true,
-                SortOrder = 0,
-                CanManageRoles = true,
-                CanManageMembers = true,
-                CanManageEvents = true,
-                CanModerateLiveEvent = true,
-                CanAddLoot = true,
-                CanManageInventory = true,
-                CanManageTreasury = true,
-                CanManageRules = true,
-                CanManageAnnouncements = true,
-                CanManageTods = true,
-                CanAuditDkp = true,
-                CanManageAuctions = true,
-                CanCustomizeLinkshell = true
-            });
+                if (!existingNames.Contains(defaultRole.Name))
+                {
+                    toAdd.Add(defaultRole);
+                }
+            }
+
+            result[linkshellId] = rolesForLinkshell;
         }
 
-        if (!existingByName.ContainsKey("Officer"))
+        if (toAdd.Count > 0)
         {
-            added.Add(new LinkshellRole
-            {
-                LinkshellId = linkshellId,
-                Name = "Officer",
-                IsSystem = true,
-                SortOrder = 1,
-                CanManageRoles = false,
-                CanManageMembers = false,
-                CanManageEvents = true,
-                CanModerateLiveEvent = true,
-                CanAddLoot = true,
-                CanManageInventory = true,
-                CanManageTreasury = false,
-                CanManageRules = true,
-                CanManageAnnouncements = true,
-                CanManageTods = true,
-                CanAuditDkp = false,
-                CanManageAuctions = true,
-                CanCustomizeLinkshell = false
-            });
-        }
-
-        if (!existingByName.ContainsKey("Member"))
-        {
-            added.Add(new LinkshellRole
-            {
-                LinkshellId = linkshellId,
-                Name = "Member",
-                IsSystem = true,
-                SortOrder = 2
-            });
-        }
-
-        if (added.Count > 0)
-        {
-            await _dbContext.LinkshellRoles.AddRangeAsync(added, cancellationToken);
+            await _dbContext.LinkshellRoles.AddRangeAsync(toAdd, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
-            existing.AddRange(added);
+
+            foreach (var added in toAdd)
+            {
+                if (!result.TryGetValue(added.LinkshellId, out var bucket))
+                {
+                    bucket = new List<LinkshellRole>();
+                    result[added.LinkshellId] = bucket;
+                }
+                bucket.Add(added);
+            }
         }
 
-        return existing.OrderBy(r => r.SortOrder).ThenBy(r => r.Name).ToList();
+        foreach (var key in result.Keys.ToList())
+        {
+            result[key] = result[key].OrderBy(r => r.SortOrder).ThenBy(r => r.Name).ToList();
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<LinkshellRole> BuildDefaultRoles(int linkshellId)
+    {
+        yield return new LinkshellRole
+        {
+            LinkshellId = linkshellId,
+            Name = "Leader",
+            IsSystem = true,
+            SortOrder = 0,
+            CanManageRoles = true,
+            CanManageMembers = true,
+            CanManageEvents = true,
+            CanModerateLiveEvent = true,
+            CanAddLoot = true,
+            CanManageInventory = true,
+            CanManageTreasury = true,
+            CanManageRules = true,
+            CanManageAnnouncements = true,
+            CanManageTods = true,
+            CanAuditDkp = true,
+            CanManageAuctions = true,
+            CanCustomizeLinkshell = true
+        };
+
+        yield return new LinkshellRole
+        {
+            LinkshellId = linkshellId,
+            Name = "Officer",
+            IsSystem = true,
+            SortOrder = 1,
+            CanManageRoles = false,
+            CanManageMembers = false,
+            CanManageEvents = true,
+            CanModerateLiveEvent = true,
+            CanAddLoot = true,
+            CanManageInventory = true,
+            CanManageTreasury = false,
+            CanManageRules = true,
+            CanManageAnnouncements = true,
+            CanManageTods = true,
+            CanAuditDkp = false,
+            CanManageAuctions = true,
+            CanCustomizeLinkshell = false
+        };
+
+        yield return new LinkshellRole
+        {
+            LinkshellId = linkshellId,
+            Name = "Member",
+            IsSystem = true,
+            SortOrder = 2
+        };
     }
 
     private static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)

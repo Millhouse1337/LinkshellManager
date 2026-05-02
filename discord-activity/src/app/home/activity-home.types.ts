@@ -13,7 +13,6 @@ export const TAB_NAMES = [
   'auctions',
   'dkp',
   'endgame',
-  'hnm',
   'missions',
   'messages',
   'configurations'

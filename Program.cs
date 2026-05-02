@@ -3,6 +3,8 @@ using System.IO;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Threading.RateLimiting;
+using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Options;
@@ -11,6 +13,7 @@ using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authentication.OAuth.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using NodaTime;
@@ -29,13 +32,18 @@ builder.Services
     .AddDefaultIdentity<AppUser>(options => options.SignIn.RequireConfirmedAccount = false)
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
+var discordClientId = builder.Configuration["Discord:ClientId"]
+    ?? throw new InvalidOperationException("Configuration value 'Discord:ClientId' is required.");
+var discordClientSecret = builder.Configuration["Discord:ClientSecret"]
+    ?? throw new InvalidOperationException("Configuration value 'Discord:ClientSecret' is required.");
+
 builder.Services
     .AddAuthentication()
     .AddOAuth("DiscordWebsite", options =>
     {
         options.SignInScheme = IdentityConstants.ExternalScheme;
-        options.ClientId = builder.Configuration["Discord:ClientId"] ?? string.Empty;
-        options.ClientSecret = builder.Configuration["Discord:ClientSecret"] ?? string.Empty;
+        options.ClientId = discordClientId;
+        options.ClientSecret = discordClientSecret;
         options.CallbackPath = "/signin-discord";
         options.AuthorizationEndpoint = "https://discord.com/oauth2/authorize";
         options.TokenEndpoint = "https://discord.com/api/oauth2/token";
@@ -87,7 +95,22 @@ builder.Services.ConfigureExternalCookie(options =>
     options.Cookie.IsEssential = true;
 });
 
-var mvcBuilder = builder.Services.AddControllersWithViews();
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-XSRF-TOKEN";
+    options.Cookie.Name = "XSRF-TOKEN";
+    options.Cookie.HttpOnly = false;
+    options.Cookie.SameSite = SameSiteMode.None;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+});
+
+var mvcBuilder = builder.Services.AddControllersWithViews(options =>
+{
+    // Cookie-authenticated POST/PUT/DELETE requests must carry an antiforgery
+    // token. Bearer-authenticated requests (Discord Activity SPA, addon) bypass
+    // this — see CookieAuthAntiforgeryFilter for the rationale.
+    options.Filters.Add<CookieAuthAntiforgeryFilter>();
+});
 var razorPagesBuilder = builder.Services.AddRazorPages();
 
 if (builder.Environment.IsDevelopment())
@@ -98,10 +121,12 @@ if (builder.Environment.IsDevelopment())
 
 builder.Services.AddOptions<DiscordOAuthOptions>()
     .Bind(builder.Configuration.GetSection("Discord"))
-    .ValidateDataAnnotations();
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<DiscordIdentityService>();
+builder.Services.AddScoped<AltCharacterValidator>();
 builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
@@ -110,19 +135,61 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
 {
     options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
                                Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+
+    if (builder.Environment.IsDevelopment())
+    {
+        // Dev tunnels (pinggy/ngrok/cloudflared) and localhost reverse proxies are not on
+        // the default loopback allowlist, so we accept forwarded headers from any source.
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
+    else
+    {
+        // In production, populate KnownProxies / KnownNetworks via configuration so we
+        // only honor X-Forwarded-* from trusted reverse proxies.
+        var trustedProxies = builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? Array.Empty<string>();
+        foreach (var proxy in trustedProxies)
+        {
+            if (System.Net.IPAddress.TryParse(proxy, out var ip))
+            {
+                options.KnownProxies.Add(ip);
+            }
+        }
+
+        var trustedNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? Array.Empty<string>();
+        foreach (var network in trustedNetworks)
+        {
+            var parts = network.Split('/', 2);
+            if (parts.Length == 2 &&
+                System.Net.IPAddress.TryParse(parts[0], out var prefix) &&
+                int.TryParse(parts[1], out var prefixLength))
+            {
+                options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, prefixLength));
+            }
+        }
+    }
 });
 
 var isDevelopment = builder.Environment.IsDevelopment();
+
+// Discord proxies activities under https://<application_id>.discordsays.com.
+// Restrict CORS to that exact host (plus discord.com itself for SDK callbacks)
+// — the previous wildcard *.discordsays.com allowed every other Discord
+// activity to call this API on behalf of an authenticated user.
+var activityHost = $"{discordClientId}.discordsays.com";
+
+// Optional dev tunnel host (set DEV_TUNNEL_HOST to e.g. "abc123.ngrok-free.app").
+// We require an exact host match instead of wildcarding tunnel-provider domains.
+var devTunnelHost = builder.Configuration["DEV_TUNNEL_HOST"]
+    ?? Environment.GetEnvironmentVariable("DEV_TUNNEL_HOST");
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DiscordCors", policy =>
     {
         policy
-            .AllowAnyHeader()
-            .AllowAnyMethod()
+            .WithHeaders("Authorization", "Content-Type", "X-XSRF-TOKEN", "Accept", "Cache-Control", "Pragma")
+            .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
             .AllowCredentials()
             .SetIsOriginAllowed(origin =>
             {
@@ -132,23 +199,25 @@ builder.Services.AddCors(options =>
                     if (uri.Scheme != "https") return false;
 
                     if (uri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".discord.com", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".discordsays.com", StringComparison.OrdinalIgnoreCase))
+                        uri.Host.Equals(activityHost, StringComparison.OrdinalIgnoreCase))
                     {
                         return true;
                     }
 
-                    if (isDevelopment && (
-                        uri.Host.EndsWith(".pinggy.link", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".ngrok-free.app", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".ngrok-free.dev", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".ngrok.io", StringComparison.OrdinalIgnoreCase) ||
-                        uri.Host.EndsWith(".trycloudflare.com", StringComparison.OrdinalIgnoreCase) ||
-                        origin.Equals("https://localhost:4200", StringComparison.OrdinalIgnoreCase) ||
-                        origin.Equals("https://localhost:5001", StringComparison.OrdinalIgnoreCase) ||
-                        origin.Equals("https://localhost:7051", StringComparison.OrdinalIgnoreCase)))
+                    if (isDevelopment)
                     {
-                        return true;
+                        if (!string.IsNullOrWhiteSpace(devTunnelHost) &&
+                            uri.Host.Equals(devTunnelHost, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+
+                        if (origin.Equals("https://localhost:4200", StringComparison.OrdinalIgnoreCase) ||
+                            origin.Equals("https://localhost:5001", StringComparison.OrdinalIgnoreCase) ||
+                            origin.Equals("https://localhost:7051", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
                     }
 
                     return false;
@@ -159,6 +228,38 @@ builder.Services.AddCors(options =>
                 }
             });
     });
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // OAuth code exchange: per-IP fixed window. Each call hits Discord and may
+    // create a new AppUser row, so unauthenticated flooding has both DB and
+    // outbound-cost impact.
+    options.AddPolicy("oauth-exchange", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            }));
+
+    // Addon pairing-code redeem: per-IP. The 8-character code from a 32-char
+    // alphabet (~1.1e12 search space) is brute-forceable without throttling.
+    options.AddPolicy("addon-pair", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            }));
 });
 
 var app = builder.Build();
@@ -186,8 +287,8 @@ app.Use(async (ctx, next) =>
     {
         ctx.Response.Headers.Remove("X-Frame-Options");
 
-        var devHosts = isDevelopment
-            ? " https://*.pinggy.link https://*.ngrok-free.app https://*.ngrok-free.dev https://*.ngrok.io https://*.trycloudflare.com"
+        var devTunnelHostFragment = isDevelopment && !string.IsNullOrWhiteSpace(devTunnelHost)
+            ? $" https://{devTunnelHost}"
             : string.Empty;
         var devLocalhost = isDevelopment
             ? " https://localhost:* http://localhost:* ws://localhost:* wss://localhost:*"
@@ -199,14 +300,18 @@ app.Use(async (ctx, next) =>
         var csp = string.Join(" ",
             "default-src 'self';",
             "base-uri 'self';",
-            $"frame-ancestors 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devHosts}{devLocalhostFrame};",
-            $"connect-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devHosts}{devLocalhost};",
+            $"frame-ancestors 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment}{devLocalhostFrame};",
+            $"connect-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment}{devLocalhost};",
             "img-src 'self' data: blob: https://cdn.discordapp.com https://media.discordapp.net https://*.discordsays.com;",
             "font-src 'self' data:;",
+            // 'unsafe-inline' on style-src is retained because the existing
+            // Razor views use inline style attributes throughout; migrating
+            // those to stylesheets is tracked as follow-up cleanup. The
+            // script-src is locked to nonce-only (no 'unsafe-inline', no blob:).
             "style-src 'self' 'unsafe-inline';",
-            $"script-src 'self' 'nonce-{nonce}' blob:;",
+            $"script-src 'self' 'nonce-{nonce}';",
             "object-src 'none';",
-            $"frame-src https://discord.com https://*.discord.com https://*.discordsays.com{devHosts};"
+            $"frame-src https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment};"
         );
 
         ctx.Response.Headers["Content-Security-Policy"] = csp;
@@ -237,6 +342,7 @@ if (Directory.Exists(activityPhysicalPath))
 
 app.UseRouting();
 app.UseCors("DiscordCors");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

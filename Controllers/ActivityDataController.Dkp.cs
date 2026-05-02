@@ -149,6 +149,23 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "A reason for the audit is required." });
         }
 
+        if (request.Reason.Length > 500)
+        {
+            return BadRequest(new { error = "Audit reason must be 500 characters or fewer." });
+        }
+
+        // Bound the absolute audit amount to a sane range so a typo (or
+        // adversarial bid) can't corrupt a member's balance with extreme values.
+        const double MaxAuditAbsAmount = 1_000_000d;
+        if (double.IsNaN(request.Amount) || double.IsInfinity(request.Amount))
+        {
+            return BadRequest(new { error = "Audit amount must be a finite number." });
+        }
+        if (Math.Abs(request.Amount) > MaxAuditAbsAmount)
+        {
+            return BadRequest(new { error = $"Audit amount must be between -{MaxAuditAbsAmount:N0} and {MaxAuditAbsAmount:N0}." });
+        }
+
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
         if (!await CanAsync(membership, r => r.CanAuditDkp, cancellationToken))
         {

@@ -29,8 +29,14 @@
         </div>
     </div>
     <div class="page-actions">
-        <a class="btn ghost" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
-        <a class="btn ghost" asp-action="Delete" asp-route-id="@Model.Id">Delete</a>
+        @if (ViewBag.CanEditLinkshell is true)
+        {
+            <a class="btn ghost" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
+        }
+        @if (ViewBag.CanDeleteLinkshell is true)
+        {
+            <a class="btn ghost" asp-action="Delete" asp-route-id="@Model.Id">Delete</a>
+        }
     </div>
 </div>
 
@@ -76,9 +82,18 @@
                     var status = member.Status ?? "Active";
                     var statusClass = status.Equals("Active", StringComparison.OrdinalIgnoreCase) ? "success"
                         : status.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "warning" : "";
+                    var alts = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName1)) alts.Add(member.AppUser!.AltCharacterName1!);
+                    if (!string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName2)) alts.Add(member.AppUser!.AltCharacterName2!);
                     <div class="roster-row">
                         <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
-                        <div><div class="roster-name">@name</div></div>
+                        <div>
+                            <div class="roster-name">@name</div>
+                            @if (alts.Count > 0)
+                            {
+                                <div class="roster-name-sub">Alts: @string.Join(", ", alts)</div>
+                            }
+                        </div>
                         <div class="roster-rank">@(member.Rank ?? "Member")</div>
                         <div class="roster-dkp">@((member.LinkshellDkp ?? 0).ToString("0.##"))</div>
                         <div><span class="tag @statusClass">@status</span></div>

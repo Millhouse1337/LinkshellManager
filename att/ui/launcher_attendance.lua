@@ -75,6 +75,14 @@ function M.draw(state, callbacks)
         local rosterHeight = isHnmEvent and 200 or 180
 
         local function render_live_roster()
+            -- Warm the roster cache on first render so the per-row Alts subtitle
+            -- can populate. Subsequent frames skip the call — the TTL inside
+            -- on_load_roster would no-op anyway, but render callbacks should
+            -- stay read-only after warmup.
+            if state.rosterCache == nil and callbacks.on_load_roster then
+                callbacks.on_load_roster(false)
+            end
+
             local selfKey = (get_self_name() or ''):lower()
             if selfKey == '' then selfKey = nil end
 
@@ -205,6 +213,17 @@ function M.draw(state, callbacks)
                         imgui.TextColored(SELF_COLOR, line)
                     else
                         imgui.Text(line)
+                    end
+
+                    -- Account-linked alts (max 2). Shown as a dim subtitle so
+                    -- the linkshell can recognize who's behind the character.
+                    -- Actions remain attributed to the main character server-side.
+                    local altsByName = state.rosterCache and state.rosterCache.altsByName
+                    if altsByName then
+                        local memberAlts = altsByName[key]
+                        if memberAlts and #memberAlts > 0 then
+                            imgui.TextDisabled('    Alts: ' .. table.concat(memberAlts, ', '))
+                        end
                     end
 
                     -- Break/return action buttons live next to the name.

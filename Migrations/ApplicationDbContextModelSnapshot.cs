@@ -174,6 +174,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("AltCharacterName1")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AltCharacterName2")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("CharacterName")
                         .HasColumnType("text");
 

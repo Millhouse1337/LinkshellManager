@@ -150,7 +150,13 @@ public partial class EventController : Controller
             return _dateTimeZoneProvider[timeZoneId];
         }
 
-        _logger.LogWarning("Unknown time zone '{TimeZoneId}', falling back to UTC.", timeZoneId);
+        // Truncate user-supplied value before logging to keep arbitrary input
+        // bounded — log sinks that render structured fields as HTML/markdown
+        // can otherwise be tricked into rendering malicious payloads.
+        var safeTimeZoneId = string.IsNullOrEmpty(timeZoneId)
+            ? string.Empty
+            : timeZoneId.Length > 64 ? timeZoneId[..64] : timeZoneId;
+        _logger.LogWarning("Unknown time zone '{TimeZoneId}', falling back to UTC.", safeTimeZoneId);
         return DateTimeZone.Utc;
     }
 }

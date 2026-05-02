@@ -9,14 +9,10 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed class MeController : ControllerBase
 {
     private readonly DiscordIdentityService _discordIdentityService;
-    private readonly IHostEnvironment _environment;
 
-    public MeController(
-        DiscordIdentityService discordIdentityService,
-        IHostEnvironment environment)
+    public MeController(DiscordIdentityService discordIdentityService)
     {
         _discordIdentityService = discordIdentityService;
-        _environment = environment;
     }
 
     [HttpGet]
@@ -43,13 +39,12 @@ public sealed class MeController : ControllerBase
         }
         catch (DiscordApiException ex)
         {
-            return StatusCode(
-                ex.StatusCode,
-                new
-                {
-                    error = ex.Message,
-                    details = _environment.IsDevelopment() ? ex.Details : null
-                });
+            // Don't surface upstream Discord error bodies — they may leak token
+            // validity hints or other sensitive material. Clamp upstream
+            // StatusCode so transport failures (StatusCode == 0) don't blow up
+            // the response pipeline.
+            var status = ex.StatusCode is >= 400 and <= 599 ? ex.StatusCode : 502;
+            return StatusCode(status, new { error = ex.Message });
         }
     }
 

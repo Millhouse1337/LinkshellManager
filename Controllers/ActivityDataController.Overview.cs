@@ -56,20 +56,10 @@ public sealed partial class ActivityDataController
             .Select(group => new { LinkshellId = group.Key, Total = group.Sum(entry => entry.Value) })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Total, cancellationToken);
 
-        foreach (var linkId in linkshellIds)
-        {
-            await EnsureDefaultRolesAsync(linkId, cancellationToken);
-        }
-
-        var allRoles = await _dbContext.LinkshellRoles
-            .Where(r => linkshellIds.Contains(r.LinkshellId))
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-        var rolesByLinkshellAndName = allRoles
-            .GroupBy(r => r.LinkshellId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase));
+        var rolesByLinkshell = await EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
+        var rolesByLinkshellAndName = rolesByLinkshell.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase));
 
         // Cap is generous because this list feeds both the Live ops panel and the
         // Pending Events queue in one fetch — splitting at 8 was clipping queued
@@ -195,6 +185,8 @@ public sealed partial class ActivityDataController
                 appUser.Id,
                 appUser.UserName ?? string.Empty,
                 appUser.CharacterName,
+                appUser.AltCharacterName1,
+                appUser.AltCharacterName2,
                 appUser.TimeZone,
                 appUser.PrimaryLinkshellId,
                 appUser.PrimaryLinkshellName),
@@ -221,6 +213,8 @@ public sealed partial class ActivityDataController
                         member.Id,
                         member.AppUserId,
                         member.CharacterName ?? member.AppUser?.UserName ?? "Unknown member",
+                        member.AppUser?.AltCharacterName1,
+                        member.AppUser?.AltCharacterName2,
                         member.Rank,
                         member.Status,
                         member.LinkshellDkp)).ToList(),

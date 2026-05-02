@@ -4,6 +4,13 @@
     var imageSource = Model.ProfileImageData is { Length: > 0 }
         ? $"data:image/png;base64,{Convert.ToBase64String(Model.ProfileImageData)}"
         : null;
+    var displayName = string.IsNullOrWhiteSpace(Model.CharacterName) ? "Profile" : Model.CharacterName;
+    var initials = string.IsNullOrWhiteSpace(Model.CharacterName)
+        ? "?"
+        : new string(Model.CharacterName!.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Take(2)
+            .Select(part => char.ToUpperInvariant(part[0]))
+            .ToArray());
 }
 
 <div class="page-head fade d1">
@@ -18,16 +25,21 @@
 
 <div class="card fade d2" style="padding:20px;max-width:720px">
     <form asp-action="UpdateProfile" method="post">
-        @if (imageSource is not null)
-        {
-            <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+        <div asp-validation-summary="All" class="text-danger" style="margin-bottom:12px"></div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+            @if (imageSource is not null)
+            {
                 <img src="@imageSource" alt="Profile" style="width:72px;height:72px;border-radius:999px;object-fit:cover;border:1px solid var(--border)" />
-                <div>
-                    <div style="font-weight:500;color:var(--fg)">@Model.CharacterName</div>
-                    <div style="font-size:12px;color:var(--fg-3)">Profile image syncs from Discord</div>
-                </div>
+            }
+            else
+            {
+                <div aria-hidden="true" style="width:72px;height:72px;border-radius:999px;border:1px solid var(--border);background:var(--bg-2);color:var(--fg-2);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:24px;letter-spacing:1px">@initials</div>
+            }
+            <div>
+                <div style="font-weight:500;color:var(--fg)">@displayName</div>
+                <div style="font-size:12px;color:var(--fg-3)">Profile image syncs from Discord</div>
             </div>
-        }
+        </div>
 
         <div class="form-grid">
             <div class="field">
@@ -37,6 +49,21 @@
             <div class="field">
                 <label asp-for="TimeZone">Time zone (IANA)</label>
                 <input asp-for="TimeZone" class="form-control" placeholder="America/New_York" />
+            </div>
+        </div>
+
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-weight:500;color:var(--fg);margin-bottom:6px">Link Alternate Characters</div>
+            <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">Add up to two extra characters tied to this account. Linkshell members can see them, but every action you take is still recorded under your main character.</div>
+            <div class="form-grid">
+                <div class="field">
+                    <label asp-for="AltCharacterName1">Alternate character 1</label>
+                    <input asp-for="AltCharacterName1" class="form-control" maxlength="64" placeholder="Optional alt character" />
+                </div>
+                <div class="field">
+                    <label asp-for="AltCharacterName2">Alternate character 2</label>
+                    <input asp-for="AltCharacterName2" class="form-control" maxlength="64" placeholder="Optional alt character" />
+                </div>
             </div>
         </div>
 

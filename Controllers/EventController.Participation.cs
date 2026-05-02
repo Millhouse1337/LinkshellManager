@@ -131,6 +131,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SignUp(int jobId, int eventId, string? jobName = null, string? subJobName = null, string? jobType = null)
     {
         var user = await RequireCurrentUserAsync();
@@ -232,6 +233,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Unsign(int jobId, int eventId)
     {
         var user = await RequireCurrentUserAsync();
@@ -271,6 +273,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> ConfirmAttendance(int eventId, Dictionary<string, string> attendance)
     {
         var user = await RequireCurrentUserAsync();
@@ -315,12 +318,38 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> QuickJoin(int eventId, string jobName, string subJobName, string jobType)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
         {
             return Challenge();
+        }
+
+        const int MaxJobFieldLength = 64;
+        static string? CleanField(string? value, int max)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var trimmed = value.Trim();
+            return trimmed.Length > max ? null : trimmed;
+        }
+
+        var cleanJobName = CleanField(jobName, MaxJobFieldLength);
+        var cleanSubJobName = CleanField(subJobName, MaxJobFieldLength);
+        var cleanJobType = CleanField(jobType, MaxJobFieldLength);
+
+        if (cleanJobName is null)
+        {
+            return BadRequest("Job name is required and must be 64 characters or fewer.");
+        }
+        if (!string.IsNullOrWhiteSpace(subJobName) && cleanSubJobName is null)
+        {
+            return BadRequest("Sub job name must be 64 characters or fewer.");
+        }
+        if (!string.IsNullOrWhiteSpace(jobType) && cleanJobType is null)
+        {
+            return BadRequest("Job type must be 64 characters or fewer.");
         }
 
         var existing = await _context.AppUserEvents.FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
@@ -348,9 +377,9 @@ public partial class EventController
                 AppUserId = user.Id,
                 EventId = eventId,
                 CharacterName = user.CharacterName,
-                JobName = jobName,
-                SubJobName = subJobName,
-                JobType = jobType,
+                JobName = cleanJobName,
+                SubJobName = cleanSubJobName,
+                JobType = cleanJobType,
                 StartTime = DateTime.UtcNow,
                 EventDkp = 0,
                 IsQuickJoin = true
@@ -479,6 +508,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> VerifyUser(int eventId, string characterName, bool isVerified)
     {
         var currentUser = await RequireCurrentUserAsync();
@@ -519,6 +549,7 @@ public partial class EventController
     }
 
     [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> UndoVerification(int eventId, string characterName)
     {
         var currentUser = await RequireCurrentUserAsync();

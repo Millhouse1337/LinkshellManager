@@ -15,7 +15,7 @@ namespace LinkshellManagerDiscordApp.Services;
 public sealed class DiscordIdentityService
 {
     private static readonly Uri TokenEndpoint = new("https://discord.com/api/oauth2/token");
-    private static readonly Uri UsersMeEndpoint = new("https://discord.com/api/users/@me");
+    private static readonly Uri OAuth2MeEndpoint = new("https://discord.com/api/oauth2/@me");
     private static readonly Uri DiscordCdnBaseUri = new("https://cdn.discordapp.com/");
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -116,9 +116,10 @@ public sealed class DiscordIdentityService
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var details = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("Discord token exchange failed with status {Status}: {Body}", response.StatusCode, details);
-            throw new DiscordApiException((int)response.StatusCode, "Discord token exchange failed.", details);
+            // Don't log Discord's response body — it may include the submitted
+            // authorization code, which is a credential.
+            _logger.LogWarning("Discord token exchange failed with status {Status}.", response.StatusCode);
+            throw new DiscordApiException((int)response.StatusCode, "Discord token exchange failed.");
         }
 
         var payload = await response.Content.ReadFromJsonAsync<DiscordTokenPayload>(cancellationToken: cancellationToken);
@@ -130,28 +131,44 @@ public sealed class DiscordIdentityService
         return payload;
     }
 
+    // Calls Discord's /oauth2/@me endpoint, which returns the application the
+    // token was issued to *and* the authorizing user. We require the token to
+    // belong to OUR ClientId before trusting the embedded user identity —
+    // otherwise any Discord OAuth token with the `identify` scope (issued to
+    // any other Discord application the user has authorized) could be replayed
+    // here to impersonate them.
     private async Task<DiscordIdentityProfile> GetCurrentDiscordUserAsync(string accessToken, CancellationToken cancellationToken)
     {
         var client = _httpClientFactory.CreateClient();
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, UsersMeEndpoint);
+        using var request = new HttpRequestMessage(HttpMethod.Get, OAuth2MeEndpoint);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Headers.Accept.ParseAdd("application/json");
 
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var details = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("Discord user lookup failed with status {Status}: {Body}", response.StatusCode, details);
-            throw new DiscordApiException((int)response.StatusCode, "Discord user lookup failed.", details);
+            // Don't log Discord's response body — it may echo token validity hints.
+            _logger.LogWarning("Discord oauth2/@me lookup failed with status {Status}.", response.StatusCode);
+            throw new DiscordApiException((int)response.StatusCode, "Discord token validation failed.");
         }
 
-        var user = await response.Content.ReadFromJsonAsync<DiscordIdentityProfilePayload>(cancellationToken: cancellationToken);
-        if (user is null || string.IsNullOrWhiteSpace(user.Id))
+        var envelope = await response.Content.ReadFromJsonAsync<DiscordOAuth2MePayload>(cancellationToken: cancellationToken);
+        if (envelope is null || envelope.Application is null || envelope.User is null || string.IsNullOrWhiteSpace(envelope.User.Id))
         {
-            throw new DiscordApiException(502, "Discord returned an invalid user payload.");
+            throw new DiscordApiException(502, "Discord returned an invalid token validation payload.");
         }
 
+        if (!string.Equals(envelope.Application.Id, _options.ClientId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Rejecting Discord access token issued to application {ApplicationId} (expected {ExpectedId}).",
+                envelope.Application.Id,
+                _options.ClientId);
+            throw new DiscordApiException(401, "Access token was issued to a different Discord application.");
+        }
+
+        var user = envelope.User;
         return new DiscordIdentityProfile(
             user.Id,
             user.Username,
@@ -423,6 +440,15 @@ public sealed class DiscordIdentityService
         [property: JsonPropertyName("discriminator")] string? Discriminator,
         [property: JsonPropertyName("global_name")] string? GlobalName,
         [property: JsonPropertyName("avatar")] string? Avatar);
+
+    private sealed record DiscordOAuth2MeApplication(
+        [property: JsonPropertyName("id")] string Id);
+
+    private sealed record DiscordOAuth2MePayload(
+        [property: JsonPropertyName("application")] DiscordOAuth2MeApplication? Application,
+        [property: JsonPropertyName("user")] DiscordIdentityProfilePayload? User,
+        [property: JsonPropertyName("scopes")] string[]? Scopes,
+        [property: JsonPropertyName("expires")] string? Expires);
 }
 
 public sealed record DiscordIdentityProfile(

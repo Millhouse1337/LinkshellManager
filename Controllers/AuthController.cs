@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -23,6 +24,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("exchange")]
+    [EnableRateLimiting("oauth-exchange")]
     public async Task<IActionResult> ExchangeAsync(
         [FromBody] DiscordCodeExchangeRequest request,
         CancellationToken cancellationToken)
@@ -30,6 +32,11 @@ public sealed class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Code))
         {
             return BadRequest(new { error = "Missing authorization code." });
+        }
+
+        if (request.Code.Length > 256)
+        {
+            return BadRequest(new { error = "Authorization code is malformed." });
         }
 
         if (!_discordIdentityService.IsConfigured(out var configIssues))
@@ -56,13 +63,14 @@ public sealed class AuthController : ControllerBase
         }
         catch (DiscordApiException ex)
         {
+            // Don't surface upstream Discord error bodies to the client even in
+            // development — they may leak the submitted authorization code.
+            // Clamp upstream StatusCode to a sane HTTP range so transport-level
+            // failures (StatusCode == 0) don't blow up the response pipeline.
+            var status = ex.StatusCode is >= 400 and <= 599 ? ex.StatusCode : 502;
             return StatusCode(
-                ex.StatusCode,
-                new
-                {
-                    error = ex.Message,
-                    details = _environment.IsDevelopment() ? ex.Details : null
-                });
+                status,
+                new { error = ex.Message });
         }
     }
 

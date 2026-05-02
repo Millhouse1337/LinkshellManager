@@ -10,6 +10,18 @@
         if (el) { el.classList.remove('mt-modal--open'); document.body.style.overflow = ''; }
     }
 
+    // Treat 401 (signed out) as a hard redirect: the cookie has expired so any
+    // further interaction will fail. 403 surfaces as an authorization message
+    // because re-login won't help. Returns true if the response was handled.
+    function handleAuthFailure(res) {
+        if (res.status === 401) {
+            var returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+            window.location.href = '/Identity/Account/Login?returnUrl=' + returnUrl;
+            return true;
+        }
+        return false;
+    }
+
     document.querySelectorAll('[data-mt-close]').forEach(function (el) {
         el.addEventListener('click', function () {
             var modal = el.closest('.mt-modal');
@@ -77,6 +89,8 @@
         fetch('/api/activity/dkp-history?linkshellId=' + encodeURIComponent(linkshellId) + '&appUserId=' + encodeURIComponent(appUserId), {
             credentials: 'same-origin'
         }).then(function (res) {
+            if (handleAuthFailure(res)) { return null; }
+            if (res.status === 403) { sel.innerHTML = '<option value="">Not authorized to view entries</option>'; return null; }
             if (!res.ok) { sel.innerHTML = '<option value="">Could not load entries</option>'; return null; }
             return res.json();
         }).then(function (data) {
@@ -141,10 +155,14 @@
 
         var btn = document.getElementById('auditSaveBtn');
         btn.disabled = true;
+        var headers = { 'Content-Type': 'application/json' };
+        if (window.LSM_CSRF_HEADER && window.LSM_CSRF_TOKEN) {
+            headers[window.LSM_CSRF_HEADER] = window.LSM_CSRF_TOKEN;
+        }
         fetch('/api/activity/dkp-audit', {
             method: 'POST',
             credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify({
                 linkshellId: currentLinkshellId,
                 targetAppUserId: currentAppUserId,
@@ -154,9 +172,10 @@
                 reason: reason
             })
         }).then(function (res) {
+            if (handleAuthFailure(res)) { return null; }
             if (!res.ok) {
                 return res.text().then(function (text) {
-                    var errMsg = 'Audit failed.';
+                    var errMsg = res.status === 403 ? 'Not authorized to perform this audit.' : 'Audit failed.';
                     try { var j = JSON.parse(text); if (j && j.error) errMsg = j.error; } catch (e) {}
                     showError(errMsg);
                     return null;

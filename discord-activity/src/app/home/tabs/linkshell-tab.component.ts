@@ -4,11 +4,13 @@ import { FormsModule } from '@angular/forms';
 import {
   ActivityItem,
   ActivityItemInput,
+  ActivityLinkshellRole,
   ActivityRevenueEntry,
   ActivityRevenueInput,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
+import { formatAlts } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-linkshell-tab',
@@ -18,6 +20,7 @@ import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.compone
 })
 export class LinkshellTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly formatAlts = formatAlts;
 
   // Persists across the dashboard <-> linkshell hop, since both tabs render
   // a roster search that we want to feel like the same control. Parent owns
@@ -108,11 +111,35 @@ export class LinkshellTabComponent {
 
   protected editingRankMemberId = signal<number | null>(null);
   protected editingRankValue = '';
-  protected readonly rankOptions = ['Leader', 'Officer', 'Member'] as const;
 
-  protected beginEditRank(memberId: number, currentRank: string | null | undefined): void {
+  // Roles are linkshell-specific (custom roles are persisted server-side via
+  // createLinkshellRole). We load on demand and cache per-linkshell so the
+  // dropdown reflects the server's current set instead of a hardcoded list.
+  private readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
+  private readonly fallbackRoleNames = ['Leader', 'Officer', 'Member'] as const;
+
+  // Returns the rank options for the dropdown as { id, name } pairs. While the
+  // server is loading we surface the system defaults so the inline edit is
+  // never empty.
+  protected rankOptions(): { id: number; name: string }[] {
+    const id = this.selectedDashboardLinkshellId();
+    const loaded = this.rolesByLinkshell()[id];
+    if (loaded && loaded.length > 0) {
+      return loaded.map(role => ({ id: role.id, name: role.name }));
+    }
+    return this.fallbackRoleNames.map((name, index) => ({ id: -(index + 1), name }));
+  }
+
+  protected async beginEditRank(memberId: number, currentRank: string | null | undefined): Promise<void> {
     this.editingRankMemberId.set(memberId);
     this.editingRankValue = currentRank || 'Member';
+    const id = this.selectedDashboardLinkshellId();
+    if (id && !this.rolesByLinkshell()[id]) {
+      const data = await this.activity.loadLinkshellRoles(id);
+      if (data) {
+        this.rolesByLinkshell.update(map => ({ ...map, [id]: data.roles }));
+      }
+    }
   }
 
   protected cancelEditRank(): void {

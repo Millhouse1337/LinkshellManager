@@ -47,6 +47,28 @@
         </label>
       </div>
 
+      <p class="muted" style="margin: 8px 0 4px">
+        Link Alternate Characters &mdash; up to two extra characters tied to this account. Linkshell members can see them on the roster, but every action you perform (events, ToDs, auctions, signups) is still recorded under your main character.
+      </p>
+      <div class="create-form__grid">
+        <label>
+          <span>Alternate character 1</span>
+          <input
+            [(ngModel)]="profileModel.altCharacterName1"
+            name="profileAltCharacterName1"
+            maxlength="64"
+            placeholder="Optional alt character" />
+        </label>
+        <label>
+          <span>Alternate character 2</span>
+          <input
+            [(ngModel)]="profileModel.altCharacterName2"
+            name="profileAltCharacterName2"
+            maxlength="64"
+            placeholder="Optional alt character" />
+        </label>
+      </div>
+
       <div class="create-form__actions create-form__actions--end">
         <button type="submit" class="action-button" [disabled]="activity.busyProfileSave()">
           {{ activity.busyProfileSave() ? 'Saving...' : 'Save profile' }}

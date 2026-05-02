@@ -8,6 +8,13 @@
 @{
     var isSignedIn = SignInManager.IsSignedIn(User);
     AppUser? currentUser = isSignedIn ? await UserManager.GetUserAsync(User) : null;
+    if (isSignedIn && currentUser is null)
+    {
+        // Auth cookie present but the backing user can no longer be resolved (deleted or stale claim).
+        // Bounce to login rather than rendering an unstyled, navless shell.
+        Context.Response.Redirect("/Identity/Account/Login?expired=1");
+        return;
+    }
     var pageTitle = ViewData["Title"]?.ToString() ?? "Dashboard";
     var profileImage = currentUser?.ProfileImage is { Length: > 0 }
         ? $"data:image/png;base64,{Convert.ToBase64String(currentUser.ProfileImage)}"
@@ -83,14 +90,6 @@
                     </div>
 
                     <div class="topbar-actions">
-                        <button type="button" class="search" aria-label="Search">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-                            <span>Search…</span>
-                            <kbd>⌘K</kbd>
-                        </button>
-                        <button type="button" class="icon-btn" title="Notifications" aria-label="Notifications">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
-                        </button>
                         <a class="avatar-btn" asp-controller="Account" asp-action="Profile" title="Profile">
                             @if (profileImage is not null)
                             {
@@ -102,9 +101,11 @@
                             }
                             <span class="avatar-name">@displayName</span>
                         </a>
-                        <a class="icon-btn" asp-controller="Account" asp-action="Logout" title="Sign out" aria-label="Sign out">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>
-                        </a>
+                        <form asp-controller="Account" asp-action="Logout" method="post" class="logout-form">
+                            <button type="submit" class="icon-btn" title="Sign out" aria-label="Sign out">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>
+                            </button>
+                        </form>
                     </div>
                 </div>
 

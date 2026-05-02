@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 
 namespace LinkshellManagerDiscordApp.Models;
@@ -5,6 +6,12 @@ namespace LinkshellManagerDiscordApp.Models;
 public class AppUser : IdentityUser
 {
     public string? CharacterName { get; set; }
+
+    [MaxLength(64)]
+    public string? AltCharacterName1 { get; set; }
+
+    [MaxLength(64)]
+    public string? AltCharacterName2 { get; set; }
 
     public string? TimeZone { get; set; }
 

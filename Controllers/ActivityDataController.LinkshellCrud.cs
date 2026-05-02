@@ -68,7 +68,8 @@ public sealed partial class ActivityDataController
         appUser.PrimaryLinkshellId ??= linkshell.Id;
         appUser.PrimaryLinkshellName ??= linkshell.LinkshellName;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // UserManager.UpdateAsync uses the same DbContext (Identity is wired to ApplicationDbContext)
+        // and calls SaveChangesAsync internally, which flushes the AppUserLinkshell add too.
         await _userManager.UpdateAsync(appUser);
 
         return Ok(new { success = true, linkshellId = linkshell.Id });
@@ -117,6 +118,8 @@ public sealed partial class ActivityDataController
                     link.Id,
                     link.AppUserId,
                     link.CharacterName ?? link.AppUser?.UserName ?? "Unknown member",
+                    link.AppUser?.AltCharacterName1,
+                    link.AppUser?.AltCharacterName2,
                     link.Rank,
                     link.Status,
                     link.LinkshellDkp))
@@ -149,7 +152,6 @@ public sealed partial class ActivityDataController
         appUser.PrimaryLinkshellName = membership.Linkshell.LinkshellName;
 
         await _userManager.UpdateAsync(appUser);
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { success = true });
     }
@@ -268,6 +270,11 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        return await DeleteLinkshellCoreAsync(linkshellId, cancellationToken);
+    }
+
+    private async Task<IActionResult> DeleteLinkshellCoreAsync(int linkshellId, CancellationToken cancellationToken)
+    {
         var linkshell = await _dbContext.Linkshells
             .Include(ls => ls.AppUserLinkshells)
             .Include(ls => ls.Events)
@@ -300,6 +307,8 @@ public sealed partial class ActivityDataController
                 error = "Cancel or end all active and queued events before deleting this linkshell."
             });
         }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var impactedUserIds = linkshell.AppUserLinkshells
             .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
@@ -346,6 +355,7 @@ public sealed partial class ActivityDataController
         _dbContext.Linkshells.Remove(linkshell);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return Ok(new { success = true });
     }
 
@@ -377,7 +387,10 @@ public sealed partial class ActivityDataController
 
         if (IsLeader(membership) && memberCount == 1)
         {
-            return await DeleteLinkshellAsync(linkshellId, cancellationToken);
+            // Sole-leader leaves -> deletes the linkshell. Delegate to the shared core
+            // (which runs inside its own transaction) before this method has touched
+            // the change tracker, so the two flows do not interleave.
+            return await DeleteLinkshellCoreAsync(linkshellId, cancellationToken);
         }
 
         _dbContext.AppUserLinkshells.Remove(membership);
