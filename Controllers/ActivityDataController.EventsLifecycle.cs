@@ -1,0 +1,505 @@
+﻿using System.Globalization;
+using System.Net.Http.Headers;
+using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.ViewModels;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using NodaTime;
+
+namespace LinkshellManagerDiscordApp.Controllers;
+
+public sealed partial class ActivityDataController
+{
+    [HttpPost("events")]
+    public async Task<IActionResult> CreateEventAsync([FromBody] ActivityCreateEventRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.EventName))
+        {
+            return BadRequest(new { error = "Event name is required." });
+        }
+
+        if (request.LinkshellId <= 0)
+        {
+            return BadRequest(new { error = "A linkshell selection is required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to create events."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!TryConvertUserTimeZoneToUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
+            !TryConvertUserTimeZoneToUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
+        {
+            return BadRequest(new { error = "Use valid local start and end times in the event form." });
+        }
+
+        var eventEntity = new Event
+        {
+            LinkshellId = request.LinkshellId,
+            EventName = request.EventName.Trim(),
+            EventType = request.EventType?.Trim(),
+            EventLocation = request.EventLocation?.Trim(),
+            CreatorUserId = appUser.Id,
+            StartTime = startTimeUtc,
+            EndTime = endTimeUtc,
+            Duration = request.Duration,
+            DkpPerHour = request.DkpPerHour,
+            Details = request.Details?.Trim(),
+            TimeStamp = DateTime.UtcNow
+        };
+
+        _dbContext.Events.Add(eventEntity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var job in request.Jobs.Where(job => !string.IsNullOrWhiteSpace(job.JobName)))
+        {
+            _dbContext.Jobs.Add(new Job
+            {
+                EventId = eventEntity.Id,
+                JobName = job.JobName?.Trim(),
+                SubJobName = job.SubJobName?.Trim(),
+                JobType = job.JobType?.Trim(),
+                Quantity = job.Quantity,
+                SignedUp = 0,
+                Enlisted = new List<string>(),
+                Details = job.Details?.Trim()
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, eventId = eventEntity.Id });
+    }
+
+    [HttpPost("events/{eventId:int}/update")]
+    public async Task<IActionResult> UpdateEventAsync(
+        int eventId,
+        [FromBody] ActivityCreateEventRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.LinkshellId <= 0)
+        {
+            return BadRequest(new { error = "A linkshell selection is required." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.EventName))
+        {
+            return BadRequest(new { error = "Event name is required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to update events."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var eventEntity = await _dbContext.Events
+            .Include(evt => evt.Jobs)
+            .Include(evt => evt.AppUserEvents)
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var currentMembership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(currentMembership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!TryConvertUserTimeZoneToUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
+            !TryConvertUserTimeZoneToUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
+        {
+            return BadRequest(new { error = "Use valid local start and end times in the event form." });
+        }
+
+        if (eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest(new { error = "Live events cannot be edited. End the event or create a new one instead." });
+        }
+
+        var hasJobChanges = eventEntity.Jobs.Count != request.Jobs.Count ||
+                            eventEntity.Jobs
+                                .Select(CreateJobSignature)
+                                .OrderBy(signature => signature)
+                                .SequenceEqual(request.Jobs.Select(CreateJobSignature).OrderBy(signature => signature)) == false;
+
+        if (eventEntity.AppUserEvents.Count > 0 && hasJobChanges)
+        {
+            return BadRequest(new { error = "Jobs cannot be changed after players have signed up. Remove signups or keep the existing job list." });
+        }
+
+        eventEntity.LinkshellId = request.LinkshellId;
+        eventEntity.EventName = request.EventName.Trim();
+        eventEntity.EventType = request.EventType?.Trim();
+        eventEntity.EventLocation = request.EventLocation?.Trim();
+        eventEntity.StartTime = startTimeUtc;
+        eventEntity.EndTime = endTimeUtc;
+        eventEntity.Duration = request.Duration;
+        eventEntity.DkpPerHour = request.DkpPerHour;
+        eventEntity.Details = request.Details?.Trim();
+
+        _dbContext.Jobs.RemoveRange(eventEntity.Jobs);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var job in request.Jobs.Where(job => !string.IsNullOrWhiteSpace(job.JobName)))
+        {
+            _dbContext.Jobs.Add(new Job
+            {
+                EventId = eventEntity.Id,
+                JobName = job.JobName?.Trim(),
+                SubJobName = job.SubJobName?.Trim(),
+                JobType = job.JobType?.Trim(),
+                Quantity = job.Quantity,
+                SignedUp = 0,
+                Enlisted = new List<string>(),
+                Details = job.Details?.Trim()
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/start")]
+    public async Task<IActionResult> StartEventAsync(
+        int eventId,
+        [FromBody] ActivityStartEventRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to start events."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events
+            .Include(evt => evt.AppUserEvents)
+            .Include(evt => evt.Linkshell)
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var absentIds = request?.AbsentParticipantIds;
+        if (absentIds is { Count: > 0 })
+        {
+            var absentSet = new HashSet<int>(absentIds);
+            var absentParticipations = eventEntity.AppUserEvents
+                .Where(p => absentSet.Contains(p.Id))
+                .ToList();
+
+            if (absentParticipations.Count > 0)
+            {
+                var jobs = await _dbContext.Jobs
+                    .Where(job => job.EventId == eventId)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var participation in absentParticipations)
+                {
+                    var job = jobs.FirstOrDefault(j =>
+                        j.JobName == participation.JobName &&
+                        j.SubJobName == participation.SubJobName);
+
+                    if (job is not null)
+                    {
+                        job.Enlisted.RemoveAll(name => name == participation.CharacterName);
+                        job.SignedUp = job.Enlisted.Count;
+                    }
+
+                    _dbContext.AppUserEvents.Remove(participation);
+                }
+            }
+        }
+
+        eventEntity.CommencementStartTime ??= DateTime.UtcNow;
+        foreach (var participation in eventEntity.AppUserEvents)
+        {
+            if (absentIds is { Count: > 0 } && absentIds.Contains(participation.Id))
+            {
+                continue;
+            }
+            participation.StartTime ??= eventEntity.CommencementStartTime;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/end")]
+    public async Task<IActionResult> EndEventAsync(int eventId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to end events."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events
+            .Include(evt => evt.AppUserEvents)
+            .Include(evt => evt.EventLootDetails)
+            .Include(evt => evt.Linkshell)
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var lootStructure = NormalizeLootStructure(eventEntity.Linkshell?.LootStructure ?? "Dkp");
+        var isLootCouncil = lootStructure == "LootCouncil";
+        var isHybrid = lootStructure == "Hybrid";
+        var roundingStep = NormalizeDkpRounding(eventEntity.Linkshell?.DkpRoundingIncrement) == "Half" ? 0.5 : 0.25;
+        var roundingMultiplier = 1d / roundingStep;
+
+        var endTimeUtc = DateTime.UtcNow;
+        var history = new EventHistory
+        {
+            LinkshellId = eventEntity.LinkshellId,
+            EventName = eventEntity.EventName,
+            EventType = eventEntity.EventType,
+            EventLocation = eventEntity.EventLocation,
+            StartDate = eventEntity.StartTime?.Date,
+            StartTime = eventEntity.StartTime,
+            EndTime = endTimeUtc,
+            CommencementStartTime = eventEntity.CommencementStartTime,
+            Duration = eventEntity.CommencementStartTime.HasValue
+                ? (endTimeUtc - eventEntity.CommencementStartTime.Value).TotalHours
+                : eventEntity.Duration,
+            DkpPerHour = eventEntity.DkpPerHour,
+            EventDkp = eventEntity.EventDkp,
+            Details = eventEntity.Details,
+            TimeStamp = DateTime.UtcNow,
+            AppUserEventHistories = new List<AppUserEventHistory>()
+        };
+
+        var linkshellMemberships = await _dbContext.AppUserLinkshells
+            .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
+            .ToListAsync(cancellationToken);
+        var membershipsByAppUserId = linkshellMemberships
+            .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
+            .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var participantsByCharacterName = eventEntity.AppUserEvents
+            .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
+            .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var ledgerEntries = new List<DkpLedgerEntry>();
+        var nextSequenceByAppUserId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var participation in eventEntity.AppUserEvents)
+        {
+            var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
+            var roundedDuration = Math.Round(durationHours * roundingMultiplier) / roundingMultiplier;
+            var eventDkp = isLootCouncil ? 0 : roundedDuration * (eventEntity.DkpPerHour ?? 0);
+
+            participation.Duration = roundedDuration;
+            participation.EventDkp = eventDkp;
+
+            history.AppUserEventHistories.Add(new AppUserEventHistory
+            {
+                AppUserId = participation.AppUserId,
+                CharacterName = participation.CharacterName,
+                JobName = participation.JobName,
+                SubJobName = participation.SubJobName,
+                JobType = participation.JobType,
+                StartTime = participation.StartTime,
+                Duration = roundedDuration,
+                EventDkp = eventDkp,
+                IsQuickJoin = participation.IsQuickJoin,
+                IsVerified = participation.IsVerified,
+                Proctor = participation.Proctor
+            });
+
+            if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&
+                membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
+            {
+                if (!isLootCouncil)
+                {
+                    linkshellMembership.LinkshellDkp = (linkshellMembership.LinkshellDkp ?? 0) + eventDkp;
+                }
+                nextSequenceByAppUserId[participation.AppUserId] = 2;
+            }
+
+            if (!isLootCouncil && !string.IsNullOrWhiteSpace(participation.AppUserId))
+            {
+                ledgerEntries.Add(new DkpLedgerEntry
+                {
+                    AppUserId = participation.AppUserId,
+                    EventHistory = history,
+                    LinkshellId = eventEntity.LinkshellId,
+                    EntryType = "EventEarned",
+                    Amount = eventDkp,
+                    Sequence = 1,
+                    OccurredAt = endTimeUtc,
+                    CharacterName = participation.CharacterName,
+                    EventName = eventEntity.EventName,
+                    EventType = eventEntity.EventType,
+                    EventLocation = eventEntity.EventLocation,
+                    EventStartTime = eventEntity.StartTime,
+                    EventEndTime = endTimeUtc,
+                    Details = "DKP earned from completed event."
+                });
+            }
+        }
+
+        _dbContext.EventHistories.Add(history);
+        if (!isLootCouncil)
+        {
+            foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
+            {
+                var rawValue = lootDetail.WinningDkpSpent.GetValueOrDefault();
+                if (rawValue <= 0)
+                {
+                    continue;
+                }
+
+                var winnerMembership = ResolveLootWinnerMembership(
+                    lootDetail.ItemWinner,
+                    membershipsByAppUserId,
+                    participantsByCharacterName,
+                    linkshellMemberships);
+                if (winnerMembership is null || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
+                {
+                    continue;
+                }
+
+                double amount;
+                string lootDetailsText;
+                if (isHybrid)
+                {
+                    var pct = Math.Clamp(rawValue, 0, 100);
+                    var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
+                    amount = -Math.Round(currentBalance * pct / 100d, 2);
+                    lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
+                }
+                else
+                {
+                    amount = -rawValue;
+                    lootDetailsText = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.";
+                }
+
+                winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
+
+                var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
+                ledgerEntries.Add(new DkpLedgerEntry
+                {
+                    AppUserId = winnerMembership.AppUserId,
+                    EventHistory = history,
+                    LinkshellId = eventEntity.LinkshellId,
+                    EntryType = "LootSpent",
+                    Amount = amount,
+                    Sequence = currentSequence,
+                    OccurredAt = endTimeUtc,
+                    CharacterName = winnerMembership.CharacterName,
+                    EventName = eventEntity.EventName,
+                    EventType = eventEntity.EventType,
+                    EventLocation = eventEntity.EventLocation,
+                    EventStartTime = eventEntity.StartTime,
+                    EventEndTime = endTimeUtc,
+                    ItemName = lootDetail.ItemName,
+                    Details = lootDetailsText
+                });
+                nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
+            }
+        }
+
+        _dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
+        _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
+        _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
+
+        var eventJobs = await _dbContext.Jobs.Where(job => job.EventId == eventId).ToListAsync(cancellationToken);
+        _dbContext.Jobs.RemoveRange(eventJobs);
+        _dbContext.Events.Remove(eventEntity);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("events/{eventId:int}/cancel")]
+    public async Task<IActionResult> CancelEventAsync(int eventId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to cancel events."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events
+            .Include(evt => evt.Jobs)
+            .Include(evt => evt.AppUserEvents)
+            .Include(evt => evt.EventLootDetails)
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
+        }
+
+        _dbContext.Jobs.RemoveRange(eventEntity.Jobs);
+        _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
+        _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
+        _dbContext.Events.Remove(eventEntity);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+}

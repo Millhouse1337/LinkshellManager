@@ -1,13 +1,27 @@
 {
   "permissions": {
     "allow": [
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(node *)",
       "Bash(dotnet build *)",
       "Bash(dotnet tool *)",
-      "Bash(export PATH=\"$PATH:/c/Users/millh/.dotnet/tools\")",
       "Bash(dotnet-ef database *)",
-      "Bash(export PGPASSWORD=postgres)",
-      "Bash(psql -h localhost -U postgres -l)",
       "Bash(dotnet-ef migrations *)"
+    ],
+    "deny":[
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)", 
+      "Bash(git reset ---hard *)", 
+      "Bash(docker rm *)", 
+      "Bash(DROP TABLE *)", 
+      "Bash(sudo *)"
     ]
   }
 }

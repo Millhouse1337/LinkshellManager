@@ -1,0 +1,210 @@
+<article class="panel" aria-labelledby="invites-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Membership</p>
+        <h2 id="invites-heading">Invites</h2>
+      </div>
+      <span class="pill">{{ (activity.overview()?.pendingInvites?.length ?? 0) + (activity.overview()?.sentInvites?.length ?? 0) }}</span>
+    </div>
+
+    @if (activity.overview()?.pendingInvites?.length) {
+      <div class="invite-section">
+        <h3>Incoming</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (invite of activity.overview()?.pendingInvites ?? []; track invite.id) {
+            <li>
+              <div>
+                <strong>{{ invite.linkshellName }}</strong>
+                <span>Invite for {{ invite.appUserDisplayName }}</span>
+              </div>
+              <div class="button-cluster">
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyInviteId() === invite.id"
+                  (click)="activity.acceptInvite(invite.id)">
+                  {{ activity.busyInviteId() === invite.id ? 'Updating...' : 'Accept' }}
+                </button>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyInviteId() === invite.id"
+                  (click)="activity.declineInvite(invite.id)">
+                  Decline
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (activity.overview()?.incomingJoinRequests?.length) {
+      <div class="invite-section">
+        <h3>Join requests</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (request of activity.overview()?.incomingJoinRequests ?? []; track request.id) {
+            <li>
+              <div>
+                <strong>{{ request.appUserDisplayName }}</strong>
+                <span>Requested access to {{ request.linkshellName }}</span>
+              </div>
+              <div class="button-cluster">
+                <button
+                  type="button"
+                  class="action-button"
+                  [disabled]="activity.busyInviteId() === request.id"
+                  (click)="activity.approveJoinRequest(request.id)">
+                  {{ activity.busyInviteId() === request.id ? 'Updating...' : 'Approve' }}
+                </button>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyInviteId() === request.id"
+                  (click)="activity.declineJoinRequest(request.id)">
+                  Decline
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <div class="card invite-players-card">
+      <div class="card-head">
+        <div class="card-title">Invite players</div>
+      </div>
+      <div class="card-body">
+      @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0)) {
+        <div class="invite-search">
+          <select
+            [ngModel]="inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0"
+            (ngModelChange)="onInviteLinkshellChange($event)"
+            name="inviteLinkshellId">
+            @for (linkshell of activity.overview()?.linkshells ?? []; track linkshell.id) {
+              <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+            }
+          </select>
+          <input
+            [(ngModel)]="inviteSearchTerm"
+            name="inviteSearchTerm"
+            placeholder="Search by character or username" />
+          <button type="button" class="action-button" (click)="runInviteSearch()">
+            {{ activity.inviteSearchBusy() ? 'Searching...' : 'Search' }}
+          </button>
+        </div>
+
+        @if (activity.participantInviteBusy() || connectedInviteCandidates().length > 0 || activity.participants().length > 0) {
+          <div class="invite-section">
+            <h3>Connected now</h3>
+            @if (activity.participantInviteBusy()) {
+              <p class="notice">Matching current Discord participants to linked app users...</p>
+            } @else if (connectedInviteCandidates().length > 0) {
+              <ul class="compact-list compact-list--dense">
+                @for (candidate of connectedInviteCandidates(); track candidate.appUserId) {
+                  <li>
+                    <div>
+                      <strong>{{ candidate.displayName }}</strong>
+                      <span>
+                        {{ candidate.userName || 'No username' }}
+                        @if (candidate.primaryLinkshellName) {
+                          <span> | primary: {{ candidate.primaryLinkshellName }}</span>
+                        }
+                      </span>
+                    </div>
+                    <div class="button-cluster">
+                      <button type="button" class="action-button" (click)="sendInvite(candidate.appUserId)">Invite</button>
+                    </div>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="notice">No connected participants are eligible for a quick invite right now.</p>
+            }
+          </div>
+        }
+
+        @if (filteredInviteSearchResults().length > 0) {
+          <ul class="compact-list compact-list--dense">
+            @for (result of filteredInviteSearchResults(); track result.id) {
+              <li>
+                <div>
+                  <strong>{{ result.displayName }}</strong>
+                  <span>
+                    {{ result.userName || 'No username' }}
+                    @if (result.primaryLinkshellName) {
+                      <span> | primary: {{ result.primaryLinkshellName }}</span>
+                    }
+                  </span>
+                </div>
+                <div class="button-cluster">
+                  <button type="button" class="action-button" (click)="sendInvite(result.id)">Invite</button>
+                </div>
+              </li>
+            }
+          </ul>
+        } @else if (inviteSearchTerm.trim().length >= 2 && !activity.inviteSearchBusy()) {
+          <p class="notice">No eligible players matched this search.</p>
+        }
+      } @else if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+        <p class="notice">
+          @if (isMemberMode()) {
+            Invite controls are limited to leaders and officers. You can still accept incoming invites above.
+          } @else {
+            Only linkshell leaders or officers can send invites.
+          }
+        </p>
+      } @else {
+        <p class="notice">Create or join a linkshell before sending invites.</p>
+      }
+      </div>
+    </div>
+
+    @if (!isMemberMode() && activity.overview()?.sentInvites?.length) {
+      <div class="invite-section">
+        <h3>Sent</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (invite of activity.overview()?.sentInvites ?? []; track invite.id) {
+            <li>
+              <div>
+                <strong>{{ invite.appUserDisplayName }}</strong>
+                <span>{{ invite.linkshellName }}</span>
+              </div>
+              <div class="button-cluster">
+                <span>{{ invite.status }}</span>
+                @if (canManageLinkshell(invite.linkshellId)) {
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyInviteId() === invite.id"
+                    (click)="activity.revokeInvite(invite.id)">
+                    {{ activity.busyInviteId() === invite.id ? 'Updating...' : 'Revoke' }}
+                  </button>
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (activity.overview()?.outgoingJoinRequests?.length) {
+      <div class="invite-section">
+        <h3>Your join requests</h3>
+        <ul class="compact-list compact-list--dense">
+          @for (request of activity.overview()?.outgoingJoinRequests ?? []; track request.id) {
+            <li>
+              <div>
+                <strong>{{ request.linkshellName }}</strong>
+                <span>Awaiting review</span>
+              </div>
+              <div class="button-cluster">
+                <span>{{ request.status }}</span>
+              </div>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </article>

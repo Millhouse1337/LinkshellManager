@@ -1,0 +1,426 @@
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">Settings</div>
+          <div class="section-title">Configurations</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">View Linkshells</div>
+          <span class="tag default num">{{ dashboardLinkshells().length }}</span>
+        </div>
+        @if (dashboardLinkshells().length > 0) {
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Linkshell</th>
+                  <th>Rank</th>
+                  <th>Status</th>
+                  <th class="num">DKP</th>
+                  <th class="num">Members</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (link of dashboardLinkshells(); track link.id) {
+                  <tr>
+                    <td>
+                      <div class="linkshell-name-cell">
+                        <strong>{{ link.name }}</strong>
+                        @if (link.id === activity.overview()?.appUser?.primaryLinkshellId) {
+                          <span class="tag success">Primary</span>
+                        }
+                      </div>
+                    </td>
+                    <td>{{ link.rank || '—' }}</td>
+                    <td>{{ link.status || '—' }}</td>
+                    <td class="num">{{ link.linkshellDkp ?? 0 | number }}</td>
+                    <td class="num">{{ link.memberCount }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">You're not a member of any linkshells yet.</div>
+          </div>
+        }
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Create Linkshell</div>
+          <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">
+            {{ showCreateLinkshellForm() ? 'Cancel' : '+ New Linkshell' }}
+          </button>
+        </div>
+        @if (showCreateLinkshellForm()) {
+          <form class="inline-form" (submit)="$event.preventDefault(); submitCreateLinkshell()">
+            <label>
+              <span>Name</span>
+              <input type="text" name="newLinkshellName" [(ngModel)]="newLinkshellName" required />
+            </label>
+            <label>
+              <span>Details</span>
+              <textarea name="newLinkshellDetails" [(ngModel)]="newLinkshellDetails" rows="2" placeholder="Brief description, focus, or schedule"></textarea>
+            </label>
+            <div class="inline-form__actions">
+              <button type="submit" class="btn primary sm">Create linkshell</button>
+              <button type="button" class="btn ghost sm" (click)="toggleCreateLinkshellForm()">Cancel</button>
+            </div>
+          </form>
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Start a brand new linkshell and invite members.</div>
+          </div>
+        }
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Customize Linkshell</div>
+          @if (dashboardLinkshells().length > 1) {
+            <select
+              class="form-select"
+              [ngModel]="customizeTargetLinkshellId()"
+              (ngModelChange)="onCustomizeLinkshellChange($event)"
+              name="customizeLinkshellSelect">
+              @for (linkshell of dashboardLinkshells(); track linkshell.id) {
+                <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+              }
+            </select>
+          }
+        </div>
+
+        @if (!canCustomizeSelectedLinkshell()) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Only members with the "Customize linkshell settings" permission can change these.</div>
+          </div>
+        } @else {
+          <form class="customize-form" (ngSubmit)="$event.preventDefault(); saveCustomizeDraft()">
+            <div class="customize-form__section">
+              <strong>Loot structure</strong>
+              <p class="muted">Choose how loot is awarded for this linkshell.</p>
+              <div class="customize-form__options">
+                <label class="customize-form__option">
+                  <input type="radio" name="lootStructureDraft" value="Dkp"
+                    [ngModel]="customizeDraft.lootStructure"
+                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                  <span>
+                    <strong>DKP</strong>
+                    <span class="muted">Time-based DKP earned per event, spent on loot.</span>
+                  </span>
+                </label>
+                <label class="customize-form__option">
+                  <input type="radio" name="lootStructureDraft" value="LootCouncil"
+                    [ngModel]="customizeDraft.lootStructure"
+                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                  <span>
+                    <strong>Loot Council</strong>
+                    <span class="muted">Leader decides; DKP is not tracked.</span>
+                  </span>
+                </label>
+                <label class="customize-form__option">
+                  <input type="radio" name="lootStructureDraft" value="Hybrid"
+                    [ngModel]="customizeDraft.lootStructure"
+                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                  <span>
+                    <strong>Percentage Based</strong>
+                    <span class="muted">DKP earned as usual; loot deducts a percentage of the winner's balance.</span>
+                  </span>
+                </label>
+              </div>
+
+              @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
+                <label class="customize-form__field">
+                  <span>DKP rounding increment</span>
+                  <select name="dkpRoundingIncrementDraft"
+                    [ngModel]="customizeDraft.dkpRoundingIncrement"
+                    (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
+                    <option value="Quarter">Nearest quarter (0.25)</option>
+                    <option value="Half">Nearest half (0.5)</option>
+                  </select>
+                </label>
+              }
+            </div>
+
+            <div class="customize-form__section">
+              <strong>Feature toggles</strong>
+              <p class="muted">Hide sections your linkshell doesn't use.</p>
+              <div class="customize-form__toggles">
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableEndgameDraft"
+                    [ngModel]="customizeDraft.enableEndgame"
+                    (ngModelChange)="customizeDraft.enableEndgame = $event; onCustomizeFieldChange()" />
+                  <span>Endgame tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableHnmDraft"
+                    [ngModel]="customizeDraft.enableHnmSection"
+                    (ngModelChange)="customizeDraft.enableHnmSection = $event; onCustomizeFieldChange()" />
+                  <span>HNM tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableMissionsDraft"
+                    [ngModel]="customizeDraft.enableMissions"
+                    (ngModelChange)="customizeDraft.enableMissions = $event; onCustomizeFieldChange()" />
+                  <span>Missions tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableAuctionsDraft"
+                    [ngModel]="customizeDraft.enableAuctions"
+                    (ngModelChange)="customizeDraft.enableAuctions = $event; onCustomizeFieldChange()" />
+                  <span>Auctions tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableTodsDraft"
+                    [ngModel]="customizeDraft.enableToDs"
+                    (ngModelChange)="customizeDraft.enableToDs = $event; onCustomizeFieldChange()" />
+                  <span>ToDs tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableEventsDraft"
+                    [ngModel]="customizeDraft.enableEvents"
+                    (ngModelChange)="customizeDraft.enableEvents = $event; onCustomizeFieldChange()" />
+                  <span>Events tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableDkpDraft"
+                    [ngModel]="customizeDraft.enableDkp"
+                    (ngModelChange)="customizeDraft.enableDkp = $event; onCustomizeFieldChange()" />
+                  <span>DKP tab</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableItemsDraft"
+                    [ngModel]="customizeDraft.enableItems"
+                    (ngModelChange)="customizeDraft.enableItems = $event; onCustomizeFieldChange()" />
+                  <span>Items tile on dashboard</span>
+                </label>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="enableRevenueDraft"
+                    [ngModel]="customizeDraft.enableRevenue"
+                    (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
+                  <span>Revenue tile on dashboard</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="customize-form__actions">
+              <button type="submit" class="btn primary" [disabled]="!customizeDirty">
+                {{ customizeDirty ? 'Save changes' : 'Saved' }}
+              </button>
+              <button type="button" class="btn ghost" (click)="syncCustomizeDraft()" [disabled]="!customizeDirty">
+                Discard
+              </button>
+            </div>
+          </form>
+        }
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Permissions</div>
+          <div class="card-head-right">
+            @if (dashboardLinkshells().length > 1) {
+              <select
+                class="form-select"
+                [ngModel]="permissionsTargetLinkshellId()"
+                (ngModelChange)="onPermissionsLinkshellChange($event)"
+                name="permissionsLinkshellSelect">
+                @for (linkshell of dashboardLinkshells(); track linkshell.id) {
+                  <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+                }
+              </select>
+            }
+            @if (canManageRolesForSelectedLinkshell() && !showNewRoleForm && editingRoleId === null) {
+              <button type="button" class="btn primary sm" style="white-space:nowrap" (click)="beginCreateRole()">+ New Role</button>
+            }
+          </div>
+        </div>
+
+        @if (currentLinkshellRoles().length === 0) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Loading roles…</div>
+          </div>
+        } @else {
+          <div class="table-wrap">
+            <table class="data-table permissions-matrix">
+              <thead>
+                <tr>
+                  <th>Permission</th>
+                  @for (role of currentLinkshellRoles(); track role.id) {
+                    <th>
+                      <div class="permissions-matrix__role">
+                        <strong>{{ role.name }}</strong>
+                        @if (role.isSystem) { <span class="tag default">System</span> }
+                        @if (canManageRolesForSelectedLinkshell()) {
+                          <div class="permissions-matrix__role-actions">
+                            @if (pendingDeleteRoleId === role.id) {
+                              <button type="button" class="btn sm danger-outline"
+                                [disabled]="activity.busyRoles()"
+                                (click)="confirmDeleteRole(role)">
+                                {{ activity.busyRoles() ? 'Deleting…' : 'Confirm' }}
+                              </button>
+                              <button type="button" class="btn ghost sm"
+                                [disabled]="activity.busyRoles()"
+                                (click)="cancelDeleteRole()">Cancel</button>
+                            } @else {
+                              <button type="button" class="btn ghost sm" (click)="beginEditRole(role)">Edit</button>
+                              @if (!role.isSystem) {
+                                <button type="button" class="btn ghost sm" (click)="requestDeleteRole(role)">Delete</button>
+                              }
+                            }
+                          </div>
+                        }
+                      </div>
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (perm of permissionKeys; track perm.key) {
+                  <tr>
+                    <td>{{ perm.label }}</td>
+                    @for (role of currentLinkshellRoles(); track role.id) {
+                      <td class="permissions-matrix__cell">
+                        @if ($any(role)[perm.key]) { <span class="perm-yes">✓</span> } @else { <span class="perm-no">—</span> }
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if ((showNewRoleForm || editingRoleId !== null) && canManageRolesForSelectedLinkshell()) {
+          <form class="role-edit-form" (submit)="$event.preventDefault(); saveRoleDraft()">
+            <div class="role-edit-form__header">
+              <strong>{{ editingRoleId !== null ? 'Edit role' : 'New role' }}</strong>
+              <button type="button" class="btn ghost sm" (click)="cancelRoleEdit()">Cancel</button>
+            </div>
+            <label>
+              <span>Role name</span>
+              <input type="text" name="roleDraftName" [(ngModel)]="roleDraft.name" maxlength="64" required
+                [disabled]="isEditingSystemRole()" />
+            </label>
+            <div class="role-edit-form__permissions">
+              @for (perm of permissionKeys; track perm.key) {
+                <label class="role-edit-form__perm">
+                  <input type="checkbox"
+                    [name]="'permDraft_' + perm.key"
+                    [(ngModel)]="roleDraft.permissions[perm.key]" />
+                  <span>{{ perm.label }}</span>
+                </label>
+              }
+            </div>
+            <div class="role-edit-form__actions">
+              <button type="submit" class="btn primary" [disabled]="activity.busyRoles()">
+                {{ activity.busyRoles() ? 'Saving…' : (editingRoleId !== null ? 'Save changes' : 'Create role') }}
+              </button>
+              <button type="button" class="btn ghost" (click)="cancelRoleEdit()" [disabled]="activity.busyRoles()">Cancel</button>
+            </div>
+          </form>
+        }
+      </div>
+
+      <div class="card" (mouseenter)="loadAddonTokensForCurrent()">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Game Addon (att)</div>
+            <p class="muted" style="font-size:12px;margin:4px 0 0">
+              Generate a one-time pairing code, then in FFXI type <code>/att link &lt;code&gt;</code>
+              to connect the addon to this linkshell.
+            </p>
+          </div>
+          @if (canManageAddonTokens()) {
+            <button type="button" class="btn primary sm" (click)="openAddonPairingModal()">
+              + Generate pairing code
+            </button>
+          }
+        </div>
+
+        @if (!canManageAddonTokens()) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Only members with the "Customize linkshell settings" permission can manage addon tokens.</div>
+          </div>
+        } @else if (addonTokens().length === 0) {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">No active addon tokens. Generate one to get started.</div>
+          </div>
+        } @else {
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Token</th>
+                  <th>Label</th>
+                  <th>Created</th>
+                  <th>Last used</th>
+                  <th class="num"></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (token of addonTokens(); track token.id) {
+                  <tr>
+                    <td><code>{{ token.prefix }}…</code></td>
+                    <td>{{ token.label || '—' }}</td>
+                    <td>{{ formatAddonTokenDate(token.createdAt) }}</td>
+                    <td>{{ formatAddonTokenDate(token.lastUsedAt) }}</td>
+                    <td class="num">
+                      <button type="button" class="btn warn sm"
+                        [disabled]="activity.busyAddonTokens()"
+                        (click)="revokeAddonToken(token.id)">Revoke</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+    </div>
+
+@if (addonModalOpen) {
+  <div class="addon-modal-backdrop" (click)="closeAddonPairingModal()">
+    <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
+      <div class="addon-modal-header">
+        <strong>Pairing code</strong>
+        <button type="button" class="btn ghost sm" (click)="closeAddonPairingModal()">×</button>
+      </div>
+      <div class="addon-modal-body">
+        <label class="addon-modal-field">
+          <span>Label (optional)</span>
+          <input type="text" [(ngModel)]="addonModalLabel" maxlength="128"
+            placeholder="e.g. Nils — desktop"
+            [disabled]="!!addonGeneratedCode" />
+        </label>
+        @if (addonGeneratedCode) {
+          <div class="addon-modal-code">
+            <div class="addon-modal-code__value">{{ addonGeneratedCode }}</div>
+            <div class="muted" style="font-size:12px;margin-top:6px">
+              Expires in {{ addonCountdownLabel }}. In FFXI: <code>/att link &lt;code&gt;</code>
+            </div>
+          </div>
+        }
+        @if (addonModalError) {
+          <div class="addon-modal-error">{{ addonModalError }}</div>
+        }
+      </div>
+      <div class="addon-modal-footer">
+        <button type="button" class="btn ghost" (click)="closeAddonPairingModal()">Close</button>
+        @if (!addonGeneratedCode) {
+          <button type="button" class="btn primary"
+            [disabled]="activity.busyAddonTokens()"
+            (click)="submitAddonPairingCode()">
+            {{ activity.busyAddonTokens() ? 'Generating…' : 'Generate' }}
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+}

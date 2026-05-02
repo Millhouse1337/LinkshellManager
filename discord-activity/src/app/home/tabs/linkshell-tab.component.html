@@ -1,0 +1,255 @@
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">Management</div>
+          <div class="section-title">Manage Team</div>
+        </div>
+      </div>
+
+      <!-- Linkshell Roster (same data as Dashboard) -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Linkshell Roster</div>
+            <div class="card-head-right">
+              <span class="tag default num">{{ selectedDashboardMembers().length }}</span>
+            </div>
+          </div>
+          @if (selectedDashboardMembers().length > 0) {
+            <div class="ac-roster-search">
+              <input
+                type="text"
+                class="form-input"
+                placeholder="Search roster"
+                [(ngModel)]="rosterSearch"
+                name="manageRosterSearch" />
+            </div>
+            <div class="ac-roster ac-roster--with-actions">
+              <div class="ac-roster-head">
+                <div></div>
+                <div>Character</div>
+                <div>Rank</div>
+                <div class="ac-roster-dkp-head">DKP</div>
+                <div>Status</div>
+                <div></div>
+              </div>
+              @for (member of filteredDashboardMembers(); track member.id) {
+                <div class="ac-roster-row">
+                  <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
+                  <div class="ac-roster-name-cell">
+                    <div class="ac-roster-name">{{ member.characterName }}</div>
+                  </div>
+                  <div class="ac-roster-rank">
+                    @if (editingRankMemberId() === member.id) {
+                      <select
+                        [(ngModel)]="editingRankValue"
+                        [name]="'rankEdit_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id">
+                        @for (rank of rankOptions; track rank) {
+                          <option [value]="rank">{{ rank }}</option>
+                        }
+                      </select>
+                    } @else {
+                      {{ member.rank || 'Member' }}
+                    }
+                  </div>
+                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+                  <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+                  <div class="ac-roster-actions">
+                    @if (canEditRosterRank(member.appUserId)) {
+                      @if (editingRankMemberId() === member.id) {
+                        <button
+                          type="button"
+                          class="btn primary sm"
+                          [disabled]="activity.busyMemberId() === member.id"
+                          (click)="saveEditRank(selectedDashboardLinkshellId(), member.id)">
+                          {{ activity.busyMemberId() === member.id ? 'Saving…' : 'Save' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn ghost sm"
+                          [disabled]="activity.busyMemberId() === member.id"
+                          (click)="cancelEditRank()">
+                          Cancel
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          class="btn ghost sm"
+                          (click)="beginEditRank(member.id, member.rank)">
+                          Modify Rank
+                        </button>
+                      }
+                    }
+                  </div>
+                </div>
+              }
+              @if (filteredDashboardMembers().length === 0) {
+                <div class="ac-roster-row"><div style="grid-column: 1 / -1; color: var(--fg-3); font-size: 12px;">No members matched your search.</div></div>
+              }
+            </div>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No members in this linkshell yet.</div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Invites section from sidebar -->
+      <app-activity-sidebar-panel [visibleSections]="['invites']" />
+
+      <!-- Manage Items -->
+      <div class="section-head">
+        <div>
+          <div class="section-label">Inventory</div>
+          <div class="section-title">Manage Items</div>
+        </div>
+        @if (canManageConfigLinkshell()) {
+          <button type="button" class="btn primary sm" (click)="toggleItemForm()">
+            {{ showItemForm() ? 'Cancel' : (editingItemId() !== null ? 'Editing...' : '+ Add Item') }}
+          </button>
+        }
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Stockpile</div>
+          <span class="tag default num">{{ configItems().length }} items &middot; {{ configTotalItemQuantity() }} qty</span>
+        </div>
+        @if (showItemForm() && canManageConfigLinkshell()) {
+          <form class="inline-form" (submit)="$event.preventDefault(); submitItem()">
+            <div class="inline-form__row">
+              <label>
+                <span>Name</span>
+                <input type="text" name="itemName" [(ngModel)]="itemName" required />
+              </label>
+              <label>
+                <span>Type</span>
+                <input type="text" name="itemType" [(ngModel)]="itemType" placeholder="Consumable, Gear, ..." />
+              </label>
+              <label>
+                <span>Quantity</span>
+                <input type="number" name="itemQuantity" [(ngModel)]="itemQuantity" min="0" />
+              </label>
+            </div>
+            <label>
+              <span>Notes</span>
+              <textarea name="itemNotes" [(ngModel)]="itemNotes" rows="2"></textarea>
+            </label>
+            <div class="inline-form__actions">
+              <button type="submit" class="btn primary sm" [disabled]="activity.busyItemSave() || activity.busyItemId() !== null">
+                {{ editingItemId() !== null ? 'Save changes' : 'Add item' }}
+              </button>
+              <button type="button" class="btn ghost sm" (click)="toggleItemForm()">Cancel</button>
+            </div>
+          </form>
+        }
+        @if (configItems().length > 0) {
+          <ul class="entry-list">
+            @for (item of configItems(); track item.id) {
+              <li class="entry-item">
+                <div class="entry-item__main">
+                  <strong>{{ item.itemName }}</strong>
+                  @if (item.itemType) { <span class="tag default">{{ item.itemType }}</span> }
+                  <span class="tag default num">{{ item.quantity }}</span>
+                </div>
+                @if (item.notes) { <div class="entry-item__sub">{{ item.notes }}</div> }
+                <div class="entry-item__meta">
+                  <span>Added by {{ item.createdByCharacterName || 'Unknown' }}</span>
+                  @if (activity.formatDateTime(item.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
+                </div>
+                @if (canManageConfigLinkshell()) {
+                  <div class="entry-item__actions">
+                    <button type="button" class="btn ghost sm" (click)="beginEditItem(item)" [disabled]="activity.busyItemId() === item.id">Edit</button>
+                    <button type="button" class="btn ghost sm" (click)="deleteItem(item.id)" [disabled]="activity.busyItemId() === item.id">Delete</button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">No items tracked yet. Add items to manage loot drops and inventory.</div>
+          </div>
+        }
+      </div>
+
+      <!-- Manage Revenue -->
+      <div class="section-head">
+        <div>
+          <div class="section-label">Finances</div>
+          <div class="section-title">Manage Revenue</div>
+        </div>
+        @if (canManageConfigLinkshell()) {
+          <button type="button" class="btn primary sm" (click)="toggleRevenueForm()">
+            {{ showRevenueForm() ? 'Cancel' : '+ Add Entry' }}
+          </button>
+        }
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Treasury</div>
+          <div class="revenue-totals">
+            <span class="tag success num">Income {{ configIncomeTotal() | number }}</span>
+            <span class="tag warning num">Expense {{ configExpenseTotal() | number }}</span>
+            <span class="tag default num">Net {{ configNetTotal() | number }}</span>
+          </div>
+        </div>
+        @if (showRevenueForm() && canManageConfigLinkshell()) {
+          <form class="inline-form" (submit)="$event.preventDefault(); submitRevenue()">
+            <div class="inline-form__row">
+              <label>
+                <span>Type</span>
+                <select name="revenueType" [(ngModel)]="revenueType">
+                  <option value="Income">Income</option>
+                  <option value="Expense">Expense</option>
+                </select>
+              </label>
+              <label>
+                <span>Category</span>
+                <input type="text" name="revenueCategory" [(ngModel)]="revenueCategory" placeholder="Sales, Fees, ..." />
+              </label>
+              <label>
+                <span>Value</span>
+                <input type="number" name="revenueValue" [(ngModel)]="revenueValue" min="0" />
+              </label>
+            </div>
+            <label>
+              <span>Details</span>
+              <textarea name="revenueDetails" [(ngModel)]="revenueDetails" rows="2"></textarea>
+            </label>
+            <div class="inline-form__actions">
+              <button type="submit" class="btn primary sm" [disabled]="activity.busyRevenueSave()">Save entry</button>
+              <button type="button" class="btn ghost sm" (click)="toggleRevenueForm()">Cancel</button>
+            </div>
+          </form>
+        }
+        @if (configRevenue().length > 0) {
+          <ul class="entry-list">
+            @for (entry of configRevenue(); track entry.id) {
+              <li class="entry-item entry-item--{{ entry.entryType.toLowerCase() }}">
+                <div class="entry-item__main">
+                  <span class="tag {{ entry.entryType === 'Income' ? 'success' : 'warning' }}">{{ entry.entryType }}</span>
+                  @if (entry.category) { <strong>{{ entry.category }}</strong> }
+                  <span class="tag default num">{{ entry.value | number }}</span>
+                </div>
+                @if (entry.details) { <div class="entry-item__sub">{{ entry.details }}</div> }
+                <div class="entry-item__meta">
+                  <span>By {{ entry.createdByCharacterName || 'Unknown' }}</span>
+                  @if (activity.formatDateTime(entry.occurredAt); as when) { <span>&middot; {{ when }}</span> }
+                </div>
+                @if (canManageConfigLinkshell()) {
+                  <div class="entry-item__actions">
+                    <button type="button" class="btn ghost sm" (click)="deleteRevenue(entry.id)" [disabled]="activity.busyRevenueId() === entry.id">Delete</button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">No revenue entries yet. Track income and expenses to keep the treasury up to date.</div>
+          </div>
+        }
+      </div>
+    </div>

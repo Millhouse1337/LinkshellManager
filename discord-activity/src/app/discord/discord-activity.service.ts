@@ -1,12 +1,24 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 
+import { ActivityHttpClient } from './activity-http.client';
+import { AddonTokenService } from './addon-token.service';
+import { AuctionService } from './auction.service';
+import { AuthService } from './auth.service';
+import { DkpService } from './dkp.service';
+import { EventService } from './event.service';
+import { InviteService } from './invite.service';
+import { LinkshellContentService } from './linkshell-content.service';
+import { LinkshellService } from './linkshell.service';
+import { TodService } from './tod.service';
+import {
+  formatError,
+  resolveBrowserTimeZone,
+  withTimeout
+} from './discord-activity.helpers';
 import type {
   ActivityAddonPairingCodeResponse,
   ActivityAddonTokenList,
-  ActivityAuction,
-  ActivityAuctionBid,
-  ActivityAuctionHistory,
   ActivityCreateAuctionInput,
   ActivityCreateEventInput,
   ActivityCreateLinkshellInput,
@@ -16,20 +28,15 @@ import type {
   ActivityHistory,
   ActivityHistoryDetail,
   ActivityItemInput,
-  ActivityLinkshellDetail,
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
-  ActivityLinkshellSearchResult,
   ActivityLootInput,
   ActivityLootStructure,
-  ActivityOverview,
-  ActivityParticipantInviteCandidate,
   ActivityQuickJoinInput,
   ActivityRevenueInput,
   ActivityStatus,
   ActivityUpdateProfileInput,
   ActivityUpdateTodInput,
-  ActivityUserSearchResult,
   DiscordContext,
   DiscordParticipant,
   DiscordSdkContextSource,
@@ -37,13 +44,6 @@ import type {
   DiscordTokenExchangeResponse,
   LocalActivityUser
 } from './discord-activity.types';
-import {
-  datetimeLocalToUtcIso,
-  formatActionError,
-  formatError,
-  resolveBrowserTimeZone,
-  withTimeout
-} from './discord-activity.helpers';
 
 // Re-export types so existing consumers that import from
 // `./discord-activity.service` keep compiling without source changes.
@@ -94,6 +94,11 @@ export type {
 
 declare const NG_APP_DISCORD_CLIENT_ID: string;
 
+/**
+ * Facade for the Activity feature. Discord SDK init + OAuth lives here;
+ * everything else delegates to per-domain services. Public surface (methods
+ * and signals) is preserved exactly for the consumer components.
+ */
 @Injectable({ providedIn: 'root' })
 export class DiscordActivityService {
   private readonly clientId = NG_APP_DISCORD_CLIENT_ID ?? '';
@@ -103,56 +108,74 @@ export class DiscordActivityService {
   private initializationPromise: Promise<void> | null = null;
   private sdk: DiscordSdkContextSource | null = null;
 
+  private readonly auth = inject(AuthService);
+  private readonly http = inject(ActivityHttpClient);
+  private readonly addonTokenService = inject(AddonTokenService);
+  private readonly auctionService = inject(AuctionService);
+  private readonly dkpService = inject(DkpService);
+  private readonly eventService = inject(EventService);
+  private readonly inviteService = inject(InviteService);
+  private readonly linkshellService = inject(LinkshellService);
+  private readonly linkshellContentService = inject(LinkshellContentService);
+  private readonly todService = inject(TodService);
+
+  // --- Top-level state owned by the facade itself ---
   readonly status = signal<ActivityStatus>('idle');
   readonly phase = signal('Waiting to initialize');
   readonly error = signal<string | null>(null);
-  readonly session = signal<DiscordSession | null>(null);
-  readonly localUser = signal<LocalActivityUser | null>(null);
   readonly participants = signal<DiscordParticipant[]>([]);
   readonly context = signal<DiscordContext | null>(null);
-  readonly overview = signal<ActivityOverview | null>(null);
-  readonly actionMessage = signal<string | null>(null);
-  readonly actionError = signal<string | null>(null);
-  readonly busyEventId = signal<number | null>(null);
-  readonly busyLinkshellId = signal<number | null>(null);
-  readonly busyMemberId = signal<number | null>(null);
-  readonly inviteSearchResults = signal<ActivityUserSearchResult[]>([]);
-  readonly inviteSearchBusy = signal(false);
-  readonly busyInviteId = signal<number | null>(null);
+  readonly actionMessage = this.auth.actionMessage;
+  readonly actionError = this.auth.actionError;
   readonly busyProfileSave = signal(false);
-  readonly participantInviteCandidates = signal<ActivityParticipantInviteCandidate[]>([]);
-  readonly participantInviteBusy = signal(false);
-  readonly linkshellSearchResults = signal<ActivityLinkshellSearchResult[]>([]);
-  readonly linkshellSearchBusy = signal(false);
   readonly busyRefresh = signal(false);
-  readonly linkshellDetail = signal<ActivityLinkshellDetail | null>(null);
-  readonly linkshellDetailBusy = signal(false);
   readonly historyList = signal<ActivityHistory[]>([]);
   readonly historyDetail = signal<ActivityHistoryDetail | null>(null);
   readonly historyBusy = signal(false);
-  readonly dkpHistory = signal<ActivityDkpHistory | null>(null);
-  readonly dkpHistoryBusy = signal(false);
-  readonly auctions = signal<ActivityAuction[]>([]);
-  readonly auctionsBusy = signal(false);
-  readonly auctionHistory = signal<ActivityAuctionHistory[]>([]);
-  readonly auctionHistoryBusy = signal(false);
-  readonly auctionBids = signal<Record<number, ActivityAuctionBid[]>>({});
-  readonly busyAuctionId = signal<number | null>(null);
-  readonly busyAuctionItemId = signal<number | null>(null);
-  readonly busyTodId = signal<number | null>(null);
-  readonly busyTodSave = signal(false);
-  readonly busyRuleSave = signal(false);
-  readonly busyRuleId = signal<number | null>(null);
-  readonly busyAnnouncementSave = signal(false);
-  readonly busyAnnouncementId = signal<number | null>(null);
-  readonly busyItemSave = signal(false);
-  readonly busyItemId = signal<number | null>(null);
-  readonly busyRevenueSave = signal(false);
-  readonly busyRevenueId = signal<number | null>(null);
+  readonly busyRuleSave = this.linkshellContentService.busyRuleSave;
+  readonly busyRuleId = this.linkshellContentService.busyRuleId;
+  readonly busyAnnouncementSave = this.linkshellContentService.busyAnnouncementSave;
+  readonly busyAnnouncementId = this.linkshellContentService.busyAnnouncementId;
+  readonly busyItemSave = this.linkshellContentService.busyItemSave;
+  readonly busyItemId = this.linkshellContentService.busyItemId;
+  readonly busyRevenueSave = this.linkshellContentService.busyRevenueSave;
+  readonly busyRevenueId = this.linkshellContentService.busyRevenueId;
+
+  // --- Facade signal accessors (re-export per-domain signals) ---
+  readonly session = this.auth.session;
+  readonly localUser = this.auth.localUser;
+  readonly overview = this.auth.overview;
+  readonly busyEventId = this.eventService.busyEventId;
+  readonly busyLinkshellId = this.linkshellService.busyLinkshellId;
+  readonly busyMemberId = this.linkshellService.busyMemberId;
+  readonly busyRoles = this.linkshellService.busyRoles;
+  readonly linkshellDetail = this.linkshellService.linkshellDetail;
+  readonly linkshellDetailBusy = this.linkshellService.linkshellDetailBusy;
+  readonly inviteSearchResults = this.inviteService.inviteSearchResults;
+  readonly inviteSearchBusy = this.inviteService.inviteSearchBusy;
+  readonly busyInviteId = this.inviteService.busyInviteId;
+  readonly participantInviteCandidates = this.inviteService.participantInviteCandidates;
+  readonly participantInviteBusy = this.inviteService.participantInviteBusy;
+  readonly linkshellSearchResults = this.inviteService.linkshellSearchResults;
+  readonly linkshellSearchBusy = this.inviteService.linkshellSearchBusy;
+  readonly dkpHistory = this.dkpService.dkpHistory;
+  readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
+  readonly busyDkpAudit = this.dkpService.busyDkpAudit;
+  readonly auctions = this.auctionService.auctions;
+  readonly auctionsBusy = this.auctionService.auctionsBusy;
+  readonly auctionHistory = this.auctionService.auctionHistory;
+  readonly auctionHistoryBusy = this.auctionService.auctionHistoryBusy;
+  readonly auctionBids = this.auctionService.auctionBids;
+  readonly busyAuctionId = this.auctionService.busyAuctionId;
+  readonly busyAuctionItemId = this.auctionService.busyAuctionItemId;
+  readonly busyTodId = this.todService.busyTodId;
+  readonly busyTodSave = this.todService.busyTodSave;
+  readonly busyAddonTokens = this.addonTokenService.busyAddonTokens;
 
   readonly isReady = computed(() => this.status() === 'ready');
   readonly isStandalonePreview = computed(() => this.status() === 'standalone');
 
+  // --- Discord SDK initialization + OAuth (kept on facade) ---
   async initialize(): Promise<void> {
     if (this.initializationPromise) {
       return this.initializationPromise;
@@ -214,14 +237,14 @@ export class DiscordActivityService {
         throw new Error('Discord authenticate returned no session data.');
       }
 
-      this.session.set(auth);
-      this.localUser.set(token.localUser ?? null);
+      this.auth.session.set(auth);
+      this.auth.localUser.set(token.localUser ?? null);
 
       this.phase.set('Resolving the local app user');
-      this.localUser.set(await this.fetchLocalUser(token.accessToken));
+      this.auth.localUser.set(await this.fetchLocalUser(token.accessToken));
 
       this.phase.set('Loading linkshell activity data');
-      this.overview.set(await this.fetchOverview(token.accessToken));
+      this.auth.overview.set(await this.auth.fetchOverview(token.accessToken));
 
       this.phase.set('Loading activity participants');
       const participantsResponse = (await sdk.commands.getInstanceConnectedParticipants()) as {
@@ -300,100 +323,38 @@ export class DiscordActivityService {
     return payload as LocalActivityUser;
   }
 
-  private async fetchOverview(accessToken?: string): Promise<ActivityOverview> {
-    return this.fetchActivityJson<ActivityOverview>('/api/activity/overview', accessToken);
-  }
-
-  private async fetchActivityJson<T>(path: string, accessToken?: string): Promise<T> {
-    const headers: Record<string, string> = {};
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-    }
-
-    const response = await fetch(path, {
-      headers,
-      cache: 'no-store',
-      credentials: 'include'
-    });
-
-    const responseText = await response.text();
-    let payload: unknown = {};
-
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = { error: responseText };
-      }
-    }
-
-    if (!response.ok) {
-      const errorPayload = payload as { error?: unknown };
-      const message =
-        typeof errorPayload.error === 'string'
-          ? errorPayload.error
-          : `Loading linkshell activity data failed with status ${response.status}.`;
-      throw new Error(message);
-    }
-
-    return payload as T;
-  }
-
-  async signUpForEvent(eventId: number, jobId: number, adHocJob?: ActivityQuickJoinInput): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
+  private async tryLoadStandaloneOverview(): Promise<void> {
     try {
-      const body: { jobId: number; jobName?: string; subJobName?: string; jobType?: string } = { jobId };
-      if (jobId <= 0 && adHocJob) {
-        body.jobName = adHocJob.jobName;
-        body.subJobName = adHocJob.subJobName;
-        body.jobType = adHocJob.jobType;
-      }
-      await this.postActivityAction(`/api/activity/events/${eventId}/signup`, body);
-      await this.refreshOverview();
-      this.actionMessage.set('Event signup updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Signing up for the event failed.'));
-    } finally {
-      this.busyEventId.set(null);
+      this.auth.overview.set(await this.auth.fetchOverview());
+      this.phase.set('Loaded outside Discord using the current website session.');
+    } catch {
+      this.auth.overview.set(null);
     }
   }
 
-  async unsignFromEvent(eventId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/unsign`);
-      await this.refreshOverview();
-      this.actionMessage.set('Event signup removed.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Removing the event signup failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
+  private setError(message: string): void {
+    this.status.set('error');
+    this.phase.set('Discord Activity initialization failed');
+    this.error.set(message);
   }
 
-  async refreshOverview(): Promise<void> {
-    const accessToken = this.session()?.access_token;
-    this.overview.set(await this.fetchOverview(accessToken));
+  // --- Top-level coordination methods (overview, refresh, history) ---
+  refreshOverview(): Promise<void> {
+    return this.auth.refreshOverview();
   }
 
   async refreshActivityData(): Promise<void> {
     this.busyRefresh.set(true);
-    this.actionError.set(null);
+    this.auth.setActionError(null);
 
     try {
-      const accessToken = this.session()?.access_token;
-      this.overview.set(await this.fetchOverview(accessToken));
+      const accessToken = this.auth.currentAccessToken();
+      this.auth.overview.set(await this.auth.fetchOverview(accessToken));
 
-      const appUser = this.overview()?.appUser;
-      const currentLocalUser = this.localUser();
+      const appUser = this.auth.overview()?.appUser;
+      const currentLocalUser = this.auth.localUser();
       if (appUser && currentLocalUser) {
-        this.localUser.set({
+        this.auth.localUser.set({
           ...currentLocalUser,
           appUser: {
             ...currentLocalUser.appUser,
@@ -409,9 +370,9 @@ export class DiscordActivityService {
         this.participants.set(participantsResponse.participants ?? []);
       }
 
-      this.actionMessage.set('Activity data refreshed.');
+      this.auth.setActionMessage('Activity data refreshed.');
     } catch (error) {
-      this.actionError.set(formatActionError(error, 'Refreshing activity data failed.'));
+      this.auth.setActionError(this.formatActionErrorMsg(error, 'Refreshing activity data failed.'));
     } finally {
       this.busyRefresh.set(false);
     }
@@ -421,11 +382,13 @@ export class DiscordActivityService {
     this.historyBusy.set(true);
 
     try {
-      const accessToken = this.session()?.access_token;
-      this.historyList.set(await this.fetchActivityJson<ActivityHistory[]>('/api/activity/history', accessToken));
+      const accessToken = this.auth.currentAccessToken();
+      this.historyList.set(
+        await this.http.fetchActivityJson<ActivityHistory[]>('/api/activity/history', accessToken)
+      );
     } catch (error) {
       this.historyList.set([]);
-      this.actionError.set(formatActionError(error, 'Loading event history failed.'));
+      this.auth.setActionError(this.formatActionErrorMsg(error, 'Loading event history failed.'));
     } finally {
       this.historyBusy.set(false);
     }
@@ -440,13 +403,18 @@ export class DiscordActivityService {
     this.historyBusy.set(true);
 
     try {
-      const accessToken = this.session()?.access_token;
+      const accessToken = this.auth.currentAccessToken();
       this.historyDetail.set(
-        await this.fetchActivityJson<ActivityHistoryDetail>(`/api/activity/history/${historyId}`, accessToken)
+        await this.http.fetchActivityJson<ActivityHistoryDetail>(
+          `/api/activity/history/${historyId}`,
+          accessToken
+        )
       );
     } catch (error) {
       this.historyDetail.set(null);
-      this.actionError.set(formatActionError(error, 'Loading event history details failed.'));
+      this.auth.setActionError(
+        this.formatActionErrorMsg(error, 'Loading event history details failed.')
+      );
     } finally {
       this.historyBusy.set(false);
     }
@@ -456,551 +424,27 @@ export class DiscordActivityService {
     this.historyDetail.set(null);
   }
 
-  async loadDkpHistory(linkshellId?: number | null, appUserId?: string | null): Promise<ActivityDkpHistory | null> {
-    this.dkpHistoryBusy.set(true);
-
-    try {
-      const accessToken = this.session()?.access_token;
-      const query = new URLSearchParams();
-      if (linkshellId) {
-        query.set('linkshellId', String(linkshellId));
-      }
-      if (appUserId) {
-        query.set('appUserId', appUserId);
-      }
-
-      const path = query.size > 0 ? `/api/activity/dkp-history?${query.toString()}` : '/api/activity/dkp-history';
-      const history = await this.fetchActivityJson<ActivityDkpHistory>(path, accessToken);
-      this.dkpHistory.set(history);
-      return history;
-    } catch (error) {
-      this.dkpHistory.set(null);
-      this.actionError.set(formatActionError(error, 'Loading DKP History failed.'));
-      return null;
-    } finally {
-      this.dkpHistoryBusy.set(false);
-    }
+  clearActionState(): void {
+    this.auth.clearActionState();
   }
 
-  clearDkpHistory(): void {
-    this.dkpHistory.set(null);
-  }
-
-  readonly busyDkpAudit = signal(false);
-  readonly busyRoles = signal(false);
-  readonly busyAddonTokens = signal(false);
-
-  // Game Addon (att) pairing — calls the same /api/addon/management endpoints
-  // the web Customize Linkshell page uses (cookie-authenticated; the Activity's
-  // session cookie carries through via credentials:'include' on every fetch).
-  async loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> {
-    this.busyAddonTokens.set(true);
-    this.actionError.set(null);
-    try {
-      const accessToken = this.session()?.access_token;
-      return await this.fetchActivityJson<ActivityAddonTokenList>(
-        `/api/addon/management/tokens?linkshellId=${linkshellId}`,
-        accessToken
-      );
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Loading addon tokens failed.'));
-      return null;
-    } finally {
-      this.busyAddonTokens.set(false);
-    }
-  }
-
-  async createAddonPairingCode(linkshellId: number, label: string | null): Promise<ActivityAddonPairingCodeResponse | null> {
-    this.busyAddonTokens.set(true);
-    this.actionError.set(null);
-    try {
-      return await this.postActivityJson<ActivityAddonPairingCodeResponse>(
-        '/api/addon/management/pairing-code',
-        { linkshellId, label }
-      );
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Generating the pairing code failed.'));
-      return null;
-    } finally {
-      this.busyAddonTokens.set(false);
-    }
-  }
-
-  async revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> {
-    this.busyAddonTokens.set(true);
-    this.actionError.set(null);
-    try {
-      await this.postActivityAction(
-        `/api/addon/management/tokens/${tokenId}/revoke?linkshellId=${linkshellId}`
-      );
-      return true;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Revoking the addon token failed.'));
-      return false;
-    } finally {
-      this.busyAddonTokens.set(false);
-    }
-  }
-
-  // Removes a single AppUserEventWindow row (a participant's attendance for one
-  // posted HNM window). The server cleans up the matching ledger entry too.
-  async removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> {
-    this.actionError.set(null);
-    try {
-      const accessToken = this.session()?.access_token;
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-      const response = await fetch(
-        `/api/addon/management/window-attendees/${attendeeId}`,
-        { method: 'DELETE', headers, credentials: 'include' }
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const payload = JSON.parse(text || '{}') as { error?: string };
-          throw new Error(payload.error || `Remove failed (HTTP ${response.status}).`);
-        } catch {
-          throw new Error(text || `Remove failed (HTTP ${response.status}).`);
-        }
-      }
-      return true;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Removing the attendee failed.'));
-      return false;
-    }
-  }
-
-  async loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> {
-    this.busyRoles.set(true);
-    this.actionError.set(null);
-    try {
-      const accessToken = this.session()?.access_token;
-      const data = await this.fetchActivityJson<ActivityLinkshellRolesResponse>(
-        `/api/activity/linkshells/${linkshellId}/roles`,
-        accessToken
-      );
-      return data;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Loading linkshell roles failed.'));
-      return null;
-    } finally {
-      this.busyRoles.set(false);
-    }
-  }
-
-  async createLinkshellRole(linkshellId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> {
-    this.busyRoles.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/roles`, input);
-      await this.refreshOverview();
-      this.actionMessage.set('Role created.');
-      return true;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Creating the role failed.'));
-      return false;
-    } finally {
-      this.busyRoles.set(false);
-    }
-  }
-
-  async updateLinkshellRole(linkshellId: number, roleId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> {
-    this.busyRoles.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-    try {
-      await this.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/roles/${roleId}/update`,
-        input
-      );
-      await this.refreshOverview();
-      this.actionMessage.set('Role updated.');
-      return true;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the role failed.'));
-      return false;
-    } finally {
-      this.busyRoles.set(false);
-    }
-  }
-
-  async deleteLinkshellRole(linkshellId: number, roleId: number): Promise<boolean> {
-    this.busyRoles.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-    try {
-      await this.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/roles/${roleId}/delete`
-      );
-      await this.refreshOverview();
-      this.actionMessage.set('Role deleted.');
-      return true;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the role failed.'));
-      return false;
-    } finally {
-      this.busyRoles.set(false);
-    }
-  }
-
-  async submitDkpAudit(input: {
-    linkshellId: number;
-    targetAppUserId: string;
-    mode: 'Adjust' | 'Misc';
-    relatedLedgerEntryId?: number | null;
-    amount: number;
-    reason: string;
-  }): Promise<boolean> {
-    this.busyDkpAudit.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction('/api/activity/dkp-audit', {
-        linkshellId: input.linkshellId,
-        targetAppUserId: input.targetAppUserId,
-        mode: input.mode,
-        relatedLedgerEntryId: input.relatedLedgerEntryId ?? null,
-        amount: input.amount,
-        reason: input.reason
-      });
-      await this.loadDkpHistory(input.linkshellId, input.targetAppUserId);
-      await this.refreshOverview();
-      this.actionMessage.set('DKP audit recorded.');
-      return true;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Submitting the DKP audit failed.'));
-      return false;
-    } finally {
-      this.busyDkpAudit.set(false);
-    }
-  }
-
-  async loadAuctions(linkshellId?: number | null): Promise<void> {
-    this.auctionsBusy.set(true);
-
-    try {
-      const accessToken = this.session()?.access_token;
-      const query = new URLSearchParams();
-      if (linkshellId) {
-        query.set('linkshellId', String(linkshellId));
-      }
-
-      const path = query.size > 0 ? `/api/activity/auctions?${query.toString()}` : '/api/activity/auctions';
-      this.auctions.set(await this.fetchActivityJson<ActivityAuction[]>(path, accessToken));
-    } catch (error) {
-      this.auctions.set([]);
-      this.actionError.set(formatActionError(error, 'Loading auctions failed.'));
-    } finally {
-      this.auctionsBusy.set(false);
-    }
-  }
-
-  async loadAuctionHistory(linkshellId?: number | null): Promise<void> {
-    this.auctionHistoryBusy.set(true);
-
-    try {
-      const accessToken = this.session()?.access_token;
-      const query = new URLSearchParams();
-      if (linkshellId) {
-        query.set('linkshellId', String(linkshellId));
-      }
-
-      const path = query.size > 0 ? `/api/activity/auction-history?${query.toString()}` : '/api/activity/auction-history';
-      this.auctionHistory.set(await this.fetchActivityJson<ActivityAuctionHistory[]>(path, accessToken));
-    } catch (error) {
-      this.auctionHistory.set([]);
-      this.actionError.set(formatActionError(error, 'Loading auction history failed.'));
-    } finally {
-      this.auctionHistoryBusy.set(false);
-    }
-  }
-
-  async loadAuctionItemBids(itemId: number): Promise<void> {
-    if (itemId <= 0) {
-      return;
-    }
-
-    try {
-      const accessToken = this.session()?.access_token;
-      const bids = await this.fetchActivityJson<ActivityAuctionBid[]>(`/api/activity/auction-items/${itemId}/bids`, accessToken);
-      this.auctionBids.update(current => ({ ...current, [itemId]: bids }));
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Loading auction bids failed.'));
-    }
-  }
-
-  clearAuctionState(): void {
-    this.auctions.set([]);
-    this.auctionHistory.set([]);
-    this.auctionBids.set({});
-  }
-
-  async createAuction(input: ActivityCreateAuctionInput): Promise<void> {
-    this.busyAuctionId.set(input.linkshellId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction('/api/activity/auctions', {
-        linkshellId: input.linkshellId,
-        title: input.title,
-        startTimeLocal: datetimeLocalToUtcIso(input.startTimeLocal),
-        endTimeLocal: datetimeLocalToUtcIso(input.endTimeLocal),
-        items: input.items
-      });
-      await this.refreshOverview();
-      await this.loadAuctions(input.linkshellId);
-      await this.loadAuctionHistory(input.linkshellId);
-      this.actionMessage.set('Auction created.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Creating the auction failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionId.set(null);
-    }
-  }
-
-  async updateAuction(auctionId: number, input: ActivityCreateAuctionInput): Promise<void> {
-    this.busyAuctionId.set(auctionId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/auctions/${auctionId}/update`, {
-        linkshellId: input.linkshellId,
-        title: input.title,
-        startTimeLocal: datetimeLocalToUtcIso(input.startTimeLocal),
-        endTimeLocal: datetimeLocalToUtcIso(input.endTimeLocal),
-        items: input.items
-      });
-      await this.refreshOverview();
-      await this.loadAuctions(input.linkshellId);
-      this.actionMessage.set('Auction updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the auction failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionId.set(null);
-    }
-  }
-
-  async startAuction(auctionId: number, linkshellId: number): Promise<void> {
-    this.busyAuctionId.set(auctionId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/auctions/${auctionId}/start`);
-      await this.loadAuctions(linkshellId);
-      this.actionMessage.set('Auction started.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Starting the auction failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionId.set(null);
-    }
-  }
-
-  async placeAuctionBid(itemId: number, bidAmount: number, linkshellId: number): Promise<void> {
-    this.busyAuctionItemId.set(itemId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/auction-items/${itemId}/bid`, { bidAmount });
-      await this.loadAuctions(linkshellId);
-      await this.loadAuctionItemBids(itemId);
-      await this.refreshOverview();
-      this.actionMessage.set('Bid submitted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Submitting the bid failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionItemId.set(null);
-    }
-  }
-
-  async closeAuction(auctionId: number, linkshellId: number, deliveredItemIds: number[] = []): Promise<void> {
-    this.busyAuctionId.set(auctionId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/auctions/${auctionId}/close`, { deliveredItemIds });
-      await this.refreshOverview();
-      await this.loadAuctions(linkshellId);
-      await this.loadAuctionHistory(linkshellId);
-      this.actionMessage.set('Auction closed and archived.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Closing the auction failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionId.set(null);
-    }
-  }
-
-  async markAuctionHistoryItemReceived(itemId: number, linkshellId: number): Promise<void> {
-    this.busyAuctionItemId.set(itemId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/auction-history/items/${itemId}/received`);
-      await this.loadAuctionHistory(linkshellId);
-      this.actionMessage.set('Auction history item marked received.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating auction history failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionItemId.set(null);
-    }
-  }
-
-  async undoAuctionHistoryItem(itemId: number, linkshellId: number): Promise<void> {
-    this.busyAuctionItemId.set(itemId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/auction-history/items/${itemId}/undo`);
-      await this.loadAuctionHistory(linkshellId);
-      this.actionMessage.set('Auction history status updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating auction history failed.'));
-      throw error;
-    } finally {
-      this.busyAuctionItemId.set(null);
-    }
-  }
-
-  async loadLinkshellDetail(linkshellId: number): Promise<void> {
-    if (linkshellId <= 0) {
-      this.linkshellDetail.set(null);
-      return;
-    }
-
-    this.linkshellDetailBusy.set(true);
-
-    try {
-      const accessToken = this.session()?.access_token;
-      this.linkshellDetail.set(
-        await this.fetchActivityJson<ActivityLinkshellDetail>(`/api/activity/linkshells/${linkshellId}`, accessToken)
-      );
-    } catch (error) {
-      this.linkshellDetail.set(null);
-      this.actionError.set(formatActionError(error, 'Loading linkshell details failed.'));
-    } finally {
-      this.linkshellDetailBusy.set(false);
-    }
-  }
-
-  clearLinkshellDetail(): void {
-    this.linkshellDetail.set(null);
-  }
-
-  async createEvent(input: ActivityCreateEventInput): Promise<void> {
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction('/api/activity/events', {
-        linkshellId: input.linkshellId,
-        eventName: input.eventName,
-        eventType: input.eventType || null,
-        eventLocation: input.eventLocation || null,
-        startTimeLocal: datetimeLocalToUtcIso(input.startTimeLocal),
-        endTimeLocal: datetimeLocalToUtcIso(input.endTimeLocal),
-        duration: input.duration ?? null,
-        dkpPerHour: input.dkpPerHour ?? null,
-        details: input.details || null,
-        jobs: input.jobs
-          .filter(job => job.jobName.trim().length > 0)
-          .map(job => ({
-            jobName: job.jobName,
-            subJobName: job.subJobName,
-            jobType: job.jobType || null,
-            quantity: job.quantity ?? null,
-            details: job.details || null
-          }))
-      });
-
-      await this.refreshOverview();
-      this.actionMessage.set('Event created.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Creating the event failed.'));
-      throw error;
-    }
-  }
-
-  async updateEvent(eventId: number, input: ActivityCreateEventInput): Promise<void> {
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/update`, {
-        linkshellId: input.linkshellId,
-        eventName: input.eventName,
-        eventType: input.eventType || null,
-        eventLocation: input.eventLocation || null,
-        startTimeLocal: datetimeLocalToUtcIso(input.startTimeLocal),
-        endTimeLocal: datetimeLocalToUtcIso(input.endTimeLocal),
-        duration: input.duration ?? null,
-        dkpPerHour: input.dkpPerHour ?? null,
-        details: input.details || null,
-        jobs: input.jobs
-          .filter(job => job.jobName.trim().length > 0)
-          .map(job => ({
-            jobName: job.jobName,
-            subJobName: job.subJobName,
-            jobType: job.jobType || null,
-            quantity: job.quantity ?? null,
-            details: job.details || null
-          }))
-      });
-
-      await this.refreshOverview();
-      this.actionMessage.set('Event updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the event failed.'));
-      throw error;
-    }
-  }
-
-  async createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> {
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction('/api/activity/linkshells', {
-        name: input.name,
-        details: input.details || null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Linkshell created.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Creating the linkshell failed.'));
-      throw error;
-    }
-  }
-
+  // --- Profile (kept on facade — also rewrites localUser snapshot) ---
   async updateProfile(input: ActivityUpdateProfileInput): Promise<void> {
     this.busyProfileSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
 
     try {
-      await this.postActivityAction('/api/activity/profile', {
+      await this.http.postActivityAction('/api/activity/profile', {
         characterName: input.characterName,
         timeZone: input.timeZone || null
       });
-      await this.refreshOverview();
+      await this.auth.refreshOverview();
 
-      const appUser = this.overview()?.appUser;
-      const currentLocalUser = this.localUser();
+      const appUser = this.auth.overview()?.appUser;
+      const currentLocalUser = this.auth.localUser();
       if (appUser && currentLocalUser) {
-        this.localUser.set({
+        this.auth.localUser.set({
           ...currentLocalUser,
           appUser: {
             ...currentLocalUser.appUser,
@@ -1009,976 +453,26 @@ export class DiscordActivityService {
         });
       }
 
-      this.actionMessage.set('Profile updated.');
+      this.auth.setActionMessage('Profile updated.');
     } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the profile failed.'));
+      this.auth.setActionError(this.formatActionErrorMsg(error, 'Updating the profile failed.'));
       throw error;
     } finally {
       this.busyProfileSave.set(false);
     }
   }
 
-  async updateLinkshell(
-    linkshellId: number,
-    input: ActivityCreateLinkshellInput & {
-      lootStructure?: ActivityLootStructure | null;
-      enableHnmSection?: boolean | null;
-      enableMissions?: boolean | null;
-      enableAuctions?: boolean | null;
-      enableToDs?: boolean | null;
-      enableEndgame?: boolean | null;
-      enableEvents?: boolean | null;
-      enableDkp?: boolean | null;
-      enableItems?: boolean | null;
-      enableRevenue?: boolean | null;
-      dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null;
-    }
-  ): Promise<void> {
-    this.busyLinkshellId.set(linkshellId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
+  // --- Rules / Announcements / Items / Revenue: see linkshellContentService ---
+  // (delegates live in the facade-delegates section below)
 
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/update`, {
-        name: input.name,
-        details: input.details || null,
-        lootStructure: input.lootStructure ?? null,
-        enableHnmSection: input.enableHnmSection ?? null,
-        enableMissions: input.enableMissions ?? null,
-        enableAuctions: input.enableAuctions ?? null,
-        enableToDs: input.enableToDs ?? null,
-        enableEndgame: input.enableEndgame ?? null,
-        enableEvents: input.enableEvents ?? null,
-        enableDkp: input.enableDkp ?? null,
-        enableItems: input.enableItems ?? null,
-        enableRevenue: input.enableRevenue ?? null,
-        dkpRoundingIncrement: input.dkpRoundingIncrement ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Linkshell updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the linkshell failed.'));
-      throw error;
-    } finally {
-      this.busyLinkshellId.set(null);
-    }
-  }
-
-  async setPrimaryLinkshell(linkshellId: number): Promise<void> {
-    this.busyLinkshellId.set(linkshellId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/primary`);
-      await this.refreshOverview();
-      this.actionMessage.set('Primary linkshell updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the primary linkshell failed.'));
-    } finally {
-      this.busyLinkshellId.set(null);
-    }
-  }
-
-  async searchPlayers(query: string, linkshellId: number): Promise<void> {
-    if (!query.trim() || query.trim().length < 2 || linkshellId <= 0) {
-      this.inviteSearchResults.set([]);
-      return;
-    }
-
-    this.inviteSearchBusy.set(true);
-    this.actionError.set(null);
-
-    try {
-      const headers: Record<string, string> = {};
-      const accessToken = this.session()?.access_token;
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch(
-        `/api/activity/players/search?query=${encodeURIComponent(query.trim())}&linkshellId=${linkshellId}`,
-        {
-          headers,
-          cache: 'no-store',
-          credentials: 'include'
-        }
-      );
-
-      const responseText = await response.text();
-      let payload: unknown = [];
-
-      if (responseText) {
-        try {
-          payload = JSON.parse(responseText);
-        } catch {
-          payload = { error: responseText };
-        }
-      }
-
-      if (!response.ok) {
-        const errorPayload = payload as { error?: unknown };
-        throw new Error(
-          typeof errorPayload.error === 'string'
-            ? errorPayload.error
-            : `Searching players failed with status ${response.status}.`
-        );
-      }
-
-      this.inviteSearchResults.set(payload as ActivityUserSearchResult[]);
-    } catch (error) {
-      this.inviteSearchResults.set([]);
-      this.actionError.set(formatActionError(error, 'Searching players failed.'));
-    } finally {
-      this.inviteSearchBusy.set(false);
-    }
-  }
-
-  clearInviteSearch(): void {
-    this.inviteSearchResults.set([]);
-  }
-
-  clearParticipantInviteCandidates(): void {
-    this.participantInviteCandidates.set([]);
-  }
-
-  clearLinkshellSearch(): void {
-    this.linkshellSearchResults.set([]);
-  }
-
-  async loadParticipantInviteCandidates(linkshellId: number, discordUserIds: string[]): Promise<void> {
-    const normalizedIds = Array.from(
-      new Set(discordUserIds.map(id => id.trim()).filter(id => id.length > 0))
-    );
-
-    if (linkshellId <= 0 || normalizedIds.length === 0) {
-      this.participantInviteCandidates.set([]);
-      return;
-    }
-
-    this.participantInviteBusy.set(true);
-
-    try {
-      const response = await this.postActivityJson<ActivityParticipantInviteCandidate[]>(
-        '/api/activity/invites/participants',
-        {
-          linkshellId,
-          discordUserIds: normalizedIds
-        }
-      );
-
-      this.participantInviteCandidates.set(response);
-    } catch (error) {
-      this.participantInviteCandidates.set([]);
-      this.actionError.set(formatActionError(error, 'Loading connected participant invite targets failed.'));
-    } finally {
-      this.participantInviteBusy.set(false);
-    }
-  }
-
-  async sendInvite(linkshellId: number, appUserId: string): Promise<void> {
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/invites`, { appUserId });
-      await this.refreshOverview();
-      this.actionMessage.set('Invite sent.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Sending the invite failed.'));
-    }
-  }
-
-  async searchLinkshells(query: string): Promise<void> {
-    this.linkshellSearchBusy.set(true);
-    this.actionError.set(null);
-
-    try {
-      const headers: Record<string, string> = {};
-      const accessToken = this.session()?.access_token;
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch(
-        `/api/activity/linkshells/search?query=${encodeURIComponent(query.trim())}`,
-        {
-          headers,
-          cache: 'no-store',
-          credentials: 'include'
-        }
-      );
-
-      const responseText = await response.text();
-      let payload: unknown = [];
-
-      if (responseText) {
-        try {
-          payload = JSON.parse(responseText);
-        } catch {
-          payload = { error: responseText };
-        }
-      }
-
-      if (!response.ok) {
-        const errorPayload = payload as { error?: unknown };
-        throw new Error(
-          typeof errorPayload.error === 'string'
-            ? errorPayload.error
-            : `Searching linkshells failed with status ${response.status}.`
-        );
-      }
-
-      this.linkshellSearchResults.set(payload as ActivityLinkshellSearchResult[]);
-    } catch (error) {
-      this.linkshellSearchResults.set([]);
-      this.actionError.set(formatActionError(error, 'Searching linkshells failed.'));
-    } finally {
-      this.linkshellSearchBusy.set(false);
-    }
-  }
-
-  async requestJoinLinkshell(linkshellId: number): Promise<void> {
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/join-request`);
-      await this.refreshOverview();
-      this.actionMessage.set('Join request sent.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Sending the join request failed.'));
-    }
-  }
-
-  async approveJoinRequest(inviteId: number): Promise<void> {
-    this.busyInviteId.set(inviteId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/join-requests/${inviteId}/approve`);
-      await this.refreshOverview();
-      this.actionMessage.set('Join request approved.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Approving the join request failed.'));
-    } finally {
-      this.busyInviteId.set(null);
-    }
-  }
-
-  async declineJoinRequest(inviteId: number): Promise<void> {
-    this.busyInviteId.set(inviteId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/join-requests/${inviteId}/decline`);
-      await this.refreshOverview();
-      this.actionMessage.set('Join request declined.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Declining the join request failed.'));
-    } finally {
-      this.busyInviteId.set(null);
-    }
-  }
-
-  async acceptInvite(inviteId: number): Promise<void> {
-    this.busyInviteId.set(inviteId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/invites/${inviteId}/accept`);
-      await this.refreshOverview();
-      this.actionMessage.set('Invite accepted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Accepting the invite failed.'));
-    } finally {
-      this.busyInviteId.set(null);
-    }
-  }
-
-  async declineInvite(inviteId: number): Promise<void> {
-    this.busyInviteId.set(inviteId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/invites/${inviteId}/decline`);
-      await this.refreshOverview();
-      this.actionMessage.set('Invite declined.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Declining the invite failed.'));
-    } finally {
-      this.busyInviteId.set(null);
-    }
-  }
-
-  async revokeInvite(inviteId: number): Promise<void> {
-    this.busyInviteId.set(inviteId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/invites/${inviteId}/revoke`);
-      await this.refreshOverview();
-      this.actionMessage.set('Invite revoked.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Revoking the invite failed.'));
-    } finally {
-      this.busyInviteId.set(null);
-    }
-  }
-
-  async removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> {
-    this.busyMemberId.set(memberId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/members/${memberId}/remove`);
-      await this.refreshOverview();
-      this.actionMessage.set('Linkshell member removed.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Removing the linkshell member failed.'));
-    } finally {
-      this.busyMemberId.set(null);
-    }
-  }
-
-  async updateLinkshellMemberRole(linkshellId: number, memberId: number, role: string, characterName?: string | null): Promise<void> {
-    this.busyMemberId.set(memberId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/members/${memberId}/role`, { role });
-      await this.refreshOverview();
-      const who = characterName?.trim() || 'Member';
-      this.actionMessage.set(
-        role === 'Leader'
-          ? `Leadership transferred to ${who}.`
-          : role === 'Officer'
-            ? `${who} promoted to officer.`
-            : `${who}'s role changed to ${role}.`
-      );
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the member role failed.'));
-    } finally {
-      this.busyMemberId.set(null);
-    }
-  }
-
-  async deleteLinkshell(linkshellId: number): Promise<void> {
-    this.busyLinkshellId.set(linkshellId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/delete`);
-      await this.refreshOverview();
-      this.actionMessage.set('Linkshell deleted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the linkshell failed.'));
-      throw error;
-    } finally {
-      this.busyLinkshellId.set(null);
-    }
-  }
-
-  async leaveLinkshell(linkshellId: number): Promise<void> {
-    this.busyLinkshellId.set(linkshellId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/leave`);
-      await this.refreshOverview();
-      this.actionMessage.set('Linkshell membership updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Leaving the linkshell failed.'));
-      throw error;
-    } finally {
-      this.busyLinkshellId.set(null);
-    }
-  }
-
-  async startEvent(eventId: number, absentParticipantIds?: number[]): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      const body = absentParticipantIds && absentParticipantIds.length > 0
-        ? { absentParticipantIds }
-        : undefined;
-      await this.postActivityAction(`/api/activity/events/${eventId}/start`, body);
-      await this.refreshOverview();
-      this.actionMessage.set('Event started.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Starting the event failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async cancelEvent(eventId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/cancel`);
-      await this.refreshOverview();
-      this.actionMessage.set('Event canceled.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Canceling the event failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async verifyParticipant(eventId: number, participantId: number, isVerified: boolean): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/verify`, {
-        participantId,
-        isVerified
-      });
-      await this.refreshOverview();
-      this.actionMessage.set(isVerified ? 'Participant marked present.' : 'Participant marked absent.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating attendance verification failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async resetParticipantVerification(eventId: number, participantId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/verify/reset`, { participantId });
-      await this.refreshOverview();
-      this.actionMessage.set('Attendance verification reset.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Resetting attendance verification failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async takeBreak(eventId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/break`);
-      await this.refreshOverview();
-      this.actionMessage.set('You are now marked as on break.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating break status failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async sendParticipantToBreak(eventId: number, participantId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/break/force`, { participantId });
-      await this.refreshOverview();
-      this.actionMessage.set('Member moved to the Break Room.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Sending the member to the Break Room failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async resumeParticipantFromBreak(eventId: number, participantId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/break/resume/force`, { participantId });
-      await this.refreshOverview();
-      this.actionMessage.set('Member resumed from break.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Resuming the member from break failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async returnFromBreak(eventId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/break/return`);
-      await this.refreshOverview();
-      this.actionMessage.set('You returned from break and are awaiting verification.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Returning from break failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async verifyReturn(eventId: number, ledgerEntryId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/verify-return`, {
-        ledgerEntryId
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Break return verified.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Verifying the break return failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async denyReturn(eventId: number, ledgerEntryId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/deny-return`, {
-        ledgerEntryId
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Break return denied.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Denying the break return failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async addLoot(eventId: number, input: ActivityLootInput): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/loot`, {
-        itemName: input.itemName,
-        itemWinner: input.itemWinner || null,
-        winningDkpSpent: input.winningDkpSpent ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Loot entry added.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Adding loot failed.'));
-      throw error;
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async createTod(input: ActivityCreateTodInput): Promise<void> {
-    this.busyTodSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction('/api/activity/tods', {
-        linkshellId: input.linkshellId,
-        monsterName: input.monsterName,
-        dayNumber: input.dayNumber ?? null,
-        claim: input.claim,
-        timeLocal: input.timeLocal,
-        cooldown: input.cooldown || null,
-        interval: input.interval || null,
-        noLoot: input.noLoot,
-        lootDetails: input.lootDetails.map(detail => ({
-          itemName: detail.itemName || null,
-          itemWinner: detail.itemWinner || null,
-          winningDkpSpent: detail.winningDkpSpent ?? null
-        })),
-        imagePath: input.imagePath ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('ToD entry saved.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Saving the ToD entry failed.'));
-      throw error;
-    } finally {
-      this.busyTodSave.set(false);
-    }
-  }
-
-  async updateTod(input: ActivityUpdateTodInput): Promise<void> {
-    this.busyTodSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/tods/${input.todId}/update`, {
-        monsterName: input.monsterName,
-        dayNumber: input.dayNumber ?? null,
-        claim: input.claim,
-        timeLocal: input.timeLocal,
-        cooldown: input.cooldown || null,
-        interval: input.interval || null,
-        noLoot: input.noLoot,
-        lootDetails: input.lootDetails.map(detail => ({
-          itemName: detail.itemName || null,
-          itemWinner: detail.itemWinner || null,
-          winningDkpSpent: detail.winningDkpSpent ?? null
-        })),
-        imagePath: input.imagePath ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('ToD entry updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the ToD entry failed.'));
-      throw error;
-    } finally {
-      this.busyTodSave.set(false);
-    }
-  }
-
-  async uploadTodImage(file: File): Promise<string | null> {
-    this.actionError.set(null);
-    try {
-      const accessToken = this.session()?.access_token;
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const headers: Record<string, string> = {};
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch('/api/activity/tods/upload-image', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-        headers
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Upload failed');
-      }
-
-      const payload = await response.json() as { imagePath?: string };
-      return payload.imagePath ?? null;
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Uploading the ToD image failed.'));
-      return null;
-    }
-  }
-
-  async createRule(linkshellId: number, title: string, details: string): Promise<void> {
-    this.busyRuleSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/rules`, {
-        title,
-        details
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Rule added.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Creating the rule failed.'));
-      throw error;
-    } finally {
-      this.busyRuleSave.set(false);
-    }
-  }
-
-  async updateRule(ruleId: number, title: string, details: string): Promise<void> {
-    this.busyRuleSave.set(true);
-    this.busyRuleId.set(ruleId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/rules/${ruleId}/update`, {
-        title,
-        details
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Rule updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the rule failed.'));
-      throw error;
-    } finally {
-      this.busyRuleSave.set(false);
-      this.busyRuleId.set(null);
-    }
-  }
-
-  async deleteRule(ruleId: number): Promise<void> {
-    this.busyRuleId.set(ruleId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/rules/${ruleId}/delete`);
-      await this.refreshOverview();
-      this.actionMessage.set('Rule deleted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the rule failed.'));
-      throw error;
-    } finally {
-      this.busyRuleId.set(null);
-    }
-  }
-
-  async createAnnouncement(linkshellId: number, title: string, details: string): Promise<void> {
-    this.busyAnnouncementSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/announcements`, {
-        title,
-        details
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Announcement posted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Creating the announcement failed.'));
-      throw error;
-    } finally {
-      this.busyAnnouncementSave.set(false);
-    }
-  }
-
-  async updateAnnouncement(announcementId: number, title: string, details: string): Promise<void> {
-    this.busyAnnouncementSave.set(true);
-    this.busyAnnouncementId.set(announcementId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/announcements/${announcementId}/update`, {
-        title,
-        details
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Announcement updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the announcement failed.'));
-      throw error;
-    } finally {
-      this.busyAnnouncementSave.set(false);
-      this.busyAnnouncementId.set(null);
-    }
-  }
-
-  async deleteAnnouncement(announcementId: number): Promise<void> {
-    this.busyAnnouncementId.set(announcementId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/announcements/${announcementId}/delete`);
-      await this.refreshOverview();
-      this.actionMessage.set('Announcement deleted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the announcement failed.'));
-      throw error;
-    } finally {
-      this.busyAnnouncementId.set(null);
-    }
-  }
-
-  async createItem(linkshellId: number, input: ActivityItemInput): Promise<void> {
-    this.busyItemSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/items`, {
-        itemName: input.itemName,
-        itemType: input.itemType ?? null,
-        quantity: input.quantity,
-        notes: input.notes ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Item added to inventory.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Adding the item failed.'));
-      throw error;
-    } finally {
-      this.busyItemSave.set(false);
-    }
-  }
-
-  async updateItem(itemId: number, input: ActivityItemInput): Promise<void> {
-    this.busyItemId.set(itemId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/items/${itemId}/update`, {
-        itemName: input.itemName,
-        itemType: input.itemType ?? null,
-        quantity: input.quantity,
-        notes: input.notes ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Item updated.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Updating the item failed.'));
-      throw error;
-    } finally {
-      this.busyItemId.set(null);
-    }
-  }
-
-  async deleteItem(itemId: number): Promise<void> {
-    this.busyItemId.set(itemId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/items/${itemId}/delete`);
-      await this.refreshOverview();
-      this.actionMessage.set('Item deleted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the item failed.'));
-      throw error;
-    } finally {
-      this.busyItemId.set(null);
-    }
-  }
-
-  async createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> {
-    this.busyRevenueSave.set(true);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/linkshells/${linkshellId}/revenue`, {
-        entryType: input.entryType,
-        category: input.category ?? null,
-        value: input.value,
-        details: input.details ?? null,
-        occurredAt: input.occurredAt ?? null
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Revenue entry saved.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Saving the revenue entry failed.'));
-      throw error;
-    } finally {
-      this.busyRevenueSave.set(false);
-    }
-  }
-
-  async deleteRevenueEntry(entryId: number): Promise<void> {
-    this.busyRevenueId.set(entryId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/revenue/${entryId}/delete`);
-      await this.refreshOverview();
-      this.actionMessage.set('Revenue entry deleted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the revenue entry failed.'));
-      throw error;
-    } finally {
-      this.busyRevenueId.set(null);
-    }
-  }
-
-  async deleteTod(todId: number): Promise<void> {
-    this.busyTodId.set(todId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/tods/${todId}/delete`);
-      await this.refreshOverview();
-      this.actionMessage.set('ToD entry deleted.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Deleting the ToD entry failed.'));
-      throw error;
-    } finally {
-      this.busyTodId.set(null);
-    }
-  }
-
-  async endEvent(eventId: number): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/end`);
-      await this.refreshOverview();
-      this.actionMessage.set('Event ended and moved to history.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Ending the event failed.'));
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  async quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> {
-    this.busyEventId.set(eventId);
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-
-    try {
-      await this.postActivityAction(`/api/activity/events/${eventId}/quick-join`, {
-        jobName: input.jobName,
-        subJobName: input.subJobName,
-        jobType: input.jobType
-      });
-      await this.refreshOverview();
-      this.actionMessage.set('Live event join added.');
-    } catch (error) {
-      this.actionError.set(formatActionError(error, 'Joining the live event failed.'));
-      throw error;
-    } finally {
-      this.busyEventId.set(null);
-    }
-  }
-
-  private async tryLoadStandaloneOverview(): Promise<void> {
-    try {
-      this.overview.set(await this.fetchOverview());
-      this.phase.set('Loaded outside Discord using the current website session.');
-    } catch {
-      this.overview.set(null);
-    }
-  }
-
-  clearActionState(): void {
-    this.actionError.set(null);
-    this.actionMessage.set(null);
-  }
-
+  // --- Time / formatting helpers (kept on facade for consumer convenience) ---
   viewerTimeZone(): string {
-    return this.browserTimeZone || this.overview()?.appUser?.timeZone || this.localUser()?.appUser?.timeZone || 'UTC';
+    return (
+      this.browserTimeZone ||
+      this.auth.overview()?.appUser?.timeZone ||
+      this.auth.localUser()?.appUser?.timeZone ||
+      'UTC'
+    );
   }
 
   formatDateTime(value?: string | null): string | null {
@@ -2044,57 +538,109 @@ export class DiscordActivityService {
     return `${lookup('year')}-${lookup('month')}-${lookup('day')}T${lookup('hour')}:${lookup('minute')}`;
   }
 
-  private async postActivityAction(path: string, body?: unknown): Promise<void> {
-    await this.postActivityJson(path, body);
+  // Local re-export of the helper so we don't have to import it into every
+  // facade method that needs it.
+  private formatActionErrorMsg(error: unknown, fallback: string): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return fallback;
   }
 
-  private async postActivityJson<T = void>(path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
+  // ===========================================================================
+  // Facade delegate methods — one-line forwarders to the per-domain services.
+  // Method signatures and behavior are identical to the pre-refactor versions.
+  // ===========================================================================
 
-    const accessToken = this.session()?.access_token;
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-    }
+  // --- AddonTokenService ---
+  loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> { return this.addonTokenService.loadAddonTokens(linkshellId); }
+  createAddonPairingCode(linkshellId: number, label: string | null): Promise<ActivityAddonPairingCodeResponse | null> { return this.addonTokenService.createAddonPairingCode(linkshellId, label); }
+  revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> { return this.addonTokenService.revokeAddonToken(tokenId, linkshellId); }
 
-    const response = await fetch(path, {
-      method: 'POST',
-      headers,
-      cache: 'no-store',
-      credentials: 'include',
-      body: body ? JSON.stringify(body) : undefined
-    });
+  // --- DkpService ---
+  loadDkpHistory(linkshellId?: number | null, appUserId?: string | null): Promise<ActivityDkpHistory | null> { return this.dkpService.loadDkpHistory(linkshellId, appUserId); }
+  clearDkpHistory(): void { this.dkpService.clearDkpHistory(); }
+  submitDkpAudit(input: { linkshellId: number; targetAppUserId: string; mode: 'Adjust' | 'Misc'; relatedLedgerEntryId?: number | null; amount: number; reason: string }): Promise<boolean> { return this.dkpService.submitDkpAudit(input); }
 
-    if (response.ok) {
-      if (response.status === 204) {
-        return undefined as T;
-      }
+  // --- TodService ---
+  createTod(input: ActivityCreateTodInput): Promise<void> { return this.todService.createTod(input); }
+  updateTod(input: ActivityUpdateTodInput): Promise<void> { return this.todService.updateTod(input); }
+  deleteTod(todId: number): Promise<void> { return this.todService.deleteTod(todId); }
+  uploadTodImage(file: File): Promise<string | null> { return this.todService.uploadTodImage(file); }
 
-      const responseText = await response.text();
-      if (!responseText) {
-        return undefined as T;
-      }
+  // --- AuctionService ---
+  loadAuctions(linkshellId?: number | null): Promise<void> { return this.auctionService.loadAuctions(linkshellId); }
+  loadAuctionHistory(linkshellId?: number | null): Promise<void> { return this.auctionService.loadAuctionHistory(linkshellId); }
+  loadAuctionItemBids(itemId: number): Promise<void> { return this.auctionService.loadAuctionItemBids(itemId); }
+  clearAuctionState(): void { this.auctionService.clearAuctionState(); }
+  createAuction(input: ActivityCreateAuctionInput): Promise<void> { return this.auctionService.createAuction(input); }
+  updateAuction(auctionId: number, input: ActivityCreateAuctionInput): Promise<void> { return this.auctionService.updateAuction(auctionId, input); }
+  startAuction(auctionId: number, linkshellId: number): Promise<void> { return this.auctionService.startAuction(auctionId, linkshellId); }
+  placeAuctionBid(itemId: number, bidAmount: number, linkshellId: number): Promise<void> { return this.auctionService.placeAuctionBid(itemId, bidAmount, linkshellId); }
+  closeAuction(auctionId: number, linkshellId: number, deliveredItemIds: number[] = []): Promise<void> { return this.auctionService.closeAuction(auctionId, linkshellId, deliveredItemIds); }
+  markAuctionHistoryItemReceived(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.markAuctionHistoryItemReceived(itemId, linkshellId); }
+  undoAuctionHistoryItem(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.undoAuctionHistoryItem(itemId, linkshellId); }
 
-      return JSON.parse(responseText) as T;
-    }
+  // --- InviteService ---
+  searchPlayers(query: string, linkshellId: number): Promise<void> { return this.inviteService.searchPlayers(query, linkshellId); }
+  clearInviteSearch(): void { this.inviteService.clearInviteSearch(); }
+  clearParticipantInviteCandidates(): void { this.inviteService.clearParticipantInviteCandidates(); }
+  clearLinkshellSearch(): void { this.inviteService.clearLinkshellSearch(); }
+  loadParticipantInviteCandidates(linkshellId: number, discordUserIds: string[]): Promise<void> { return this.inviteService.loadParticipantInviteCandidates(linkshellId, discordUserIds); }
+  sendInvite(linkshellId: number, appUserId: string): Promise<void> { return this.inviteService.sendInvite(linkshellId, appUserId); }
+  searchLinkshells(query: string): Promise<void> { return this.inviteService.searchLinkshells(query); }
+  requestJoinLinkshell(linkshellId: number): Promise<void> { return this.inviteService.requestJoinLinkshell(linkshellId); }
+  approveJoinRequest(inviteId: number): Promise<void> { return this.inviteService.approveJoinRequest(inviteId); }
+  declineJoinRequest(inviteId: number): Promise<void> { return this.inviteService.declineJoinRequest(inviteId); }
+  acceptInvite(inviteId: number): Promise<void> { return this.inviteService.acceptInvite(inviteId); }
+  declineInvite(inviteId: number): Promise<void> { return this.inviteService.declineInvite(inviteId); }
+  revokeInvite(inviteId: number): Promise<void> { return this.inviteService.revokeInvite(inviteId); }
 
-    const responseText = await response.text();
-    if (!responseText) {
-      throw new Error(`Activity request failed with status ${response.status}.`);
-    }
+  // --- LinkshellService ---
+  loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
+  clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
+  createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
+  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
+  setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
+  deleteLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.deleteLinkshell(linkshellId); }
+  leaveLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.leaveLinkshell(linkshellId); }
+  removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> { return this.linkshellService.removeLinkshellMember(linkshellId, memberId); }
+  updateLinkshellMemberRole(linkshellId: number, memberId: number, role: string, characterName?: string | null): Promise<void> { return this.linkshellService.updateLinkshellMemberRole(linkshellId, memberId, role, characterName); }
+  loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> { return this.linkshellService.loadLinkshellRoles(linkshellId); }
+  createLinkshellRole(linkshellId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> { return this.linkshellService.createLinkshellRole(linkshellId, input); }
+  updateLinkshellRole(linkshellId: number, roleId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> { return this.linkshellService.updateLinkshellRole(linkshellId, roleId, input); }
+  deleteLinkshellRole(linkshellId: number, roleId: number): Promise<boolean> { return this.linkshellService.deleteLinkshellRole(linkshellId, roleId); }
 
-    try {
-      const payload = JSON.parse(responseText) as { error?: string };
-      throw new Error(payload.error || `Activity request failed with status ${response.status}.`);
-    } catch {
-      throw new Error(responseText);
-    }
-  }
+  // --- EventService ---
+  signUpForEvent(eventId: number, jobId: number, adHocJob?: ActivityQuickJoinInput): Promise<void> { return this.eventService.signUpForEvent(eventId, jobId, adHocJob); }
+  unsignFromEvent(eventId: number): Promise<void> { return this.eventService.unsignFromEvent(eventId); }
+  createEvent(input: ActivityCreateEventInput): Promise<void> { return this.eventService.createEvent(input); }
+  updateEvent(eventId: number, input: ActivityCreateEventInput): Promise<void> { return this.eventService.updateEvent(eventId, input); }
+  startEvent(eventId: number, absentParticipantIds?: number[]): Promise<void> { return this.eventService.startEvent(eventId, absentParticipantIds); }
+  endEvent(eventId: number): Promise<void> { return this.eventService.endEvent(eventId); }
+  cancelEvent(eventId: number): Promise<void> { return this.eventService.cancelEvent(eventId); }
+  takeBreak(eventId: number): Promise<void> { return this.eventService.takeBreak(eventId); }
+  returnFromBreak(eventId: number): Promise<void> { return this.eventService.returnFromBreak(eventId); }
+  sendParticipantToBreak(eventId: number, participantId: number): Promise<void> { return this.eventService.sendParticipantToBreak(eventId, participantId); }
+  resumeParticipantFromBreak(eventId: number, participantId: number): Promise<void> { return this.eventService.resumeParticipantFromBreak(eventId, participantId); }
+  verifyParticipant(eventId: number, participantId: number, isVerified: boolean): Promise<void> { return this.eventService.verifyParticipant(eventId, participantId, isVerified); }
+  resetParticipantVerification(eventId: number, participantId: number): Promise<void> { return this.eventService.resetParticipantVerification(eventId, participantId); }
+  verifyReturn(eventId: number, ledgerEntryId: number): Promise<void> { return this.eventService.verifyReturn(eventId, ledgerEntryId); }
+  denyReturn(eventId: number, ledgerEntryId: number): Promise<void> { return this.eventService.denyReturn(eventId, ledgerEntryId); }
+  addLoot(eventId: number, input: ActivityLootInput): Promise<void> { return this.eventService.addLoot(eventId, input); }
+  quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> { return this.eventService.quickJoinLiveEvent(eventId, input); }
+  removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> { return this.eventService.removeAttendanceWindowAttendee(attendeeId); }
 
-  private setError(message: string): void {
-    this.status.set('error');
-    this.phase.set('Discord Activity initialization failed');
-    this.error.set(message);
-  }
+  // --- LinkshellContentService (rules / announcements / items / revenue) ---
+  createRule(linkshellId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.createRule(linkshellId, title, details); }
+  updateRule(ruleId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.updateRule(ruleId, title, details); }
+  deleteRule(ruleId: number): Promise<void> { return this.linkshellContentService.deleteRule(ruleId); }
+  createAnnouncement(linkshellId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.createAnnouncement(linkshellId, title, details); }
+  updateAnnouncement(announcementId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.updateAnnouncement(announcementId, title, details); }
+  deleteAnnouncement(announcementId: number): Promise<void> { return this.linkshellContentService.deleteAnnouncement(announcementId); }
+  createItem(linkshellId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.createItem(linkshellId, input); }
+  updateItem(itemId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.updateItem(itemId, input); }
+  deleteItem(itemId: number): Promise<void> { return this.linkshellContentService.deleteItem(itemId); }
+  createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.createRevenueEntry(linkshellId, input); }
+  deleteRevenueEntry(entryId: number): Promise<void> { return this.linkshellContentService.deleteRevenueEntry(entryId); }
 }

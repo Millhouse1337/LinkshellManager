@@ -1,0 +1,259 @@
+<article class="panel" aria-labelledby="linkshell-heading">
+    <div class="panel__header">
+      <div>
+        <p class="eyebrow eyebrow--small">Linkshell</p>
+        <h2 id="linkshell-heading">{{ isMemberMode() ? 'Membership' : 'Roster' }}</h2>
+      </div>
+      <div class="button-cluster">
+        <span class="pill">{{ activity.overview()?.stats?.linkshellCount ?? 0 }}</span>
+        @if (canCreateLinkshell()) {
+        <button type="button" class="action-button action-button--secondary" (click)="openCreateLinkshellForm()">Create</button>
+        }
+      </div>
+    </div>
+
+    @if (isCreateLinkshellOpen) {
+      <form class="create-form create-form--compact" (ngSubmit)="submitCreateLinkshellForm()">
+        <div class="create-form__header">
+          <div>
+            <strong>{{ editingLinkshellId ? 'Edit linkshell' : 'Create linkshell' }}</strong>
+            <p>
+              @if (editingLinkshellId) {
+                Update the selected linkshell without leaving the Activity.
+              } @else {
+                Bootstrap the current Discord-linked app user with a primary linkshell.
+              }
+            </p>
+          </div>
+          <button type="button" class="action-button action-button--secondary" (click)="closeCreateLinkshellForm()">Close</button>
+        </div>
+
+        <div class="create-form__grid">
+          <label>
+            <span>Linkshell name</span>
+            <input [(ngModel)]="createLinkshellModel.name" name="linkshellName" required />
+          </label>
+          <label>
+            <span>Details</span>
+            <input [(ngModel)]="createLinkshellModel.details" name="linkshellDetails" />
+          </label>
+        </div>
+
+        <div class="create-form__actions">
+          <button type="submit" class="action-button" [disabled]="isSubmittingLinkshell">
+            @if (isSubmittingLinkshell) {
+              {{ editingLinkshellId ? 'Saving...' : 'Creating...' }}
+            } @else {
+              {{ editingLinkshellId ? 'Save linkshell' : 'Create linkshell' }}
+            }
+          </button>
+        </div>
+      </form>
+    }
+
+    @if (selectedLinkshell(); as selectedLinkshell) {
+      @if (linkshellMemberships().length > 1) {
+        <div class="invite-section">
+          <h3>Memberships</h3>
+          <ul class="compact-list compact-list--dense">
+            @for (linkshell of linkshellMemberships(); track linkshell.id) {
+              <li>
+                <div>
+                  <strong>{{ linkshell.name }}</strong>
+                  <span>{{ linkshell.rank || 'Member' }} | {{ linkshell.memberCount }} members</span>
+                </div>
+                <div class="button-cluster">
+                  @if (selectedLinkshellId === linkshell.id) {
+                    <span class="pill">Viewing</span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      (click)="selectLinkshell(linkshell.id)">
+                      View
+                    </button>
+                  }
+                  @if (primaryLinkshellId() === linkshell.id) {
+                    <span class="pill">Primary</span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyLinkshellId() === linkshell.id"
+                      (click)="activity.setPrimaryLinkshell(linkshell.id)">
+                      {{ activity.busyLinkshellId() === linkshell.id ? 'Updating...' : 'Set primary' }}
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyLinkshellId() === linkshell.id"
+                    (click)="confirmLeaveLinkshell(linkshell.id, linkshell.name)">
+                    {{ activity.busyLinkshellId() === linkshell.id ? 'Updating...' : 'Leave' }}
+                  </button>
+                </div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      <div class="summary-card">
+        <p class="summary-card__label">Selected linkshell</p>
+        <strong>{{ selectedLinkshell.name }}</strong>
+        <p>{{ selectedLinkshell.memberCount }} members</p>
+        @if (selectedLinkshell.details) {
+          <p class="muted">{{ selectedLinkshell.details }}</p>
+        }
+        @if (primaryLinkshellActiveEventCount() > 0) {
+          <p class="notice">This linkshell still has {{ primaryLinkshellActiveEventCount() }} queued/live event(s).</p>
+        }
+        <div class="button-cluster">
+          @if (canManageLinkshell(selectedLinkshell.id)) {
+            <button type="button" class="action-button action-button--secondary" (click)="openEditLinkshellForm()">Edit</button>
+            <button
+              type="button"
+              class="action-button action-button--secondary"
+              [disabled]="activity.busyLinkshellId() === selectedLinkshell.id || !canDeletePrimaryLinkshell()"
+              [title]="deletePrimaryLinkshellHint()"
+              (click)="confirmDeleteLinkshell(selectedLinkshell.id, selectedLinkshell.name)">
+              {{ activity.busyLinkshellId() === selectedLinkshell.id ? 'Updating...' : 'Delete' }}
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="action-button action-button--secondary"
+              [disabled]="activity.busyLinkshellId() === selectedLinkshell.id"
+              (click)="confirmLeaveLinkshell(selectedLinkshell.id, selectedLinkshell.name)">
+              {{ activity.busyLinkshellId() === selectedLinkshell.id ? 'Updating...' : 'Leave linkshell' }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="invite-section">
+        <div class="panel__header">
+          <h3>Members</h3>
+          <span class="pill">{{ filteredSelectedLinkshellMembers().length }}</span>
+        </div>
+        <div class="roster-tools">
+          <input
+            [(ngModel)]="memberSearchTerm"
+            name="memberSearchTerm"
+            placeholder="Search roster" />
+          @if (!isMemberMode()) {
+          <div class="filter-row">
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'all'"
+              (click)="memberRoleFilter = 'all'">
+              All
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'leader'"
+              (click)="memberRoleFilter = 'leader'">
+              Leaders
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'officer'"
+              (click)="memberRoleFilter = 'officer'">
+              Officers
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              [class.filter-pill--active]="memberRoleFilter === 'member'"
+              (click)="memberRoleFilter = 'member'">
+              Members
+            </button>
+          </div>
+          }
+        </div>
+      </div>
+
+      <div class="ac-roster">
+        <div class="ac-roster-head">
+          <div></div>
+          <div>Character</div>
+          <div>Rank</div>
+          <div class="ac-roster-dkp-head">DKP</div>
+          <div>Status</div>
+        </div>
+        @for (member of filteredSelectedLinkshellMembers(); track member.id) {
+          <div class="ac-roster-row">
+            <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ memberInitials(member.characterName) }}</div>
+            <div class="ac-roster-name-cell">
+              <div class="ac-roster-name">{{ member.characterName }}</div>
+            </div>
+            <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
+            <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+            <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+            @if (canManageMembers() && member.appUserId && member.appUserId !== appUserId()) {
+              <div class="ac-roster-actions">
+                <select
+                  [ngModel]="member.rank || 'Member'"
+                  (ngModelChange)="changeMemberRole(selectedLinkshell.id, member.id, member.characterName, $event)"
+                  [name]="'memberRole_' + member.id"
+                  [disabled]="activity.busyMemberId() === member.id">
+                  @for (role of availableRolesForLinkshell(selectedLinkshell.id); track role.id) {
+                    <option [value]="role.name">{{ role.name }}</option>
+                  }
+                </select>
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyMemberId() === member.id"
+                  (click)="activity.removeLinkshellMember(selectedLinkshell.id, member.id)">
+                  {{ activity.busyMemberId() === member.id ? 'Removing...' : 'Remove' }}
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </div>
+      @if (filteredSelectedLinkshellMembers().length === 0) {
+        <p class="notice">No roster members matched the current search/filter.</p>
+      }
+    } @else if (activity.overview()) {
+      <p class="notice">No linkshell membership has been selected yet.</p>
+      @if (canRequestLinkshellAccess()) {
+        <div class="invite-section">
+          <h3>Request to join a linkshell</h3>
+          @if (activity.linkshellSearchBusy()) {
+            <p class="notice">Loading available linkshells...</p>
+          } @else if (activity.linkshellSearchResults().length > 0) {
+            <div class="invite-search">
+              <select
+                [(ngModel)]="selectedJoinLinkshellId"
+                name="selectedJoinLinkshellId">
+                @for (linkshell of activity.linkshellSearchResults(); track linkshell.id) {
+                  <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
+                }
+              </select>
+              <button type="button" class="action-button" (click)="requestJoinSelectedLinkshell()">Request join</button>
+            </div>
+
+            @if (selectedJoinLinkshell(); as selectedLinkshell) {
+              <div class="summary-card">
+                <p class="summary-card__label">Selected linkshell</p>
+                <strong>{{ selectedLinkshell.name }}</strong>
+                <p>{{ selectedLinkshell.memberCount }} members</p>
+                @if (selectedLinkshell.details) {
+                  <p class="muted">{{ selectedLinkshell.details }}</p>
+                }
+              </div>
+            }
+          } @else {
+            <p class="notice">No joinable linkshells are available right now.</p>
+          }
+        </div>
+      }
+    } @else {
+      <p class="notice">Linkshell data will appear after the current user is resolved.</p>
+    }
+  </article>

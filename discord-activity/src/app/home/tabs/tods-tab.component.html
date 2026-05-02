@@ -1,0 +1,289 @@
+    <div class="panel-tab fade">
+      <div class="section-head">
+        <div>
+          <div class="section-label">ToD Tracker</div>
+        </div>
+        <div class="section-head-right">
+          <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
+          @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+            <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+          }
+        </div>
+      </div>
+
+      <!-- Tracked Windows -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Tracked Windows</div>
+          <span class="tag default num">{{ selectedDashboardTods().length }}</span>
+        </div>
+        @if (selectedDashboardTods().length > 0) {
+          @for (group of groupedDashboardTods(); track group.key) {
+            <div class="tod-entry" [class.window-open]="isTodReady(group.latest)">
+              <div class="tod-head">
+                <div class="tod-head-left">
+                  <div class="tod-mob-name">{{ group.latest.monsterName }}</div>
+                  <span class="tag" [class.success]="group.latest.claim" [class.default]="!group.latest.claim">{{ group.latest.claim ? 'Claimed' : 'Unclaimed' }}</span>
+                  @if (group.history.length > 0) {
+                    <span class="tag default num">{{ group.history.length + 1 }}</span>
+                  }
+                </div>
+                <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
+              </div>
+              <div class="tod-sub">Day {{ group.latest.dayNumber ?? '-' }} &middot; {{ group.latest.cooldown || '22 Hour' }} &middot; {{ group.latest.interval || '10 Min' }} &middot; {{ group.latest.lootCount }} loot</div>
+              <div class="tod-meta-grid">
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Countdown</div>
+                  <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
+                </div>
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Time of death</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || 'Unavailable' }}</div>
+                </div>
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Repop starts</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || 'Unavailable' }}</div>
+                </div>
+              </div>
+              @if (group.latest.imagePath) {
+                <a class="tod-image-thumb" [href]="group.latest.imagePath" target="_blank" rel="noopener">
+                  <img [src]="group.latest.imagePath" alt="ToD screenshot" />
+                </a>
+              }
+              <div class="tod-entry-actions">
+                @if (group.history.length > 0) {
+                  <button type="button" class="btn sm" (click)="toggleTodGroup(group.key)">
+                    {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
+                  </button>
+                }
+                @if (group.latest.lootCount > 0) {
+                  <button type="button" class="btn sm" (click)="toggleTodLoot(group.latest.id)">
+                    {{ isTodLootExpanded(group.latest.id) ? 'Hide loot' : 'View Loot (' + group.latest.lootCount + ')' }}
+                  </button>
+                }
+                <button type="button" class="btn sm" (click)="beginEditTod(group.latest)">Edit</button>
+                <button type="button" class="btn sm danger-outline"
+                  [disabled]="activity.busyTodId() === group.latest.id"
+                  (click)="deleteTod(group.latest.id, group.latest.monsterName)">
+                  {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
+                </button>
+              </div>
+              @if (isTodLootExpanded(group.latest.id)) {
+                <div class="tod-loot-list">
+                  @for (loot of group.latest.lootDetails; track loot.id) {
+                    <div class="tod-loot-item">
+                      <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                      <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                      @if (loot.winningDkpSpent != null) {
+                        <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+              @if (isTodGroupExpanded(group.key)) {
+                <div class="tod-history-list">
+                  @for (hist of group.history; track hist.id) {
+                    <div class="tod-history-item">
+                      <div class="tod-history-main">
+                        <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
+                        <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || 'Unavailable' }}</span>
+                      </div>
+                      <div class="tod-history-meta">
+                        <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
+                        @if (hist.lootCount > 0) {
+                          <button type="button" class="btn sm" (click)="toggleTodLoot(hist.id)">
+                            {{ isTodLootExpanded(hist.id) ? 'Hide loot' : 'View Loot' }}
+                          </button>
+                        }
+                        <button type="button" class="btn sm" (click)="beginEditTod(hist)">Edit</button>
+                        <button type="button" class="btn sm danger-outline"
+                          [disabled]="activity.busyTodId() === hist.id"
+                          (click)="deleteTod(hist.id, hist.monsterName)">
+                          {{ activity.busyTodId() === hist.id ? 'Deleting...' : 'Delete' }}
+                        </button>
+                      </div>
+                      @if (isTodLootExpanded(hist.id)) {
+                        <div class="tod-loot-list">
+                          @for (loot of hist.lootDetails; track loot.id) {
+                            <div class="tod-loot-item">
+                              <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                              <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                              @if (loot.winningDkpSpent != null) {
+                                <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Log the first Time of Death below and the tracker will show countdowns here.</div>
+          </div>
+        }
+      </div>
+
+      <!-- Log ToD form -->
+      @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">{{ editingTodId !== null ? 'Edit ToD' : 'Log ToD' }}</div>
+            @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+              <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+            }
+          </div>
+          <div class="card-body">
+            <form class="form-grid tod-form" (ngSubmit)="submitTod()">
+              <div class="tod-form__row tod-form__row--monster" [class.tod-form__row--split]="isTodMonsterOther()">
+                <label class="field">
+                  <span class="form-label">Monster</span>
+                  <select class="form-select" [(ngModel)]="todDraft.monsterName" (ngModelChange)="onTodMonsterChange($event)" name="todMonsterName">
+                    @for (monster of todMonsterOptions; track monster) { <option [value]="monster">{{ monster }}</option> }
+                  </select>
+                </label>
+                @if (isTodMonsterOther()) {
+                  <label class="field">
+                    <span class="form-label">Monster name</span>
+                    <input class="form-input" [(ngModel)]="todCustomMonsterName" name="todCustomMonsterName"
+                      placeholder="Enter monster name" maxlength="128" required />
+                  </label>
+                }
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span class="form-label">Day number</span>
+                  <div class="tod-day-number-row">
+                    @if (!todDayNumberNotSpecified) {
+                      <input class="form-input" [(ngModel)]="todDraft.dayNumber" name="todDayNumber" type="number" min="0" placeholder="0" />
+                    } @else {
+                      <input class="form-input" value="Not specified" disabled />
+                    }
+                    <label class="tod-toggle">
+                      <input type="checkbox" [ngModel]="todDayNumberNotSpecified"
+                        (ngModelChange)="onTodDayNumberNotSpecifiedChange($event)" name="todDayNumberNotSpecified" />
+                      <span>Not specified</span>
+                    </label>
+                  </div>
+                </label>
+                <label class="field">
+                  <span class="form-label">Claim</span>
+                  <select class="form-select" [ngModel]="todClaimChoice"
+                    (ngModelChange)="onTodClaimChoiceChange($event)" name="todClaim">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                    <option value="NotSpecified">Not specified</option>
+                  </select>
+                </label>
+              </div>
+              <div class="tod-form__row tod-form__row--cooldown" [class.tod-form__row--split]="isTodCooldownOther()">
+                <label class="field">
+                  <span class="form-label">Cooldown</span>
+                  <select class="form-select" [(ngModel)]="todDraft.cooldown" (ngModelChange)="updateTodRepopTime()" name="todCooldown">
+                    @for (cooldown of todCooldownOptions; track cooldown) { <option [value]="cooldown">{{ cooldown }}</option> }
+                  </select>
+                </label>
+                @if (isTodCooldownOther()) {
+                  <label class="field">
+                    <span class="form-label">Cooldown hours</span>
+                    <input class="form-input" [ngModel]="todCustomCooldownHours"
+                      (ngModelChange)="onTodCustomCooldownChange($event)" name="todCustomCooldownHours"
+                      type="number" min="1" placeholder="Cooldown hours" required />
+                  </label>
+                }
+                <label class="field">
+                  <span class="form-label">Interval</span>
+                  <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
+                    @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span class="form-label">Time of death</span>
+                  <input class="form-input" [ngModel]="todTimeLocalValue"
+                    (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
+                    type="datetime-local" step="1" required />
+                </label>
+                <label class="field">
+                  <span class="form-label">Repop time</span>
+                  <input class="form-input" [ngModel]="todRepopLocalValue" name="todRepopLocal"
+                    type="datetime-local" step="1" readonly />
+                </label>
+              </div>
+              <div class="tod-repop-card">
+                <div class="tod-repop-card__label">Calculated repop</div>
+                <strong>{{ todRepopSummary() }}</strong>
+              </div>
+              @if (todDraft.claim && lootStructureFor(todDraft.linkshellId) !== 'LootCouncil') {
+                <label class="tod-toggle">
+                  <input type="checkbox" [ngModel]="!todDraft.noLoot" (ngModelChange)="onTodNoLootChange(!$event)" name="todAddLoot" />
+                  <span>Add loot</span>
+                </label>
+                @if (!todDraft.noLoot) {
+                  <div class="loot-rows">
+                    <div class="panel__header">
+                      <h4>Loot</h4>
+                      <button type="button" class="btn sm" (click)="addTodLootRow()">Add row</button>
+                    </div>
+                    @for (loot of todDraft.lootDetails; track $index) {
+                      <div class="loot-row-editor">
+                        <input class="form-input" [(ngModel)]="loot.itemName" [name]="'todLootItem' + $index" placeholder="Item name" />
+                        <select class="form-select" [(ngModel)]="loot.itemWinner" [name]="'todLootWinner' + $index">
+                          <option value="">Winner</option>
+                          @for (characterName of todCharacterNames(); track characterName) {
+                            <option [value]="characterName">{{ characterName }}</option>
+                          }
+                        </select>
+                        <input class="form-input" [(ngModel)]="loot.winningDkpSpent" [name]="'todLootDkp' + $index"
+                          type="number" min="0"
+                          [attr.max]="lootInputMax(todDraft.linkshellId)"
+                          [placeholder]="lootInputPlaceholder(todDraft.linkshellId)" />
+                        <button type="button" class="btn sm danger-outline" (click)="removeTodLootRow($index)">Remove</button>
+                      </div>
+                    }
+                  </div>
+                }
+              }
+              <div class="field">
+                <span class="form-label">Screenshot (optional)</span>
+                @if (todImagePath) {
+                  <div class="tod-image-preview">
+                    <img [src]="todImagePath" alt="ToD screenshot" />
+                    <button type="button" class="btn sm danger-outline" (click)="removeTodImage()">Remove image</button>
+                  </div>
+                } @else {
+                  <input type="file" accept="image/png,image/jpeg,image/webp"
+                    (change)="onTodImageFileChange($event)"
+                    [disabled]="isUploadingTodImage" />
+                  @if (isUploadingTodImage) {
+                    <p class="muted">Uploading…</p>
+                  }
+                }
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn primary" [disabled]="activity.busyTodSave() || isUploadingTodImage">
+                  {{ activity.busyTodSave() ? 'Saving...' : (editingTodId !== null ? 'Save changes' : 'Log ToD') }}
+                </button>
+                @if (editingTodId !== null) {
+                  <button type="button" class="btn ghost" (click)="cancelTodEdit()" [disabled]="activity.busyTodSave()">
+                    Cancel edit
+                  </button>
+                }
+              </div>
+            </form>
+          </div>
+        </div>
+      } @else {
+        <div class="card">
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">Create or join a linkshell before using the ToD Tracker.</div>
+          </div>
+        </div>
+      }
+    </div>

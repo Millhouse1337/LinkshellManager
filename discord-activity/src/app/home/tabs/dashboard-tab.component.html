@@ -1,0 +1,513 @@
+    <div class="panel-tab fade">
+      <!-- Linkshell overview stat strip -->
+      @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+        <div class="section-head">
+          <div>
+            <div class="section-label">Dashboard</div>
+            <div class="section-title">Linkshell overview</div>
+          </div>
+          <span class="tag default num">{{ dashboardLinkshell.memberCount }} members</span>
+        </div>
+
+        <div class="stat-strip">
+          <div class="stat-cell">
+            <div class="stat-cell-label">Linkshell</div>
+            <div class="stat-cell-value stat-cell-value--text">{{ dashboardLinkshell.name }}</div>
+          </div>
+          @if (dashboardLinkshell.settings?.enableItems) {
+            <div class="stat-cell">
+              <div class="stat-cell-label">Items</div>
+              <div class="stat-cell-value">{{ dashboardLinkshell.itemCount }}</div>
+            </div>
+          }
+          @if (dashboardLinkshell.settings?.enableRevenue) {
+            <div class="stat-cell">
+              <div class="stat-cell-label">Revenue</div>
+              <div class="stat-cell-value">{{ dashboardLinkshell.revenue }}</div>
+            </div>
+          }
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming Events</div>
+            <div class="stat-cell-value">{{ selectedDashboardEvents().length }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming Auctions</div>
+            <div class="stat-cell-value">{{ upcomingDashboardAuctionsCount() }}</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming ToDs</div>
+            <div class="stat-cell-value">{{ upcomingDashboardTodsCount() }}</div>
+          </div>
+        </div>
+      }
+
+      <!-- Rules -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Rules</div>
+          @if (canManageSelectedDashboard()) {
+            <button type="button" class="btn sm" (click)="toggleRuleForm()">
+              {{ showRuleForm() ? 'Cancel' : '+ Create' }}
+            </button>
+          }
+        </div>
+
+        @if (showRuleForm() && canManageSelectedDashboard()) {
+          <form class="inline-form" (submit)="$event.preventDefault(); submitRule()">
+            <div class="form-row">
+              <label class="form-label">Title</label>
+              <input type="text" class="form-input" name="ruleTitle" [(ngModel)]="ruleTitle" maxlength="256" required />
+            </div>
+            <div class="form-row">
+              <label class="form-label">Details</label>
+              <textarea class="form-input" name="ruleDetails" rows="3" [(ngModel)]="ruleDetails" maxlength="4000" required></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn primary sm" [disabled]="activity.busyRuleSave() || !ruleTitle.trim() || !ruleDetails.trim()">
+                {{ activity.busyRuleSave() ? 'Saving…' : (editingRuleId() !== null ? 'Update rule' : 'Save rule') }}
+              </button>
+              @if (editingRuleId() !== null) {
+                <button type="button" class="btn ghost sm" (click)="cancelEditRule()">Cancel</button>
+              }
+            </div>
+          </form>
+        }
+
+        @if (selectedDashboardRules().length > 0) {
+          <ul class="entry-list">
+            @for (rule of selectedDashboardRules(); track rule.id) {
+              <li class="entry-item">
+                <div class="entry-body">
+                  <div class="entry-title">{{ rule.title }}</div>
+                  <div class="entry-details">{{ rule.details }}</div>
+                  @if (rule.createdByCharacterName) {
+                    <div class="entry-meta">Added by {{ rule.createdByCharacterName }}</div>
+                  }
+                </div>
+                @if (canManageSelectedDashboard()) {
+                  <div class="entry-actions">
+                    <button type="button" class="btn ghost sm" (click)="startEditRule(rule)"
+                            [disabled]="activity.busyRuleId() === rule.id">
+                      Edit
+                    </button>
+                    <button type="button" class="btn ghost sm" (click)="deleteRule(rule.id)"
+                            [disabled]="activity.busyRuleId() === rule.id">
+                      {{ activity.busyRuleId() === rule.id ? '…' : 'Delete' }}
+                    </button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">No rules defined yet. Add rules so members know what's expected.</div>
+          </div>
+        }
+      </div>
+
+      <!-- Announcements -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Announcements</div>
+          @if (canManageSelectedDashboard()) {
+            <button type="button" class="btn sm" (click)="toggleAnnouncementForm()">
+              {{ showAnnouncementForm() ? 'Cancel' : '+ Create' }}
+            </button>
+          }
+        </div>
+
+        @if (showAnnouncementForm() && canManageSelectedDashboard()) {
+          <form class="inline-form" (submit)="$event.preventDefault(); submitAnnouncement()">
+            <div class="form-row">
+              <label class="form-label">Title</label>
+              <input type="text" class="form-input" name="announcementTitle" [(ngModel)]="announcementTitle" maxlength="256" required />
+            </div>
+            <div class="form-row">
+              <label class="form-label">Details</label>
+              <textarea class="form-input" name="announcementDetails" rows="3" [(ngModel)]="announcementDetails" maxlength="4000" required></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn primary sm" [disabled]="activity.busyAnnouncementSave() || !announcementTitle.trim() || !announcementDetails.trim()">
+                {{ activity.busyAnnouncementSave() ? 'Posting…' : (editingAnnouncementId() !== null ? 'Update announcement' : 'Post announcement') }}
+              </button>
+              @if (editingAnnouncementId() !== null) {
+                <button type="button" class="btn ghost sm" (click)="cancelEditAnnouncement()">Cancel</button>
+              }
+            </div>
+          </form>
+        }
+
+        @if (selectedDashboardAnnouncements().length > 0) {
+          <ul class="entry-list">
+            @for (announcement of selectedDashboardAnnouncements(); track announcement.id) {
+              <li class="entry-item">
+                <div class="entry-body">
+                  <div class="entry-title">{{ announcement.title }}</div>
+                  <div class="entry-details">{{ announcement.details }}</div>
+                  @if (announcement.createdByCharacterName) {
+                    <div class="entry-meta">Posted by {{ announcement.createdByCharacterName }}</div>
+                  }
+                </div>
+                @if (canManageSelectedDashboard()) {
+                  <div class="entry-actions">
+                    <button type="button" class="btn ghost sm" (click)="startEditAnnouncement(announcement)"
+                            [disabled]="activity.busyAnnouncementId() === announcement.id">
+                      Edit
+                    </button>
+                    <button type="button" class="btn ghost sm" (click)="deleteAnnouncement(announcement.id)"
+                            [disabled]="activity.busyAnnouncementId() === announcement.id">
+                      {{ activity.busyAnnouncementId() === announcement.id ? '…' : 'Delete' }}
+                    </button>
+                  </div>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="empty-state empty-state--compact">
+            <div class="empty-state-desc">No announcements yet. Create one to share news with your linkshell.</div>
+          </div>
+        }
+      </div>
+
+      <!-- Linkshell Roster (compact, read-only) -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Linkshell Roster</div>
+            <div class="card-head-right">
+              <span class="tag default num">{{ selectedDashboardMembers().length }}</span>
+              <button type="button" class="card-link" (click)="setActiveTab('linkshell')">Manage team</button>
+            </div>
+          </div>
+          @if (selectedDashboardMembers().length > 0) {
+            <div class="ac-roster-search">
+              <input
+                type="text"
+                class="form-input"
+                placeholder="Search roster"
+                [(ngModel)]="dashboardRosterSearch"
+                name="dashboardRosterSearch" />
+            </div>
+            <div class="ac-roster">
+              <div class="ac-roster-head">
+                <div></div>
+                <div>Character</div>
+                <div>Rank</div>
+                <div class="ac-roster-dkp-head">DKP</div>
+                <div>Status</div>
+              </div>
+              @for (member of filteredDashboardMembers(); track member.id) {
+                <div class="ac-roster-row">
+                  <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
+                  <div class="ac-roster-name-cell">
+                    <div class="ac-roster-name">{{ member.characterName }}</div>
+                  </div>
+                  <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
+                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+                  <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+                </div>
+              }
+              @if (filteredDashboardMembers().length === 0) {
+                <div class="ac-roster-row"><div style="grid-column: 1 / -1; color: var(--fg-3); font-size: 12px;">No members matched your search.</div></div>
+              }
+            </div>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No members in this linkshell yet.</div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- News & Updates (left) + Upcoming events (right) -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="dash-row">
+          <!-- News & Updates -->
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">News &amp; updates</div>
+            </div>
+            @if (dashboardNewsUpdates().length > 0) {
+              <div class="news-list">
+                @for (item of dashboardNewsUpdates(); track $index) {
+                  <div class="news-row">
+                    <div class="news-thumb"></div>
+                    <div class="news-main">
+                      <div class="news-title">{{ item.title }}</div>
+                      <div class="news-sub">{{ item.subtitle }}</div>
+                    </div>
+                    <div class="news-meta">
+                      @if (item.dkp != null) {
+                        <div><span class="num">{{ item.dkp }}</span> dkp</div>
+                      }
+                      <div class="news-time">{{ item.relative }}</div>
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="empty-state empty-state--compact">
+                <div class="empty-state-desc">No loot recorded yet.</div>
+              </div>
+            }
+          </div>
+
+          <!-- Upcoming events -->
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title">Upcoming events</div>
+              <button type="button" class="card-link" (click)="setActiveTab('events')">View all</button>
+            </div>
+            @if (dashboardUpcomingEvents().length > 0) {
+              <div class="upcoming-list">
+                @for (event of dashboardUpcomingEvents(); track event.id) {
+                  <div class="upcoming-row">
+                    <div class="upcoming-thumb"></div>
+                    <div class="upcoming-body">
+                      <div class="upcoming-title-row">
+                        <span class="upcoming-title">{{ event.name || 'Event' }}</span>
+                        @if (event.type) {
+                          <span class="tag default">{{ event.type }}</span>
+                        }
+                      </div>
+                      <div class="upcoming-sub">
+                        @if (event.requestedSlots) {
+                          {{ event.participantCount }} signed / {{ event.requestedSlots }} slots
+                        } @else {
+                          {{ event.participantCount }} signed
+                        }
+                        @if (event.location) { · {{ event.location }} }
+                      </div>
+                    </div>
+                    <div class="upcoming-time">
+                      <div class="upcoming-time-main num">{{ eventClockLabel(event.startTime) }}</div>
+                      <div class="upcoming-time-sub">{{ eventRelativeLabel(event.startTime) }}</div>
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="empty-state empty-state--compact">
+                <div class="empty-state-desc">No upcoming events scheduled.</div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- ToD Tracker + HNM claims (dashboard view) -->
+      @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+        <div class="dash-row dash-row--equal">
+        <div class="card card--tod-fixed">
+          <div class="card-head">
+            <div class="card-title">ToD Tracker</div>
+            <div class="card-head-right">
+              <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
+              <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+            </div>
+          </div>
+
+          <div class="tod-scroll">
+          @if (selectedDashboardTods().length > 0) {
+            @for (group of groupedDashboardTods(); track group.key) {
+              <div class="tod-entry" [class.window-open]="isTodReady(group.latest)">
+                <div class="tod-head">
+                  <div class="tod-head-left">
+                    <div class="tod-mob-name">{{ group.latest.monsterName }}</div>
+                    <span class="tag" [class.success]="group.latest.claim" [class.default]="!group.latest.claim">{{ group.latest.claim ? 'Claimed' : 'Unclaimed' }}</span>
+                    @if (group.history.length > 0) {
+                      <span class="tag default num">{{ group.history.length + 1 }}</span>
+                    }
+                  </div>
+                  <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
+                </div>
+                <div class="tod-sub">Day {{ group.latest.dayNumber ?? '-' }} &middot; {{ group.latest.cooldown || '22 Hour' }} &middot; {{ group.latest.interval || '10 Min' }} &middot; {{ group.latest.lootCount }} loot</div>
+                <div class="tod-meta-grid">
+                  <div class="tod-meta-cell">
+                    <div class="tod-meta-label">Countdown</div>
+                    <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
+                  </div>
+                  <div class="tod-meta-cell">
+                    <div class="tod-meta-label">Time of death</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || 'Unavailable' }}</div>
+                  </div>
+                  <div class="tod-meta-cell">
+                    <div class="tod-meta-label">Repop starts</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || 'Unavailable' }}</div>
+                  </div>
+                </div>
+                <div class="tod-entry-actions">
+                  @if (group.history.length > 0) {
+                    <button type="button" class="btn sm" (click)="toggleTodGroup(group.key)">
+                      {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
+                    </button>
+                  }
+                  @if (group.latest.lootCount > 0) {
+                    <button type="button" class="btn sm" (click)="toggleTodLoot(group.latest.id)">
+                      {{ isTodLootExpanded(group.latest.id) ? 'Hide loot' : 'View Loot (' + group.latest.lootCount + ')' }}
+                    </button>
+                  }
+                  <button
+                    type="button"
+                    class="btn sm danger-outline"
+                    [disabled]="activity.busyTodId() === group.latest.id"
+                    (click)="deleteTod(group.latest.id, group.latest.monsterName)">
+                    {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
+                  </button>
+                </div>
+                @if (isTodLootExpanded(group.latest.id)) {
+                  <div class="tod-loot-list">
+                    @for (loot of group.latest.lootDetails; track loot.id) {
+                      <div class="tod-loot-item">
+                        <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                        <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                        @if (loot.winningDkpSpent != null) {
+                          <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+                @if (isTodGroupExpanded(group.key)) {
+                  <div class="tod-history-list">
+                    @for (hist of group.history; track hist.id) {
+                      <div class="tod-history-item">
+                        <div class="tod-history-main">
+                          <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
+                          <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || 'Unavailable' }}</span>
+                        </div>
+                        <div class="tod-history-meta">
+                          <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
+                          @if (hist.lootCount > 0) {
+                            <button type="button" class="btn sm" (click)="toggleTodLoot(hist.id)">
+                              {{ isTodLootExpanded(hist.id) ? 'Hide loot' : 'View Loot' }}
+                            </button>
+                          }
+                        </div>
+                        @if (isTodLootExpanded(hist.id)) {
+                          <div class="tod-loot-list">
+                            @for (loot of hist.lootDetails; track loot.id) {
+                              <div class="tod-loot-item">
+                                <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
+                                <span class="muted"> &mdash; {{ loot.itemWinner || 'No winner' }}</span>
+                                @if (loot.winningDkpSpent != null) {
+                                  <span class="num"> &mdash; {{ loot.winningDkpSpent }} DKP</span>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No tracked windows yet. Open the ToDs tab to log one.</div>
+            </div>
+          }
+          </div>
+        </div>
+
+        <!-- HNM claims donut -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">HNM claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>
+            <div class="card-head-right">
+              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === '7d'" (click)="dashboardHnmWindow = '7d'">7d</button>
+              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === '30d'" (click)="dashboardHnmWindow = '30d'">30d</button>
+              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === 'all'" (click)="dashboardHnmWindow = 'all'">All</button>
+            </div>
+          </div>
+          @if (dashboardHnmClaimsTotal() > 0) {
+            <div class="donut-wrap">
+              <svg class="donut" viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="donut-track" cx="50" cy="50" r="40" fill="none" stroke-width="12"></circle>
+                @for (entry of dashboardHnmClaims(); track entry.monsterName; let i = $index) {
+                  <circle
+                    class="donut-seg-{{ entry.colorClass }}"
+                    cx="50" cy="50" r="40"
+                    fill="none"
+                    stroke-width="12"
+                    [attr.stroke-dasharray]="donutSegmentLength(entry.count) + ' 251.2'"
+                    [attr.stroke-dashoffset]="donutOffset(i)"
+                    stroke-linecap="butt"></circle>
+                }
+                <text class="donut-value" x="50" y="49" text-anchor="middle" dominant-baseline="middle">{{ dashboardHnmClaimsTotal() }}</text>
+                <text class="donut-label" x="50" y="58" text-anchor="middle" dominant-baseline="middle">CLAIMS</text>
+              </svg>
+              <div class="donut-legend">
+                @for (entry of dashboardHnmClaims(); track entry.monsterName) {
+                  <div class="donut-legend-row">
+                    <span class="donut-swatch donut-seg-{{ entry.colorClass }}"></span>
+                    <span class="donut-legend-name">{{ entry.monsterName }}</span>
+                    <span class="donut-legend-stats">{{ entry.count }} · {{ entry.percent | number:'1.0-0' }}%</span>
+                  </div>
+                }
+              </div>
+            </div>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No HNM claims in this window yet.</div>
+            </div>
+          }
+        </div>
+        </div>
+      }
+
+      <!-- Recent activity -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Recent activity</div>
+            <button type="button" class="card-link" (click)="setActiveTab('events')">Full log</button>
+          </div>
+          <div class="activity-filter-bar">
+            <div class="seg-toggle">
+              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'all'" (click)="activityFilter = 'all'">All</button>
+              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'kills'" (click)="activityFilter = 'kills'">Kills</button>
+              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'claims'" (click)="activityFilter = 'claims'">Claims</button>
+              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'events'" (click)="activityFilter = 'events'">Events</button>
+              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'loot'" (click)="activityFilter = 'loot'">Loot</button>
+            </div>
+          </div>
+          @if (dashboardRecentActivity().length > 0) {
+            <div class="activity-feed">
+              @for (item of dashboardRecentActivity(); track $index) {
+                <div class="activity-row">
+                  <div class="activity-when">{{ item.relative }}</div>
+                  <div class="activity-dot-cell">
+                    <span class="activity-dot activity-dot--{{ item.kind }}"></span>
+                  </div>
+                  <div class="activity-body">
+                    <div class="activity-body-primary">
+                      <strong>{{ item.name }}</strong>
+                      <span> {{ item.action }}</span>
+                    </div>
+                    @if (item.detail) {
+                      <div class="activity-body-detail">{{ item.detail }}</div>
+                    }
+                  </div>
+                  <div class="activity-right">
+                    @if (item.dkp != null) {
+                      <span class="activity-dkp" [class.activity-dkp--neg]="item.dkp < 0" [class.activity-dkp--pos]="item.dkp >= 0">
+                        {{ item.dkp >= 0 ? '+' : '' }}{{ item.dkp }} DKP
+                      </span>
+                    }
+                    <span class="activity-badge activity-badge--{{ item.kind }}">{{ item.categoryLabel }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No activity yet.</div>
+            </div>
+          }
+        </div>
+      }
+    </div>
