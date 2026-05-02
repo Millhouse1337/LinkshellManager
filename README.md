@@ -54,7 +54,8 @@ Design constraints for this restoration:
 - `AppUser` is now the primary ASP.NET Identity user type.
 - Discord launch/auth stays on the existing `POST /auth/discord/exchange` and `GET /api/me` flow.
 - The MVC slice uses the same host, same cookies, same PostgreSQL database, and same CSP/frame policy as the Discord Activity host.
-- Non-priority legacy modules such as Auctions, TOD, Admin, Contact/Messaging, Rule management, and revenue/item management are intentionally excluded from compilation in this pass.
+- Non-priority legacy modules such as Auctions, Admin, Contact/Messaging, Rule management, and revenue/item management are intentionally excluded from compilation in this pass.
+- The ToD (Time of Death) tracker has been restored as a first-class feature, with logging, editing, and per-linkshell monster tracking.
 
 ## Local user model
 
@@ -75,10 +76,14 @@ Current `AppUser` fields used by the restored slice:
 - `Id`
 - `UserName`
 - `CharacterName`
+- `AltCharacterName1`
+- `AltCharacterName2`
 - `TimeZone`
 - `PrimaryLinkshellId`
 - `PrimaryLinkshellName`
 - `ProfileImage`
+
+`AltCharacterName1` and `AltCharacterName2` capture the user's alternate in-game character names. They are optional, capped at 64 characters, and validated alongside the primary character name during profile updates.
 
 Current `DiscordActivityUsers` fields:
 
@@ -99,7 +104,7 @@ Provisioning behavior:
 - `GET /api/me` now returns both the Discord-linked local user record and the linked `AppUser` summary needed by the restored website features.
 - Linkshells, memberships, live events, completed event history, and notifications are all keyed from the `AppUser` layer.
 
-Important: for the embedded Activity flow, the backend does not send `redirect_uri` during token exchange. Discord�s current Activity tutorial shows the embedded flow without `redirect_uri`; the Redirect URI still needs to exist in the Developer Portal, but it is a portal requirement rather than a request parameter used by this app flow.
+Important: for the embedded Activity flow, the backend does not send `redirect_uri` during token exchange. Discord's current Activity tutorial shows the embedded flow without `redirect_uri`; the Redirect URI still needs to exist in the Developer Portal, but it is a portal requirement rather than a request parameter used by this app flow.
 
 Official references used:
 - Embedded App SDK reference: https://docs.discord.com/developers/developer-tools/embedded-app-sdk
@@ -167,9 +172,10 @@ Create the database and apply the EF migration:
 "$env:USERPROFILE\\.dotnet\\tools\\dotnet-ef.exe" database update
 ```
 
-The local Activity user table is added by migration:
+Current migrations applied by `database update`:
 
-- `20260416225941_AddDiscordActivityUsers`
+- `20260501223012_InitialBeta` — initial schema for the restored MVC slice and Discord Activity tables.
+- `20260502190212_AddAltCharacterNames` — adds `AltCharacterName1` and `AltCharacterName2` columns to `AspNetUsers`.
 
 The default repo connection string targets:
 
@@ -228,6 +234,14 @@ Use the `https` profile. The Activity route should be available at:
 - Tunnel hostnames are included for development, but production CSP should be reviewed again once the final hostname is fixed.
 - The standalone browser preview is intentionally not a full Discord-authenticated experience.
 
-cd discord-activity npm run build
-dotnet run
-./cloudflared.exe tunnel --url http://localhost:5012
+## Quick start commands
+
+Run these from the repo root in three separate terminals when testing the embedded Discord flow:
+
+```powershell
+cd discord-activity; npm run build
+dotnet run --launch-profile https
+.\cloudflared.exe tunnel --url http://localhost:5012
+```
+
+Update the Discord Developer Portal URL Mapping with the tunnel hostname each time it changes.
