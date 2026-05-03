@@ -47,6 +47,18 @@ public sealed partial class ActivityDataController : ControllerBase
         _dateTimeZoneProvider = dateTimeZoneProvider;
     }
 
+    [HttpGet("antiforgery")]
+    public IActionResult GetAntiforgeryToken(
+        [FromServices] Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery)
+    {
+        var tokens = antiforgery.GetAndStoreTokens(HttpContext);
+        return Ok(new
+        {
+            headerName = tokens.HeaderName,
+            requestToken = tokens.RequestToken
+        });
+    }
+
     private static bool IsValidLootStructure(string? structure)
     {
         return string.Equals(structure, "Dkp", StringComparison.OrdinalIgnoreCase) ||

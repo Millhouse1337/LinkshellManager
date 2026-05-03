@@ -16,6 +16,7 @@ import { AuthService } from './auth.service';
 @Injectable({ providedIn: 'root' })
 export class ActivityHttpClient {
   private readonly auth = inject(AuthService);
+  private antiforgeryTokenPromise: Promise<ActivityAntiforgeryToken | null> | null = null;
 
   async fetchActivityJson<T>(path: string, accessToken?: string): Promise<T> {
     const headers: Record<string, string> = {};
@@ -65,6 +66,11 @@ export class ActivityHttpClient {
     const accessToken = this.auth.currentAccessToken();
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
+    } else {
+      const antiforgery = await this.getAntiforgeryToken();
+      if (antiforgery?.headerName && antiforgery.requestToken) {
+        headers[antiforgery.headerName] = antiforgery.requestToken;
+      }
     }
 
     const response = await fetch(path, {
@@ -100,4 +106,27 @@ export class ActivityHttpClient {
       throw new Error(responseText);
     }
   }
+
+  private async getAntiforgeryToken(): Promise<ActivityAntiforgeryToken | null> {
+    this.antiforgeryTokenPromise ??= this.fetchAntiforgeryToken();
+    return this.antiforgeryTokenPromise;
+  }
+
+  private async fetchAntiforgeryToken(): Promise<ActivityAntiforgeryToken | null> {
+    const response = await fetch('/api/activity/antiforgery', {
+      cache: 'no-store',
+      credentials: 'include'
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as ActivityAntiforgeryToken;
+  }
+}
+
+interface ActivityAntiforgeryToken {
+  headerName?: string | null;
+  requestToken?: string | null;
 }

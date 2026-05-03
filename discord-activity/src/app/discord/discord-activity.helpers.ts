@@ -33,10 +33,6 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, mes
 }
 
 export function formatError(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return withDiscordHint(error.message);
-  }
-
   if (isDiscordRpcError(error)) {
     const rpcMessage = error.data?.message ?? error.message ?? 'Discord RPC call failed.';
     const rpcCode = error.data?.code ?? error.code;
@@ -47,6 +43,10 @@ export function formatError(error: unknown): string {
         : `Discord ${cmd.toLowerCase()} failed: ${rpcMessage}`;
 
     return withDiscordHint(details, cmd);
+  }
+
+  if (error instanceof Error && error.message) {
+    return withDiscordHint(error.message);
   }
 
   return 'An unknown error occurred while initializing the Discord Activity.';

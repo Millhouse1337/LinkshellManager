@@ -47,7 +47,7 @@ if (-not $SkipFrontend) {
             npm ci
             if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
         }
-        npm run build -- --configuration production
+        npx ng build --configuration production
         if ($LASTEXITCODE -ne 0) { throw "Angular build failed" }
     } finally {
         Pop-Location

@@ -34,6 +34,11 @@ public sealed class CookieAuthAntiforgeryFilter : IAsyncAuthorizationFilter
             return;
         }
 
+        if (context.HttpContext.User.Identity?.IsAuthenticated != true)
+        {
+            return;
+        }
+
         var antiforgery = context.HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
         try
         {
