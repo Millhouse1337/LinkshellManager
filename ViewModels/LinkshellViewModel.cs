@@ -36,5 +36,7 @@ public class LinkshellCustomizeViewModel
     public bool EnableItems      { get; set; } = true;
     public bool EnableRevenue    { get; set; } = true;
 
+    public bool CanManageRoles { get; set; }
+
     public List<Linkshell> ManageableLinkshells { get; set; } = new();
 }

@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -328,7 +329,12 @@ public class LinkshellController : Controller
             return Forbid();
         }
 
-        return View(BuildCustomizeViewModel(target, manageableLinkshells));
+        var roles = await EnsureDefaultRolesAsync(target.Id, HttpContext.RequestAborted);
+        var membership = await GetMembershipAsync(user.Id, target.Id);
+        return View(BuildCustomizeViewModel(
+            target,
+            manageableLinkshells,
+            CanRole(roles, membership?.Rank, role => role.CanManageRoles)));
     }
 
     [HttpPost]
@@ -379,6 +385,8 @@ public class LinkshellController : Controller
                 .ToListAsync();
             model.ManageableLinkshells = manageable;
             model.LinkshellName = linkshell.LinkshellName;
+            var roles = await EnsureDefaultRolesAsync(linkshell.Id, HttpContext.RequestAborted);
+            model.CanManageRoles = CanRole(roles, membership?.Rank, role => role.CanManageRoles);
             return View(model);
         }
 
@@ -400,7 +408,7 @@ public class LinkshellController : Controller
     }
 
     private static LinkshellCustomizeViewModel BuildCustomizeViewModel(
-        Linkshell target, IReadOnlyList<Linkshell> manageableLinkshells) =>
+        Linkshell target, IReadOnlyList<Linkshell> manageableLinkshells, bool canManageRoles) =>
         new()
         {
             LinkshellId           = target.Id,
@@ -416,8 +424,51 @@ public class LinkshellController : Controller
             EnableDkp             = target.EnableDkp,
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
+            CanManageRoles        = canManageRoles,
             ManageableLinkshells  = manageableLinkshells.ToList()
         };
+
+    private async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(
+        int linkshellId,
+        CancellationToken cancellationToken)
+    {
+        var roles = await _context.LinkshellRoles
+            .Where(role => role.LinkshellId == linkshellId)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var existingNames = new HashSet<string>(
+            roles.Select(role => role.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var missing = LinkshellRoleDefaults.BuildDefaultRoles(linkshellId)
+            .Where(role => !existingNames.Contains(role.Name))
+            .ToList();
+
+        if (missing.Count > 0)
+        {
+            await _context.LinkshellRoles.AddRangeAsync(missing, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+            roles.AddRange(missing);
+        }
+
+        return roles
+            .OrderBy(role => role.SortOrder)
+            .ThenBy(role => role.Name)
+            .ToList();
+    }
+
+    private static bool CanRole(
+        IReadOnlyList<LinkshellRole> roles,
+        string? rank,
+        Func<LinkshellRole, bool> selector)
+    {
+        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+        var role = roles.FirstOrDefault(role => role.Name.Equals(rankName, StringComparison.OrdinalIgnoreCase))
+            ?? roles.FirstOrDefault(role => role.Name.Equals("Member", StringComparison.OrdinalIgnoreCase));
+
+        return role is not null && selector(role);
+    }
 
     private async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId)
     {

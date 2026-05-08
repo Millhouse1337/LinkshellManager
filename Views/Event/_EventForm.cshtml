@@ -32,22 +32,29 @@
 <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="margin-bottom:12px"></div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;align-items:start">
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_LinkshellId">Linkshell</label>
-        <select class="form-select" id="Event_LinkshellId" name="Event.LinkshellId">
-            @foreach (var linkshell in Model.Linkshells)
-            {
-                if (linkshell.Id == Model.Event.LinkshellId)
+    @if (isEditMode)
+    {
+        <div class="field" style="display:flex;flex-direction:column">
+            <label for="Event_LinkshellId">Linkshell</label>
+            <select class="form-select" id="Event_LinkshellId" name="Event.LinkshellId">
+                @foreach (var linkshell in Model.Linkshells)
                 {
-                    <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                    if (linkshell.Id == Model.Event.LinkshellId)
+                    {
+                        <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                    }
+                    else
+                    {
+                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                    }
                 }
-                else
-                {
-                    <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                }
-            }
-        </select>
-    </div>
+            </select>
+        </div>
+    }
+    else
+    {
+        <input type="hidden" id="Event_LinkshellId" name="Event.LinkshellId" value="@Model.Event.LinkshellId" />
+    }
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EventName">Event name</label>
         <input class="form-control" id="Event_EventName" name="Event.EventName" value="@Model.Event.EventName" />

@@ -26,7 +26,7 @@ public class DkpHistoryController : Controller
         _dateTimeZoneProvider = dateTimeZoneProvider;
     }
 
-    public async Task<IActionResult> Index(int? linkshellId, string? appUserId)
+    public async Task<IActionResult> Index(string? appUserId, int page = 1)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
@@ -58,8 +58,7 @@ public class DkpHistoryController : Controller
             return View(viewModel);
         }
 
-        var selectedLinkshellId = linkshellId
-            ?? user.PrimaryLinkshellId
+        var selectedLinkshellId = user.PrimaryLinkshellId
             ?? viewModel.Linkshells.First().Id;
 
         if (viewModel.Linkshells.All(link => link.Id != selectedLinkshellId))
@@ -102,29 +101,37 @@ public class DkpHistoryController : Controller
             .ThenBy(entry => entry.Sequence)
             .ToListAsync();
 
+        viewModel.TotalEntryCount = ledgerEntries.Count;
+        viewModel.PageSize = DkpHistoryViewModel.DefaultPageSize;
+        viewModel.PageNumber = Math.Clamp(page, 1, viewModel.TotalPages);
+
         var runningBalance = 0d;
         viewModel.SelectedAppUserId = selectedAppUserId;
         viewModel.SelectedMemberName = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CharacterName;
         viewModel.CurrentBalance = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CurrentBalance;
-        viewModel.Entries = ledgerEntries.Select(entry =>
-        {
-            runningBalance += entry.Amount;
-            return new DkpHistoryEntryViewModel
+        viewModel.Entries = ledgerEntries
+            .Select(entry =>
             {
-                Id = entry.Id,
-                EntryType = entry.EntryType,
-                Amount = entry.Amount,
-                RunningBalance = runningBalance,
-                OccurredAt = ConvertUtcToUserTimeZone(entry.OccurredAt, user.TimeZone),
-                EventName = entry.EventName,
-                EventType = entry.EventType,
-                EventLocation = entry.EventLocation,
-                EventStartTime = ConvertUtcToUserTimeZone(entry.EventStartTime, user.TimeZone),
-                EventEndTime = ConvertUtcToUserTimeZone(entry.EventEndTime, user.TimeZone),
-                ItemName = entry.ItemName,
-                Details = entry.Details
-            };
-        }).ToList();
+                runningBalance += entry.Amount;
+                return new DkpHistoryEntryViewModel
+                {
+                    Id = entry.Id,
+                    EntryType = entry.EntryType,
+                    Amount = entry.Amount,
+                    RunningBalance = runningBalance,
+                    OccurredAt = ConvertUtcToUserTimeZone(entry.OccurredAt, user.TimeZone),
+                    EventName = entry.EventName,
+                    EventType = entry.EventType,
+                    EventLocation = entry.EventLocation,
+                    EventStartTime = ConvertUtcToUserTimeZone(entry.EventStartTime, user.TimeZone),
+                    EventEndTime = ConvertUtcToUserTimeZone(entry.EventEndTime, user.TimeZone),
+                    ItemName = entry.ItemName,
+                    Details = entry.Details
+                };
+            })
+            .Skip((viewModel.PageNumber - 1) * viewModel.PageSize)
+            .Take(viewModel.PageSize)
+            .ToList();
 
         return View(viewModel);
     }

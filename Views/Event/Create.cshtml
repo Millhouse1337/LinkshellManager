@@ -11,9 +11,6 @@
         <h1 class="page-title">Create event</h1>
         <div class="page-sub"><span>Schedule a new linkshell run</span></div>
     </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-action="Index">Cancel</a>
-    </div>
 </div>
 
 <div class="card fade d2" style="padding:20px">
@@ -21,7 +18,6 @@
         @await Html.PartialAsync("_EventForm", Model)
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <button type="submit" class="btn primary">Save event</button>
-            <a class="btn ghost" asp-action="Index">Cancel</a>
         </div>
     </form>
 </div>

@@ -6,88 +6,74 @@
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Create auction</h1>
-        <div class="page-sub"><span>Set the title, timer, and auction items</span></div>
-    </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-action="Index">Back</a>
+        <div class="page-sub"><span>Schedule the window, add item rows, and manually start it when you are ready</span></div>
     </div>
 </div>
 
-<div class="card fade d2" style="padding:20px">
-    <form asp-action="Create" method="post" id="auctionForm">
-        <div class="form-grid">
-            <div class="field">
-                <label asp-for="LinkshellId">Linkshell</label>
-                <select asp-for="LinkshellId" class="form-select">
-                    @foreach (var linkshell in Model.Linkshells)
-                    {
-                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                    }
-                </select>
-            </div>
-            <div class="field">
-                <label asp-for="Auction.AuctionTitle">Auction title</label>
-                <input asp-for="Auction.AuctionTitle" class="form-control" />
-                <span asp-validation-for="Auction.AuctionTitle" style="color:var(--danger);font-size:11px"></span>
-            </div>
-            <div class="field">
-                <label asp-for="Auction.StartTime">Start time</label>
-                <input asp-for="Auction.StartTime" type="datetime-local" class="form-control" />
-                <span asp-validation-for="Auction.StartTime" style="color:var(--danger);font-size:11px"></span>
-            </div>
-            <div class="field">
-                <label asp-for="Auction.EndTime">End time</label>
-                <input asp-for="Auction.EndTime" type="datetime-local" class="form-control" />
-                <span asp-validation-for="Auction.EndTime" style="color:var(--danger);font-size:11px"></span>
-            </div>
-        </div>
+<form asp-action="Create" method="post" id="auctionForm" class="create-form fade d2">
+    <input asp-for="LinkshellId" type="hidden" />
 
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-            <div>
-                <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0 0 2px">Auction items</h2>
-                <div style="font-size:12px;color:var(--fg-3)">Add at least one item with its opening bid.</div>
-            </div>
+    <div class="create-form__grid">
+        <label>
+            <span>Title</span>
+            <input asp-for="Auction.AuctionTitle" required />
+            <span asp-validation-for="Auction.AuctionTitle" class="create-form__error"></span>
+        </label>
+        <label>
+            <span>Start time</span>
+            <input asp-for="Auction.StartTime" type="datetime-local" required />
+            <span asp-validation-for="Auction.StartTime" class="create-form__error"></span>
+        </label>
+        <label>
+            <span>End time</span>
+            <input asp-for="Auction.EndTime" type="datetime-local" required />
+            <span asp-validation-for="Auction.EndTime" class="create-form__error"></span>
+        </label>
+    </div>
+
+    <div class="create-form__section">
+        <div class="create-form__section-head">
+            <h3>Items</h3>
             <button type="button" class="btn ghost sm" id="addAuctionItemButton">+ Add item</button>
         </div>
 
-        <div id="auctionItems" style="display:grid;gap:12px">
+        <div id="auctionItems" class="create-form__items">
             @for (var i = 0; i < Model.AuctionItems.Count; i++)
             {
-                <div class="card auction-item-row" style="padding:12px" data-index="@i">
+                <div class="create-form__item auction-item-row" data-index="@i">
                     <input asp-for="AuctionItems[i].Id" type="hidden" />
-                    <div class="form-grid">
-                        <div class="field">
-                            <label asp-for="AuctionItems[i].ItemName">Item name</label>
-                            <input asp-for="AuctionItems[i].ItemName" class="form-control" />
-                            <span asp-validation-for="AuctionItems[i].ItemName" style="color:var(--danger);font-size:11px"></span>
-                        </div>
-                        <div class="field">
-                            <label asp-for="AuctionItems[i].ItemType">Item type</label>
-                            <input asp-for="AuctionItems[i].ItemType" class="form-control" />
-                        </div>
-                        <div class="field">
-                            <label asp-for="AuctionItems[i].StartingBidDkp">Starting bid</label>
-                            <input asp-for="AuctionItems[i].StartingBidDkp" class="form-control" />
-                            <span asp-validation-for="AuctionItems[i].StartingBidDkp" style="color:var(--danger);font-size:11px"></span>
-                        </div>
-                        <div class="field" style="grid-column:1/-1">
-                            <label asp-for="AuctionItems[i].Notes">Notes</label>
-                            <input asp-for="AuctionItems[i].Notes" class="form-control" />
-                        </div>
-                        <div class="field" style="grid-column:1/-1">
-                            <button type="button" class="btn ghost sm remove-auction-item">Remove item</button>
-                        </div>
+                    <div class="create-form__grid">
+                        <label>
+                            <span>Item name</span>
+                            <input asp-for="AuctionItems[i].ItemName" required />
+                            <span asp-validation-for="AuctionItems[i].ItemName" class="create-form__error"></span>
+                        </label>
+                        <label>
+                            <span>Item type</span>
+                            <input asp-for="AuctionItems[i].ItemType" />
+                        </label>
+                        <label>
+                            <span>Starting DKP</span>
+                            <input asp-for="AuctionItems[i].StartingBidDkp" type="number" min="0" />
+                            <span asp-validation-for="AuctionItems[i].StartingBidDkp" class="create-form__error"></span>
+                        </label>
+                        <label class="create-form__field--full">
+                            <span>Notes</span>
+                            <input asp-for="AuctionItems[i].Notes" />
+                        </label>
+                    </div>
+                    <div class="create-form__item-actions">
+                        <button type="button" class="btn ghost sm remove-auction-item">Remove row</button>
                     </div>
                 </div>
             }
         </div>
+    </div>
 
-        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-            <button type="submit" class="btn primary">Create auction</button>
-            <a class="btn ghost" asp-action="Index">Cancel</a>
-        </div>
-    </form>
-</div>
+    <div class="create-form__actions">
+        <button type="submit" class="btn primary">Create auction</button>
+    </div>
+</form>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
@@ -115,17 +101,30 @@
             addItemButton.addEventListener('click', () => {
                 const index = itemsContainer.querySelectorAll('.auction-item-row').length;
                 const wrapper = document.createElement('div');
-                wrapper.className = 'card auction-item-row';
-                wrapper.style.padding = '12px';
+                wrapper.className = 'create-form__item auction-item-row';
                 wrapper.dataset.index = index;
                 wrapper.innerHTML = `
                     <input type="hidden" name="AuctionItems[${index}].Id" value="0" />
-                    <div class="form-grid">
-                        <div class="field"><label for="AuctionItems_${index}__ItemName">Item name</label><input class="form-control" id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" /></div>
-                        <div class="field"><label for="AuctionItems_${index}__ItemType">Item type</label><input class="form-control" id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" /></div>
-                        <div class="field"><label for="AuctionItems_${index}__StartingBidDkp">Starting bid</label><input class="form-control" id="AuctionItems_${index}__StartingBidDkp" name="AuctionItems[${index}].StartingBidDkp" type="number" /></div>
-                        <div class="field" style="grid-column:1/-1"><label for="AuctionItems_${index}__Notes">Notes</label><input class="form-control" id="AuctionItems_${index}__Notes" name="AuctionItems[${index}].Notes" /></div>
-                        <div class="field" style="grid-column:1/-1"><button type="button" class="btn ghost sm remove-auction-item">Remove item</button></div>
+                    <div class="create-form__grid">
+                        <label>
+                            <span>Item name</span>
+                            <input id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" required />
+                        </label>
+                        <label>
+                            <span>Item type</span>
+                            <input id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" />
+                        </label>
+                        <label>
+                            <span>Starting DKP</span>
+                            <input id="AuctionItems_${index}__StartingBidDkp" name="AuctionItems[${index}].StartingBidDkp" type="number" min="0" />
+                        </label>
+                        <label class="create-form__field--full">
+                            <span>Notes</span>
+                            <input id="AuctionItems_${index}__Notes" name="AuctionItems[${index}].Notes" />
+                        </label>
+                    </div>
+                    <div class="create-form__item-actions">
+                        <button type="button" class="btn ghost sm remove-auction-item">Remove row</button>
                     </div>`;
                 itemsContainer.appendChild(wrapper);
             });

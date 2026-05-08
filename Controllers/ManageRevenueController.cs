@@ -76,6 +76,7 @@ public class ManageRevenueController : Controller
         {
             Linkshells = manageableLinkshells,
             LinkshellId = defaultLinkshellId,
+            LinkshellName = manageableLinkshells.First(l => l.Id == defaultLinkshellId).LinkshellName,
             OccurredAt = DateTime.UtcNow
         });
     }
@@ -88,10 +89,16 @@ public class ManageRevenueController : Controller
         if (user is null) return Challenge();
 
         var manageableLinkshells = await GetManageableLinkshellsAsync(user.Id);
-        if (!manageableLinkshells.Any(l => l.Id == model.LinkshellId))
+        var selectedLinkshell = manageableLinkshells.FirstOrDefault(l => l.Id == user.PrimaryLinkshellId)
+            ?? manageableLinkshells.FirstOrDefault();
+        if (selectedLinkshell is null)
         {
-            ModelState.AddModelError(nameof(model.LinkshellId), "You cannot manage revenue for that linkshell.");
+            return Forbid();
         }
+
+        model.LinkshellId = selectedLinkshell.Id;
+        model.LinkshellName = selectedLinkshell.LinkshellName;
+        ModelState.Remove(nameof(model.LinkshellId));
 
         if (!ModelState.IsValid)
         {
@@ -99,14 +106,13 @@ public class ManageRevenueController : Controller
             return View(model);
         }
 
-        var linkshell = manageableLinkshells.First(l => l.Id == model.LinkshellId);
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == model.LinkshellId);
 
         _context.RevenueEntries.Add(new RevenueEntry
         {
             LinkshellId = model.LinkshellId,
-            LinkshellName = linkshell.LinkshellName,
+            LinkshellName = selectedLinkshell.LinkshellName,
             EntryType = model.EntryType.Trim(),
             Category = model.Category?.Trim(),
             Value = model.Value,

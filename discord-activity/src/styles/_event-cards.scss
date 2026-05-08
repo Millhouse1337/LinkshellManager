@@ -50,6 +50,11 @@
   align-self: flex-start;
 }
 
+.card-collapse-toggle--center {
+  display: block;
+  margin: 4px auto 0;
+}
+
 .card-collapse-toggle:hover {
   color: var(--fg);
 }

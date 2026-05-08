@@ -162,6 +162,87 @@ export class LinkshellTabComponent {
     return memberAppUserId !== this.activity.overview()?.appUser?.id;
   }
 
+  // ----- Leave / remove members -----
+
+  protected pendingLeaveLinkshell = signal(false);
+  protected pendingRemoveMemberId = signal<number | null>(null);
+
+  protected currentUserAppUserId(): string | null {
+    return this.activity.overview()?.appUser?.id ?? null;
+  }
+
+  protected isCurrentUser(memberAppUserId: string | null | undefined): boolean {
+    const id = this.currentUserAppUserId();
+    return !!id && id === memberAppUserId;
+  }
+
+  protected isCurrentUserLeaderOfSelected(): boolean {
+    return (this.selectedDashboardLinkshell()?.rank ?? '').toLowerCase() === 'leader';
+  }
+
+  protected otherLeaderCountInSelected(): number {
+    const myId = this.currentUserAppUserId();
+    return this.selectedDashboardMembers()
+      .filter(member => (member.rank ?? '').toLowerCase() === 'leader')
+      .filter(member => member.appUserId !== myId)
+      .length;
+  }
+
+  // True when the current user is the linkshell's last remaining leader and
+  // there are other members. They must promote someone else to Leader before
+  // they can leave (otherwise the linkshell would be left orphaned).
+  protected mustHandoffBeforeLeaving(): boolean {
+    if (!this.isCurrentUserLeaderOfSelected()) return false;
+    if (this.otherLeaderCountInSelected() > 0) return false;
+    return this.selectedDashboardMembers().length > 1;
+  }
+
+  protected canRemoveMember(memberAppUserId: string | null | undefined): boolean {
+    if (!this.isCurrentUserLeaderOfSelected()) return false;
+    if (this.isCurrentUser(memberAppUserId)) return false;
+    return true;
+  }
+
+  protected requestLeaveLinkshell(): void {
+    if (this.mustHandoffBeforeLeaving()) return;
+    this.pendingRemoveMemberId.set(null);
+    this.pendingLeaveLinkshell.set(true);
+  }
+
+  protected cancelLeaveLinkshell(): void {
+    this.pendingLeaveLinkshell.set(false);
+  }
+
+  protected async confirmLeaveLinkshell(): Promise<void> {
+    if (this.mustHandoffBeforeLeaving()) return;
+    const id = this.selectedDashboardLinkshellId();
+    if (!id) return;
+    try {
+      await this.activity.leaveLinkshell(id);
+    } finally {
+      this.pendingLeaveLinkshell.set(false);
+    }
+  }
+
+  protected requestRemoveMember(memberId: number): void {
+    this.pendingLeaveLinkshell.set(false);
+    this.pendingRemoveMemberId.set(memberId);
+  }
+
+  protected cancelRemoveMember(): void {
+    this.pendingRemoveMemberId.set(null);
+  }
+
+  protected async confirmRemoveMember(memberId: number): Promise<void> {
+    const id = this.selectedDashboardLinkshellId();
+    if (!id) return;
+    try {
+      await this.activity.removeLinkshellMember(id, memberId);
+    } finally {
+      this.pendingRemoveMemberId.set(null);
+    }
+  }
+
   // ----- Inventory & revenue (formerly the "configurations tab" leftovers
   // that actually appear under the Management tab) -----
 

@@ -28,7 +28,6 @@
         const addLootRowButton = document.getElementById('add-loot-row');
         const removeLootRowButton = document.getElementById('remove-loot-row');
         const noLootButton = document.getElementById('no-loot-button');
-        const linkshellFilter = document.getElementById('linkshell-filter');
         const lootDetailsTableBody = document.getElementById('loot-details-table-body');
         const countdownElements = Array.from(document.querySelectorAll('.countdown-timer'));
 
@@ -208,12 +207,6 @@
             if (noLootInput) noLootInput.value = 'true';
             if (lootSection) lootSection.classList.add('d-none');
             resetLootRows();
-        });
-
-        if (linkshellFilter) linkshellFilter.addEventListener('change', () => {
-            const url = new URL(window.location.href);
-            url.searchParams.set('linkshellId', linkshellFilter.value);
-            window.location.assign(url.toString());
         });
 
         document.querySelectorAll('.view-loot-btn').forEach((button) => {

@@ -37,7 +37,7 @@ public class TodController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(int? linkshellId = null)
+    public async Task<IActionResult> Index()
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -47,10 +47,9 @@ public class TodController : Controller
 
         var model = await BuildViewModelAsync(user, new TodManagerViewModel
         {
-            LinkshellId = linkshellId ?? 0,
             Tod = new Tod
             {
-                LinkshellId = linkshellId ?? user.PrimaryLinkshellId ?? 0,
+                LinkshellId = user.PrimaryLinkshellId ?? 0,
                 Claim = true,
                 Cooldown = TodManagerViewModel.TwentyTwoHourCooldown,
                 Interval = TodManagerViewModel.TenMinuteInterval
@@ -61,7 +60,7 @@ public class TodController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Create(int? linkshellId = null)
+    public async Task<IActionResult> Create()
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -71,10 +70,9 @@ public class TodController : Controller
 
         var model = await BuildViewModelAsync(user, new TodManagerViewModel
         {
-            LinkshellId = linkshellId ?? 0,
             Tod = new Tod
             {
-                LinkshellId = linkshellId ?? user.PrimaryLinkshellId ?? 0,
+                LinkshellId = user.PrimaryLinkshellId ?? 0,
                 Claim = true,
                 Cooldown = TodManagerViewModel.TwentyTwoHourCooldown,
                 Interval = TodManagerViewModel.TenMinuteInterval
@@ -95,6 +93,7 @@ public class TodController : Controller
         }
 
         model.Tod ??= new Tod { Claim = true };
+        model.Tod.LinkshellId = await ResolveActiveLinkshellIdAsync(user);
         model.Tod.Cooldown = string.IsNullOrWhiteSpace(model.Tod.Cooldown)
             ? GetDefaultCooldown(model.Tod.MonsterName)
             : model.Tod.Cooldown.Trim();
@@ -153,7 +152,7 @@ public class TodController : Controller
             await _context.SaveChangesAsync();
         }
 
-        return RedirectToAction(nameof(Index), new { linkshellId = newTod.LinkshellId });
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpGet]
@@ -217,7 +216,7 @@ public class TodController : Controller
         _context.Tods.Remove(tod);
         await _context.SaveChangesAsync();
 
-        return RedirectToAction(nameof(Index), new { linkshellId = tod.LinkshellId });
+        return RedirectToAction(nameof(Index));
     }
 
     private async Task<TodManagerViewModel> BuildViewModelAsync(AppUser user, TodManagerViewModel? source = null)
@@ -228,11 +227,9 @@ public class TodController : Controller
             .OrderBy(link => link.LinkshellName)
             .ToListAsync();
 
-        var selectedLinkshellId = source?.Tod?.LinkshellId > 0
-            ? source.Tod.LinkshellId
-            : source?.LinkshellId > 0
-                ? source.LinkshellId
-                : user.PrimaryLinkshellId ?? linkshells.FirstOrDefault()?.Id ?? 0;
+        var selectedLinkshellId = user.PrimaryLinkshellId.HasValue && linkshells.Any(link => link.Id == user.PrimaryLinkshellId.Value)
+            ? user.PrimaryLinkshellId.Value
+            : linkshells.FirstOrDefault()?.Id ?? 0;
 
         var characterNames = selectedLinkshellId > 0
             ? await _context.AppUserLinkshells
@@ -255,10 +252,7 @@ public class TodController : Controller
             : new List<Tod>();
 
         var todDraft = source?.Tod ?? new Tod();
-        if (todDraft.LinkshellId == 0)
-        {
-            todDraft.LinkshellId = selectedLinkshellId;
-        }
+        todDraft.LinkshellId = selectedLinkshellId;
 
         todDraft.Claim = source?.Tod?.Claim ?? todDraft.Claim;
         todDraft.Cooldown = string.IsNullOrWhiteSpace(todDraft.Cooldown)
@@ -469,6 +463,22 @@ public class TodController : Controller
     private async Task<bool> HasLinkshellAccessAsync(string userId, int linkshellId)
     {
         return await _context.AppUserLinkshells.AnyAsync(link => link.AppUserId == userId && link.LinkshellId == linkshellId);
+    }
+
+    private async Task<int> ResolveActiveLinkshellIdAsync(AppUser user)
+    {
+        var linkshellIds = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id)
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .Select(link => link.LinkshellId)
+            .ToListAsync();
+
+        if (user.PrimaryLinkshellId.HasValue && linkshellIds.Contains(user.PrimaryLinkshellId.Value))
+        {
+            return user.PrimaryLinkshellId.Value;
+        }
+
+        return linkshellIds.FirstOrDefault();
     }
 
     private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)

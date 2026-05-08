@@ -35,22 +35,6 @@
                 {
                     <form method="get">
                         <div class="field">
-                            <label for="linkshellId">Linkshell</label>
-                            <select class="form-select" id="linkshellId" name="linkshellId" onchange="this.form.submit()">
-                                @foreach (var linkshell in Model.Linkshells)
-                                {
-                                    @if (Model.SelectedLinkshellId == linkshell.Id)
-                                    {
-                                        <option value="@linkshell.Id" selected>@linkshell.Name</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="@linkshell.Id">@linkshell.Name</option>
-                                    }
-                                }
-                            </select>
-                        </div>
-                        <div class="field">
                             <label for="appUserId">Member</label>
                             <select class="form-select" id="appUserId" name="appUserId" onchange="this.form.submit()">
                                 @foreach (var member in Model.Members)
@@ -80,7 +64,7 @@
     <div>
         <div class="card">
             <div class="card-head">
-                <div class="card-title">Ledger <span class="tag">@Model.Entries.Count</span></div>
+                <div class="card-title">Ledger <span class="tag">@Model.TotalEntryCount</span></div>
             </div>
             @if (!Model.Entries.Any())
             {
@@ -142,6 +126,31 @@
                         }
                     </tbody>
                 </table>
+                @if (Model.TotalPages > 1)
+                {
+                    <div class="pagination-bar">
+                        <div class="pagination-bar__summary">
+                            Page <span class="num">@Model.PageNumber</span> of <span class="num">@Model.TotalPages</span>
+                        </div>
+                        <div class="pagination-bar__actions">
+                            <a class="btn ghost sm @(Model.PageNumber <= 1 ? "disabled" : "")"
+                               asp-action="Index"
+                               asp-route-appUserId="@Model.SelectedAppUserId"
+                               asp-route-page="@(Model.PageNumber - 1)">Previous</a>
+                            @for (var pageNumber = 1; pageNumber <= Model.TotalPages; pageNumber++)
+                            {
+                                <a class="btn sm @(pageNumber == Model.PageNumber ? "primary" : "ghost")"
+                                   asp-action="Index"
+                                   asp-route-appUserId="@Model.SelectedAppUserId"
+                                   asp-route-page="@pageNumber">@pageNumber</a>
+                            }
+                            <a class="btn ghost sm @(Model.PageNumber >= Model.TotalPages ? "disabled" : "")"
+                               asp-action="Index"
+                               asp-route-appUserId="@Model.SelectedAppUserId"
+                               asp-route-page="@(Model.PageNumber + 1)">Next</a>
+                        </div>
+                    </div>
+                }
             }
         </div>
     </div>

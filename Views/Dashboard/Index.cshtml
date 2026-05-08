@@ -46,25 +46,6 @@
         </div>
     </div>
 
-    @if (Model.Linkshells.Count > 1)
-    {
-        <form method="get" asp-action="Index" class="page-actions">
-            <select class="form-select" name="linkshellId" onchange="this.form.submit()">
-                @foreach (var linkshell in Model.Linkshells)
-                {
-                    if (linkshell.Id == Model.SelectedLinkshellId)
-                    {
-                        <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                    }
-                    else
-                    {
-                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                    }
-                }
-            </select>
-            <noscript><button class="btn" type="submit">Load</button></noscript>
-        </form>
-    }
 </div>
 
 @if (Model.Linkshells.Count == 0)
@@ -79,46 +60,36 @@
 }
 else
 {
-    <div class="stats fade d2">
-        <div class="stat">
-            <div class="stat-icon a">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
-            </div>
-            <div class="stat-body">
-                <div class="stat-label">Total Members</div>
-                <div class="stat-value">@Model.TotalMembers</div>
-                <div class="stat-delta">in @(Model.SelectedLinkshellName ?? "linkshell")</div>
-            </div>
+    <div class="stat-strip fade d2">
+        <div class="stat-cell">
+            <div class="stat-cell-label">Linkshell</div>
+            <div class="stat-cell-value stat-cell-value--text">@(Model.SelectedLinkshellName ?? "—")</div>
         </div>
-        <div class="stat">
-            <div class="stat-icon b">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+        @if (Model.EnableItems)
+        {
+            <div class="stat-cell">
+                <div class="stat-cell-label">Items</div>
+                <div class="stat-cell-value">@Model.ItemCount</div>
             </div>
-            <div class="stat-body">
-                <div class="stat-label">Upcoming Events</div>
-                <div class="stat-value">@Model.UpcomingEvents</div>
-                <div class="stat-delta">scheduled</div>
+        }
+        @if (Model.EnableRevenue)
+        {
+            <div class="stat-cell">
+                <div class="stat-cell-label">Revenue</div>
+                <div class="stat-cell-value">@Model.RevenueTotal.ToString("N0")</div>
             </div>
+        }
+        <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming Events</div>
+            <div class="stat-cell-value">@Model.UpcomingEvents</div>
         </div>
-        <div class="stat">
-            <div class="stat-icon c">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            </div>
-            <div class="stat-body">
-                <div class="stat-label">Completed Events</div>
-                <div class="stat-value">@Model.CompletedEvents</div>
-                <div class="stat-delta">last @Model.CompletedEvents shown</div>
-            </div>
+        <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming Auctions</div>
+            <div class="stat-cell-value">@Model.UpcomingAuctionsCount</div>
         </div>
-        <div class="stat">
-            <div class="stat-icon d">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14l-2 7H7z"/><path d="M6 11v9h12v-9"/></svg>
-            </div>
-            <div class="stat-body">
-                <div class="stat-label">Linkshells</div>
-                <div class="stat-value">@Model.Linkshells.Count</div>
-                <div class="stat-delta">you belong to</div>
-            </div>
+        <div class="stat-cell">
+            <div class="stat-cell-label">Upcoming ToDs</div>
+            <div class="stat-cell-value">@Model.UpcomingTodsCount</div>
         </div>
     </div>
 
@@ -280,10 +251,6 @@ else
                             <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
                             <div>
                                 <div class="roster-name">@name</div>
-                                @if (!string.IsNullOrWhiteSpace(m.AppUser?.UserName) && m.CharacterName != m.AppUser.UserName)
-                                {
-                                    <div class="roster-name-sub">@m.AppUser.UserName</div>
-                                }
                             </div>
                             <div class="roster-rank">@(m.Rank ?? "Member")</div>
                             <div class="roster-dkp">@((m.LinkshellDkp ?? 0).ToString("0.##"))</div>

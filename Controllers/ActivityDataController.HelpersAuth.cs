@@ -153,7 +153,7 @@ public sealed partial class ActivityDataController
             rolesForLinkshell ??= new List<LinkshellRole>();
 
             var existingNames = new HashSet<string>(rolesForLinkshell.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
-            foreach (var defaultRole in BuildDefaultRoles(linkshellId))
+            foreach (var defaultRole in LinkshellRoleDefaults.BuildDefaultRoles(linkshellId))
             {
                 if (!existingNames.Contains(defaultRole.Name))
                 {
@@ -186,59 +186,6 @@ public sealed partial class ActivityDataController
         }
 
         return result;
-    }
-
-    private static IEnumerable<LinkshellRole> BuildDefaultRoles(int linkshellId)
-    {
-        yield return new LinkshellRole
-        {
-            LinkshellId = linkshellId,
-            Name = "Leader",
-            IsSystem = true,
-            SortOrder = 0,
-            CanManageRoles = true,
-            CanManageMembers = true,
-            CanManageEvents = true,
-            CanModerateLiveEvent = true,
-            CanAddLoot = true,
-            CanManageInventory = true,
-            CanManageTreasury = true,
-            CanManageRules = true,
-            CanManageAnnouncements = true,
-            CanManageTods = true,
-            CanAuditDkp = true,
-            CanManageAuctions = true,
-            CanCustomizeLinkshell = true
-        };
-
-        yield return new LinkshellRole
-        {
-            LinkshellId = linkshellId,
-            Name = "Officer",
-            IsSystem = true,
-            SortOrder = 1,
-            CanManageRoles = false,
-            CanManageMembers = false,
-            CanManageEvents = true,
-            CanModerateLiveEvent = true,
-            CanAddLoot = true,
-            CanManageInventory = true,
-            CanManageTreasury = false,
-            CanManageRules = true,
-            CanManageAnnouncements = true,
-            CanManageTods = true,
-            CanAuditDkp = false,
-            CanManageAuctions = true,
-            CanCustomizeLinkshell = false
-        };
-
-        yield return new LinkshellRole
-        {
-            LinkshellId = linkshellId,
-            Name = "Member",
-            IsSystem = true,
-            SortOrder = 2
-        };
     }
 
     private static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)

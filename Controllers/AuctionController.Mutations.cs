@@ -21,6 +21,9 @@ public partial class AuctionController
             return Challenge();
         }
 
+        model.LinkshellId = await ResolveActiveLinkshellIdAsync(user);
+        ModelState.Remove(nameof(AuctionViewModel.LinkshellId));
+
         model = await BuildAuctionViewModelAsync(user, model);
         var membership = await GetMembershipAsync(user.Id, model.LinkshellId);
         if (membership is null)

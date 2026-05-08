@@ -1,7 +1,7 @@
 .dkp-audit-form {
   display: grid;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface-2);
@@ -17,42 +17,130 @@
 
 .dkp-audit-form__mode {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   grid-template-columns: 1fr 1fr;
 }
 
 .dkp-audit-form__mode-option {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
+  background: var(--surface);
   cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.dkp-audit-form__mode-option input {
-  margin-top: 2px;
+.dkp-audit-form__mode-option:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dkp-audit-form__mode-option:has(input:checked) {
+  border-color: var(--accent, #7c5cff);
+  background: rgba(124, 92, 255, 0.08);
+  box-shadow: 0 0 0 1px var(--accent, #7c5cff) inset;
+}
+
+.dkp-audit-form__mode-option input[type="radio"] {
+  margin: 2px 0 0;
+  accent-color: var(--accent, #7c5cff);
+  flex-shrink: 0;
 }
 
 .dkp-audit-form__mode-option span {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.dkp-audit-form__mode-option strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.dkp-audit-form__mode-option .muted {
+  font-size: 11px;
+  color: var(--fg-3);
 }
 
 .dkp-audit-form__grid {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   grid-template-columns: 1fr 1fr;
 }
 
-.dkp-audit-form__grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.dkp-audit-form__grid > label {
+  display: grid;
+  gap: 6px;
   font-size: 12px;
+  color: var(--fg-2);
+}
+
+.dkp-audit-form__grid > label > span {
+  font-size: 11px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dkp-audit-form__grid input[type="number"],
+.dkp-audit-form__grid input[type="text"],
+.dkp-audit-form__grid select,
+.dkp-audit-form__grid textarea {
+  width: 100%;
+  padding: 0 10px;
+  height: 34px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.dkp-audit-form__grid textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.dkp-audit-form__grid select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 10px) 50%;
+  background-size: 12px 8px;
+}
+
+.dkp-audit-form__grid select option {
+  background: var(--surface, #1f1f23);
+  color: var(--fg, #e4e4e7);
+}
+
+.dkp-audit-form__grid input[type="number"]:hover:not(:disabled),
+.dkp-audit-form__grid input[type="text"]:hover:not(:disabled),
+.dkp-audit-form__grid select:hover:not(:disabled),
+.dkp-audit-form__grid textarea:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.dkp-audit-form__grid input[type="number"]:focus-visible,
+.dkp-audit-form__grid input[type="text"]:focus-visible,
+.dkp-audit-form__grid select:focus-visible,
+.dkp-audit-form__grid textarea:focus-visible {
+  border-color: var(--accent, #7c5cff);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
 }
 
 .dkp-audit-form__reason {
@@ -63,6 +151,9 @@
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .dkp-history-table th,
@@ -134,8 +225,8 @@
 
 .role-edit-form {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 14px;
+  padding: 16px;
   border-top: 1px solid var(--border);
   background: var(--surface-2);
 }
@@ -147,17 +238,106 @@
   gap: 8px;
 }
 
+.role-edit-form > label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-2);
+  max-width: 360px;
+}
+
+.role-edit-form > label > span {
+  font-size: 11px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.role-edit-form > label > input[type="text"] {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.role-edit-form > label > input[type="text"]:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.role-edit-form > label > input[type="text"]:focus-visible {
+  border-color: var(--accent, #7c5cff);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+}
+
+.role-edit-form > label > input[type="text"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .role-edit-form__permissions {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 6px 16px;
+  gap: 8px 16px;
 }
 
 .role-edit-form__perm {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
+  cursor: pointer;
+}
+
+// Render the underlying checkbox as an iOS-style on/off toggle switch,
+// matching the feature toggles in .customize-form__toggle.
+.role-edit-form__perm input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    transition: transform 0.15s ease;
+  }
+
+  &:checked {
+    background: var(--accent, #7c5cff);
+    border-color: var(--accent, #7c5cff);
+  }
+
+  &:checked::before {
+    transform: translateX(14px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent, #7c5cff);
+    outline-offset: 2px;
+  }
 }
 
 .role-edit-form__actions {

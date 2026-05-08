@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddonToken,
@@ -29,6 +29,21 @@ export class ConfigurationsTabComponent {
     void this.loadRolesForSelectedLinkshell();
     this.syncCustomizeDraft();
 
+    // Re-sync customize draft + reload roles when the active (primary)
+    // linkshell changes — both cards now follow the dashboard selection so
+    // there's no per-card picker to invalidate.
+    effect(() => {
+      const id = this.selectedDashboardLinkshellId();
+      if (!id) return;
+      this.editingRoleId = null;
+      this.showNewRoleForm = false;
+      this.pendingDeleteRoleId = null;
+      this.addonModalLoadedFor = null;
+      this.syncCustomizeDraft();
+      void this.loadRolesForSelectedLinkshell();
+      void this.loadAddonTokensForCurrent();
+    });
+
     this.destroyRef.onDestroy(() => {
       if (this.addonCountdownTimer) {
         clearInterval(this.addonCountdownTimer);
@@ -36,6 +51,11 @@ export class ConfigurationsTabComponent {
       }
     });
   }
+
+  protected activeLinkshellName = computed(() => {
+    const id = this.selectedDashboardLinkshellId();
+    return this.dashboardLinkshells().find(l => l.id === id)?.name ?? null;
+  });
 
   // ----- Re-implemented small reads -----
 
@@ -60,6 +80,109 @@ export class ConfigurationsTabComponent {
       this.dashboardLinkshells()[0]?.id ??
       0
     );
+  }
+
+  // ----- Edit / delete linkshell (leaders only) -----
+
+  protected editingLinkshellId: number | null = null;
+  protected linkshellEditDraft: { name: string; details: string } = { name: '', details: '' };
+  protected pendingDeleteLinkshellId: number | null = null;
+
+  protected isLinkshellLeader(rank: string | null | undefined): boolean {
+    return (rank ?? '').toLowerCase() === 'leader';
+  }
+
+  protected beginEditLinkshell(link: { id: number; name: string; details?: string | null }): void {
+    this.editingLinkshellId = link.id;
+    this.linkshellEditDraft = {
+      name: link.name ?? '',
+      details: link.details ?? ''
+    };
+    this.pendingDeleteLinkshellId = null;
+  }
+
+  protected cancelEditLinkshell(): void {
+    this.editingLinkshellId = null;
+    this.linkshellEditDraft = { name: '', details: '' };
+  }
+
+  protected async saveEditLinkshell(): Promise<void> {
+    if (this.editingLinkshellId === null) return;
+    const linkshellId = this.editingLinkshellId;
+    const link = this.dashboardLinkshells().find(l => l.id === linkshellId);
+    if (!link) return;
+    const name = this.linkshellEditDraft.name.trim();
+    if (!name) return;
+
+    try {
+      // Pass through existing settings so the rename doesn't reset feature flags.
+      const settings = link.settings;
+      await this.activity.updateLinkshell(linkshellId, {
+        name,
+        details: this.linkshellEditDraft.details.trim() || null,
+        lootStructure: settings?.lootStructure ?? null,
+        enableHnmSection: settings?.enableHnmSection ?? null,
+        enableMissions: settings?.enableMissions ?? null,
+        enableAuctions: settings?.enableAuctions ?? null,
+        enableToDs: settings?.enableToDs ?? null,
+        enableEndgame: settings?.enableEndgame ?? null,
+        enableEvents: settings?.enableEvents ?? null,
+        enableDkp: settings?.enableDkp ?? null,
+        enableItems: settings?.enableItems ?? null,
+        enableRevenue: settings?.enableRevenue ?? null,
+        dkpRoundingIncrement: settings?.dkpRoundingIncrement ?? null
+      });
+      this.cancelEditLinkshell();
+    } catch {
+      // surfaced by service
+    }
+  }
+
+  protected requestDeleteLinkshell(link: { id: number }): void {
+    this.pendingDeleteLinkshellId = link.id;
+    if (this.editingLinkshellId === link.id) {
+      this.cancelEditLinkshell();
+    }
+  }
+
+  protected cancelDeleteLinkshell(): void {
+    this.pendingDeleteLinkshellId = null;
+  }
+
+  protected async confirmDeleteLinkshell(link: { id: number }): Promise<void> {
+    try {
+      await this.activity.deleteLinkshell(link.id);
+      this.pendingDeleteLinkshellId = null;
+    } catch {
+      // surfaced by service
+    }
+  }
+
+  // ----- Switch primary linkshell -----
+
+  protected switchTargetLinkshellId = signal<number | null>(null);
+
+  protected effectiveSwitchLinkshellId(): number {
+    const explicit = this.switchTargetLinkshellId();
+    if (explicit && this.dashboardLinkshells().some(l => l.id === explicit)) {
+      return explicit;
+    }
+    return this.selectedDashboardLinkshellId();
+  }
+
+  protected isSwitchTargetCurrent(): boolean {
+    return this.effectiveSwitchLinkshellId() === this.selectedDashboardLinkshellId();
+  }
+
+  protected onSwitchLinkshellChange(linkshellId: number): void {
+    this.switchTargetLinkshellId.set(linkshellId);
+  }
+
+  protected async switchPrimaryLinkshell(): Promise<void> {
+    const id = this.effectiveSwitchLinkshellId();
+    if (!id || id === this.selectedDashboardLinkshellId()) return;
+    await this.activity.setPrimaryLinkshell(id);
+    this.switchTargetLinkshellId.set(null);
   }
 
   // ----- Create linkshell -----
@@ -110,7 +233,6 @@ export class ConfigurationsTabComponent {
   ] as const;
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
-  protected rolesLinkshellId: number | null = null;
   protected editingRoleId: number | null = null;
   protected readonly roleDraft: {
     name: string;
@@ -119,7 +241,7 @@ export class ConfigurationsTabComponent {
   protected showNewRoleForm = false;
 
   protected permissionsTargetLinkshellId(): number {
-    return this.rolesLinkshellId ?? this.selectedDashboardLinkshellId();
+    return this.selectedDashboardLinkshellId();
   }
 
   protected currentLinkshellRoles(): ActivityLinkshellRole[] {
@@ -140,13 +262,6 @@ export class ConfigurationsTabComponent {
     if (data) {
       this.rolesByLinkshell.update(map => ({ ...map, [id]: data.roles }));
     }
-  }
-
-  protected onPermissionsLinkshellChange(linkshellId: number): void {
-    this.rolesLinkshellId = linkshellId;
-    this.editingRoleId = null;
-    this.showNewRoleForm = false;
-    void this.loadRolesForSelectedLinkshell();
   }
 
   protected beginEditRole(role: ActivityLinkshellRole): void {
@@ -263,11 +378,10 @@ export class ConfigurationsTabComponent {
     dkpRoundingIncrement: 'Quarter'
   };
 
-  protected customizeLinkshellId: number | null = null;
   protected customizeDirty = false;
 
   protected customizeTargetLinkshellId(): number {
-    return this.customizeLinkshellId ?? this.selectedDashboardLinkshellId();
+    return this.selectedDashboardLinkshellId();
   }
 
   protected canCustomizeSelectedLinkshell(): boolean {
@@ -293,11 +407,6 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableRevenue = settings.enableRevenue;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
     this.customizeDirty = false;
-  }
-
-  protected onCustomizeLinkshellChange(linkshellId: number): void {
-    this.customizeLinkshellId = linkshellId;
-    this.syncCustomizeDraft();
   }
 
   protected onCustomizeFieldChange(): void {

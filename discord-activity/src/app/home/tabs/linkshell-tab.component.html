@@ -7,12 +7,30 @@
       </div>
 
       <!-- Linkshell Roster (same data as Dashboard) -->
-      @if (selectedDashboardLinkshell()) {
+      @if (selectedDashboardLinkshell(); as activeLinkshell) {
         <div class="card">
           <div class="card-head">
             <div class="card-title">Linkshell Roster</div>
             <div class="card-head-right">
+              <span class="tag accent" title="Currently active linkshell">{{ activeLinkshell.name }}</span>
               <span class="tag default num">{{ selectedDashboardMembers().length }}</span>
+              @if (pendingLeaveLinkshell()) {
+                <button type="button" class="btn sm danger-outline"
+                  [disabled]="activity.busyLinkshellId() === activeLinkshell.id"
+                  (click)="confirmLeaveLinkshell()">
+                  {{ activity.busyLinkshellId() === activeLinkshell.id ? 'Leaving…' : 'Confirm leave' }}
+                </button>
+                <button type="button" class="btn ghost sm"
+                  [disabled]="activity.busyLinkshellId() === activeLinkshell.id"
+                  (click)="cancelLeaveLinkshell()">Cancel</button>
+              } @else {
+                <button type="button" class="btn ghost sm"
+                  [disabled]="mustHandoffBeforeLeaving()"
+                  [title]="mustHandoffBeforeLeaving() ? 'Promote another member to Leader before leaving' : 'Leave this linkshell'"
+                  (click)="requestLeaveLinkshell()">
+                  Leave Linkshell
+                </button>
+              }
             </div>
           </div>
           @if (selectedDashboardMembers().length > 0) {
@@ -83,6 +101,29 @@
                           class="btn ghost sm"
                           (click)="beginEditRank(member.id, member.rank)">
                           Modify Rank
+                        </button>
+                      }
+                    }
+                    @if (canRemoveMember(member.appUserId) && editingRankMemberId() !== member.id) {
+                      @if (pendingRemoveMemberId() === member.id) {
+                        <button
+                          type="button"
+                          class="btn sm danger-outline"
+                          [disabled]="activity.busyMemberId() === member.id"
+                          (click)="confirmRemoveMember(member.id)">
+                          {{ activity.busyMemberId() === member.id ? 'Removing…' : 'Confirm remove' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn ghost sm"
+                          [disabled]="activity.busyMemberId() === member.id"
+                          (click)="cancelRemoveMember()">Cancel</button>
+                      } @else {
+                        <button
+                          type="button"
+                          class="btn ghost sm"
+                          (click)="requestRemoveMember(member.id)">
+                          Remove
                         </button>
                       }
                     }

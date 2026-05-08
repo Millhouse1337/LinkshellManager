@@ -95,6 +95,12 @@ public partial class EventController
             return Challenge();
         }
 
+        eventViewModel.Event ??= new Event();
+        eventViewModel.Event.LinkshellId = await ResolveActiveManageableLinkshellIdAsync(user);
+        eventViewModel.LinkshellId = eventViewModel.Event.LinkshellId;
+        ModelState.Remove("Event.LinkshellId");
+        ModelState.Remove(nameof(EventViewModel.LinkshellId));
+
         var createMembership = await GetMembershipAsync(user.Id, eventViewModel.Event.LinkshellId);
         if (!CanManageLinkshell(createMembership))
         {

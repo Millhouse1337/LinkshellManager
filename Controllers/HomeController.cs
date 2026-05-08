@@ -23,7 +23,14 @@ namespace LinkshellManagerDiscordApp.Controllers
             return View();
         }
 
+        [Route("privacy")]
         public IActionResult Privacy()
+        {
+            return View();
+        }
+
+        [Route("terms")]
+        public IActionResult Terms()
         {
             return View();
         }

@@ -38,15 +38,24 @@ public partial class EventController : Controller
             .OrderBy(linkshell => linkshell.LinkshellName)
             .ToListAsync();
 
-        var selectedLinkshellId = source?.LinkshellId ?? source?.Event?.LinkshellId ?? user.PrimaryLinkshellId ?? linkshells.FirstOrDefault()?.Id ?? 0;
+        var isExistingEvent = source?.Event?.Id > 0;
+        var selectedLinkshellId = isExistingEvent && source?.Event?.LinkshellId > 0
+            ? source.Event.LinkshellId
+            : user.PrimaryLinkshellId ?? linkshells.FirstOrDefault()?.Id ?? 0;
         if (selectedLinkshellId > 0 && linkshells.All(linkshell => linkshell.Id != selectedLinkshellId))
         {
             selectedLinkshellId = linkshells.FirstOrDefault()?.Id ?? 0;
         }
 
+        var eventDraft = source?.Event ?? new Event();
+        if (!isExistingEvent)
+        {
+            eventDraft.LinkshellId = selectedLinkshellId;
+        }
+
         return new EventViewModel
         {
-            Event = source?.Event ?? new Event(),
+            Event = eventDraft,
             Jobs = source?.Jobs ?? new List<Job>(),
             Linkshells = linkshells,
             LinkshellId = selectedLinkshellId
@@ -60,6 +69,24 @@ public partial class EventController : Controller
         return await _context.AppUserLinkshells
             .Include(link => link.Linkshell)
             .FirstOrDefaultAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId);
+    }
+
+    private async Task<int> ResolveActiveManageableLinkshellIdAsync(AppUser user)
+    {
+        var linkshellIds = await _context.AppUserLinkshells
+            .Where(link =>
+                link.AppUserId == user.Id &&
+                (link.Rank == "Leader" || link.Rank == "Officer"))
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .Select(link => link.LinkshellId)
+            .ToListAsync();
+
+        if (user.PrimaryLinkshellId.HasValue && linkshellIds.Contains(user.PrimaryLinkshellId.Value))
+        {
+            return user.PrimaryLinkshellId.Value;
+        }
+
+        return linkshellIds.FirstOrDefault();
     }
 
     private static bool CanManageLinkshell(AppUserLinkshell? membership)

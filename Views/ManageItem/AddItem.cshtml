@@ -8,28 +8,15 @@
         <h1 class="page-title">Add item</h1>
         <div class="page-sub"><span>Track a new item for your linkshell</span></div>
     </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-action="Index">Cancel</a>
-    </div>
 </div>
 
 <div class="card fade d2" style="padding:20px">
     <form asp-action="AddItem" method="post">
         @Html.AntiForgeryToken()
+        <input asp-for="LinkshellId" type="hidden" />
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
-        <div class="form-grid">
-            <div class="field">
-                <label asp-for="LinkshellId">Linkshell</label>
-                <select asp-for="LinkshellId" class="form-select" required>
-                    @foreach (var linkshell in Model.Linkshells)
-                    {
-                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                    }
-                </select>
-                <span asp-validation-for="LinkshellId" class="text-danger"></span>
-            </div>
-
+        <div class="form-grid" style="grid-template-columns:repeat(2,minmax(220px,1fr));column-gap:24px;align-items:start">
             <div class="field">
                 <label asp-for="ItemName"></label>
                 <input asp-for="ItemName" class="form-control" maxlength="256" />
@@ -57,7 +44,6 @@
 
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <button type="submit" class="btn primary">Add item</button>
-            <a class="btn ghost" asp-action="Index">Cancel</a>
         </div>
     </form>
 </div>

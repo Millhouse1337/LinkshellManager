@@ -78,14 +78,6 @@
       <div class="card-body">
       @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0)) {
         <div class="invite-search">
-          <select
-            [ngModel]="inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0"
-            (ngModelChange)="onInviteLinkshellChange($event)"
-            name="inviteLinkshellId">
-            @for (linkshell of activity.overview()?.linkshells ?? []; track linkshell.id) {
-              <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
-            }
-          </select>
           <input
             [(ngModel)]="inviteSearchTerm"
             name="inviteSearchTerm"
@@ -106,12 +98,9 @@
                   <li>
                     <div>
                       <strong>{{ candidate.displayName }}</strong>
-                      <span>
-                        {{ candidate.userName || 'No username' }}
-                        @if (candidate.primaryLinkshellName) {
-                          <span> | primary: {{ candidate.primaryLinkshellName }}</span>
-                        }
-                      </span>
+                      @if (candidate.primaryLinkshellName) {
+                        <span>Primary: {{ candidate.primaryLinkshellName }}</span>
+                      }
                     </div>
                     <div class="button-cluster">
                       <button type="button" class="action-button" (click)="sendInvite(candidate.appUserId)">Invite</button>
@@ -131,12 +120,9 @@
               <li>
                 <div>
                   <strong>{{ result.displayName }}</strong>
-                  <span>
-                    {{ result.userName || 'No username' }}
-                    @if (result.primaryLinkshellName) {
-                      <span> | primary: {{ result.primaryLinkshellName }}</span>
-                    }
-                  </span>
+                  @if (result.primaryLinkshellName) {
+                    <span>Primary: {{ result.primaryLinkshellName }}</span>
+                  }
                 </div>
                 <div class="button-cluster">
                   <button type="button" class="action-button" (click)="sendInvite(result.id)">Invite</button>

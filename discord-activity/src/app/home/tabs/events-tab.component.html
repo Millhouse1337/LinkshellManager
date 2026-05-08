@@ -44,16 +44,16 @@
                 <span>{{ event.requestedSlots }} requested slots</span>
                 <span class="num">{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
               </div>
-              <button
-                type="button"
-                class="card-collapse-toggle card-collapse-toggle--right"
-                [class.collapsed]="isLiveEventCollapsed(event.id)"
-                (click)="toggleLiveEventCollapsed(event.id)"
-                [attr.aria-expanded]="!isLiveEventCollapsed(event.id)"
-                [attr.aria-label]="isLiveEventCollapsed(event.id) ? 'Expand event' : 'Collapse event'">
-                <span class="card-collapse-toggle__chevron">▾</span>
-              </button>
             </div>
+            <button
+              type="button"
+              class="card-collapse-toggle card-collapse-toggle--center"
+              [class.collapsed]="isLiveEventCollapsed(event.id)"
+              (click)="toggleLiveEventCollapsed(event.id)"
+              [attr.aria-expanded]="!isLiveEventCollapsed(event.id)"
+              [attr.aria-label]="isLiveEventCollapsed(event.id) ? 'Expand event' : 'Collapse event'">
+              <span class="card-collapse-toggle__chevron">▾</span>
+            </button>
 
             @if (!isLiveEventCollapsed(event.id)) {
             <ul class="job-tags">

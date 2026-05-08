@@ -88,7 +88,29 @@ public class DashboardController : Controller
                 .ToListAsync()
             : new List<Tod>();
 
-        var selectedLinkshellName = linkshells.FirstOrDefault(linkshell => linkshell.Id == selectedLinkshellId)?.LinkshellName;
+        var selectedLinkshell = linkshells.FirstOrDefault(linkshell => linkshell.Id == selectedLinkshellId);
+        var selectedLinkshellName = selectedLinkshell?.LinkshellName;
+
+        var itemCount = selectedLinkshellId.HasValue
+            ? await _context.Items.CountAsync(item => item.LinkshellId == selectedLinkshellId.Value)
+            : 0;
+
+        var revenueTotal = selectedLinkshellId.HasValue
+            ? await _context.RevenueEntries
+                .Where(entry => entry.LinkshellId == selectedLinkshellId.Value)
+                .SumAsync(entry => (long?)entry.Value) ?? 0L
+            : 0L;
+
+        var nowUtc = DateTime.UtcNow;
+        var upcomingAuctionsCount = selectedLinkshellId.HasValue
+            ? await _context.Auctions
+                .Where(auction => auction.LinkshellId == selectedLinkshellId.Value
+                                   && (auction.EndTime == null || auction.EndTime > nowUtc))
+                .CountAsync()
+            : 0;
+
+        var upcomingTodsCount = tods.Count(tod => tod.RepopTime.HasValue
+            && DateTime.SpecifyKind(tod.RepopTime.Value, DateTimeKind.Utc) > nowUtc);
 
         var todTracker = BuildTodTracker(tods);
         var hnmClaims = BuildHnmClaims(tods, out var hnmTotal);
@@ -105,6 +127,12 @@ public class DashboardController : Controller
             TotalMembers = members.Count,
             UpcomingEvents = events.Count(evt => evt.CommencementStartTime is null),
             CompletedEvents = eventHistories.Count,
+            ItemCount = itemCount,
+            RevenueTotal = revenueTotal,
+            UpcomingAuctionsCount = upcomingAuctionsCount,
+            UpcomingTodsCount = upcomingTodsCount,
+            EnableItems = selectedLinkshell?.EnableItems ?? true,
+            EnableRevenue = selectedLinkshell?.EnableRevenue ?? true,
             TodTracker = todTracker,
             HnmClaims = hnmClaims,
             HnmClaimsTotal = hnmTotal,

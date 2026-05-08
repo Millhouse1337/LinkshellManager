@@ -34,7 +34,8 @@ public partial class AuctionController : Controller
             .OrderBy(link => link.LinkshellName)
             .ToListAsync();
 
-        var selectedLinkshellId = source?.LinkshellId
+        var sourceLinkshellId = source?.LinkshellId > 0 ? source.LinkshellId : (int?)null;
+        var selectedLinkshellId = sourceLinkshellId
             ?? user.PrimaryLinkshellId
             ?? linkshells.FirstOrDefault()?.Id
             ?? 0;
@@ -64,6 +65,22 @@ public partial class AuctionController : Controller
     {
         return await _context.AppUserLinkshells
             .AnyAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId);
+    }
+
+    private async Task<int> ResolveActiveLinkshellIdAsync(AppUser user)
+    {
+        var linkshellIds = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id)
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .Select(link => link.LinkshellId)
+            .ToListAsync();
+
+        if (user.PrimaryLinkshellId.HasValue && linkshellIds.Contains(user.PrimaryLinkshellId.Value))
+        {
+            return user.PrimaryLinkshellId.Value;
+        }
+
+        return linkshellIds.FirstOrDefault();
     }
 
     private static bool CanEditAuction(string currentUserId, Auction auction, DateTime referenceUtc)

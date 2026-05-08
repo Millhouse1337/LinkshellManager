@@ -13,9 +13,6 @@
             <span>@selectedLinkshellName</span>
         </div>
     </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-action="Index">Cancel</a>
-    </div>
 </div>
 
 @if (!Model.Linkshells.Any())
@@ -26,136 +23,153 @@
 }
 else
 {
-    <div class="card fade d2">
-        <div class="card-head">
-            <div class="card-title">Submit ToD</div>
+    <form asp-action="Create" method="post" id="tod-form" novalidate
+          data-character-names="@JsonSerializer.Serialize(Model.CharacterNames)"
+          class="create-form fade d2">
+        @Html.AntiForgeryToken()
+        <input asp-for="Tod.LinkshellId" type="hidden" />
+
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger"
+             style="display:@(ViewData.ModelState.IsValid ? "none" : "block"); margin-bottom:14px;"></div>
+
+        <div class="create-form__header">
+            <div>
+                <strong>Submit ToD</strong>
+                <p>Log a kill, calculate the next repop window, and record any loot.</p>
+            </div>
+            <span class="tag accent">@selectedLinkshellName</span>
         </div>
-        <div class="card-body">
-            <form asp-action="Create" method="post" id="tod-form" novalidate data-character-names="@JsonSerializer.Serialize(Model.CharacterNames)">
-                @Html.AntiForgeryToken()
-                <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="display:@(ViewData.ModelState.IsValid ? "none" : "block"); margin-bottom:14px;"></div>
 
-                <div class="form-grid">
-                    <label asp-for="Tod.LinkshellId" class="form-grid-label">Linkshell</label>
-                    <div>
-                        <select asp-for="Tod.LinkshellId" class="form-select" id="linkshell-select">
-                            @foreach (var linkshell in Model.Linkshells)
-                            {
-                                <option value="@linkshell.Id" selected="@(linkshell.Id == Model.Tod.LinkshellId ? "selected" : null)">@linkshell.LinkshellName</option>
-                            }
-                        </select>
-                        <span asp-validation-for="Tod.LinkshellId" class="field-error"></span>
-                    </div>
+        <div class="create-form__grid">
+            <label>
+                <span>Monster</span>
+                <select asp-for="Tod.MonsterName" id="monster-select" required>
+                    <option value="">Select monster name</option>
+                    @foreach (var monster in Model.MonsterOptions)
+                    {
+                        <option value="@monster"
+                                selected="@(string.Equals(monster, Model.Tod.MonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                            @monster
+                        </option>
+                    }
+                </select>
+                <span asp-validation-for="Tod.MonsterName" class="create-form__error"></span>
+            </label>
 
-                    <label asp-for="Tod.MonsterName" class="form-grid-label">Monster</label>
-                    <div>
-                        <select asp-for="Tod.MonsterName" class="form-select" id="monster-select">
-                            <option value="">Select monster name</option>
-                            @foreach (var monster in Model.MonsterOptions)
-                            {
-                                <option value="@monster" selected="@(string.Equals(monster, Model.Tod.MonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@monster</option>
-                            }
-                        </select>
-                        <span asp-validation-for="Tod.MonsterName" class="field-error"></span>
-                    </div>
+            <label>
+                <span>Day number</span>
+                <input asp-for="Tod.DayNumber" type="number" min="0" inputmode="numeric" placeholder="0" />
+                <span asp-validation-for="Tod.DayNumber" class="create-form__error"></span>
+            </label>
 
-                    <label asp-for="Tod.DayNumber" class="form-grid-label">Day #</label>
-                    <div>
-                        <input asp-for="Tod.DayNumber" class="form-control" type="number" min="0" inputmode="numeric" />
-                        <span asp-validation-for="Tod.DayNumber" class="field-error"></span>
-                    </div>
+            <label>
+                <span>Claim</span>
+                <select asp-for="Tod.Claim" id="claim-select">
+                    <option value="true" selected="@(Model.Tod.Claim ? "selected" : null)">Yes</option>
+                    <option value="false" selected="@(!Model.Tod.Claim ? "selected" : null)">No</option>
+                </select>
+            </label>
 
-                    <label asp-for="Tod.Claim" class="form-grid-label">Claim</label>
-                    <div>
-                        <select asp-for="Tod.Claim" class="form-select" id="claim-select">
-                            <option value="true" selected="@(Model.Tod.Claim ? "selected" : null)">Yes</option>
-                            <option value="false" selected="@(!Model.Tod.Claim ? "selected" : null)">No</option>
-                        </select>
-                    </div>
+            <label>
+                <span>Cooldown</span>
+                <select asp-for="Tod.Cooldown" id="cooldown-select">
+                    @foreach (var cooldown in Model.CooldownOptions)
+                    {
+                        <option value="@cooldown"
+                                selected="@(string.Equals(cooldown, Model.Tod.Cooldown, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                            @cooldown
+                        </option>
+                    }
+                </select>
+                <span asp-validation-for="Tod.Cooldown" class="create-form__error"></span>
+            </label>
 
-                    <label asp-for="Tod.Time" class="form-grid-label">ToD</label>
-                    <div>
-                        <input asp-for="Tod.Time" type="datetime-local" class="form-control" step="1" id="tod-time" value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
-                        <span asp-validation-for="Tod.Time" class="field-error"></span>
-                    </div>
+            <label>
+                <span>Interval</span>
+                <select asp-for="Tod.Interval" id="interval-select">
+                    @foreach (var interval in Model.IntervalOptions)
+                    {
+                        <option value="@interval"
+                                selected="@(string.Equals(interval, Model.Tod.Interval, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                            @interval
+                        </option>
+                    }
+                </select>
+                <span asp-validation-for="Tod.Interval" class="create-form__error"></span>
+            </label>
 
-                    <label asp-for="Tod.Cooldown" class="form-grid-label">Cooldown</label>
-                    <div>
-                        <select asp-for="Tod.Cooldown" class="form-select" id="cooldown-select">
-                            @foreach (var cooldown in Model.CooldownOptions)
-                            {
-                                <option value="@cooldown" selected="@(string.Equals(cooldown, Model.Tod.Cooldown, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@cooldown</option>
-                            }
-                        </select>
-                        <span asp-validation-for="Tod.Cooldown" class="field-error"></span>
-                    </div>
+            <label>
+                <span>Time of death</span>
+                <input asp-for="Tod.Time" type="datetime-local" step="1" id="tod-time"
+                       value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
+                <span asp-validation-for="Tod.Time" class="create-form__error"></span>
+            </label>
 
-                    <label asp-for="Tod.RepopTime" class="form-grid-label">Repop time</label>
-                    <div>
-                        <input asp-for="Tod.RepopTime" type="datetime-local" class="form-control" step="1" id="repop-time" value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />
-                    </div>
-
-                    <label asp-for="Tod.Interval" class="form-grid-label">Interval</label>
-                    <div>
-                        <select asp-for="Tod.Interval" class="form-select" id="interval-select">
-                            @foreach (var interval in Model.IntervalOptions)
-                            {
-                                <option value="@interval" selected="@(string.Equals(interval, Model.Tod.Interval, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@interval</option>
-                            }
-                        </select>
-                        <span asp-validation-for="Tod.Interval" class="field-error"></span>
-                    </div>
-                </div>
-
-                <input asp-for="NoLoot" type="hidden" id="no-loot" />
-
-                <div id="loot-section" class="@(Model.Tod.Claim && !Model.NoLoot ? "" : "d-none")" style="margin-top:20px">
-                    <div class="card-title" style="margin-bottom:10px">Loot details</div>
-                    <div id="loot-rows" style="display:grid;gap:10px">
-                        @for (var index = 0; index < Model.TodLootDetails.Count; index++)
-                        {
-                            var lootDetail = Model.TodLootDetails[index];
-                            <div class="loot-detail-row" style="padding:12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface)">
-                                <div class="field-row" style="margin-bottom:0">
-                                    <div class="field">
-                                        <label class="field-label">Item name</label>
-                                        <input type="text" class="form-control" data-field="ItemName" name="TodLootDetails[@index].ItemName" value="@lootDetail.ItemName" />
-                                    </div>
-                                    <div class="field">
-                                        <label class="field-label">Item winner</label>
-                                        <select class="form-select" data-field="ItemWinner" name="TodLootDetails[@index].ItemWinner">
-                                            <option value="">Select winner</option>
-                                            @foreach (var characterName in Model.CharacterNames)
-                                            {
-                                                <option value="@characterName" selected="@(string.Equals(characterName, lootDetail.ItemWinner, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@characterName</option>
-                                            }
-                                        </select>
-                                    </div>
-                                    <div class="field">
-                                        <label class="field-label">DKP spent</label>
-                                        <input type="number" class="form-control" data-field="WinningDkpSpent" name="TodLootDetails[@index].WinningDkpSpent" min="1" value="@lootDetail.WinningDkpSpent" />
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <div id="loot-controls" class="@(Model.Tod.Claim ? "" : "d-none")" style="display:flex;justify-content:space-between;gap:8px;margin-top:16px;flex-wrap:wrap">
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
-                        <button type="button" class="btn" id="add-loot-row">+ Add loot</button>
-                        <button type="button" class="btn ghost" id="remove-loot-row">Remove</button>
-                        <button type="button" class="btn ghost" id="no-loot-button">No loot</button>
-                    </div>
-                    <button type="submit" class="btn primary">Submit ToD</button>
-                </div>
-
-                <div id="submit-only-row" class="@(Model.Tod.Claim ? "d-none" : "")" style="display:flex;justify-content:flex-end;margin-top:16px">
-                    <button type="submit" class="btn primary">Submit ToD</button>
-                </div>
-            </form>
+            <label class="create-form__field--full">
+                <span>Repop time</span>
+                <input asp-for="Tod.RepopTime" type="datetime-local" step="1" id="repop-time"
+                       value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />
+            </label>
         </div>
-    </div>
+
+        <input asp-for="NoLoot" type="hidden" id="no-loot" />
+
+        <div id="loot-section" class="create-form__section @(Model.Tod.Claim && !Model.NoLoot ? "" : "d-none")">
+            <div class="create-form__section-head">
+                <h3>Loot details</h3>
+            </div>
+            <div id="loot-rows" class="create-form__items">
+                @for (var index = 0; index < Model.TodLootDetails.Count; index++)
+                {
+                    var lootDetail = Model.TodLootDetails[index];
+                    <div class="create-form__item loot-detail-row">
+                        <div class="create-form__grid">
+                            <label>
+                                <span>Item name</span>
+                                <input type="text" data-field="ItemName"
+                                       name="TodLootDetails[@index].ItemName" value="@lootDetail.ItemName" />
+                            </label>
+                            <label>
+                                <span>Winner</span>
+                                <select data-field="ItemWinner"
+                                        name="TodLootDetails[@index].ItemWinner">
+                                    <option value="">Select winner</option>
+                                    @foreach (var characterName in Model.CharacterNames)
+                                    {
+                                        <option value="@characterName"
+                                                selected="@(string.Equals(characterName, lootDetail.ItemWinner, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                                            @characterName
+                                        </option>
+                                    }
+                                </select>
+                            </label>
+                            <label>
+                                <span>DKP spent</span>
+                                <input type="number" data-field="WinningDkpSpent"
+                                       name="TodLootDetails[@index].WinningDkpSpent"
+                                       min="1" value="@lootDetail.WinningDkpSpent" />
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div id="loot-controls"
+             class="create-form__actions create-form__actions--split @(Model.Tod.Claim ? "" : "d-none")">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button type="button" class="btn ghost sm" id="add-loot-row">+ Add loot</button>
+                <button type="button" class="btn ghost sm" id="remove-loot-row">Remove</button>
+                <button type="button" class="btn ghost sm" id="no-loot-button">No loot</button>
+            </div>
+            <button type="submit" class="btn primary">Submit ToD</button>
+        </div>
+
+        <div id="submit-only-row"
+             class="create-form__actions @(Model.Tod.Claim ? "d-none" : "")">
+            <button type="submit" class="btn primary">Submit ToD</button>
+        </div>
+    </form>
 }
 
 @section Scripts {

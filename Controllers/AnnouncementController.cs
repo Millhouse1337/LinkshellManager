@@ -68,7 +68,8 @@ public class AnnouncementController : Controller
         var viewModel = new AnnouncementViewModel
         {
             Linkshells = manageableLinkshells,
-            LinkshellId = defaultLinkshellId
+            LinkshellId = defaultLinkshellId,
+            LinkshellName = manageableLinkshells.First(l => l.Id == defaultLinkshellId).LinkshellName
         };
 
         return View(viewModel);
@@ -82,10 +83,16 @@ public class AnnouncementController : Controller
         if (user is null) return Challenge();
 
         var manageableLinkshells = await GetManageableLinkshellsAsync(user.Id);
-        if (!manageableLinkshells.Any(l => l.Id == model.LinkshellId))
+        var selectedLinkshell = manageableLinkshells.FirstOrDefault(l => l.Id == user.PrimaryLinkshellId)
+            ?? manageableLinkshells.FirstOrDefault();
+        if (selectedLinkshell is null)
         {
-            ModelState.AddModelError(nameof(model.LinkshellId), "You cannot manage announcements for that linkshell.");
+            return Forbid();
         }
+
+        model.LinkshellId = selectedLinkshell.Id;
+        model.LinkshellName = selectedLinkshell.LinkshellName;
+        ModelState.Remove(nameof(model.LinkshellId));
 
         if (!ModelState.IsValid)
         {
@@ -93,14 +100,13 @@ public class AnnouncementController : Controller
             return View(model);
         }
 
-        var linkshell = manageableLinkshells.First(l => l.Id == model.LinkshellId);
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == model.LinkshellId);
 
         var announcement = new Announcement
         {
             LinkshellId = model.LinkshellId,
-            LinkshellName = linkshell.LinkshellName,
+            LinkshellName = selectedLinkshell.LinkshellName,
             AnnouncementTitle = model.AnnouncementTitle.Trim(),
             AnnouncementDetails = model.AnnouncementDetails.Trim(),
             CreatedByAppUserId = user.Id,
@@ -200,6 +206,7 @@ public class AnnouncementController : Controller
                          && (ul.Rank == "Leader" || ul.Rank == "Officer"))
             .Select(ul => ul.Linkshell!)
             .Where(l => l != null)
+            .OrderBy(l => l.LinkshellName)
             .ToListAsync();
     }
 }

@@ -2,11 +2,19 @@ namespace LinkshellManagerDiscordApp.ViewModels;
 
 public class DkpHistoryViewModel
 {
+    public const int DefaultPageSize = 15;
+
     public int? SelectedLinkshellId { get; set; }
     public string? SelectedLinkshellName { get; set; }
     public string? SelectedAppUserId { get; set; }
     public string? SelectedMemberName { get; set; }
     public double CurrentBalance { get; set; }
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = DefaultPageSize;
+    public int TotalEntryCount { get; set; }
+    public int TotalPages => TotalEntryCount == 0
+        ? 1
+        : (int)Math.Ceiling(TotalEntryCount / (double)Math.Max(1, PageSize));
     public List<DkpHistoryLinkshellOptionViewModel> Linkshells { get; set; } = new();
     public List<DkpHistoryMemberOptionViewModel> Members { get; set; } = new();
     public List<DkpHistoryEntryViewModel> Entries { get; set; } = new();

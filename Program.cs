@@ -101,7 +101,9 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.Name = "XSRF-TOKEN";
     options.Cookie.HttpOnly = false;
     options.Cookie.SameSite = SameSiteMode.None;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest
+        : CookieSecurePolicy.Always;
 });
 
 var mvcBuilder = builder.Services.AddControllersWithViews(options =>

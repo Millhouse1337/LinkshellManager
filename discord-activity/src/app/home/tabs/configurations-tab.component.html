@@ -3,6 +3,11 @@
         <div>
           <div class="section-label">Settings</div>
           <div class="section-title">Configurations</div>
+          @if (activeLinkshellName(); as activeName) {
+            <div class="section-sub">
+              Currently configuring <span class="tag accent">{{ activeName }}</span>
+            </div>
+          }
         </div>
       </div>
 
@@ -21,6 +26,7 @@
                   <th>Status</th>
                   <th class="num">DKP</th>
                   <th class="num">Members</th>
+                  <th class="num">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -38,7 +44,58 @@
                     <td>{{ link.status || '—' }}</td>
                     <td class="num">{{ link.linkshellDkp ?? 0 | number }}</td>
                     <td class="num">{{ link.memberCount }}</td>
+                    <td class="num">
+                      @if (isLinkshellLeader(link.rank)) {
+                        <div class="linkshell-row-actions">
+                          @if (pendingDeleteLinkshellId === link.id) {
+                            <button type="button" class="btn sm danger-outline"
+                              [disabled]="activity.busyLinkshellId() === link.id"
+                              (click)="confirmDeleteLinkshell(link)">
+                              {{ activity.busyLinkshellId() === link.id ? 'Deleting…' : 'Confirm' }}
+                            </button>
+                            <button type="button" class="btn ghost sm"
+                              [disabled]="activity.busyLinkshellId() === link.id"
+                              (click)="cancelDeleteLinkshell()">Cancel</button>
+                          } @else if (editingLinkshellId === link.id) {
+                            <button type="button" class="btn ghost sm" (click)="cancelEditLinkshell()">Close</button>
+                          } @else {
+                            <button type="button" class="btn ghost sm" (click)="beginEditLinkshell(link)">Edit</button>
+                            <button type="button" class="btn ghost sm" (click)="requestDeleteLinkshell(link)">Delete</button>
+                          }
+                        </div>
+                      } @else {
+                        <span class="muted">—</span>
+                      }
+                    </td>
                   </tr>
+                  @if (editingLinkshellId === link.id && isLinkshellLeader(link.rank)) {
+                    <tr class="linkshell-row-edit">
+                      <td colspan="6">
+                        <form class="inline-form" (submit)="$event.preventDefault(); saveEditLinkshell()">
+                          <label>
+                            <span>Name</span>
+                            <input type="text" name="editLinkshellName"
+                              [(ngModel)]="linkshellEditDraft.name" maxlength="64" required />
+                          </label>
+                          <label>
+                            <span>Details</span>
+                            <textarea name="editLinkshellDetails"
+                              [(ngModel)]="linkshellEditDraft.details" rows="2"
+                              placeholder="Brief description, focus, or schedule"></textarea>
+                          </label>
+                          <div class="inline-form__actions" style="justify-content:flex-end">
+                            <button type="button" class="btn ghost sm"
+                              (click)="cancelEditLinkshell()"
+                              [disabled]="activity.busyLinkshellId() === link.id">Cancel</button>
+                            <button type="submit" class="btn primary sm"
+                              [disabled]="activity.busyLinkshellId() === link.id || !linkshellEditDraft.name.trim()">
+                              {{ activity.busyLinkshellId() === link.id ? 'Saving…' : 'Save changes' }}
+                            </button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
             </table>
@@ -50,9 +107,38 @@
         }
       </div>
 
+      @if (dashboardLinkshells().length > 1) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Switch Linkshells</div>
+          </div>
+          <form class="inline-form" (submit)="$event.preventDefault(); switchPrimaryLinkshell()">
+            <label>
+              <span>Active linkshell</span>
+              <select
+                name="switchLinkshellSelect"
+                [ngModel]="effectiveSwitchLinkshellId()"
+                (ngModelChange)="onSwitchLinkshellChange($event)">
+                @for (linkshell of dashboardLinkshells(); track linkshell.id) {
+                  <option [ngValue]="linkshell.id">
+                    {{ linkshell.name }}{{ linkshell.id === selectedDashboardLinkshellId() ? ' (current)' : '' }}
+                  </option>
+                }
+              </select>
+            </label>
+            <div class="inline-form__actions" style="justify-content:flex-end">
+              <button type="submit" class="btn primary sm"
+                [disabled]="isSwitchTargetCurrent() || activity.busyLinkshellId() === effectiveSwitchLinkshellId()">
+                {{ activity.busyLinkshellId() === effectiveSwitchLinkshellId() ? 'Switching…' : 'Switch Linkshell' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      }
+
       <div class="card">
         <div class="card-head">
-          <div class="card-title">Create Linkshell</div>
+          <div class="card-title">Create a New Linkshell</div>
           <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">
             {{ showCreateLinkshellForm() ? 'Cancel' : '+ New Linkshell' }}
           </button>
@@ -82,16 +168,8 @@
       <div class="card">
         <div class="card-head">
           <div class="card-title">Customize Linkshell</div>
-          @if (dashboardLinkshells().length > 1) {
-            <select
-              class="form-select"
-              [ngModel]="customizeTargetLinkshellId()"
-              (ngModelChange)="onCustomizeLinkshellChange($event)"
-              name="customizeLinkshellSelect">
-              @for (linkshell of dashboardLinkshells(); track linkshell.id) {
-                <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
-              }
-            </select>
+          @if (activeLinkshellName(); as activeName) {
+            <span class="tag accent" title="Editing the currently active linkshell">{{ activeName }}</span>
           }
         </div>
 
@@ -224,16 +302,8 @@
         <div class="card-head">
           <div class="card-title">Permissions</div>
           <div class="card-head-right">
-            @if (dashboardLinkshells().length > 1) {
-              <select
-                class="form-select"
-                [ngModel]="permissionsTargetLinkshellId()"
-                (ngModelChange)="onPermissionsLinkshellChange($event)"
-                name="permissionsLinkshellSelect">
-                @for (linkshell of dashboardLinkshells(); track linkshell.id) {
-                  <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
-                }
-              </select>
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Permissions for the currently active linkshell">{{ activeName }}</span>
             }
             @if (canManageRolesForSelectedLinkshell() && !showNewRoleForm && editingRoleId === null) {
               <button type="button" class="btn primary sm" style="white-space:nowrap" (click)="beginCreateRole()">+ New Role</button>
@@ -336,11 +406,16 @@
               to connect the addon to this linkshell.
             </p>
           </div>
-          @if (canManageAddonTokens()) {
-            <button type="button" class="btn primary sm" (click)="openAddonPairingModal()">
-              + Generate pairing code
-            </button>
-          }
+          <div class="card-head-right">
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Pairing codes apply to the currently active linkshell">{{ activeName }}</span>
+            }
+            @if (canManageAddonTokens()) {
+              <button type="button" class="btn primary sm" (click)="openAddonPairingModal()">
+                + Generate pairing code
+              </button>
+            }
+          </div>
         </div>
 
         @if (!canManageAddonTokens()) {

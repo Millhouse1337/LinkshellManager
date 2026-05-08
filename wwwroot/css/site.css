@@ -544,6 +544,8 @@ a { color: inherit; text-decoration: none; }
 .btn.ghost:hover { background: var(--surface); color: var(--fg); }
 .btn.warn { background: #d29a2a; border-color: #d29a2a; color: #1a1306; font-weight: 600; }
 .btn.warn:hover { background: #e2ac3c; border-color: #e2ac3c; color: #1a1306; }
+.btn.danger-outline { color: var(--danger); border-color: rgba(248, 113, 113, 0.35); background: transparent; }
+.btn.danger-outline:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-weak); }
 .btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
 
 /* ---------- Manage Team modals ---------- */
@@ -621,6 +623,51 @@ a { color: inherit; text-decoration: none; }
 }
 @media (max-width: 900px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Compact stat strip (mirrors the discord-activity dashboard 6-cell layout) */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .stat-strip { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .stat-strip { grid-template-columns: 1fr; }
+}
+.stat-cell {
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  min-width: 0;
+}
+.stat-cell-label {
+  font-size: 10px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.stat-cell-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-cell-value--text {
+  font-family: var(--font-sans);
+  font-size: 14px;
 }
 .stat {
   padding: 14px 16px;
@@ -835,15 +882,30 @@ select.form-select {
   font-family: var(--font-sans);
   font-size: 13px;
   color: var(--fg);
-  background: var(--surface);
+  background-color: var(--surface);
+  background-image: none;
   border: 1px solid var(--border-2);
   border-radius: var(--r-md);
 }
+.form-select,
+select.form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 28px;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 10px) 50%;
+  background-size: 12px 8px;
+  cursor: pointer;
+}
+select.form-select::-ms-expand { display: none; }
 textarea.form-control { height: auto; padding: 8px 10px; }
 .form-control:focus,
 .form-select:focus,
 textarea.form-control:focus {
-  background: var(--surface-2);
+  background-color: var(--surface-2);
   color: var(--fg);
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-weak);
@@ -907,6 +969,39 @@ table.themed tbody tr:hover {
 table.themed .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.pagination-bar__summary {
+  color: var(--fg-3);
+  font-size: 12px;
+}
+.pagination-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.btn.disabled,
+.btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+@media (max-width: 720px) {
+  .pagination-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .pagination-bar__actions {
+    justify-content: flex-start;
+  }
 }
 
 /* ---------- Form layout helpers ---------- */
@@ -991,6 +1086,100 @@ table.themed .num {
 
 /* ---------- Card body padding helper ---------- */
 .card-body { padding: 16px; }
+
+/* ---------- Permissions matrix ---------- */
+.permissions-config-card .card-head {
+  align-items: flex-start;
+}
+.permissions-status {
+  color: var(--fg-3);
+  font-size: 12px;
+}
+.permissions-error {
+  margin: 12px 16px 0;
+}
+.permissions-table-wrap {
+  overflow-x: auto;
+}
+.permissions-matrix {
+  min-width: 900px;
+}
+.permissions-matrix th:not(:first-child),
+.permissions-matrix td:not(:first-child) {
+  min-width: 150px;
+}
+.permissions-matrix__role {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+.permissions-matrix__role strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.permissions-matrix__role-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.permissions-matrix__cell {
+  text-align: center;
+  font-family: var(--font-mono);
+}
+.perm-yes {
+  color: var(--success);
+  font-weight: 600;
+}
+.perm-no {
+  color: var(--fg-3);
+}
+.role-edit-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.role-edit-form__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.role-edit-form__header strong {
+  color: var(--fg);
+  font-size: 14px;
+}
+.role-edit-form__permissions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+}
+.role-edit-form__perm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-1);
+  font-size: 13px;
+}
+.role-edit-form__perm input {
+  flex: 0 0 auto;
+}
+.role-edit-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 720px) {
+  .permissions-config-card .card-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .role-edit-form__permissions {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* ---------- Animations ---------- */
 .fade { animation: fade 0.35s ease both; }
@@ -1194,3 +1383,170 @@ table.themed .num {
 .event-card-collapsible.is-collapsed > .event-card-collapsible__body {
     display: none;
 }
+
+/* ===== Discord-activity-style create forms (Auction Create, ToD Create) ===== */
+.create-form {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+
+.create-form__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.create-form__header strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.create-form__header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.create-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.create-form > label,
+.create-form__grid > label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-2);
+  margin: 0;
+}
+
+.create-form > label > span,
+.create-form__grid > label > span {
+  font-size: 11px;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+  display: block;
+}
+
+.create-form__grid > label.create-form__field--full {
+  grid-column: 1 / -1;
+}
+
+.create-form > label > input,
+.create-form > label > select,
+.create-form > label > textarea,
+.create-form__grid > label > input,
+.create-form__grid > label > select,
+.create-form__grid > label > textarea {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.create-form > label > textarea,
+.create-form__grid > label > textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+.create-form > label > select,
+.create-form__grid > label > select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 10px) 50%;
+  background-size: 12px 8px;
+}
+.create-form > label > input:hover:not(:disabled),
+.create-form > label > select:hover:not(:disabled),
+.create-form > label > textarea:hover:not(:disabled),
+.create-form__grid > label > input:hover:not(:disabled),
+.create-form__grid > label > select:hover:not(:disabled),
+.create-form__grid > label > textarea:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.create-form > label > input:focus-visible,
+.create-form > label > select:focus-visible,
+.create-form > label > textarea:focus-visible,
+.create-form__grid > label > input:focus-visible,
+.create-form__grid > label > select:focus-visible,
+.create-form__grid > label > textarea:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+}
+
+.create-form__error {
+  font-size: 11px;
+  color: var(--danger, #e05a5a);
+}
+
+.create-form__section {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.create-form__section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.create-form__section-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.create-form__items {
+  display: grid;
+  gap: 10px;
+}
+.create-form__item {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.create-form__item-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.create-form__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.create-form__actions--split {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.d-none { display: none !important; }

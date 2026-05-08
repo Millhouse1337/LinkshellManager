@@ -15,17 +15,11 @@
         </div>
     </div>
 
-    <div class="page-actions" style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="page-actions">
         @if (Model.Linkshells.Any())
         {
-            <select id="linkshell-filter" class="form-select">
-                @foreach (var linkshell in Model.Linkshells)
-                {
-                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId ? "selected" : null)">@linkshell.LinkshellName</option>
-                }
-            </select>
+            <a class="btn primary" asp-action="Create">+ Add ToD</a>
         }
-        <a class="btn primary" asp-action="Create">+ Add ToD</a>
     </div>
 </div>
 

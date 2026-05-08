@@ -12,6 +12,12 @@ public class DashboardViewModel
     public int TotalMembers { get; set; }
     public int UpcomingEvents { get; set; }
     public int CompletedEvents { get; set; }
+    public int ItemCount { get; set; }
+    public long RevenueTotal { get; set; }
+    public int UpcomingAuctionsCount { get; set; }
+    public int UpcomingTodsCount { get; set; }
+    public bool EnableItems { get; set; } = true;
+    public bool EnableRevenue { get; set; } = true;
 
     public List<TodTrackerEntry> TodTracker { get; set; } = new();
     public List<HnmClaimEntry> HnmClaims { get; set; } = new();

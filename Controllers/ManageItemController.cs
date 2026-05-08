@@ -70,7 +70,8 @@ public class ManageItemController : Controller
         return View(new ManageItemViewModel
         {
             Linkshells = manageableLinkshells,
-            LinkshellId = defaultLinkshellId
+            LinkshellId = defaultLinkshellId,
+            LinkshellName = manageableLinkshells.First(l => l.Id == defaultLinkshellId).LinkshellName
         });
     }
 
@@ -82,10 +83,16 @@ public class ManageItemController : Controller
         if (user is null) return Challenge();
 
         var manageableLinkshells = await GetManageableLinkshellsAsync(user.Id);
-        if (!manageableLinkshells.Any(l => l.Id == model.LinkshellId))
+        var selectedLinkshell = manageableLinkshells.FirstOrDefault(l => l.Id == user.PrimaryLinkshellId)
+            ?? manageableLinkshells.FirstOrDefault();
+        if (selectedLinkshell is null)
         {
-            ModelState.AddModelError(nameof(model.LinkshellId), "You cannot manage items for that linkshell.");
+            return Forbid();
         }
+
+        model.LinkshellId = selectedLinkshell.Id;
+        model.LinkshellName = selectedLinkshell.LinkshellName;
+        ModelState.Remove(nameof(model.LinkshellId));
 
         if (!ModelState.IsValid)
         {
@@ -93,7 +100,6 @@ public class ManageItemController : Controller
             return View(model);
         }
 
-        var linkshell = manageableLinkshells.First(l => l.Id == model.LinkshellId);
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == model.LinkshellId);
 
@@ -101,7 +107,7 @@ public class ManageItemController : Controller
         _context.Items.Add(new Item
         {
             LinkshellId = model.LinkshellId,
-            LinkshellName = linkshell.LinkshellName,
+            LinkshellName = selectedLinkshell.LinkshellName,
             ItemName = model.ItemName.Trim(),
             ItemType = model.ItemType?.Trim(),
             Quantity = model.Quantity,

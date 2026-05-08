@@ -1,10 +1,8 @@
 @model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
-@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Manage Team";
     var message = ViewBag.Message as string;
     var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
-    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
 }
 
 <div class="page-head fade d1">
@@ -39,11 +37,11 @@ else
 {
     @if (Model.Linkshells.Count > 1)
     {
-        <div class="card fade d2" style="padding:16px">
-            <form asp-action="Index" method="get" class="form-grid">
+        <div class="card fade d2" style="padding:16px;margin-bottom:16px">
+            <form asp-action="Index" method="get" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
                 <div class="field">
                     <label for="selectedLinkshellId">Linkshell</label>
-                    <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select" onchange="this.form.submit()">
+                    <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select" style="min-width:240px">
                         @foreach (var linkshell in Model.Linkshells)
                         {
                             if (linkshell.Id == Model.SelectedLinkshellId)
@@ -57,6 +55,7 @@ else
                         }
                     </select>
                 </div>
+                <button type="submit" class="btn primary sm" style="margin-bottom:14px;white-space:nowrap">Switch Linkshell</button>
             </form>
         </div>
     }
@@ -91,7 +90,6 @@ else
                 <tbody>
                     @foreach (var member in Model.Members)
                     {
-                        var hasAppUserId = !string.IsNullOrWhiteSpace(member.AppUserId);
                         <tr>
                             <td>@(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")</td>
                             <td><span class="tag">@(member.Rank ?? "—")</span></td>
@@ -111,20 +109,6 @@ else
                                                 data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)">
                                             Modify Rank
                                         </button>
-                                        @if (hasAppUserId)
-                                        {
-                                            <button type="button" class="btn warn sm js-dkp-audit"
-                                                    data-linkshellid="@Model.SelectedLinkshellId"
-                                                    data-appuserid="@member.AppUserId"
-                                                    data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)"
-                                                    data-dkp="@((member.LinkshellDkp ?? 0).ToString("0.##"))">
-                                                DKP Audit
-                                            </button>
-                                        }
-                                        else
-                                        {
-                                            <button type="button" class="btn warn sm" disabled title="Member has no user account">DKP Audit</button>
-                                        }
                                     </div>
                                 </td>
                             }
@@ -172,67 +156,5 @@ else
         </div>
     </div>
 
-    <div class="mt-modal" id="dkpAuditModal" role="dialog" aria-modal="true">
-        <div class="mt-modal__backdrop" data-mt-close="1"></div>
-        <div class="mt-modal__dialog mt-modal__dialog--lg">
-            <div class="mt-modal__content">
-                <div class="mt-modal__header">
-                    <h5 class="mt-modal__title">Record DKP audit</h5>
-                    <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
-                </div>
-                <div class="mt-modal__body">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-                        <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
-                            <input type="radio" name="auditMode" value="Adjust" checked />
-                            <strong style="margin-left:6px">Correct a previous entry</strong>
-                            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Fix DKP awarded/charged on a past event or auction.</div>
-                        </label>
-                        <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
-                            <input type="radio" name="auditMode" value="Misc" />
-                            <strong style="margin-left:6px">Miscellaneous adjustment</strong>
-                            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Add or subtract DKP for any other reason.</div>
-                        </label>
-                    </div>
-
-                    <div class="field" style="margin-bottom:12px">
-                        <label>Member</label>
-                        <div id="auditMemberName" style="color:var(--fg);font-weight:500"></div>
-                        <div id="auditMemberBalance" style="color:var(--fg-3);font-size:12px"></div>
-                    </div>
-
-                    <div id="auditAdjustFields">
-                        <div class="field" style="margin-bottom:12px">
-                            <label for="auditEntrySelect">Entry to correct</label>
-                            <select id="auditEntrySelect" class="form-select">
-                                <option value="">Loading entries…</option>
-                            </select>
-                            <div id="auditEntryHint" style="color:var(--fg-3);font-size:12px;margin-top:4px"></div>
-                        </div>
-                    </div>
-
-                    <div class="field" style="margin-bottom:12px">
-                        <label for="auditAmount" id="auditAmountLabel">Corrected amount (DKP)</label>
-                        <input type="number" step="0.01" id="auditAmount" class="form-control" placeholder="e.g. 45" />
-                    </div>
-
-                    <div class="field" style="margin-bottom:4px">
-                        <label for="auditReason">Reason</label>
-                        <textarea id="auditReason" class="form-control" rows="3" placeholder="Explain why this audit is being recorded"></textarea>
-                    </div>
-
-                    <div id="auditError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
-                </div>
-                <div class="mt-modal__footer">
-                    <button type="button" class="btn ghost" data-mt-close="1">Cancel</button>
-                    <button type="button" class="btn primary" id="auditSaveBtn">Save audit</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script nonce="@Html.CspNonce()">
-        window.LSM_CSRF_HEADER = '@antiforgeryTokens.HeaderName';
-        window.LSM_CSRF_TOKEN = '@antiforgeryTokens.RequestToken';
-    </script>
     <script src="~/js/manage-team.js" asp-append-version="true" defer></script>
 }
