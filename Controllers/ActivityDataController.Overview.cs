@@ -177,6 +177,46 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken)
             : new List<RevenueEntry>();
 
+        // Resolve creator/starter character names for each active event. Prefer
+        // the user's linkshell-specific character name; fall back to their
+        // top-level AppUser.CharacterName, then UserName.
+        var creatorStarterUserIds = activeEvents
+            .SelectMany(evt => new[] { evt.CreatorUserId, evt.StarterUserId })
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .Distinct()
+            .ToList();
+
+        var membershipNamesByPair = creatorStarterUserIds.Count > 0
+            ? await _dbContext.AppUserLinkshells
+                .Where(link => creatorStarterUserIds.Contains(link.AppUserId))
+                .Select(link => new { link.LinkshellId, link.AppUserId, link.CharacterName })
+                .AsNoTracking()
+                .ToListAsync(cancellationToken)
+            : new();
+
+        var membershipNameLookup = membershipNamesByPair
+            .Where(row => !string.IsNullOrWhiteSpace(row.CharacterName))
+            .ToDictionary(row => (row.LinkshellId, row.AppUserId), row => row.CharacterName!);
+
+        var fallbackNames = creatorStarterUserIds.Count > 0
+            ? await _userManager.Users
+                .Where(u => creatorStarterUserIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.CharacterName, u.UserName })
+                .AsNoTracking()
+                .ToDictionaryAsync(u => u.Id, u => u.CharacterName ?? u.UserName, cancellationToken)
+            : new Dictionary<string, string?>();
+
+        string? ResolveActorName(int linkshellId, string? userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId)) return null;
+            if (membershipNameLookup.TryGetValue((linkshellId, userId), out var name)) return name;
+            return fallbackNames.GetValueOrDefault(userId);
+        }
+
+        var addonConfigured = await _dbContext.AddonApiTokens
+            .AnyAsync(token => token.IssuedToAppUserId == appUser.Id && token.RevokedAt == null, cancellationToken);
+
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
 
@@ -363,7 +403,9 @@ public sealed partial class ActivityDataController
                                 att.VerifiedAt,
                                 att.VerifiedBy))
                             .ToList()))
-                    .ToList())).ToList(),
+                    .ToList(),
+                ResolveActorName(evt.LinkshellId, evt.CreatorUserId),
+                ResolveActorName(evt.LinkshellId, evt.StarterUserId))).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,
@@ -406,7 +448,8 @@ public sealed partial class ActivityDataController
                 linkshellMemberships.Count,
                 activeEvents.Count,
                 recentHistory.Count,
-                activeEvents.Count(evt => evt.CommencementStartTime.HasValue))));
+                activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
+            addonConfigured));
     }
 
     [HttpGet("history")]

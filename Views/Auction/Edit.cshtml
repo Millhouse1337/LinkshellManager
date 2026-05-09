@@ -1,6 +1,7 @@
 @model LinkshellManagerDiscordApp.ViewModels.AuctionViewModel
 @{
     ViewData["Title"] = "Edit Auction";
+    var sourceItemsJson = System.Text.Json.JsonSerializer.Serialize(Model.SourceItems);
 }
 
 <div class="page-head fade d1">
@@ -57,13 +58,27 @@
                     <input asp-for="AuctionItems[i].Id" type="hidden" />
                     <div class="form-grid">
                         <div class="field">
+                            <label asp-for="AuctionItems[i].SourceItemId">Source</label>
+                            <select asp-for="AuctionItems[i].SourceItemId" class="form-select auction-item-source">
+                                <option value="">External (not from inventory)</option>
+                                @foreach (var option in Model.SourceItems)
+                                {
+                                    <option value="@option.Id"
+                                            data-name="@option.ItemName"
+                                            data-type="@option.ItemType">
+                                        @option.ItemName (@option.Quantity on hand)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field">
                             <label asp-for="AuctionItems[i].ItemName">Item name</label>
-                            <input asp-for="AuctionItems[i].ItemName" class="form-control" />
+                            <input asp-for="AuctionItems[i].ItemName" class="form-control auction-item-name" />
                             <span asp-validation-for="AuctionItems[i].ItemName" style="color:var(--danger);font-size:11px"></span>
                         </div>
                         <div class="field">
                             <label asp-for="AuctionItems[i].ItemType">Item type</label>
-                            <input asp-for="AuctionItems[i].ItemType" class="form-control" />
+                            <input asp-for="AuctionItems[i].ItemType" class="form-control auction-item-type" />
                         </div>
                         <div class="field">
                             <label asp-for="AuctionItems[i].StartingBidDkp">Starting bid</label>
@@ -95,12 +110,13 @@
         (() => {
             const itemsContainer = document.getElementById('auctionItems');
             const addItemButton = document.getElementById('addAuctionItemButton');
+            const sourceItems = @Html.Raw(sourceItemsJson);
 
             const renumberRows = () => {
                 const rows = itemsContainer.querySelectorAll('.auction-item-row');
                 rows.forEach((row, index) => {
                     row.dataset.index = index;
-                    row.querySelectorAll('input, label, span').forEach((element) => {
+                    row.querySelectorAll('input, select, label, span').forEach((element) => {
                         ['name', 'id', 'for'].forEach((attribute) => {
                             const value = element.getAttribute(attribute);
                             if (!value) { return; }
@@ -112,6 +128,37 @@
                 });
             };
 
+            const buildSourceOptions = () => {
+                const escape = (value) => String(value ?? '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                const externalLabel = '<option value="">External (not from inventory)</option>';
+                const options = sourceItems.map((option) =>
+                    `<option value="${option.Id}" data-name="${escape(option.ItemName)}" data-type="${escape(option.ItemType ?? '')}">${escape(option.ItemName)} (${option.Quantity} on hand)</option>`);
+                return externalLabel + options.join('');
+            };
+
+            const applySourceSelection = (row) => {
+                const sourceSelect = row.querySelector('.auction-item-source');
+                const nameInput = row.querySelector('.auction-item-name');
+                const typeInput = row.querySelector('.auction-item-type');
+                if (!sourceSelect || !nameInput || !typeInput) { return; }
+                const selectedOption = sourceSelect.options[sourceSelect.selectedIndex];
+                const dataName = selectedOption?.dataset?.name ?? '';
+                const dataType = selectedOption?.dataset?.type ?? '';
+                if (sourceSelect.value) {
+                    nameInput.value = dataName;
+                    typeInput.value = dataType;
+                    nameInput.readOnly = true;
+                    typeInput.readOnly = true;
+                } else {
+                    nameInput.readOnly = false;
+                    typeInput.readOnly = false;
+                }
+            };
+
+            itemsContainer.querySelectorAll('.auction-item-row').forEach(applySourceSelection);
+
             addItemButton.addEventListener('click', () => {
                 const index = itemsContainer.querySelectorAll('.auction-item-row').length;
                 const wrapper = document.createElement('div');
@@ -121,13 +168,21 @@
                 wrapper.innerHTML = `
                     <input type="hidden" name="AuctionItems[${index}].Id" value="0" />
                     <div class="form-grid">
-                        <div class="field"><label for="AuctionItems_${index}__ItemName">Item name</label><input class="form-control" id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" /></div>
-                        <div class="field"><label for="AuctionItems_${index}__ItemType">Item type</label><input class="form-control" id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" /></div>
+                        <div class="field"><label for="AuctionItems_${index}__SourceItemId">Source</label><select class="form-select auction-item-source" id="AuctionItems_${index}__SourceItemId" name="AuctionItems[${index}].SourceItemId">${buildSourceOptions()}</select></div>
+                        <div class="field"><label for="AuctionItems_${index}__ItemName">Item name</label><input class="form-control auction-item-name" id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" /></div>
+                        <div class="field"><label for="AuctionItems_${index}__ItemType">Item type</label><input class="form-control auction-item-type" id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" /></div>
                         <div class="field"><label for="AuctionItems_${index}__StartingBidDkp">Starting bid</label><input class="form-control" id="AuctionItems_${index}__StartingBidDkp" name="AuctionItems[${index}].StartingBidDkp" type="number" /></div>
                         <div class="field" style="grid-column:1/-1"><label for="AuctionItems_${index}__Notes">Notes</label><input class="form-control" id="AuctionItems_${index}__Notes" name="AuctionItems[${index}].Notes" /></div>
                         <div class="field" style="grid-column:1/-1"><button type="button" class="btn ghost sm remove-auction-item">Remove item</button></div>
                     </div>`;
                 itemsContainer.appendChild(wrapper);
+            });
+
+            itemsContainer.addEventListener('change', (event) => {
+                const select = event.target.closest('.auction-item-source');
+                if (!select) { return; }
+                const row = select.closest('.auction-item-row');
+                if (row) { applySourceSelection(row); }
             });
 
             itemsContainer.addEventListener('click', (event) => {

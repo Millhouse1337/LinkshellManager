@@ -54,7 +54,7 @@
         wrapper.className = 'card job-row';
         wrapper.style.padding = '12px';
         wrapper.innerHTML = `
-            <div class="form-grid">
+            <div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));align-items:end">
                 <div class="field"><label>Role</label><select class="form-select" name="Jobs[${index}].JobType">${buildOptions(typeOptions, 'Select role')}</select></div>
                 <div class="field"><label>Main job</label><select class="form-select" name="Jobs[${index}].JobName">${buildOptions(mainJobOptions, 'Select main job')}</select></div>
                 <div class="field"><label>Sub job</label><select class="form-select" name="Jobs[${index}].SubJobName">${buildOptions(subJobOptions, 'Select sub job')}</select></div>

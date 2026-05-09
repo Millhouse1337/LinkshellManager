@@ -105,7 +105,7 @@ else
                 <span asp-validation-for="Tod.Time" class="create-form__error"></span>
             </label>
 
-            <label class="create-form__field--full">
+            <label>
                 <span>Repop time</span>
                 <input asp-for="Tod.RepopTime" type="datetime-local" step="1" id="repop-time"
                        value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />

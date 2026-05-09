@@ -143,7 +143,8 @@ public partial class AuctionController
                     ItemName = item.ItemName,
                     ItemType = item.ItemType,
                     StartingBidDkp = item.StartingBidDkp,
-                    Notes = item.Notes
+                    Notes = item.Notes,
+                    SourceItemId = item.SourceItemId
                 })
                 .ToList()
         });

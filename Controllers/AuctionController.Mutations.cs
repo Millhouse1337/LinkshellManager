@@ -60,7 +60,8 @@ public partial class AuctionController
                 StartTime = ConvertUserTimeZoneToUtc(model.Auction.StartTime, user.TimeZone),
                 EndTime = ConvertUserTimeZoneToUtc(model.Auction.EndTime, user.TimeZone),
                 Status = "Pending",
-                Notes = item.Notes?.Trim()
+                Notes = item.Notes?.Trim(),
+                SourceItemId = item.SourceItemId
             }).ToList()
         };
 
@@ -118,6 +119,7 @@ public partial class AuctionController
                 existingItem.StartTime = auction.StartTime;
                 existingItem.EndTime = auction.EndTime;
                 existingItem.Notes = itemModel.Notes?.Trim();
+                existingItem.SourceItemId = itemModel.SourceItemId;
                 remainingItemsById.Remove(itemModel.Id);
             }
             else
@@ -130,7 +132,8 @@ public partial class AuctionController
                     StartTime = auction.StartTime,
                     EndTime = auction.EndTime,
                     Status = "Pending",
-                    Notes = itemModel.Notes?.Trim()
+                    Notes = itemModel.Notes?.Trim(),
+                    SourceItemId = itemModel.SourceItemId
                 });
             }
         }
@@ -350,9 +353,53 @@ public partial class AuctionController
         return RedirectToAction(nameof(Index));
     }
 
+    // Stops bidding now without archiving the run. Mirrors the activity's
+    // /api/activity/auctions/{id}/end endpoint — the auction transitions to
+    // status Ended and lingers on the active board until the creator closes
+    // it (which is where delivery confirmation + inventory drawdown happen).
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EndAuction(int auctionId)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var auction = await _context.Auctions
+            .Include(item => item.AuctionItems)
+            .FirstOrDefaultAsync(item => item.Id == auctionId);
+        if (auction is null)
+        {
+            return NotFound();
+        }
+
+        if (!IsAuctionCreator(user.Id, auction))
+        {
+            return Forbid();
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        if (!IsAuctionLive(auction, nowUtc))
+        {
+            TempData["AuctionError"] = "Only a live auction can be ended early.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        auction.EndTime = nowUtc;
+        foreach (var item in auction.AuctionItems)
+        {
+            item.EndTime = nowUtc;
+        }
+
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CloseAuction(int auctionId, List<int>? deliveredItemIds)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -374,17 +421,13 @@ public partial class AuctionController
             return Forbid();
         }
 
-        if (!HasAuctionStarted(auction, DateTime.UtcNow))
+        if (!HasAuctionEnded(auction, DateTime.UtcNow))
         {
-            TempData["AuctionError"] = "An auction must be started before it can be closed.";
+            TempData["AuctionError"] = "End the auction before closing it.";
             return RedirectToAction(nameof(Index));
         }
 
-        if (!HasAuctionEnded(auction, DateTime.UtcNow))
-        {
-            TempData["AuctionError"] = "An auction can only be closed after its timer has run out.";
-            return RedirectToAction(nameof(Index));
-        }
+        var deliveredIds = (deliveredItemIds ?? new List<int>()).ToHashSet();
 
         var auctionHistory = new AuctionHistory
         {
@@ -398,19 +441,25 @@ public partial class AuctionController
             ClosedAt = DateTime.UtcNow,
             AuctionItems = auction.AuctionItems
                 .OrderBy(item => item.Id)
-                .Select(item => new AuctionItem
+                .Select(item =>
                 {
-                    ItemName = item.ItemName,
-                    ItemType = item.ItemType,
-                    StartingBidDkp = item.StartingBidDkp,
-                    CurrentHighestBid = item.CurrentHighestBid,
-                    CurrentHighestBidder = item.CurrentHighestBidder,
-                    CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
-                    EndingBidDkp = item.CurrentHighestBid,
-                    StartTime = item.StartTime,
-                    EndTime = item.EndTime,
-                    Status = string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId) ? "NoBids" : "Closed",
-                    Notes = item.Notes
+                    var hasWinner = !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId);
+                    var delivered = hasWinner && deliveredIds.Contains(item.Id);
+                    return new AuctionItem
+                    {
+                        ItemName = item.ItemName,
+                        ItemType = item.ItemType,
+                        StartingBidDkp = item.StartingBidDkp,
+                        CurrentHighestBid = item.CurrentHighestBid,
+                        CurrentHighestBidder = item.CurrentHighestBidder,
+                        CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
+                        EndingBidDkp = item.CurrentHighestBid,
+                        StartTime = item.StartTime,
+                        EndTime = item.EndTime,
+                        Status = !hasWinner ? "NoBids" : delivered ? "Received" : "Closed",
+                        Notes = item.Notes,
+                        SourceItemId = item.SourceItemId
+                    };
                 })
                 .ToList()
         };
@@ -439,6 +488,33 @@ public partial class AuctionController
                 ItemName = item.ItemName,
                 Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}."
             });
+        }
+
+        // Drawdown the linkshell stockpile for any auction items that were
+        // sourced from inventory and that the creator confirmed delivered.
+        var sourceItemIds = auction.AuctionItems
+            .Where(item => item.SourceItemId.HasValue && deliveredIds.Contains(item.Id) && !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId))
+            .Select(item => item.SourceItemId!.Value)
+            .Distinct()
+            .ToList();
+        var inventoryItems = sourceItemIds.Count == 0
+            ? new List<Item>()
+            : await _context.Items
+                .Where(inv => sourceItemIds.Contains(inv.Id) && inv.LinkshellId == auction.LinkshellId)
+                .ToListAsync();
+        foreach (var auctionItem in auction.AuctionItems.Where(item =>
+                     item.SourceItemId.HasValue &&
+                     deliveredIds.Contains(item.Id) &&
+                     !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId)))
+        {
+            var inv = inventoryItems.FirstOrDefault(candidate => candidate.Id == auctionItem.SourceItemId!.Value);
+            if (inv is null) continue;
+            inv.Quantity = Math.Max(0, inv.Quantity - 1);
+            inv.UpdatedAt = DateTime.UtcNow;
+            if (inv.Quantity == 0)
+            {
+                _context.Items.Remove(inv);
+            }
         }
 
         _context.Bids.RemoveRange(auction.AuctionItems.SelectMany(item => item.Bids));

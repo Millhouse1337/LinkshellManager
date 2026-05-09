@@ -564,6 +564,13 @@
   gap: 8px;
 }
 
+.event-action-grid__manage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .button-cluster--stacked {
   align-items: end;
 }
@@ -628,7 +635,18 @@
 }
 
 .ad-hoc-signup .action-button {
-  align-self: flex-start;
+  align-self: flex-end;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+// Disabled "Sign up" button still reads as the primary CTA — keep the accent
+// background visible at higher opacity, and switch to a not-allowed cursor so
+// it's clear the user just needs to fill the dropdowns first.
+.ad-hoc-signup .action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
 }
 
 @media (max-width: 720px) {
@@ -693,6 +711,35 @@
   margin-top: 12px;
 }
 
+// Live-event edit reuses the same form, but the queue panel renders it inside
+// .event-edit-modal-dialog. Strip the inset spacing/border so the form fills
+// the dialog cleanly and the dialog itself owns the framing.
+.create-form--in-modal {
+  margin-top: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+// Native <dialog> opened with showModal() so the live-event edit form is
+// promoted to the browser's top layer — escaping the .panel-tab.fade ancestor
+// that would otherwise clip the modal behind the sticky tab bar.
+.event-edit-modal-dialog {
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-md, 8px);
+  color: var(--fg);
+  width: min(720px, calc(100vw - 32px));
+  max-width: none;
+  max-height: 85vh;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.event-edit-modal-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
 .create-form__header,
 .create-form__actions {
   display: flex;
@@ -734,11 +781,14 @@
 .create-form select,
 .create-form textarea,
 .job-editor input,
+.job-editor select,
 .loot-form input,
+.loot-form select,
 .late-join-form select,
 .invite-search select,
 .invite-search input,
-.roster-tools input {
+.roster-tools input,
+.ad-hoc-signup select {
   width: 100%;
   border: 1px solid var(--border-2);
   border-radius: var(--r-sm);
@@ -747,26 +797,77 @@
   font: inherit;
   padding: 8px 10px;
   font-size: 13px;
-  transition: border-color 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .create-form input:focus,
 .create-form select:focus,
 .create-form textarea:focus,
 .job-editor input:focus,
+.job-editor select:focus,
 .loot-form input:focus,
+.loot-form select:focus,
 .late-join-form select:focus,
 .invite-search select:focus,
 .invite-search input:focus,
-.roster-tools input:focus {
+.roster-tools input:focus,
+.ad-hoc-signup select:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
 }
 
-.create-form__full,
+// Custom chevron + non-native appearance for the form selects so they don't
+// fall back to the OS dropdown widget (which ignores the surrounding theme).
+.create-form select,
+.job-editor select,
+.loot-form select,
+.late-join-form select,
+.invite-search select,
+.ad-hoc-signup select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+}
+
+// Dropdown options inherit OS popup styling by default. Force the dark theme
+// so the open list matches the field that triggered it.
+.create-form select option,
+.job-editor select option,
+.loot-form select option,
+.late-join-form select option,
+.invite-search select option,
+.ad-hoc-signup select option {
+  background: var(--surface, #1f1f23);
+  color: var(--fg, #e4e4e7);
+}
+
+.create-form__full {
+  display: grid;
+  gap: 10px;
+}
+
 .create-form__jobs {
   display: grid;
   gap: 10px;
+}
+
+// Extra breathing room between the "Minimal Party Setup" header (panel__header)
+// and the first job row, plus between job rows themselves, so the section
+// reads as distinct blocks instead of a single dense list.
+.create-form__jobs .panel__header + .job-editor,
+.create-form__jobs .job-editor + .job-editor {
+  margin-top: 12px;
+}
+
+.job-editor__remove {
+  align-self: end;
 }
 
 .form-error {
@@ -804,4 +905,13 @@
 
 .job-editor__details {
   grid-column: 1 / span 4;
+}
+
+// The job-editor quantity column is only 1/4 of the form width — too narrow
+// for the default tod-day-number-row layout (input + toggle side by side).
+// Stack the input above the toggle so each gets full column width.
+.job-editor .tod-day-number-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }

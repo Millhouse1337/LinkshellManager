@@ -1,6 +1,7 @@
 @model LinkshellManagerDiscordApp.ViewModels.AuctionViewModel
 @{
     ViewData["Title"] = "Create Auction";
+    var sourceItemsJson = System.Text.Json.JsonSerializer.Serialize(Model.SourceItems);
 }
 
 <div class="page-head fade d1">
@@ -44,13 +45,27 @@
                     <input asp-for="AuctionItems[i].Id" type="hidden" />
                     <div class="create-form__grid">
                         <label>
+                            <span>Source</span>
+                            <select asp-for="AuctionItems[i].SourceItemId" class="auction-item-source">
+                                <option value="">External (not from inventory)</option>
+                                @foreach (var option in Model.SourceItems)
+                                {
+                                    <option value="@option.Id"
+                                            data-name="@option.ItemName"
+                                            data-type="@option.ItemType">
+                                        @option.ItemName (@option.Quantity on hand)
+                                    </option>
+                                }
+                            </select>
+                        </label>
+                        <label>
                             <span>Item name</span>
-                            <input asp-for="AuctionItems[i].ItemName" required />
+                            <input asp-for="AuctionItems[i].ItemName" class="auction-item-name" required />
                             <span asp-validation-for="AuctionItems[i].ItemName" class="create-form__error"></span>
                         </label>
                         <label>
                             <span>Item type</span>
-                            <input asp-for="AuctionItems[i].ItemType" />
+                            <input asp-for="AuctionItems[i].ItemType" class="auction-item-type" />
                         </label>
                         <label>
                             <span>Starting DKP</span>
@@ -81,12 +96,13 @@
         (() => {
             const itemsContainer = document.getElementById('auctionItems');
             const addItemButton = document.getElementById('addAuctionItemButton');
+            const sourceItems = @Html.Raw(sourceItemsJson);
 
             const renumberRows = () => {
                 const rows = itemsContainer.querySelectorAll('.auction-item-row');
                 rows.forEach((row, index) => {
                     row.dataset.index = index;
-                    row.querySelectorAll('input, label, span').forEach((element) => {
+                    row.querySelectorAll('input, select, label, span').forEach((element) => {
                         ['name', 'id', 'for'].forEach((attribute) => {
                             const value = element.getAttribute(attribute);
                             if (!value) { return; }
@@ -98,6 +114,42 @@
                 });
             };
 
+            const buildSourceOptions = () => {
+                const externalLabel = '<option value="">External (not from inventory)</option>';
+                const escape = (value) => String(value ?? '')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                const options = sourceItems.map((option) =>
+                    `<option value="${option.Id}" data-name="${escape(option.ItemName)}" data-type="${escape(option.ItemType ?? '')}">${escape(option.ItemName)} (${option.Quantity} on hand)</option>`);
+                return externalLabel + options.join('');
+            };
+
+            // When a row's Source select changes to an inventory item, copy the
+            // item name/type into the matching inputs and lock them. Selecting
+            // External re-enables free-text entry.
+            const applySourceSelection = (row) => {
+                const sourceSelect = row.querySelector('.auction-item-source');
+                const nameInput = row.querySelector('.auction-item-name');
+                const typeInput = row.querySelector('.auction-item-type');
+                if (!sourceSelect || !nameInput || !typeInput) { return; }
+                const selectedOption = sourceSelect.options[sourceSelect.selectedIndex];
+                const dataName = selectedOption?.dataset?.name ?? '';
+                const dataType = selectedOption?.dataset?.type ?? '';
+                if (sourceSelect.value) {
+                    nameInput.value = dataName;
+                    typeInput.value = dataType;
+                    nameInput.readOnly = true;
+                    typeInput.readOnly = true;
+                } else {
+                    nameInput.readOnly = false;
+                    typeInput.readOnly = false;
+                }
+            };
+
+            // Initialize existing rows (e.g. validation re-render with a
+            // SourceItemId already selected).
+            itemsContainer.querySelectorAll('.auction-item-row').forEach(applySourceSelection);
+
             addItemButton.addEventListener('click', () => {
                 const index = itemsContainer.querySelectorAll('.auction-item-row').length;
                 const wrapper = document.createElement('div');
@@ -107,12 +159,16 @@
                     <input type="hidden" name="AuctionItems[${index}].Id" value="0" />
                     <div class="create-form__grid">
                         <label>
+                            <span>Source</span>
+                            <select id="AuctionItems_${index}__SourceItemId" name="AuctionItems[${index}].SourceItemId" class="auction-item-source">${buildSourceOptions()}</select>
+                        </label>
+                        <label>
                             <span>Item name</span>
-                            <input id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" required />
+                            <input id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" class="auction-item-name" required />
                         </label>
                         <label>
                             <span>Item type</span>
-                            <input id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" />
+                            <input id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" class="auction-item-type" />
                         </label>
                         <label>
                             <span>Starting DKP</span>
@@ -127,6 +183,13 @@
                         <button type="button" class="btn ghost sm remove-auction-item">Remove row</button>
                     </div>`;
                 itemsContainer.appendChild(wrapper);
+            });
+
+            itemsContainer.addEventListener('change', (event) => {
+                const select = event.target.closest('.auction-item-source');
+                if (!select) { return; }
+                const row = select.closest('.auction-item-row');
+                if (row) { applySourceSelection(row); }
             });
 
             itemsContainer.addEventListener('click', (event) => {

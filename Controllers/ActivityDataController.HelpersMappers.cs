@@ -141,7 +141,13 @@ public sealed partial class ActivityDataController
             status,
             CanEditAuction(currentUserId, auction, nowUtc),
             CanStartAuction(currentUserId, auction, nowUtc),
-            isCreator && auction.StartedAt.HasValue && (!auction.EndTime.HasValue || nowUtc >= auction.EndTime.Value),
+            // CanEnd: creator can stop bidding while the auction is live (no
+            // archive yet — the run lingers in the active board with status
+            // Ended until they Close it).
+            isCreator && IsAuctionLive(auction, nowUtc),
+            // CanClose: only after the timer expires. Closing runs the delivery
+            // confirmation + archive + inventory-removal flow.
+            isCreator && HasAuctionEnded(auction, nowUtc),
             auction.AuctionItems
                 .OrderBy(item => item.Id)
                 .Select(item => new ActivityAuctionItemDto(

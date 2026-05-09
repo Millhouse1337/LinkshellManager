@@ -89,7 +89,7 @@
         {{
           (needsProfileSetup() ? 0 : 1) +
           ((activity.overview()?.linkshells?.length ?? 0) > 0 ? 1 : 0) +
-          (((activity.overview()?.activeEvents?.length ?? 0) + (activity.overview()?.recentHistory?.length ?? 0)) > 0 ? 1 : 0)
+          (activity.overview()?.addonConfigured ? 1 : 0)
         }}/3
       </span>
     </div>
@@ -109,11 +109,11 @@
           <span>Linkshell membership unlocks invites, roster controls, and event management.</span>
         </div>
       </li>
-      <li [class.checklist__item--done]="((activity.overview()?.activeEvents?.length ?? 0) + (activity.overview()?.recentHistory?.length ?? 0)) > 0">
-        <span class="checklist__marker">{{ ((activity.overview()?.activeEvents?.length ?? 0) + (activity.overview()?.recentHistory?.length ?? 0)) > 0 ? 'Done' : '3' }}</span>
+      <li [class.checklist__item--done]="activity.overview()?.addonConfigured === true">
+        <span class="checklist__marker">{{ activity.overview()?.addonConfigured ? 'Done' : '3' }}</span>
         <div>
-          <strong>Run your first event</strong>
-          <span>Create a queued event, launch it live, and archive it to populate history.</span>
+          <strong>Set up the addon</strong>
+          <span>Pair the in-game addon to this account so kills, attendance, and loot drops post automatically.</span>
         </div>
       </li>
     </ul>

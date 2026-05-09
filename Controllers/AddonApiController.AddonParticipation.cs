@@ -275,6 +275,7 @@ public sealed partial class AddonApiController
         if (eventEntity.CommencementStartTime is null)
         {
             eventEntity.CommencementStartTime = nowUtc;
+            eventEntity.StarterUserId ??= token.IssuedToAppUserId;
         }
 
         // For HNM events the addon may pin this batch to a specific spawn window

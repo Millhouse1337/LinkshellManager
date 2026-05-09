@@ -56,7 +56,7 @@
           <button type="button" class="action-button action-button--secondary" (click)="closeAuctionForm()">Close</button>
         </div>
 
-        <div class="create-form__grid">
+        <div class="create-form__grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
           <label>
             <span>Title</span>
             <input [(ngModel)]="auctionFormModel.title" name="auctionTitle" required />
@@ -127,7 +127,7 @@
           }
         </div>
 
-        <div class="create-form__actions">
+        <div class="create-form__actions" style="justify-content:flex-end">
           <button type="submit" class="action-button" [disabled]="isSubmittingAuction">
             {{ isSubmittingAuction ? (editingAuctionId ? 'Saving...' : 'Creating...') : (editingAuctionId ? 'Save auction' : 'Create auction') }}
           </button>
@@ -248,7 +248,7 @@
                       <td>
                         <div style="display:flex;gap:4px;flex-wrap:wrap">
                           <button type="button" class="btn ghost sm" (click)="toggleAuctionBids(item.id)">
-                            {{ expandedAuctionBidItems[item.id] ? 'Hide' : 'Bids' }}
+                            {{ expandedAuctionBidItems[item.id] ? 'Hide Bids' : 'View Bids' }}
                           </button>
                           @if (first) {
                             @if (auction.canEdit) {
@@ -263,13 +263,22 @@
                                 {{ activity.busyAuctionId() === auction.id ? '…' : 'Start' }}
                               </button>
                             }
+                            @if (auction.canEnd) {
+                              <button
+                                type="button"
+                                class="btn warning-fill sm"
+                                [disabled]="activity.busyAuctionId() === auction.id"
+                                (click)="endAuction(auction.id)">
+                                End Auction
+                              </button>
+                            }
                             @if (auction.canClose && closingAuctionId !== auction.id) {
                               <button
                                 type="button"
                                 class="btn danger-outline sm"
                                 [disabled]="activity.busyAuctionId() === auction.id"
                                 (click)="beginCloseAuction(auction.id)">
-                                Close
+                                Close auction
                               </button>
                             }
                           }
@@ -305,7 +314,7 @@
                       <td colspan="8">
                         <div class="auction-close-panel">
                           <div class="auction-close-panel__head">
-                            <strong>Confirm close &amp; item delivery</strong>
+                            <strong>Close auction &amp; record item delivery</strong>
                             <p class="muted">Check off items you've handed to each winner. Checked items linked to inventory will be removed from the linkshell stockpile.</p>
                           </div>
                           @for (item of auction.items; track item.id) {
@@ -337,7 +346,7 @@
                           <div class="auction-close-panel__actions">
                             <button type="button" class="btn ghost sm" (click)="cancelCloseAuction()" [disabled]="activity.busyAuctionId() === auction.id">Cancel</button>
                             <button type="button" class="btn danger-outline sm" (click)="confirmCloseAuction(auction.id)" [disabled]="activity.busyAuctionId() === auction.id">
-                              {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Confirm close' }}
+                              {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close auction' }}
                             </button>
                           </div>
                         </div>

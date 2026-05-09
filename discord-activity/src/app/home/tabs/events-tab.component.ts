@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAttendanceWindow,
@@ -11,6 +11,7 @@ import {
   ActivityStatusLedgerEntry,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
+import { ActivityEvent } from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
 import {
@@ -36,6 +37,7 @@ export class EventsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
+  private readonly queuePanel = viewChild.required(ActivityQueuePanelComponent);
 
   protected readonly mainJobOptions = [...EVENT_MAIN_JOB_OPTIONS];
   protected readonly subJobOptions = [...EVENT_SUB_JOB_OPTIONS];
@@ -109,6 +111,10 @@ export class EventsTabComponent {
     const next = new Set(this.expandedLiveEventIds());
     if (next.has(eventId)) next.delete(eventId); else next.add(eventId);
     this.expandedLiveEventIds.set(next);
+  }
+
+  protected openEditLiveEventForm(event: ActivityEvent): void {
+    this.queuePanel().openEditEventForm(event);
   }
 
   // ----- Participant grouping -----

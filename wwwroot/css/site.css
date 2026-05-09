@@ -911,6 +911,28 @@ textarea.form-control:focus {
   box-shadow: 0 0 0 3px var(--accent-weak);
   outline: none;
 }
+
+/* Without these overrides Bootstrap (and the browser default for native
+   <input>s) renders a near-white background for disabled and readonly fields,
+   which leaves white-on-white text. Keep them in the dark theme but dim the
+   surface and foreground slightly so the inert state still reads. */
+.form-control:disabled,
+.form-control[readonly],
+.form-select:disabled,
+textarea.form-control:disabled,
+textarea.form-control[readonly],
+input:disabled,
+input[readonly],
+select:disabled,
+textarea:disabled,
+textarea[readonly] {
+  background-color: var(--surface-2);
+  color: var(--fg-3);
+  border-color: var(--border);
+  cursor: not-allowed;
+  opacity: 1;
+  -webkit-text-fill-color: var(--fg-3);
+}
 .form-label, label {
   font-size: 12px;
   color: var(--fg-3);

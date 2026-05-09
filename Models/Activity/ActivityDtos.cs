@@ -13,7 +13,10 @@ public sealed record ActivityOverviewDto(
     IReadOnlyList<ActivityInviteDto> OutgoingJoinRequests,
     IReadOnlyList<ActivityHistoryDto> RecentHistory,
     IReadOnlyList<ActivityTodDto> RecentTods,
-    ActivityOverviewStatsDto Stats);
+    ActivityOverviewStatsDto Stats,
+    // True when the user has at least one non-revoked AddonApiToken.
+    // Drives the onboarding "Set up the addon" checklist item.
+    bool AddonConfigured);
 
 public sealed record ActivityAppUserDto(
     string Id,
@@ -166,7 +169,9 @@ public sealed record ActivityEventDto(
     IReadOnlyList<ActivityLootDto> Loot,
     IReadOnlyList<ActivityJobDto> Jobs,
     int WindowCount,
-    IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows);
+    IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows,
+    string? CreatorCharacterName,
+    string? StarterCharacterName);
 
 public sealed record ActivityAttendanceWindowDto(
     int Id,
@@ -353,6 +358,13 @@ public sealed record ActivityAuctionDto(
     string Status,
     bool CanEdit,
     bool CanStart,
+    // Live, creator-only — stops bidding now without archiving the run.
+    // Distinct from CanClose so the UI can offer two separate actions:
+    // "End auction" while it's live, "Close auction" once the timer is up.
+    bool CanEnd,
+    // Ended (timer expired), creator-only — runs the delivery confirmation,
+    // archives to history, and removes any inventory-sourced items that the
+    // creator marks as delivered.
     bool CanClose,
     IReadOnlyList<ActivityAuctionItemDto> Items);
 

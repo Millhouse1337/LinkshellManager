@@ -137,9 +137,13 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Use valid local start and end times in the event form." });
         }
 
-        if (eventEntity.CommencementStartTime.HasValue)
+        // Once an event is live, its participants are tied to the originating
+        // linkshell — moving it elsewhere mid-run would orphan their DKP awards.
+        // Other fields (name, times, dkp/hour, details) remain editable so an
+        // officer can correct typos or extend an in-progress run.
+        if (eventEntity.CommencementStartTime.HasValue && request.LinkshellId != eventEntity.LinkshellId)
         {
-            return BadRequest(new { error = "Live events cannot be edited. End the event or create a new one instead." });
+            return BadRequest(new { error = "A live event's linkshell cannot be changed. End the event first." });
         }
 
         var hasJobChanges = eventEntity.Jobs.Count != request.Jobs.Count ||
@@ -248,6 +252,7 @@ public sealed partial class ActivityDataController
         }
 
         eventEntity.CommencementStartTime ??= DateTime.UtcNow;
+        eventEntity.StarterUserId ??= appUser.Id;
         foreach (var participation in eventEntity.AppUserEvents)
         {
             if (absentIds is { Count: > 0 } && absentIds.Contains(participation.Id))

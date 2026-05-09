@@ -7,6 +7,26 @@
   list-style: none;
 }
 
+.jobs-needed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.jobs-needed-row__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.jobs-needed-row__tags {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
 .job-tags li {
   display: inline-flex;
   gap: 6px;
@@ -39,8 +59,16 @@
 }
 
 .job-tags + .event-action-grid,
-.job-tags + .event-action-bar {
-  margin-top: 12px;
+.job-tags + .event-action-bar,
+.jobs-needed-row + .event-action-grid,
+.jobs-needed-row + .event-action-bar {
+  margin-top: 18px;
+}
+
+.queue-card__header + .jobs-needed-row,
+.queue-card__header + .event-action-grid,
+.queue-card__header + .event-action-bar {
+  margin-top: 16px;
 }
 
 .linkshell-name-cell {

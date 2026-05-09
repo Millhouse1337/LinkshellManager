@@ -16,7 +16,7 @@
         <input asp-for="LinkshellId" type="hidden" />
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));column-gap:24px;align-items:end">
             <div class="field">
                 <label asp-for="EntryType"></label>
                 <select asp-for="EntryType" class="form-select" required>

@@ -21,6 +21,11 @@ public class Event
 
     public string? CreatorUserId { get; set; }
 
+    // Set when the event transitions from queued to live (CommencementStartTime
+    // gets stamped). Null while the event is still pending and for legacy rows
+    // started before this field was introduced.
+    public string? StarterUserId { get; set; }
+
     public DateTime? StartTime { get; set; }
 
     public DateTime? EndTime { get; set; }

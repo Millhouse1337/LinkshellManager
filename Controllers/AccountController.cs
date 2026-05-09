@@ -54,13 +54,23 @@ public class AccountController : Controller
             return Challenge();
         }
 
+        var hasLinkshell = await _context.AppUserLinkshells
+            .AnyAsync(link => link.AppUserId == user.Id);
+        var addonConfigured = await _context.AddonApiTokens
+            .AnyAsync(token => token.IssuedToAppUserId == user.Id && token.RevokedAt == null);
+
         return View(new ProfileViewModel
         {
             CharacterName = user.CharacterName,
             AltCharacterName1 = user.AltCharacterName1,
             AltCharacterName2 = user.AltCharacterName2,
             TimeZone = user.TimeZone,
-            ProfileImageData = user.ProfileImage
+            ProfileImageData = user.ProfileImage,
+            AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_dateTimeZoneProvider.Ids),
+            ProfileComplete = !string.IsNullOrWhiteSpace(user.CharacterName)
+                && !string.IsNullOrWhiteSpace(user.TimeZone),
+            HasLinkshell = hasLinkshell,
+            AddonConfigured = addonConfigured
         });
     }
 
@@ -79,6 +89,7 @@ public class AccountController : Controller
         {
             ModelState.AddModelError(nameof(model.TimeZone), "Use a valid IANA time zone such as America/New_York.");
             model.ProfileImageData = user.ProfileImage;
+            model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_dateTimeZoneProvider.Ids);
             return View(nameof(Profile), model);
         }
 
@@ -98,6 +109,7 @@ public class AccountController : Controller
             }
 
             model.ProfileImageData = user.ProfileImage;
+            model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_dateTimeZoneProvider.Ids);
             return View(nameof(Profile), model);
         }
 

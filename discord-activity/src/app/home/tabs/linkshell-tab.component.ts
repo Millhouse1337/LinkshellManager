@@ -297,11 +297,21 @@ export class LinkshellTabComponent {
   }
 
   protected showItemForm = signal(false);
+  protected readonly itemTypeOptions = ['Crafted Item', 'Endgame Loot Drop', 'Other'] as const;
   protected itemName = '';
   protected itemType = '';
+  protected itemTypeSelection = '';
   protected itemQuantity = 1;
   protected itemNotes = '';
   protected editingItemId = signal<number | null>(null);
+
+  protected onItemTypeSelectionChange(value: string): void {
+    this.itemTypeSelection = value;
+    // Preset selections (e.g. "Crafted Item") flow straight through; "Other"
+    // and the empty placeholder both clear the value so the freeform input
+    // starts blank.
+    this.itemType = value && value !== 'Other' ? value : '';
+  }
 
   protected toggleItemForm(): void {
     this.showItemForm.update(value => !value);
@@ -313,6 +323,7 @@ export class LinkshellTabComponent {
   protected resetItemForm(): void {
     this.itemName = '';
     this.itemType = '';
+    this.itemTypeSelection = '';
     this.itemQuantity = 1;
     this.itemNotes = '';
     this.editingItemId.set(null);
@@ -321,7 +332,20 @@ export class LinkshellTabComponent {
   protected beginEditItem(item: ActivityItem): void {
     this.editingItemId.set(item.id);
     this.itemName = item.itemName;
-    this.itemType = item.itemType ?? '';
+    const existingType = item.itemType ?? '';
+    // Legacy items can carry any string for itemType. Map a preset match to
+    // the dropdown selection; anything else falls into the "Other" branch so
+    // the freeform input shows the saved value.
+    if ((this.itemTypeOptions as readonly string[]).includes(existingType)) {
+      this.itemTypeSelection = existingType;
+      this.itemType = existingType;
+    } else if (existingType) {
+      this.itemTypeSelection = 'Other';
+      this.itemType = existingType;
+    } else {
+      this.itemTypeSelection = '';
+      this.itemType = '';
+    }
     this.itemQuantity = item.quantity;
     this.itemNotes = item.notes ?? '';
     this.showItemForm.set(true);

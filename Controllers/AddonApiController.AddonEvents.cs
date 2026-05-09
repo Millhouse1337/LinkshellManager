@@ -180,6 +180,7 @@ public sealed partial class AddonApiController
         if (!alreadyStarted)
         {
             eventEntity.CommencementStartTime = DateTime.UtcNow;
+            eventEntity.StarterUserId ??= token.IssuedToAppUserId;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 

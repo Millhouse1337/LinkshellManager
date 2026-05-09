@@ -177,6 +177,27 @@ export class AuctionService {
     }
   }
 
+  // Stops bidding now without archiving the auction. The auction stays on the
+  // active board with status Ended until the creator runs closeAuction(),
+  // which is where the delivery confirmation + inventory drawdown live.
+  async endAuction(auctionId: number, linkshellId: number): Promise<void> {
+    this.busyAuctionId.set(auctionId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/auctions/${auctionId}/end`);
+      await this.auth.refreshOverview();
+      await this.loadAuctions(linkshellId);
+      this.auth.setActionMessage('Auction ended. Close it to archive and deliver items.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Ending the auction failed.'));
+      throw error;
+    } finally {
+      this.busyAuctionId.set(null);
+    }
+  }
+
   async closeAuction(
     auctionId: number,
     linkshellId: number,

@@ -4,6 +4,7 @@
     var characterName = ViewBag.CharacterName as string ?? "User";
     var currentUserId = ViewBag.CurrentUserId as string ?? string.Empty;
     var currentTime = ViewBag.CurrentTime is DateTime current ? current : DateTime.Now;
+    var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
 }
 
 <div class="page-head fade d1">
@@ -42,6 +43,7 @@ else
             var canManage = string.Equals(auction.Auction.CreatedByUserId, currentUserId, StringComparison.OrdinalIgnoreCase);
             var canEdit = canManage && !auctionStarted;
             var canStart = canManage && !auction.Auction.StartedAt.HasValue && !auctionStarted && !auctionEnded;
+            var canEnd = canManage && auctionLive;
             var canClose = canManage && auctionEnded;
 
             <div class="card">
@@ -81,21 +83,39 @@ else
                         {
                             <a class="btn ghost sm" asp-action="Edit" asp-route-id="@auction.Auction.Id">Edit</a>
                         }
-                        @if (canClose)
-                        {
-                            <form asp-action="EndAuction" method="post" style="display:inline">
-                                <input type="hidden" name="auctionId" value="@auction.Auction.Id" />
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="btn primary sm" style="background:var(--danger);border-color:var(--danger)">Close</button>
-                            </form>
-                        }
-                        else if (canStart)
+                        @if (canStart)
                         {
                             <form asp-action="StartAuction" method="post" style="display:inline">
                                 <input type="hidden" name="auctionId" value="@auction.Auction.Id" />
                                 @Html.AntiForgeryToken()
                                 <button type="submit" class="btn primary sm">Start</button>
                             </form>
+                        }
+                        @if (canEnd)
+                        {
+                            <form asp-action="EndAuction" method="post" style="display:inline"
+                                  onsubmit="return confirm('End this auction now? Bidding will stop immediately. You will then be able to close it and deliver the won items.');">
+                                <input type="hidden" name="auctionId" value="@auction.Auction.Id" />
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn primary sm">End</button>
+                            </form>
+                        }
+                        @if (canClose)
+                        {
+                            var closeItemsPayload = System.Text.Json.JsonSerializer.Serialize(
+                                auction.AuctionItems.Select(item => new
+                                {
+                                    id = item.Id,
+                                    name = item.ItemName,
+                                    winner = item.CurrentHighestBidder,
+                                    bid = item.CurrentHighestBid,
+                                    fromInventory = item.SourceItemId.HasValue
+                                }));
+                            <button type="button" class="btn primary sm closeAuctionButton"
+                                    style="background:var(--danger);border-color:var(--danger)"
+                                    data-auction-id="@auction.Auction.Id"
+                                    data-auction-title="@(auction.Auction.AuctionTitle ?? "Auction")"
+                                    data-items="@closeItemsPayload">Close</button>
                         }
                     </div>
                 </div>
@@ -134,7 +154,7 @@ else
                                 </td>
                                 <td style="text-align:right">
                                     <div style="display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap">
-                                        <button type="button" class="btn ghost sm viewBidsButton" data-item-id="@item.Id">Bids</button>
+                                        <button type="button" class="btn ghost sm viewBidsButton" data-item-id="@item.Id">View Bids</button>
                                         @if (auctionLive)
                                         {
                                             <button type="button"
@@ -219,6 +239,29 @@ else
     </div>
 </div>
 
+<div class="modal fade" id="closeAuctionModal" tabindex="-1" aria-labelledby="closeAuctionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="closeAuctionModalLabel">Close auction &amp; record item delivery</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size:12px;color:var(--fg-3);margin-bottom:12px">
+                    Check off items you've handed to each winner. Checked items linked to inventory will be removed from the linkshell stockpile.
+                </div>
+                <form id="closeAuctionForm" asp-action="CloseAuction" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="closeAuctionId" name="auctionId" />
+                    <div id="closeAuctionItems" style="display:grid;gap:8px;margin-bottom:12px"></div>
+                    <button type="submit" class="btn primary"
+                            style="background:var(--danger);border-color:var(--danger);margin-top:8px">Close auction</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="makeBidModal" tabindex="-1" aria-labelledby="makeBidModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -277,6 +320,71 @@ else
                         });
                     }
                     new bootstrap.Modal(document.getElementById('viewBidsModal')).show();
+                });
+            });
+
+            // Close-auction flow: render an item-delivery checklist into the
+            // close modal each time the user opens it. Items pre-check when
+            // there's a winner — the creator unchecks anything they haven't
+            // handed over yet. Inventory-sourced + checked items will be
+            // drawn down from the stockpile when the form posts.
+            const closeButtons = document.querySelectorAll('.closeAuctionButton');
+            closeButtons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    const auctionId = button.getAttribute('data-auction-id') ?? '';
+                    const auctionTitle = button.getAttribute('data-auction-title') ?? 'Auction';
+                    document.getElementById('closeAuctionId').value = auctionId;
+                    document.getElementById('closeAuctionModalLabel').textContent = `Close ${auctionTitle} & record item delivery`;
+
+                    let items = [];
+                    try { items = JSON.parse(button.getAttribute('data-items') || '[]'); }
+                    catch { items = []; }
+
+                    const container = document.getElementById('closeAuctionItems');
+                    container.innerHTML = '';
+                    items.forEach((item) => {
+                        const row = document.createElement('label');
+                        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:6px';
+
+                        const copy = document.createElement('div');
+                        const name = document.createElement('strong');
+                        name.textContent = item.name || 'Item';
+                        copy.appendChild(name);
+                        const meta = document.createElement('div');
+                        meta.style.cssText = 'font-size:12px;color:var(--fg-3);margin-top:2px';
+                        if (item.winner) {
+                            meta.textContent = `Won by ${item.winner} for ${item.bid ?? 0} DKP`;
+                            if (item.fromInventory) {
+                                const inv = document.createElement('span');
+                                inv.className = 'tag';
+                                inv.style.marginLeft = '6px';
+                                inv.textContent = 'From inventory';
+                                meta.appendChild(inv);
+                            }
+                        } else {
+                            meta.textContent = 'No winner';
+                        }
+                        copy.appendChild(meta);
+
+                        const toggle = document.createElement('label');
+                        toggle.style.cssText = 'display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.name = 'deliveredItemIds';
+                        checkbox.value = String(item.id);
+                        checkbox.checked = !!item.winner;
+                        checkbox.disabled = !item.winner;
+                        const span = document.createElement('span');
+                        span.textContent = 'Delivered to winner';
+                        toggle.appendChild(checkbox);
+                        toggle.appendChild(span);
+
+                        row.appendChild(copy);
+                        row.appendChild(toggle);
+                        container.appendChild(row);
+                    });
+
+                    new bootstrap.Modal(document.getElementById('closeAuctionModal')).show();
                 });
             });
 

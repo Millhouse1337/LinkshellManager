@@ -2,6 +2,7 @@
     var activeLinkshellName = ViewData["ActiveLinkshellName"] as string;
     var activeLinkshellInitials = ViewData["ActiveLinkshellInitials"] as string;
     var activeRole = ViewData["ActiveRole"] as string;
+    var perms = ViewData["ActivePermissions"] as LinkshellRole;
 
     var currentController = (ViewContext.RouteData.Values["controller"] as string) ?? "";
     var currentAction = (ViewContext.RouteData.Values["action"] as string) ?? "";
@@ -21,6 +22,11 @@
         && (actions.Length == 0 || actions.Any(a => string.Equals(a, currentAction, StringComparison.OrdinalIgnoreCase)))
             ? "active"
             : "";
+
+    // When the user has no active linkshell yet, perms is null — show
+    // everything so they can navigate to create or join one. Once a linkshell
+    // is selected, gate by the matching LinkshellRole flag.
+    bool Allow(Func<LinkshellRole, bool> selector) => perms is null || selector(perms);
 }
 <aside class="sidebar">
     <a class="brand" asp-controller="Dashboard" asp-action="Index">
@@ -52,7 +58,10 @@
         </button>
         <div id="nav-announcements" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("Announcement", "Index")" asp-controller="Announcement" asp-action="Index">View Announcements</a>
-            <a class="nav-sub-item create @IsSubActive("Announcement", "Create")" asp-controller="Announcement" asp-action="Create">Create Announcement</a>
+            @if (Allow(p => p.CanManageAnnouncements))
+            {
+                <a class="nav-sub-item create @IsSubActive("Announcement", "Create")" asp-controller="Announcement" asp-action="Create">Create Announcement</a>
+            }
         </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("Rule")" data-target="#nav-rules">
@@ -62,7 +71,10 @@
         </button>
         <div id="nav-rules" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("Rule", "Index")" asp-controller="Rule" asp-action="Index">View Rules</a>
-            <a class="nav-sub-item create @IsSubActive("Rule", "Create")" asp-controller="Rule" asp-action="Create">Create Rule</a>
+            @if (Allow(p => p.CanManageRules))
+            {
+                <a class="nav-sub-item create @IsSubActive("Rule", "Create")" asp-controller="Rule" asp-action="Create">Create Rule</a>
+            }
         </div>
 
         <button type="button" class="nav-item nav-group" data-target="#nav-missions">
@@ -98,7 +110,10 @@
         </button>
         <div id="nav-auctions" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("Auction", "Index")" asp-controller="Auction" asp-action="Index">View Auctions</a>
-            <a class="nav-sub-item create @IsSubActive("Auction", "Create")" asp-controller="Auction" asp-action="Create">Create Auction</a>
+            @if (Allow(p => p.CanManageAuctions))
+            {
+                <a class="nav-sub-item create @IsSubActive("Auction", "Create")" asp-controller="Auction" asp-action="Create">Create Auction</a>
+            }
             <a class="nav-sub-item @IsSubActive("AuctionHistory")" asp-controller="AuctionHistory" asp-action="Index">Auction History</a>
         </div>
 
@@ -109,7 +124,10 @@
         </button>
         <div id="nav-events" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("Event", "Index")" asp-controller="Event" asp-action="Index">View Events</a>
-            <a class="nav-sub-item create @IsSubActive("Event", "Create")" asp-controller="Event" asp-action="Create">Create Event</a>
+            @if (Allow(p => p.CanManageEvents))
+            {
+                <a class="nav-sub-item create @IsSubActive("Event", "Create")" asp-controller="Event" asp-action="Create">Create Event</a>
+            }
             <a class="nav-sub-item @IsSubActive("EventHistory")" asp-controller="EventHistory" asp-action="Index">Event History</a>
         </div>
 
@@ -120,23 +138,29 @@
         </button>
         <div id="nav-tods" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("Tod", "Index")" asp-controller="Tod" asp-action="Index">View ToDs</a>
-            <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
+            @if (Allow(p => p.CanManageTods))
+            {
+                <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
+            }
         </div>
     </nav>
 
     <nav class="nav-section">
         <div class="nav-label">Management</div>
 
-        <button type="button" class="nav-item nav-group @IsExpanded("ManageTeam")" data-target="#nav-team">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
-            Manage Team
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-team" class="nav-sub">
-            <a class="nav-sub-item @IsSubActive("ManageTeam", "Index")" asp-controller="ManageTeam" asp-action="Index">View Team</a>
-            <a class="nav-sub-item create @IsSubActive("ManageTeam", "SearchPlayers")" asp-controller="ManageTeam" asp-action="SearchPlayers">Add Members</a>
-            <a class="nav-sub-item @IsSubActive("ManageTeam", "ViewInvites")" asp-controller="ManageTeam" asp-action="ViewInvites">View Invites</a>
-        </div>
+        @if (Allow(p => p.CanManageMembers))
+        {
+            <button type="button" class="nav-item nav-group @IsExpanded("ManageTeam")" data-target="#nav-team">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
+                Manage Team
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div id="nav-team" class="nav-sub">
+                <a class="nav-sub-item @IsSubActive("ManageTeam", "Index")" asp-controller="ManageTeam" asp-action="Index">View Team</a>
+                <a class="nav-sub-item create @IsSubActive("ManageTeam", "SearchPlayers")" asp-controller="ManageTeam" asp-action="SearchPlayers">Add Members</a>
+                <a class="nav-sub-item @IsSubActive("ManageTeam", "ViewInvites")" asp-controller="ManageTeam" asp-action="ViewInvites">View Invites</a>
+            </div>
+        }
 
         <button type="button" class="nav-item nav-group @IsExpanded("ManageItem")" data-target="#nav-items">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
@@ -145,18 +169,24 @@
         </button>
         <div id="nav-items" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("ManageItem", "Index")" asp-controller="ManageItem" asp-action="Index">View Items</a>
-            <a class="nav-sub-item create @IsSubActive("ManageItem", "AddItem")" asp-controller="ManageItem" asp-action="AddItem">Add Item</a>
+            @if (Allow(p => p.CanManageInventory))
+            {
+                <a class="nav-sub-item create @IsSubActive("ManageItem", "AddItem")" asp-controller="ManageItem" asp-action="AddItem">Add Item</a>
+            }
         </div>
 
-        <button type="button" class="nav-item nav-group @IsExpanded("ManageRevenue")" data-target="#nav-revenue">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
-            Manage Revenue
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-revenue" class="nav-sub">
-            <a class="nav-sub-item @IsSubActive("ManageRevenue", "Index")" asp-controller="ManageRevenue" asp-action="Index">View Income</a>
-            <a class="nav-sub-item create @IsSubActive("ManageRevenue", "AddIncome")" asp-controller="ManageRevenue" asp-action="AddIncome">Add Income</a>
-        </div>
+        @if (Allow(p => p.CanManageTreasury))
+        {
+            <button type="button" class="nav-item nav-group @IsExpanded("ManageRevenue")" data-target="#nav-revenue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
+                Manage Revenue
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div id="nav-revenue" class="nav-sub">
+                <a class="nav-sub-item @IsSubActive("ManageRevenue", "Index")" asp-controller="ManageRevenue" asp-action="Index">View Income</a>
+                <a class="nav-sub-item create @IsSubActive("ManageRevenue", "AddIncome")" asp-controller="ManageRevenue" asp-action="AddIncome">Add Income</a>
+            </div>
+        }
 
         <button type="button" class="nav-item nav-group @IsExpanded("DkpHistory", "DkpAdjustment")" data-target="#nav-dkp">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
@@ -165,7 +195,10 @@
         </button>
         <div id="nav-dkp" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("DkpHistory", "Index")" asp-controller="DkpHistory" asp-action="Index">View DKP</a>
-            <a class="nav-sub-item create @IsSubActive("DkpAdjustment", "Index")" asp-controller="DkpAdjustment" asp-action="Index">DKP Adjustments</a>
+            @if (Allow(p => p.CanAuditDkp))
+            {
+                <a class="nav-sub-item create @IsSubActive("DkpAdjustment", "Index")" asp-controller="DkpAdjustment" asp-action="Index">DKP Adjustments</a>
+            }
         </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("Linkshell")" data-target="#nav-config">
@@ -176,7 +209,10 @@
         <div id="nav-config" class="nav-sub">
             <a class="nav-sub-item @IsSubActive("Linkshell", "Index")" asp-controller="Linkshell" asp-action="Index">View Linkshells</a>
             <a class="nav-sub-item create @IsSubActive("Linkshell", "Create")" asp-controller="Linkshell" asp-action="Create">Create Linkshell</a>
-            <a class="nav-sub-item @IsSubActive("Linkshell", "Customize")" asp-controller="Linkshell" asp-action="Customize">Customize Linkshell</a>
+            @if (Allow(p => p.CanCustomizeLinkshell))
+            {
+                <a class="nav-sub-item @IsSubActive("Linkshell", "Customize")" asp-controller="Linkshell" asp-action="Customize">Customize Linkshell</a>
+            }
         </div>
     </nav>
 

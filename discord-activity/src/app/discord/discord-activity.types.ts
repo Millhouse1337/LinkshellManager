@@ -338,6 +338,8 @@ export interface ActivityEvent {
   jobs: ActivityEventJob[];
   windowCount: number;
   attendanceWindows: ActivityAttendanceWindow[];
+  creatorCharacterName?: string | null;
+  starterCharacterName?: string | null;
 }
 
 export interface ActivityAttendanceWindow {
@@ -496,6 +498,7 @@ export interface ActivityAuction {
   status: string;
   canEdit: boolean;
   canStart: boolean;
+  canEnd: boolean;
   canClose: boolean;
   items: ActivityAuctionItem[];
 }
@@ -570,6 +573,7 @@ export interface ActivityOverview {
   recentHistory: ActivityHistory[];
   recentTods: ActivityTodEntry[];
   stats: ActivityOverviewStats;
+  addonConfigured: boolean;
 }
 
 export interface ActivityCreateEventJobInput {

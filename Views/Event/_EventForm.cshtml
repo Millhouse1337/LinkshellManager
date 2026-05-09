@@ -257,7 +257,7 @@
     @for (var i = 0; i < jobs.Count; i++)
     {
         <div class="card job-row" style="padding:12px">
-            <div class="form-grid">
+            <div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));align-items:end">
                 <div class="field">
                     <label>Role</label>
                     <select class="form-select" name="Jobs[@i].JobType">

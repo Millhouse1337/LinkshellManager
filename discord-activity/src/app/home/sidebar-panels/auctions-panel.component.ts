@@ -483,6 +483,18 @@ export class AuctionsPanelComponent {
     await this.activity.startAuction(auctionId, this.selectedLinkshellId);
   }
 
+  protected async endAuction(auctionId: number): Promise<void> {
+    if (!this.selectedLinkshellId) return;
+    if (!window.confirm('End this auction now? Bidding will stop immediately. You will then be able to close it and deliver the won items.')) {
+      return;
+    }
+    try {
+      await this.activity.endAuction(auctionId, this.selectedLinkshellId);
+    } catch {
+      // message set by service
+    }
+  }
+
   protected beginCloseAuction(auctionId: number): void {
     const auction = this.auctions().find(a => a.id === auctionId);
     if (!auction) return;

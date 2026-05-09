@@ -50,7 +50,7 @@ else
         {
             var signedUp = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter);
             var isLive = item.Event.CommencementStartTime.HasValue;
-            <div class="card event-card-collapsible is-collapsed">
+            <div class="card">
                 <div class="card-head">
                     <div style="display:flex;flex-direction:column;gap:4px;flex:1">
                         <div class="card-title">
@@ -92,19 +92,9 @@ else
                         <a class="btn ghost sm" asp-action="Edit" asp-route-id="@item.Event.Id">Edit</a>
                         <a class="btn ghost sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
                     </div>
-                    <button type="button"
-                            class="card-collapse-toggle card-collapse-toggle--right collapsed"
-                            aria-expanded="false"
-                            aria-label="Toggle event details"
-                            onclick="
-                                var c = this.closest('.event-card-collapsible');
-                                c.classList.toggle('is-collapsed');
-                                this.classList.toggle('collapsed');
-                                this.setAttribute('aria-expanded', !c.classList.contains('is-collapsed'));
-                            ">▾</button>
                 </div>
 
-                <div class="event-card-collapsible__body">
+                <div>
                 @if (!string.IsNullOrWhiteSpace(item.Event.Details))
                 {
                     <div style="padding:0 16px 12px;color:var(--fg-3);font-size:13px">@item.Event.Details</div>
@@ -199,7 +189,11 @@ else
                                     <td>@(job.SignedUp ?? 0)</td>
                                     <td style="color:var(--fg-3);font-size:12px">@(job.Enlisted.Count > 0 ? string.Join(", ", job.Enlisted) : "—")</td>
                                     <td style="text-align:right">
-                                        @if (onThisJob)
+                                        @if (isLive)
+                                        {
+                                            <span style="color:var(--fg-4)">—</span>
+                                        }
+                                        else if (onThisJob)
                                         {
                                             <form asp-action="Unsign" method="post" style="display:inline">
                                                 <input type="hidden" name="jobId" value="@job.Id" />

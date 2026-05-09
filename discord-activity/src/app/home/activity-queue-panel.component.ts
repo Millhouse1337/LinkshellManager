@@ -1,5 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  inject,
+  viewChild
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateEventInput,
@@ -20,7 +27,13 @@ import {
 })
 export class ActivityQueuePanelComponent {
   protected readonly activity = inject(DiscordActivityService);
+  private readonly cdr = inject(ChangeDetectorRef);
+  // The live-event edit form renders inside a native <dialog> opened with
+  // showModal() so it escapes the .panel-tab.fade ancestor's stacking context
+  // and lands in the browser's top layer, above the sticky tab bar.
+  private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
   protected editingEventId: number | null = null;
+  protected isEditingLiveEvent = false;
   protected readonly createModel: ActivityCreateEventInput = {
     linkshellId: 0,
     eventName: '',
@@ -29,7 +42,7 @@ export class ActivityQueuePanelComponent {
     startTimeLocal: '',
     endTimeLocal: '',
     duration: 1,
-    dkpPerHour: 0,
+    dkpPerHour: 1,
     details: '',
     jobs: [
       {
@@ -152,20 +165,6 @@ export class ActivityQueuePanelComponent {
   // activity-home; lazily seeded so the template can two-way bind directly.
   protected readonly signupDrafts: { [eventId: number]: ActivityQuickJoinInput } = {};
 
-  // Tracks queued-event cards that are currently EXPANDED. Default empty
-  // set => everything starts collapsed. Toggling adds/removes the id.
-  // Session-only.
-  protected readonly expandedQueueIds = signal<Set<number>>(new Set());
-
-  protected isQueueCollapsed(eventId: number): boolean {
-    return !this.expandedQueueIds().has(eventId);
-  }
-
-  protected toggleQueueCollapsed(eventId: number): void {
-    const next = new Set(this.expandedQueueIds());
-    if (next.has(eventId)) next.delete(eventId); else next.add(eventId);
-    this.expandedQueueIds.set(next);
-  }
 
   protected getSignupDraft(eventId: number): ActivityQuickJoinInput {
     let draft = this.signupDrafts[eventId];
@@ -237,8 +236,19 @@ export class ActivityQueuePanelComponent {
   }
 
   protected closeCreateForm(): void {
+    this.editDialog()?.nativeElement.close();
     this.isCreateOpen = false;
     this.editingEventId = null;
+    this.isEditingLiveEvent = false;
+  }
+
+  // Native <dialog> click events fire on both the dialog box and its
+  // ::backdrop. The backdrop is the dialog itself, so an event whose target is
+  // the dialog element (not a child) means the user clicked outside the form.
+  protected onEditDialogClick(event: MouseEvent): void {
+    if (event.target === this.editDialog()?.nativeElement) {
+      this.closeCreateForm();
+    }
   }
 
   protected addJobRow(): void {
@@ -293,12 +303,13 @@ export class ActivityQueuePanelComponent {
       this.resetCreateModel();
       this.isCreateOpen = false;
       this.editingEventId = null;
+      this.isEditingLiveEvent = false;
     } finally {
       this.isSubmittingCreate = false;
     }
   }
 
-  protected openEditEventForm(event: {
+  public openEditEventForm(event: {
     id: number;
     linkshellId: number;
     name?: string | null;
@@ -306,6 +317,7 @@ export class ActivityQueuePanelComponent {
     location?: string | null;
     startTime?: string | null;
     endTime?: string | null;
+    commencementStartTime?: string | null;
     duration?: number | null;
     dkpPerHour?: number | null;
     details?: string | null;
@@ -319,6 +331,7 @@ export class ActivityQueuePanelComponent {
     this.activity.clearActionState();
     this.isCreateOpen = true;
     this.editingEventId = event.id;
+    this.isEditingLiveEvent = !!event.commencementStartTime;
     this.createModel.linkshellId = event.linkshellId;
     this.createModel.eventName = event.name ?? '';
     const incomingType = event.type ?? '';
@@ -365,6 +378,21 @@ export class ActivityQueuePanelComponent {
       ];
     }
     this.jobQuantityNotSpecified = this.createModel.jobs.map(job => job.quantity == null);
+    // External callers (e.g. live-event Edit on the events tab) reach this
+    // method through a viewChild — Angular's OnPush check for the queue panel
+    // wouldn't otherwise run on this synchronous mutation.
+    this.cdr.markForCheck();
+    if (this.isEditingLiveEvent) {
+      // Defer showModal() until Angular has rendered the <dialog> element from
+      // the @if branch above — otherwise the viewChild signal still resolves
+      // to undefined.
+      setTimeout(() => {
+        const dialog = this.editDialog()?.nativeElement;
+        if (dialog && !dialog.open) {
+          dialog.showModal();
+        }
+      });
+    }
   }
 
   protected async confirmCancelEvent(eventId: number, eventName?: string | null): Promise<void> {
@@ -391,7 +419,7 @@ export class ActivityQueuePanelComponent {
     this.createModel.startTimeLocal = '';
     this.createModel.endTimeLocal = '';
     this.createModel.duration = 1;
-    this.createModel.dkpPerHour = 0;
+    this.createModel.dkpPerHour = 1;
     this.createModel.details = '';
     this.durationNotSpecified = false;
     this.endTimeNotSpecified = false;
@@ -406,5 +434,6 @@ export class ActivityQueuePanelComponent {
       }
     ];
     this.jobQuantityNotSpecified = [false];
+    this.isEditingLiveEvent = false;
   }
 }

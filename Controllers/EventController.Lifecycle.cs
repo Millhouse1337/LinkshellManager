@@ -340,6 +340,7 @@ public partial class EventController
         }
 
         eventToStart.CommencementStartTime ??= DateTime.UtcNow;
+        eventToStart.StarterUserId ??= user.Id;
 
         foreach (var participation in eventToStart.AppUserEvents)
         {

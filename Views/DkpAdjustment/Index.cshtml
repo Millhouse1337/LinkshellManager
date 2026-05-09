@@ -45,26 +45,7 @@ else if (Model.Linkshells.Count == 0)
 }
 else
 {
-    <div class="card fade d2" style="padding:16px;margin-bottom:16px">
-        <form method="get" class="field" style="max-width:320px">
-            <label for="linkshellId">Linkshell</label>
-            <select class="form-select" id="linkshellId" name="linkshellId" onchange="this.form.submit()">
-                @foreach (var linkshell in Model.Linkshells)
-                {
-                    @if (linkshell.Id == Model.SelectedLinkshellId)
-                    {
-                        <option value="@linkshell.Id" selected>@linkshell.Name</option>
-                    }
-                    else
-                    {
-                        <option value="@linkshell.Id">@linkshell.Name</option>
-                    }
-                }
-            </select>
-        </form>
-    </div>
-
-    <div class="card fade d3">
+    <div class="card fade d2">
         <div class="card-head">
             <div class="card-title">Members <span class="tag">@Model.Members.Count</span></div>
         </div>

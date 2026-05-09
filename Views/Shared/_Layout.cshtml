@@ -23,11 +23,13 @@
     string? activeLinkshellName = null;
     string? activeLinkshellInitials = null;
     string? activeRole = null;
+    LinkshellManagerDiscordApp.Models.LinkshellRole? activePermissions = null;
     if (currentUser is not null && currentUser.PrimaryLinkshellId.HasValue)
     {
+        var activeLinkshellId = currentUser.PrimaryLinkshellId.Value;
         var ls = await DbContext.Linkshells
             .AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Id == currentUser.PrimaryLinkshellId.Value);
+            .FirstOrDefaultAsync(l => l.Id == activeLinkshellId);
         if (ls is not null)
         {
             activeLinkshellName = ls.LinkshellName;
@@ -45,14 +47,30 @@
                 .AsNoTracking()
                 .FirstOrDefaultAsync(link =>
                     link.AppUserId == currentUser.Id &&
-                    link.LinkshellId == currentUser.PrimaryLinkshellId.Value);
+                    link.LinkshellId == activeLinkshellId);
             activeRole = membership?.Rank;
+
+            // Resolve the LinkshellRole row whose Name matches the user's rank
+            // so the sidenav can hide entries the user lacks permission to use.
+            // Falls back to "Member" when the rank string doesn't resolve, which
+            // matches the controllers' GetEffectiveRoleAsync behavior.
+            var rankName = string.IsNullOrWhiteSpace(activeRole) ? "Member" : activeRole.Trim();
+            activePermissions = await DbContext.LinkshellRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.LinkshellId == activeLinkshellId && r.Name == rankName);
+            if (activePermissions is null)
+            {
+                activePermissions = await DbContext.LinkshellRoles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.LinkshellId == activeLinkshellId && r.Name == "Member");
+            }
         }
     }
 
     ViewData["ActiveLinkshellName"] = activeLinkshellName;
     ViewData["ActiveLinkshellInitials"] = activeLinkshellInitials;
     ViewData["ActiveRole"] = activeRole;
+    ViewData["ActivePermissions"] = activePermissions;
 
     var displayName = currentUser?.CharacterName ?? currentUser?.UserName ?? "User";
     var avatarInitials = string.Concat(

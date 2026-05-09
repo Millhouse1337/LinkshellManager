@@ -13,6 +13,8 @@
     // (Timer + Progress columns are not meaningful per-spawn-window).
     var isHnmEvent = string.Equals(Model.Event.EventType, "HNM", StringComparison.OrdinalIgnoreCase);
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
+    var isAlreadyParticipant = !string.IsNullOrWhiteSpace(currentUserId)
+        && Model.AppUserEvents.Any(p => p.AppUserId == currentUserId);
 }
 
 <div class="page-head fade d1">
@@ -329,7 +331,7 @@
             </div>
             <form asp-action="QuickJoin" method="post" style="padding:4px 16px 16px">
                 <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                <div class="form-grid">
+                <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:end">
                     <div class="field">
                         <label>Main job</label>
                         <select class="form-select" name="jobName" required>
@@ -361,7 +363,14 @@
                         </select>
                     </div>
                 </div>
-                <button class="btn primary" type="submit" style="margin-top:12px">Join active event</button>
+                @if (!isAlreadyParticipant)
+                {
+                    <button class="btn primary" type="submit" style="margin-top:12px">Join active event</button>
+                }
+                else
+                {
+                    <div class="muted" style="margin-top:12px;font-size:12px">You're already attached to this event.</div>
+                }
             </form>
         </div>
 
@@ -371,7 +380,7 @@
             </div>
             <form asp-action="SubmitLootDetails" method="post" style="padding:4px 16px 12px;border-bottom:1px solid var(--border)">
                 <input type="hidden" name="eventId" value="@Model.Event.Id" />
-                <div class="form-grid">
+                <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:end">
                     <div class="field"><label>Item</label><input class="form-control" name="itemName" required maxlength="200" /></div>
                     <div class="field">
                         <label>Winner</label>

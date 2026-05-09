@@ -12,12 +12,34 @@
   </div>
 
   @if (isCreateOpen) {
-    <form class="create-form" (ngSubmit)="submitCreateForm()">
+    @if (isEditingLiveEvent) {
+      <dialog #editDialog class="event-edit-modal-dialog"
+              (click)="onEditDialogClick($event)"
+              (close)="closeCreateForm()">
+        <ng-container [ngTemplateOutlet]="editFormTpl"></ng-container>
+      </dialog>
+    } @else {
+      <ng-container [ngTemplateOutlet]="editFormTpl"></ng-container>
+    }
+  }
+
+  <ng-template #editFormTpl>
+    <form class="create-form" [class.create-form--in-modal]="isEditingLiveEvent" (ngSubmit)="submitCreateForm()">
       <div class="create-form__header">
         <div>
-          <strong>{{ editingEventId ? 'Edit event' : 'Create event' }}</strong>
+          <strong>
+            @if (isEditingLiveEvent) {
+              Edit live event
+            } @else if (editingEventId) {
+              Edit event
+            } @else {
+              Create event
+            }
+          </strong>
           <p>
-            @if (editingEventId) {
+            @if (isEditingLiveEvent) {
+              Update a live event in progress. Linkshell and party setup are locked while the event is running.
+            } @else if (editingEventId) {
               Update a queued event directly from the Activity.
             } @else {
               Stage a new signup card directly from the Activity.
@@ -30,7 +52,7 @@
       <div class="create-form__grid">
         <label>
           <span>Linkshell</span>
-          <select [(ngModel)]="createModel.linkshellId" name="linkshellId" required>
+          <select [(ngModel)]="createModel.linkshellId" name="linkshellId" required [disabled]="isEditingLiveEvent">
             @for (linkshell of activity.overview()?.linkshells ?? []; track linkshell.id) {
               <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
             }
@@ -186,13 +208,13 @@
               <span>Details</span>
               <input [(ngModel)]="job.details" [name]="'jobDetails' + $index" />
             </label>
-            <button type="button" class="action-button action-button--secondary" (click)="removeJobRow($index)">Remove</button>
+            <button type="button" class="action-button action-button--secondary action-button--danger job-editor__remove" (click)="removeJobRow($index)">Remove</button>
           </div>
         }
         }
       </div>
 
-      <div class="create-form__actions">
+      <div class="create-form__actions create-form__actions--end">
         <button type="submit" class="action-button" [disabled]="isSubmittingCreate">
           @if (isSubmittingCreate) {
             {{ editingEventId ? 'Saving...' : 'Creating...' }}
@@ -202,7 +224,7 @@
         </button>
       </div>
     </form>
-  }
+  </ng-template>
 
   @if ((activity.overview()?.linkshells?.length ?? 0) === 0) {
     <div class="empty-state">
@@ -220,8 +242,7 @@
     }
     <div class="queue-list">
       @for (event of queuedEvents(); track event.id) {
-        <article class="queue-card"
-                 [class.queue-card--collapsed]="isQueueCollapsed(event.id)">
+        <article class="queue-card">
           <div class="queue-card__header">
             <div>
               <strong>{{ event.name || 'Untitled event' }}</strong>
@@ -232,31 +253,32 @@
               @if (activity.formatDateTime(event.endTime); as scheduledEnd) {
                 <p>Ends {{ scheduledEnd }}</p>
               }
+              @if (event.creatorCharacterName) {
+                <p class="event-card__actor"><span class="event-card__actor-label">Event Creator:</span> {{ event.creatorCharacterName }}</p>
+              }
+              @if (event.starterCharacterName) {
+                <p class="event-card__actor"><span class="event-card__actor-label">Event Starter:</span> {{ event.starterCharacterName }}</p>
+              }
             </div>
             <div class="queue-card__meta">
               <span>{{ event.participantCount }} participants</span>
               <span>{{ event.requestedSlots }} slots</span>
             </div>
-            <button
-              type="button"
-              class="card-collapse-toggle card-collapse-toggle--right"
-              [class.collapsed]="isQueueCollapsed(event.id)"
-              (click)="toggleQueueCollapsed(event.id)"
-              [attr.aria-expanded]="!isQueueCollapsed(event.id)"
-              [attr.aria-label]="isQueueCollapsed(event.id) ? 'Expand event' : 'Collapse event'">
-              <span class="card-collapse-toggle__chevron">▾</span>
-            </button>
           </div>
 
-          @if (!isQueueCollapsed(event.id)) {
-          <ul class="job-tags">
-            @for (job of event.jobs; track job.id) {
-              <li>
-                {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
-                <span>{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
-              </li>
-            }
-          </ul>
+          @if (event.jobs.length > 0) {
+            <div class="jobs-needed-row">
+              <span class="jobs-needed-row__label">Jobs Needed:</span>
+              <ul class="job-tags jobs-needed-row__tags">
+                @for (job of event.jobs; track job.id) {
+                  <li>
+                    {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                    <span>{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
 
           @if (event.currentParticipation) {
             <div class="event-action-bar">
@@ -302,29 +324,6 @@
             </div>
           } @else {
             <div class="event-action-grid">
-              @if (canManageLinkshell(event.linkshellId)) {
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  [disabled]="activity.busyEventId() === event.id"
-                  (click)="activity.startEvent(event.id)">
-                  {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
-                </button>
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  [disabled]="activity.busyEventId() === event.id"
-                  (click)="openEditEventForm(event)">
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  [disabled]="activity.busyEventId() === event.id"
-                  (click)="confirmCancelEvent(event.id, event.name)">
-                  Cancel
-                </button>
-              }
               @if (event.jobs.length === 0) {
                 <div class="ad-hoc-signup">
                   <p class="ad-hoc-signup__hint">
@@ -380,13 +379,37 @@
                     class="action-button"
                     [disabled]="activity.busyEventId() === event.id"
                     (click)="activity.signUpForEvent(event.id, job.id)">
-                    Join {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
+                    Join as: {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
                   </button>
                 }
               }
+              @if (canManageLinkshell(event.linkshellId)) {
+                <div class="event-action-grid__manage">
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="activity.startEvent(event.id)">
+                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="openEditEventForm(event)">
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="confirmCancelEvent(event.id, event.name)">
+                    Cancel
+                  </button>
+                </div>
+              }
             </div>
           }
-          } <!-- /queue card body collapsed -->
         </article>
       }
     </div>

@@ -171,7 +171,18 @@
               </label>
               <label>
                 <span>Type</span>
-                <input type="text" name="itemType" [(ngModel)]="itemType" placeholder="Consumable, Gear, ..." />
+                <select name="itemTypeSelection"
+                        [ngModel]="itemTypeSelection"
+                        (ngModelChange)="onItemTypeSelectionChange($event)">
+                  <option value="">Select type...</option>
+                  @for (option of itemTypeOptions; track option) {
+                    <option [value]="option">{{ option }}</option>
+                  }
+                </select>
+                @if (itemTypeSelection === 'Other') {
+                  <input type="text" name="itemType" [(ngModel)]="itemType"
+                         placeholder="Specify type" maxlength="128" />
+                }
               </label>
               <label>
                 <span>Quantity</span>

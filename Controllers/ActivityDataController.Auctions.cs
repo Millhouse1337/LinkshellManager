@@ -405,6 +405,49 @@ public sealed partial class ActivityDataController
         return Ok(new ActivityAuctionBidDto(bid.Id, bid.CharacterName, bid.BidAmount, bid.CreatedAt));
     }
 
+    // Stops bidding without archiving the run. Pulls the EndTime forward to
+    // "now" so the auction transitions from Live → Ended. The creator then
+    // archives via the separate /close endpoint, which is where the delivery
+    // confirmation + inventory drawdown live.
+    [HttpPost("auctions/{auctionId:int}/end")]
+    public async Task<IActionResult> EndAuctionAsync(int auctionId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to end auctions." });
+        }
+
+        var auction = await _dbContext.Auctions
+            .Include(item => item.AuctionItems)
+            .FirstOrDefaultAsync(item => item.Id == auctionId, cancellationToken);
+
+        if (auction is null)
+        {
+            return NotFound(new { error = "Auction not found." });
+        }
+
+        if (!IsAuctionCreator(appUser.Id, auction))
+        {
+            return Forbid();
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        if (!IsAuctionLive(auction, nowUtc))
+        {
+            return BadRequest(new { error = "Only a live auction can be ended early." });
+        }
+
+        auction.EndTime = nowUtc;
+        foreach (var item in auction.AuctionItems)
+        {
+            item.EndTime = nowUtc;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     [HttpPost("auctions/{auctionId:int}/close")]
     public async Task<IActionResult> CloseAuctionAsync(
         int auctionId,
@@ -432,14 +475,9 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        if (!HasAuctionStarted(auction, DateTime.UtcNow))
-        {
-            return BadRequest(new { error = "An auction must be started before it can be closed." });
-        }
-
         if (!HasAuctionEnded(auction, DateTime.UtcNow))
         {
-            return BadRequest(new { error = "An auction can only be closed after its timer has run out." });
+            return BadRequest(new { error = "End the auction before closing it." });
         }
 
         var deliveredIds = (request?.DeliveredItemIds ?? Array.Empty<int>()).ToHashSet();

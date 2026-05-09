@@ -18,6 +18,10 @@
   padding: 14px;
 }
 
+.event-card__hero {
+  position: relative;
+}
+
 .event-card--live {
   background: var(--surface-2);
   border-color: var(--accent);
@@ -45,6 +49,12 @@
   flex: 0 0 auto;
 }
 
+.card-collapse-toggle__chevron {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
 .card-collapse-toggle--right {
   margin-left: auto;
   align-self: flex-start;
@@ -59,12 +69,13 @@
   color: var(--fg);
 }
 
-.card-collapse-toggle.collapsed {
-  transform: rotate(-90deg);
+// Expanded cards rotate the chevron up (^); collapsed cards keep it pointing
+// down (V) so the default state invites the user to expand.
+.card-collapse-toggle:not(.collapsed) {
+  transform: rotate(180deg);
 }
 
-.event-card--collapsed,
-.queue-card--collapsed {
+.event-card--collapsed {
   // Tighter padding when collapsed since only the header is visible.
   padding-bottom: 10px;
 }
@@ -94,6 +105,20 @@
   align-items: center;
 }
 
+// Creator / Starter byline rendered under the event title in both live and
+// queue cards. Keep it compact so it doesn't compete with the title.
+.event-card__actor {
+  font-size: 12px;
+  color: var(--fg-3);
+  margin: 2px 0 0;
+}
+
+.event-card__actor-label {
+  color: var(--fg-2);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
 .event-card__meta,
 .queue-card__meta,
 .compact-list__meta {
@@ -103,8 +128,19 @@
   font-size: 12px;
 }
 
+// Edit Live Event button rides at the bottom of the live card's meta column.
+// Without justify-self: end the grid would stretch the button across the full
+// column; the small top margin separates it from the metric stack above.
+.event-card__edit {
+  justify-self: end;
+  margin-top: 6px;
+}
+
 .event-card__global-timer {
-  flex: 1 1 auto;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -112,6 +148,7 @@
   gap: 4px;
   text-align: center;
   color: #ffffff;
+  pointer-events: none;
 }
 
 .event-card__global-timer-label {

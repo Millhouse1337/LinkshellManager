@@ -44,12 +44,28 @@ public partial class AuctionController : Controller
             selectedLinkshellId = linkshells.FirstOrDefault()?.Id ?? 0;
         }
 
+        var sourceItems = selectedLinkshellId > 0
+            ? await _context.Items
+                .AsNoTracking()
+                .Where(item => item.LinkshellId == selectedLinkshellId)
+                .OrderBy(item => item.ItemName)
+                .Select(item => new AuctionSourceItemOption
+                {
+                    Id = item.Id,
+                    ItemName = item.ItemName,
+                    ItemType = item.ItemType,
+                    Quantity = item.Quantity
+                })
+                .ToListAsync()
+            : new List<AuctionSourceItemOption>();
+
         return new AuctionViewModel
         {
             LinkshellId = selectedLinkshellId,
             Linkshells = linkshells,
             Auction = source?.Auction ?? new Auction(),
-            AuctionItems = source?.AuctionItems?.Count > 0 ? source.AuctionItems : new List<AuctionItem> { new() }
+            AuctionItems = source?.AuctionItems?.Count > 0 ? source.AuctionItems : new List<AuctionItem> { new() },
+            SourceItems = sourceItems
         };
     }
 
@@ -168,6 +184,12 @@ public partial class AuctionController : Controller
             ModelState.AddModelError("Auction.EndTime", "End time must be after the start time.");
         }
 
+        // Build a fast set of inventory ids posted on the rebuilt model so
+        // we can reject SourceItemIds that don't belong to this linkshell —
+        // the dropdown only offers in-linkshell items, but the form is just
+        // HTML and a bad actor could spoof a different id in the POST.
+        var allowedSourceIds = model.SourceItems.Select(option => option.Id).ToHashSet();
+
         for (var index = 0; index < model.AuctionItems.Count; index++)
         {
             var item = model.AuctionItems[index];
@@ -179,6 +201,11 @@ public partial class AuctionController : Controller
             if (!item.StartingBidDkp.HasValue || item.StartingBidDkp < 0)
             {
                 ModelState.AddModelError($"AuctionItems[{index}].StartingBidDkp", "Starting bid must be 0 or higher.");
+            }
+
+            if (item.SourceItemId.HasValue && !allowedSourceIds.Contains(item.SourceItemId.Value))
+            {
+                ModelState.AddModelError($"AuctionItems[{index}].SourceItemId", "Selected inventory item is not available for this linkshell.");
             }
         }
     }
