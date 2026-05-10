@@ -16,6 +16,23 @@ public class DashboardController : Controller
 
     private static readonly string[] HnmPaletteClasses = { "a", "b", "c", "d", "e", "f" };
     private const int HnmClaimsWindowDays = 30;
+
+    // True HNMs only — used to scope the Dashboard "HNM Claims" donut so
+    // it isn't dominated by Sky farm pops, ground NMs, HENMs, or Sea NMs
+    // that also flow through the Tods table with Claim=true.
+    private static readonly HashSet<string> HnmNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Fafnir",
+        "Nidhogg",
+        "Behemoth",
+        "King Behemoth",
+        "Adamantoise",
+        "Aspidochelone",
+        "Tiamat",
+        "Jormungand",
+        "Vrtra",
+        "Bahamut",
+    };
     private static readonly TimeSpan SoonThreshold = TimeSpan.FromHours(3);
     private static readonly TimeSpan DefaultSpawnWindow = TimeSpan.FromHours(3);
 
@@ -211,8 +228,9 @@ public class DashboardController : Controller
     {
         var cutoff = DateTime.UtcNow - TimeSpan.FromDays(HnmClaimsWindowDays);
         var claims = tods
-            .Where(tod => tod.Claim)
+            .Where(tod => tod.Claim == true)
             .Where(tod => !string.IsNullOrWhiteSpace(tod.MonsterName))
+            .Where(tod => HnmNames.Contains(tod.MonsterName!.Trim()))
             .Where(tod => (tod.Time ?? tod.TimeStamp ?? DateTime.MinValue) >= cutoff)
             .GroupBy(tod => tod.MonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(group => new { Monster = group.Key, Count = group.Count() })
@@ -259,14 +277,28 @@ public class DashboardController : Controller
         foreach (var tod in tods.Take(40))
         {
             var when = tod.Time ?? tod.TimeStamp ?? DateTime.UtcNow;
-            var title = tod.Claim
-                ? $"{tod.MonsterName} claimed"
-                : $"{tod.MonsterName} defeated — No Claim";
+            string title;
+            string dotClass;
+            if (tod.Claim == true)
+            {
+                title = $"{tod.MonsterName} claimed";
+                dotClass = "claim";
+            }
+            else if (tod.Claim == false)
+            {
+                title = $"{tod.MonsterName} defeated — No Claim";
+                dotClass = "kill";
+            }
+            else
+            {
+                title = $"{tod.MonsterName} defeated — Not Specified";
+                dotClass = "kill";
+            }
             items.Add(new RecentActivityEntry
             {
                 When = when,
                 RelativeTime = FormatRelative(when),
-                DotClass = tod.Claim ? "claim" : "kill",
+                DotClass = dotClass,
                 Title = title,
                 Subtitle = tod.TodLootDetails.Count > 0 ? $"{tod.TodLootDetails.Count} loot" : null
             });

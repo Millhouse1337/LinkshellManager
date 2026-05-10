@@ -185,14 +185,20 @@ public sealed partial class ActivityDataController
             return 22d;
         }
 
-        if (SupportedTodCooldowns.Contains(cooldown.Trim()))
+        var trimmed = cooldown.Trim();
+
+        if (SupportedTodCooldowns.Contains(trimmed))
         {
-            return string.Equals(cooldown.Trim(), TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase)
-                ? 72d
-                : 22d;
+            if (string.Equals(trimmed, TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase))
+                return 72d;
+            if (string.Equals(trimmed, TodManagerViewModel.TwoHourCooldown, StringComparison.OrdinalIgnoreCase))
+                return 2d;
+            if (string.Equals(trimmed, TodManagerViewModel.FiveMinuteCooldown, StringComparison.OrdinalIgnoreCase))
+                return 5d / 60d;
+            return 22d;
         }
 
-        var match = System.Text.RegularExpressions.Regex.Match(cooldown.Trim(), @"^\s*(\d+(?:\.\d+)?)\s*(?:Hours?|Hr|H)?\s*$",
+        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"^\s*(\d+(?:\.\d+)?)\s*(?:Hours?|Hr|H)?\s*$",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hours) && hours > 0)
         {
@@ -231,6 +237,10 @@ public sealed partial class ActivityDataController
         if (HnmConfig.LongWindowHnms.Contains(trimmed))
         {
             return TodManagerViewModel.SeventyTwoHourCooldown;
+        }
+        if (HnmConfig.SkyGods.Contains(trimmed) || HnmConfig.SeaNms.Contains(trimmed))
+        {
+            return TodManagerViewModel.FiveMinuteCooldown;
         }
         if (HnmConfig.SkyFarmNms.Contains(trimmed))
         {

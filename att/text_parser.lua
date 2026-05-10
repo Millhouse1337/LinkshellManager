@@ -40,11 +40,17 @@ function M.handle(state, deps, e)
     -- Match a defeat line against any monster name. Accepts either a
     -- pairs-iterated table (keys = names, like HNM_WINDOW_COUNTS) or a
     -- list-iterated table (values = names, like config.customMonsters).
+    -- Two flavors of the same line exist: generic mobs ("the Earth
+    -- Elemental") and named NMs ("Tiamat"). Both variants are matched
+    -- so HNMs like Tiamat / Fafnir / Behemoth (no "the") capture too.
     local function defeat_pattern_hits(monsterName)
         local esc = monsterName:gsub('(%W)', '%%%1')
         return clean:find('defeats the ' .. esc .. '%.', 1)
+            or clean:find('defeats ' .. esc .. '%.', 1)
             or clean:find('[Tt]he ' .. esc .. ' was defeated by', 1)
             or clean:find('[Tt]he ' .. esc .. ' falls to the ground', 1)
+            or clean:find('%f[%w]' .. esc .. ' was defeated by', 1)
+            or clean:find('%f[%w]' .. esc .. ' falls to the ground', 1)
     end
 
     local function find_defeat_match(tbl)
@@ -66,7 +72,22 @@ function M.handle(state, deps, e)
     local hitName = find_defeat_match(constants.HNM_WINDOW_COUNTS)
                  or find_defeat_match(constants.TESTING_MONSTERS)
                  or find_defeat_match(constants.SKY_FARM_NMS)
+                 or find_defeat_match(constants.GROUND_NMS)
+                 or find_defeat_match(constants.HENMS)
+                 or find_defeat_match(constants.SEA_NMS_PARSER_DICT)
                  or find_defeat_match_list(config.customMonsters)
+
+    -- Disambiguate names that share a chat label across multiple mob IDs
+    -- (the three Ix'aern variants in Sea). The parser matched the bare
+    -- name from chat; resolve to the variant by reading the dying mob's
+    -- server ID out of the in-zone entity table. Falls back to the bare
+    -- name if the entity API isn't available or the mob's already gone.
+    if hitName and constants.AMBIGUOUS_NAMES and constants.AMBIGUOUS_NAMES[hitName] then
+        local mobId = helpers.find_mob_id_by_name(hitName)
+        if mobId and constants.MOB_ID_OVERRIDES and constants.MOB_ID_OVERRIDES[mobId] then
+            hitName = constants.MOB_ID_OVERRIDES[mobId]
+        end
+    end
 
     -- Diagnostic: when /att tod debug is on, print every chat line that
     -- mentions "defeats" / "defeated" / "falls" so we can see what mode &
@@ -85,9 +106,16 @@ function M.handle(state, deps, e)
     -- can't be both -- defeat matches return early below; loot matches
     -- append and return here without falling through.
     if not hitName then
+        -- Two variants again: "on the Earth Elemental." vs "on Tiamat.".
+        -- Anchors intentionally omitted: chat-timestamp addons (and any
+        -- other text_in modifier) prepend bytes to e.message_modified,
+        -- which would defeat ^/$ anchors and silently drop every loot
+        -- line. The "You find ... on <name>." substring is specific
+        -- enough that random chat won't false-match.
         local function loot_capture_for(monsterName)
             local esc = monsterName:gsub('(%W)', '%%%1')
-            return clean:match('^You find ([^%.]+) on the ' .. esc .. '%.$')
+            return clean:match('You find ([^%.]+) on the ' .. esc .. '%.')
+                or clean:match('You find ([^%.]+) on ' .. esc .. '%.')
         end
 
         local function find_loot_match(tbl)
@@ -116,7 +144,26 @@ function M.handle(state, deps, e)
             lootMonster, lootItem = find_loot_match(constants.SKY_FARM_NMS)
         end
         if not lootMonster then
+            lootMonster, lootItem = find_loot_match(constants.GROUND_NMS)
+        end
+        if not lootMonster then
+            lootMonster, lootItem = find_loot_match(constants.HENMS)
+        end
+        if not lootMonster then
+            lootMonster, lootItem = find_loot_match(constants.SEA_NMS_PARSER_DICT)
+        end
+        if not lootMonster then
             lootMonster, lootItem = find_loot_match_list(config.customMonsters)
+        end
+
+        -- Same disambiguation pass as the defeat path: if the matched name
+        -- is ambiguous (Ix'aern), resolve to the variant via mob ID so the
+        -- loot drop attaches to the correctly-named capture row.
+        if lootMonster and constants.AMBIGUOUS_NAMES and constants.AMBIGUOUS_NAMES[lootMonster] then
+            local mobId = helpers.find_mob_id_by_name(lootMonster)
+            if mobId and constants.MOB_ID_OVERRIDES and constants.MOB_ID_OVERRIDES[mobId] then
+                lootMonster = constants.MOB_ID_OVERRIDES[mobId]
+            end
         end
 
         if state.todCaptureDebug and clean:find('You find') then
@@ -163,12 +210,14 @@ function M.handle(state, deps, e)
         return
     end
 
-    -- The verbatim chat line, trimmed only of trailing whitespace. We rely
-    -- on Captured at (wall-clock at callback time, second precision) for
-    -- the actual ToD value, since FFXI's optional [HH:MM:SS] chat-prefix
-    -- requires a client setting most users don't have on and would just
-    -- duplicate Captured at anyway.
-    local stripped = clean:gsub('%s+$', '')
+    -- The chat line with stray control bytes (color/auto-translate residues
+    -- that survived clean_str) replaced with a single space, so the message
+    -- the server receives — and parses for the killer's name — is the same
+    -- shape as what the user sees in the ToD Capturing panel. Captured at
+    -- (wall-clock at callback time, second precision) carries the actual
+    -- ToD value, since FFXI's optional [HH:MM:SS] chat-prefix requires a
+    -- client setting most users don't have on.
+    local stripped = clean:gsub('[%z\1-\31]', ' '):gsub('%s+', ' '):gsub('%s+$', '')
 
     table.insert(state.todCaptures, 1, {
         monster      = hitName,

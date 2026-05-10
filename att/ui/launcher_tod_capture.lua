@@ -47,7 +47,7 @@ function M.draw(state, callbacks)
         -- ring-buffer rows can't push CSV Export / Close off the bottom
         -- of the launcher. Content scrolls inside this region when it
         -- exceeds 100px (e.g. all 3 ring slots populated).
-        imgui.BeginChild('todCaptures', { 0, 100 }, false)
+        imgui.BeginChild('todCaptures', { 0, 160 }, false)
         local captures = state.todCaptures or {}
         -- Count visible (non-hidden) captures up front so the empty hint
         -- only fires when the user-visible list is genuinely empty.
@@ -76,25 +76,57 @@ function M.draw(state, callbacks)
                     imgui.Text('    ' .. message)
                     imgui.Text('    Captured at: ' .. capturedAt)
 
-                    -- Post ToD button + state. Three states, mutually exclusive:
-                    --   posted   -> green "Posted ✓" + repop hint
-                    --   posting  -> disabled "Posting..."
-                    --   default  -> "Post ToD" button, plus optional error line
-                    if cap.posted then
-                        imgui.TextColored({ 0.4, 1.0, 0.4, 1.0 }, '    Posted to web!')
-                        if cap.posted.repopFormatted then
-                            imgui.Text('    Repop: ' .. tostring(cap.posted.repopFormatted))
-                        end
-                    elseif cap.posting then
-                        imgui.TextDisabled('    Posting...')
-                    else
+                    -- Post / claim-status UI. The buttons are gated on the
+                    -- combined posted + posting + claim state:
+                    --   posting           -> disabled "Posting..."
+                    --   not posted        -> show both Post buttons
+                    --   posted, claim nil -> show "Posted (Not Specified)"
+                    --                        AND the buttons (so the user can
+                    --                        settle the status; pressing one
+                    --                        triggers an update call rather
+                    --                        than re-posting)
+                    --   posted, claim set -> show "Posted (Claimed/Unclaimed)"
+                    --                        no buttons
+                    local function draw_claim_buttons()
                         imgui.Indent(20)
-                        if imgui.Button('Post ToD##postTod' .. tostring(i), { 90, 0 }) then
+                        if imgui.Button('Post (Claimed)##postTodClaim' .. tostring(i), { 150, 0 }) then
                             if callbacks.on_post_tod then
-                                callbacks.on_post_tod(i)
+                                callbacks.on_post_tod(i, true)
+                            end
+                        end
+                        imgui.SameLine()
+                        if imgui.Button('Post (Unclaimed)##postTodNoClaim' .. tostring(i), { 170, 0 }) then
+                            if callbacks.on_post_tod then
+                                callbacks.on_post_tod(i, false)
                             end
                         end
                         imgui.Unindent(20)
+                    end
+
+                    if cap.posting then
+                        imgui.TextDisabled('    Posting...')
+                    elseif cap.posted then
+                        local claimLabel
+                        if cap.posted.claim == true then
+                            claimLabel = ' (Claimed)'
+                        elseif cap.posted.claim == false then
+                            claimLabel = ' (Unclaimed)'
+                        else
+                            claimLabel = ' (Not Specified)'
+                        end
+                        imgui.TextColored({ 0.4, 1.0, 0.4, 1.0 }, '    Posted to web!' .. claimLabel)
+                        if cap.posted.repopFormatted then
+                            imgui.Text('    Repop: ' .. tostring(cap.posted.repopFormatted))
+                        end
+                        if cap.posted.claim == nil then
+                            draw_claim_buttons()
+                        end
+                        if cap.postError then
+                            imgui.TextColored({ 1.0, 0.5, 0.5, 1.0 },
+                                '    Update failed: ' .. tostring(cap.postError))
+                        end
+                    else
+                        draw_claim_buttons()
                         if cap.postError then
                             imgui.TextColored({ 1.0, 0.5, 0.5, 1.0 },
                                 '    Post failed: ' .. tostring(cap.postError))

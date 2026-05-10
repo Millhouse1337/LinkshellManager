@@ -309,7 +309,9 @@ export interface ActivityTodEntry {
   monsterName: string;
   dayNumber?: number | null;
   time?: string | null;
-  claim: boolean;
+  // Tri-state: true = Claimed, false = Unclaimed, null = Not Specified.
+  // Null is the auto-posted state from the addon's loot-pool flow.
+  claim: boolean | null;
   cooldown?: string | null;
   repopTime?: string | null;
   interval?: string | null;

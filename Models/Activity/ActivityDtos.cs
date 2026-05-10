@@ -440,7 +440,8 @@ public sealed record ActivityTodDto(
     string MonsterName,
     int? DayNumber,
     DateTime? Time,
-    bool Claim,
+    // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified.
+    bool? Claim,
     string? Cooldown,
     DateTime? RepopTime,
     string? Interval,
@@ -529,7 +530,8 @@ public sealed record ActivityCreateTodRequest(
     int LinkshellId,
     string? MonsterName,
     int? DayNumber,
-    bool Claim,
+    // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified.
+    bool? Claim,
     string? TimeLocal,
     string? Cooldown,
     string? Interval,
@@ -540,7 +542,8 @@ public sealed record ActivityCreateTodRequest(
 public sealed record ActivityUpdateTodRequest(
     string? MonsterName,
     int? DayNumber,
-    bool Claim,
+    // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified.
+    bool? Claim,
     string? TimeLocal,
     string? Cooldown,
     string? Interval,

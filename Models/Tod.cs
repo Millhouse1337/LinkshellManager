@@ -20,7 +20,12 @@ public class Tod
     [DataType(DataType.DateTime)]
     public DateTime? Time { get; set; }
 
-    public bool Claim { get; set; }
+    // Tri-state: true = Claimed (linkshell took the kill), false = Unclaimed
+    // (someone else's), null = Not Specified. Null is the auto-posted state
+    // for ToDs created from the addon's loot-pool flow before the user picks
+    // a claim status; the addon UI keeps the Claimed/Unclaimed buttons live
+    // on those rows so the linkshell can settle the status after the fact.
+    public bool? Claim { get; set; }
 
     public string? Cooldown { get; set; }
 

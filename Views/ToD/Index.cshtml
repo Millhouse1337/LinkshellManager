@@ -54,8 +54,15 @@ else
                     </thead>
                     <tbody>
                         @{
+                            // Group by monster, then order the groups by the
+                            // latest entry's repop time ascending so the mob
+                            // closest to popping (or already Ready — past
+                            // repop time) sits at the top of the list. Within
+                            // each group the ordering of TodItems (Time desc)
+                            // is preserved so .First() is still "latest kill".
                             var todGroups = Model.TodItems
-                                .GroupBy(t => (t.MonsterName ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase);
+                                .GroupBy(t => (t.MonsterName ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(g => g.First().RepopTimeUtc ?? DateTime.MaxValue);
                         }
                         @foreach (var group in todGroups)
                         {

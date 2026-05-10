@@ -16,11 +16,18 @@ local function zid_in_credit(eventName, zid)
     -- DEBUG
     local set = resources.attCreditZoneIds[eventName]
     -- print(string.format('[att-debug] Check: Ev="%s" ZID=%s InSet=%s', eventName, tostring(zid), tostring(set and set[zid])))
-    
+
     if not eventName then return false end
     if eventName == 'Global Search' then return true end
 
+    -- Try the name as-is, then again with the launcher's "D<n>" day-suffix
+    -- stripped. Lets day-tagged HNM events ("Fafnir/Nidhogg D234") fall
+    -- back to the canonical credit zone keys.
+    local canon = constants.canonical_event_name(eventName)
     local set = resources.attCreditZoneIds[eventName]
+    if not (set and next(set) ~= nil) and canon ~= eventName then
+        set = resources.attCreditZoneIds[canon]
+    end
     if set and next(set) ~= nil then
         return set[zid] == true
     end
@@ -28,6 +35,8 @@ local function zid_in_credit(eventName, zid)
     -- Fallback: compare normalized names
     local zname = resources.attZoneList[zid] or 'UnknownZone'
     local list  = resources.attCreditNames[eventName]
+        or (canon ~= eventName and resources.attCreditNames[canon])
+        or nil
     if not list then return false end
 
     local nz = helpers.norm(zname)

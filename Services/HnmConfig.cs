@@ -23,9 +23,8 @@ public static class HnmConfig
         "Aspidochelone"
     };
 
-    // Sky-farm NMs that share a 2-hour repop. Mirrors the addon's curated
-    // constants.SKY_FARM_NMS list. Used by GetDefaultTodCooldown so an
-    // addon-posted ToD for any of these picks up "2 Hour" automatically.
+    // Sky-farm NMs that share a 2-hour repop. Used by GetDefaultTodCooldown so
+    // an addon-posted ToD for any of these picks up "2 Hour" automatically.
     public static readonly HashSet<string> SkyFarmNms = new(StringComparer.OrdinalIgnoreCase)
     {
         "Despot",
@@ -36,6 +35,43 @@ public static class HnmConfig
         "Steam Cleaner",
         "Brigandish Blade",
         "Faust",
+    };
+
+    // The four Sky Gods + Kirin. Pop-only encounters with a 5-minute repop
+    // window from the moment they're defeated — distinct from the farm NM
+    // cycle. Used by GetDefaultTodCooldown so an addon-posted ToD for any of
+    // these picks up "5 Min" automatically.
+    public static readonly HashSet<string> SkyGods = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Seiryu",
+        "Suzaku",
+        "Byakko",
+        "Genbu",
+        "Kirin",
+    };
+
+    // CoP Sea NMs (Jailers, Ix'aern variants, Absolute Virtue). Pop-only
+    // encounters that share the Sky Gods' 5-minute cooldown — included here
+    // so addon-posted ToDs for any Sea NM default to "5 Min". Mirrors the
+    // names defined under constants.SEA_NMS_GROUPS in the addon.
+    public static readonly HashSet<string> SeaNms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Jailer of Temperance",
+        "Jailer of Fortitude",
+        "Jailer of Faith",
+        "Ix'aern (Monk)",
+        "Ix'aern (Dark Knight)",
+        "Ix'aern (Dragoon)",
+        // Bare chat-line name. Addon disambiguates to one of the variants
+        // above via mob ID, but if the entity table has already cleared by
+        // the time the parser runs, the bare name lands here and we still
+        // resolve the cooldown to 5 Min.
+        "Ix'aern",
+        "Jailer of Hope",
+        "Jailer of Justice",
+        "Jailer of Prudence",
+        "Jailer of Love",
+        "Absolute Virtue",
     };
 
     // Testing presets — temporary in-zone monsters used by QA to validate the

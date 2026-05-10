@@ -647,6 +647,7 @@ public sealed partial class AddonApiController
         _dbContext.TodLootDetails.Add(detail);
         await ActivityDataController.AdjustTodLootDkpAsync(
             _dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
@@ -694,19 +695,29 @@ public sealed partial class AddonApiController
         var interval = ActivityDataController.GetDefaultTodInterval(monsterName);
         var repopTimeUtc = defeatedAtUtc.AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown));
 
+        // Claim arrives verbatim on the request — tri-state:
+        //   true  -> "Post (Claimed)" pressed in the ToD Capturing panel
+        //   false -> "Post (Unclaimed)"
+        //   null  -> ToD was auto-posted from the loot-pool flow before the
+        //            user picked; the addon UI keeps the buttons live so they
+        //            can settle it via an update call afterward.
+        // No server-side guesswork — chat-line parsing and active-event
+        // heuristics produced too many false negatives on real linkshells.
+        var claimed = request.Claim;
+
         var tod = new Tod
         {
             LinkshellId = token.LinkshellId,
             MonsterName = monsterName,
             DayNumber = null,
-            Claim = false,
+            Claim = claimed,
             Time = defeatedAtUtc,
             Cooldown = cooldown,
             RepopTime = repopTimeUtc,
             Interval = interval,
             TimeStamp = nowUtc,
             TotalTods = 1,
-            TotalClaims = 0,
+            TotalClaims = claimed == true ? 1 : 0,
             ImagePath = null
         };
 
@@ -720,7 +731,38 @@ public sealed partial class AddonApiController
             defeatedAtUtc = tod.Time,
             repopTimeUtc = tod.RepopTime,
             cooldown = tod.Cooldown,
-            interval = tod.Interval
+            interval = tod.Interval,
+            claim = tod.Claim
         });
+    }
+
+    // Updates the claim status on an existing addon-posted ToD. The addon
+    // UI calls this after the loot-pool flow auto-creates a ToD with claim
+    // null (Not Specified) so the user can settle Claimed / Unclaimed
+    // afterward without recreating the row.
+    [HttpPost("tod/{todId:int}/claim")]
+    [AddonApiAuth]
+    public async Task<IActionResult> UpdateTodClaimAsync(
+        int todId,
+        [FromBody] AddonUpdateTodClaimRequest request,
+        CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+
+        var tod = await _dbContext.Tods.FirstOrDefaultAsync(t => t.Id == todId, cancellationToken);
+        if (tod is null)
+        {
+            return NotFound(new { error = "Tod not found." });
+        }
+        if (tod.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+
+        tod.Claim = request.Claim;
+        tod.TotalClaims = request.Claim == true ? 1 : 0;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { todId = tod.Id, claim = tod.Claim });
     }
 }

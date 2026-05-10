@@ -230,7 +230,12 @@ public sealed partial class AddonApiController : ControllerBase
     public sealed record AddonPostTodRequest(
         string MonsterName,
         DateTime? DefeatedAtUtc,
-        string? CapturedMessage);
+        string? CapturedMessage,
+        // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified
+        // (auto-posted from the loot-pool flow before the user picked).
+        bool? Claim);
+
+    public sealed record AddonUpdateTodClaimRequest(bool? Claim);
 
     public sealed record AddonPostLootRequest(
         string ItemName,

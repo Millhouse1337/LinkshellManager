@@ -4,6 +4,7 @@ namespace LinkshellManagerDiscordApp.ViewModels;
 
 public class TodManagerViewModel
 {
+    public const string FiveMinuteCooldown = "5 Min";
     public const string TwoHourCooldown = "2 Hour";
     public const string TwentyTwoHourCooldown = "22 Hour";
     public const string SeventyTwoHourCooldown = "72 Hour";
@@ -27,6 +28,7 @@ public class TodManagerViewModel
 
     public static IReadOnlyList<string> SupportedCooldowns { get; } = new[]
     {
+        FiveMinuteCooldown,
         TwoHourCooldown,
         TwentyTwoHourCooldown,
         SeventyTwoHourCooldown
@@ -79,7 +81,7 @@ public class TodTableRowViewModel
 
     public DateTime? RepopTimeUtc { get; init; }
 
-    public bool Claim { get; init; }
+    public bool? Claim { get; init; }
 
     public int LootCount { get; init; }
 }

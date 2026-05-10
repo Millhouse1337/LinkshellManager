@@ -72,8 +72,13 @@ end
 -- Reads only resources + state; uses ls_search_param above.
 function M.queue_attend_launch(state, deps, eventName)
     local resources = deps.resources
-    local area = resources.attCreditNames[eventName] and resources.attCreditNames[eventName][1]
-    if resources.attSearchArea[eventName] then area = resources.attSearchArea[eventName] end
+    local constants = deps.constants
+    -- Strip the launcher's "D<n>" day-suffix before resource lookups so a
+    -- day-tagged HNM event still finds its canonical credit / search area.
+    local lookupName = (constants and constants.canonical_event_name)
+        and constants.canonical_event_name(eventName) or eventName
+    local area = resources.attCreditNames[lookupName] and resources.attCreditNames[lookupName][1]
+    if resources.attSearchArea[lookupName] then area = resources.attSearchArea[lookupName] end
 
     if not area or area == '' then
         print(string.format('[att] No search area found for "%s".', eventName))

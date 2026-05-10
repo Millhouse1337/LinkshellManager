@@ -21,6 +21,15 @@ function M.draw(state, callbacks)
             ['King Behemoth']  = 'Behemoth/King Behemoth',
             ['Aspidochelone']  = 'Adamantoise/Aspidochelone',
         }
+        -- HNMs whose linkshells traditionally track a "day" counter for
+        -- each spawn cycle. Renders an inline Day input next to the
+        -- preset button; non-empty values become a "D<n>" suffix on the
+        -- event name when the preset is clicked.
+        local DAY_TRACKED_HNMS = {
+            ['Nidhogg']       = true,
+            ['King Behemoth'] = true,
+            ['Aspidochelone'] = true,
+        }
         -- Pull DKP rates from persisted settings (gear icon ->
         -- Settings popup). on_preset_button picks the right value
         -- (per-window for HNM-style categories, per-hour for
@@ -44,9 +53,36 @@ function M.draw(state, callbacks)
                         if cat == 'HNMS' and HNM_DISPLAY_NAMES[ev] then
                             display = HNM_DISPLAY_NAMES[ev]
                         end
+
+                        -- Render the inline Day input first (when applicable)
+                        -- so the cursor position when we draw the button is
+                        -- already past the input + label.
+                        local dayValue = nil
+                        if cat == 'HNMS' and DAY_TRACKED_HNMS[ev] then
+                            state.eventPresetDayInputs = state.eventPresetDayInputs or {}
+                            local dayPtr = { state.eventPresetDayInputs[ev] or '' }
+                            imgui.Text('Day:')
+                            imgui.SameLine()
+                            imgui.PushItemWidth(50)
+                            if imgui.InputText('##presetDay_' .. ev, dayPtr, 8) then
+                                state.eventPresetDayInputs[ev] = dayPtr[1] or ''
+                            end
+                            imgui.PopItemWidth()
+                            imgui.SameLine()
+                            dayValue = state.eventPresetDayInputs[ev]
+                        end
+
                         if imgui.Button(string.format('%s##btn_%s', display, ev)) then
+                            -- Day is forwarded as a separate arg so the
+                            -- callback can apply the "D<n>" suffix to the
+                            -- server-side event name only — local lookups
+                            -- (credit zones, search areas, window count)
+                            -- still resolve against the canonical display
+                            -- name like "Fafnir/Nidhogg".
+                            local trimmed = dayValue and dayValue:gsub('%s', '') or ''
+                            local dayArg = (trimmed ~= '') and trimmed or nil
                             if callbacks.on_preset_button then
-                                callbacks.on_preset_button(display, cat, presetDkpOpts())
+                                callbacks.on_preset_button(display, cat, presetDkpOpts(), dayArg)
                             end
                         end
                     end

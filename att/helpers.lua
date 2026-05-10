@@ -57,6 +57,47 @@ function helpers.sanitize_name(raw)
     return helpers.trim(raw)
 end
 
+-- Scans the in-zone entity table for an entity whose display name matches
+-- targetName (exact, case-sensitive — chat names are canonical) and returns
+-- its server ID. Used to disambiguate mobs that share a chat-line name but
+-- have unique server IDs (e.g. the three Ix'aern variants).
+--
+-- When multiple matches exist, prefer one with HP <= 0 / nil (just died);
+-- fall back to any alive match. Returns nil if nothing found or if the
+-- Ashita entity API isn't available on this client.
+function helpers.find_mob_id_by_name(targetName)
+    if type(targetName) ~= 'string' or targetName == '' then return nil end
+
+    local entMgr
+    pcall(function()
+        entMgr = AshitaCore:GetMemoryManager():GetEntity()
+    end)
+    if not entMgr then return nil end
+
+    local matchDead, matchAlive = nil, nil
+
+    -- FFXI's entity table is 0..2303; mobs typically live in 1024..1791.
+    -- Iteration is cheap so we scan the full range to avoid missing variant
+    -- placements on private servers.
+    for i = 0, 2303 do
+        local name, sid, hpp
+        pcall(function()
+            name = entMgr:GetName(i)
+            sid  = entMgr:GetServerId(i)
+            hpp  = entMgr:GetHPPercent(i)
+        end)
+        if name == targetName and sid and sid > 0 then
+            if not hpp or hpp == 0 then
+                matchDead = sid
+            elseif not matchAlive then
+                matchAlive = sid
+            end
+        end
+    end
+
+    return matchDead or matchAlive
+end
+
 function helpers.parse_time_string(timeStr)
     if not timeStr then return 0 end
     local m, s = timeStr:match('^(%d+):(%d+)$')

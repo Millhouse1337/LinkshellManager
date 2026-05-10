@@ -65,8 +65,9 @@ else
             <label>
                 <span>Claim</span>
                 <select asp-for="Tod.Claim" id="claim-select">
-                    <option value="true" selected="@(Model.Tod.Claim ? "selected" : null)">Yes</option>
-                    <option value="false" selected="@(!Model.Tod.Claim ? "selected" : null)">No</option>
+                    <option value="" selected="@(Model.Tod.Claim == null ? "selected" : null)">Not Specified</option>
+                    <option value="true" selected="@(Model.Tod.Claim == true ? "selected" : null)">Yes</option>
+                    <option value="false" selected="@(Model.Tod.Claim == false ? "selected" : null)">No</option>
                 </select>
             </label>
 
@@ -114,7 +115,7 @@ else
 
         <input asp-for="NoLoot" type="hidden" id="no-loot" />
 
-        <div id="loot-section" class="create-form__section @(Model.Tod.Claim && !Model.NoLoot ? "" : "d-none")">
+        <div id="loot-section" class="create-form__section @(Model.Tod.Claim == true && !Model.NoLoot ? "" : "d-none")">
             <div class="create-form__section-head">
                 <h3>Loot details</h3>
             </div>
@@ -156,7 +157,7 @@ else
         </div>
 
         <div id="loot-controls"
-             class="create-form__actions create-form__actions--split @(Model.Tod.Claim ? "" : "d-none")">
+             class="create-form__actions create-form__actions--split @(Model.Tod.Claim == true ? "" : "d-none")">
             <div style="display:flex;gap:6px;flex-wrap:wrap">
                 <button type="button" class="btn ghost sm" id="add-loot-row">+ Add loot</button>
                 <button type="button" class="btn ghost sm" id="remove-loot-row">Remove</button>
@@ -166,7 +167,7 @@ else
         </div>
 
         <div id="submit-only-row"
-             class="create-form__actions @(Model.Tod.Claim ? "d-none" : "")">
+             class="create-form__actions @(Model.Tod.Claim == true ? "d-none" : "")">
             <button type="submit" class="btn primary">Submit ToD</button>
         </div>
     </form>

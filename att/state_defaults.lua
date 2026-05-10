@@ -82,6 +82,21 @@ function M.create()
         },
         lastSyncSummary      = nil,   -- string shown in launcher after a sync attempt
         launcherCsvOnStart   = false, -- if true, Start & Post also writes the local CSV
+        -- Compact view toggle (header checkbox). When true, the launcher
+        -- hides everything except the Attendance, Loot Pool, and ToD
+        -- Capturing sections so the panel takes less screen real estate
+        -- during routine farm runs. False = full launcher with all panels.
+        launcherCompact      = false,
+
+        -- Per-monster day number inputs for the HNM Event Presets that
+        -- traditionally track a day-of-monster counter (Fafnir, Behemoth,
+        -- Adamantoise). Keys are the canonical resource name (Nidhogg,
+        -- King Behemoth, Aspidochelone — same keys the preset list uses);
+        -- values are the user's current input string. When the preset
+        -- button is clicked with a non-empty day value, the event name
+        -- carries a "D<n>" suffix end-to-end (queued / active list, ToD
+        -- record, Discord activity).
+        eventPresetDayInputs = {},
         lastScannedFor       = nil,   -- name of event the launcher last scanned for (avoids re-scanning the same selection)
 
         -- ToD Capture: ring buffer of recent HNM defeat lines plus dedup state.

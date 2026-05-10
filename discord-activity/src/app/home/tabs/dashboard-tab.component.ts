@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal }
 import { FormsModule } from '@angular/forms';
 import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
 import { formatAlts, formatElapsed, parseDate } from '../activity-home.helpers';
-import type { TabName } from '../activity-home.types';
+import { HNM_NAMES, type TabName } from '../activity-home.types';
 
 @Component({
   selector: 'app-dashboard-tab',
@@ -279,8 +279,13 @@ export class DashboardTabComponent {
   protected dashboardHnmWindow: '7d' | '30d' | 'all' = '30d';
 
   protected dashboardHnmClaims(): { monsterName: string; count: number; percent: number; colorClass: string }[] {
+    // Restrict the donut to true HNMs (Fafnir / Nidhogg / Behemoth / Tiamat
+    // / Bahamut / etc.) — Sky farm pops, ground NMs, HENMs, and Sea NMs are
+    // tracked elsewhere and would otherwise dominate the chart.
     const tods = (this.activity.overview()?.recentTods ?? [])
-      .filter(tod => tod.linkshellId === this.selectedDashboardLinkshellId() && tod.claim);
+      .filter(tod => tod.linkshellId === this.selectedDashboardLinkshellId()
+                  && tod.claim
+                  && HNM_NAMES.has((tod.monsterName ?? '').trim()));
 
     const cutoffMs = this.dashboardHnmWindow === 'all'
       ? 0
@@ -577,11 +582,21 @@ export class DashboardTabComponent {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(tod);
     }
-    return Array.from(groups.entries()).map(([key, entries]) => ({
+    const result = Array.from(groups.entries()).map(([key, entries]) => ({
       key,
       latest: entries[0],
       history: entries.slice(1, 10)
     }));
+    // Order the Tracked Windows list by next repop ascending so the mob
+    // closest to popping (or already Ready, since their repop time is in
+    // the past) sits at the top. ToDs without a repop time fall to the
+    // bottom rather than the top.
+    result.sort((a, b) => {
+      const aRepop = a.latest.repopTime ? new Date(a.latest.repopTime).getTime() : Number.POSITIVE_INFINITY;
+      const bRepop = b.latest.repopTime ? new Date(b.latest.repopTime).getTime() : Number.POSITIVE_INFINITY;
+      return aRepop - bRepop;
+    });
+    return result;
   }
 
   protected isTodGroupExpanded(key: string): boolean {

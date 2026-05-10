@@ -23,6 +23,7 @@ function M.register(state, deps)
     local chat       = deps.chat
     local utils      = deps.utils
     local config     = deps.config
+    local constants  = deps.constants
 
     -- /att
     ashita.events.register('command', 'att_command_cb', function(e)
@@ -288,9 +289,12 @@ function M.register(state, deps)
         end
 
         -- POPULATION / GATHER FLOW
-        -- 1. Determine Search Area
-        local area = resources.attCreditNames[state.pendingEventName] and resources.attCreditNames[state.pendingEventName][1]
-        if resources.attSearchArea[state.pendingEventName] then area = resources.attSearchArea[state.pendingEventName] end
+        -- 1. Determine Search Area. Strip the launcher's "D<n>" day-suffix
+        -- so a day-tagged HNM ("Fafnir/Nidhogg D234") still resolves to
+        -- the canonical credit / search-area record.
+        local lookupName = constants.canonical_event_name(state.pendingEventName)
+        local area = resources.attCreditNames[lookupName] and resources.attCreditNames[lookupName][1]
+        if resources.attSearchArea[lookupName] then area = resources.attSearchArea[lookupName] end
 
         local doSearch = true
         if state.skipNextSearch then
@@ -428,9 +432,11 @@ function M.register(state, deps)
         end
 
         -- Refresh roster first
-        -- Determine area to scan
-        local area = resources.attCreditNames[eventName] and resources.attCreditNames[eventName][1]
-        area = resources.attSearchArea[eventName] or area
+        -- Determine area to scan. Strip the launcher's "D<n>" day-suffix
+        -- so a day-tagged HNM still finds its canonical search area.
+        local areaLookup = constants.canonical_event_name(eventName)
+        local area = resources.attCreditNames[areaLookup] and resources.attCreditNames[areaLookup][1]
+        area = resources.attSearchArea[areaLookup] or area
 
         if area and area ~= '' then
             -- Trigger search first

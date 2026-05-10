@@ -72,7 +72,7 @@ public sealed partial class ActivityDataController
             .FirstOrDefaultAsync(ls => ls.Id == request.LinkshellId, cancellationToken);
         var linkshellStructure = NormalizeLootStructure(linkshellEntity?.LootStructure ?? "Dkp");
 
-        var normalizedLootDetails = request.Claim && !request.NoLoot && linkshellStructure != "LootCouncil"
+        var normalizedLootDetails = request.Claim == true && !request.NoLoot && linkshellStructure != "LootCouncil"
             ? NormalizeTodLootDetails(request.LootDetails)
             : new List<TodLootDetail>();
 
@@ -129,7 +129,7 @@ public sealed partial class ActivityDataController
             Interval = interval,
             TimeStamp = nowUtc,
             TotalTods = 1,
-            TotalClaims = request.Claim ? 1 : 0,
+            TotalClaims = request.Claim == true ? 1 : 0,
             ImagePath = SanitizeUploadedImagePath(request.ImagePath)
         };
 
@@ -343,7 +343,7 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Select a valid interval." });
         }
 
-        var normalizedLootDetails = request.Claim && !request.NoLoot && linkshellStructure != "LootCouncil"
+        var normalizedLootDetails = request.Claim == true && !request.NoLoot && linkshellStructure != "LootCouncil"
             ? NormalizeTodLootDetails(request.LootDetails)
             : new List<TodLootDetail>();
 
@@ -404,7 +404,7 @@ public sealed partial class ActivityDataController
         tod.RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown));
         tod.Interval = interval;
         tod.TimeStamp = nowUtc;
-        tod.TotalClaims = request.Claim ? 1 : 0;
+        tod.TotalClaims = request.Claim == true ? 1 : 0;
 
         var previousImage = tod.ImagePath;
         var newImage = SanitizeUploadedImagePath(request.ImagePath);

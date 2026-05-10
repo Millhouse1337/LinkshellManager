@@ -390,14 +390,35 @@ end
 -- Posts a captured HNM ToD to the web app's existing ToD list. Server fills
 -- in cooldown / interval / repop time from per-monster defaults so the addon
 -- only needs to send what it observed: the monster name, the UTC kill time,
--- and the verbatim chat line for audit. Returns the created Tod row info on
--- success: { todId, monsterName, defeatedAtUtc, repopTimeUtc, cooldown, interval }.
-function api.post_tod(monsterName, defeatedAtEpochSec, capturedMessage)
+-- the verbatim chat line for audit, and the user-supplied claim status
+-- (true=Claimed, false=Unclaimed, nil=Not Specified — the server stores the
+-- value as-is). Not Specified is the loot-pool auto-post path; the launcher
+-- keeps both Post (Claimed) / Post (Unclaimed) buttons live so the user can
+-- settle the status afterward via api.update_tod_claim. Returns
+-- { todId, monsterName, defeatedAtUtc, repopTimeUtc, cooldown, interval, claim }.
+function api.post_tod(monsterName, defeatedAtEpochSec, capturedMessage, claimed)
     local epoch = tonumber(defeatedAtEpochSec) or os.time()
-    return request('POST', '/api/addon/tod', {
+    local body = {
         monsterName     = monsterName,
         defeatedAtUtc   = os.date('!%Y-%m-%dT%H:%M:%SZ', epoch),
         capturedMessage = capturedMessage
+    }
+    -- Only attach `claim` when the caller passed an explicit true/false.
+    -- Omitting it keeps the server-side bool? at null (Not Specified).
+    if claimed == true or claimed == false then
+        body.claim = claimed
+    end
+    return request('POST', '/api/addon/tod', body)
+end
+
+-- Updates the claim flag on an existing ToD that the addon previously posted
+-- (e.g. one auto-created by the loot-pool flow before the user picked a claim
+-- status). `claimed` must be true or false — the endpoint also accepts null
+-- if the caller wants to revert to Not Specified, but the launcher only
+-- emits true/false. Returns { todId, claim } on success.
+function api.update_tod_claim(todId, claimed)
+    return request('POST', '/api/addon/tod/' .. tostring(todId) .. '/claim', {
+        claim = claimed
     })
 end
 

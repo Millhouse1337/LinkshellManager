@@ -110,8 +110,11 @@ function M.install(out, state, deps)
     out.on_update_zone = function() utils.update_suggestions(state, deps) end
 
     out.on_scan_letter = function(letter)
-         local area = resources.attCreditNames[state.pendingEventName] and resources.attCreditNames[state.pendingEventName][1]
-         area = resources.attSearchArea[state.pendingEventName] or area
+         -- Strip the launcher's "D<n>" day-suffix so a day-tagged HNM
+         -- event still finds its canonical search area / credit zone.
+         local lookupName = constants.canonical_event_name(state.pendingEventName)
+         local area = resources.attCreditNames[lookupName] and resources.attCreditNames[lookupName][1]
+         area = resources.attSearchArea[lookupName] or area
          if area and area ~= '' then
              local lsSearch = (state.g_LSMode == 'ls2') and 'linkshell2' or 'linkshell'
              AshitaCore:GetChatManager():QueueCommand(1, string.format('/sea %s %s %s', area, lsSearch, letter))
@@ -140,9 +143,20 @@ function M.install(out, state, deps)
     -- the local roster from the entity list. Does NOT fire any /sea command.
     -- `category` is the resource bucket the preset came from (HNMS / NMS /
     -- HENMs / Events) and drives the EventType we record server-side.
-    out.on_preset_button = function(eventName, category, opts)
+    out.on_preset_button = function(eventName, category, opts, dayNumber)
         opts = opts or {}
-        state.pendingEventName = eventName
+        -- Day-tracked HNMs (Fafnir, Behemoth, Adamantoise) get a "D<n>"
+        -- suffix on the server-stored event name. The local eventName
+        -- arg stays canonical ("Fafnir/Nidhogg") so credit zone /
+        -- search area / window count lookups still resolve; only the
+        -- name we POST to the server (and stash in pendingEventName for
+        -- the "Attendance for:" header) carries the suffix.
+        local dayClean = dayNumber and tostring(dayNumber):gsub('%s', '') or ''
+        local serverEventName = eventName
+        if dayClean ~= '' then
+            serverEventName = eventName .. ' D' .. dayClean
+        end
+        state.pendingEventName = serverEventName
         state.scanNextLetter = nil
         -- HNM Style (post-by-window attendance) engages for the HNMS
         -- preset category. NMS uses the same multi-post flow but is
@@ -213,7 +227,7 @@ function M.install(out, state, deps)
             state.lastSyncSummary = 'Not paired with web. Use /att link <code>.'
             print(chat.header('att') .. state.lastSyncSummary)
         else
-            local created, err = api.create_event(eventName, resolvedType, nil, dkpRate, serverWindowCount)
+            local created, err = api.create_event(serverEventName, resolvedType, nil, dkpRate, serverWindowCount)
             if created and created.eventId then
                 state.linkedEventId = created.eventId
                 state.linkedEventName = created.name or eventName

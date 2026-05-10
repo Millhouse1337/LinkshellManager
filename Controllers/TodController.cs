@@ -131,13 +131,13 @@ public class TodController : Controller
             LinkshellId = model.Tod.LinkshellId,
             TimeStamp = occurredAtUtc,
             TotalTods = 1,
-            TotalClaims = model.Tod.Claim ? 1 : 0
+            TotalClaims = model.Tod.Claim == true ? 1 : 0
         };
 
         _context.Tods.Add(newTod);
         await _context.SaveChangesAsync();
 
-        var normalizedLootDetails = model.Tod.Claim && !model.NoLoot
+        var normalizedLootDetails = model.Tod.Claim == true && !model.NoLoot
             ? NormalizeLootDetails(model.TodLootDetails)
             : new List<TodLootDetail>();
         if (normalizedLootDetails.Count > 0)

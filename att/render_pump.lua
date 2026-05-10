@@ -48,6 +48,9 @@ function M.draw(state, deps)
             event_defaults     = config.eventDefaults,
             built_in_hnms      = constants.HNM_WINDOW_COUNTS,
             built_in_sky       = constants.SKY_FARM_NMS,
+            built_in_ground    = constants.GROUND_NMS,
+            built_in_henms     = constants.HENMS,
+            built_in_sea_groups = constants.SEA_NMS_GROUPS,
             built_in_testing   = constants.TESTING_MONSTERS,
             custom_monsters    = config.customMonsters,
             on_add_custom_monster = function(name)
@@ -56,7 +59,12 @@ function M.draw(state, deps)
                 if trimmed == '' then return end
                 -- De-dup against itself + the built-in tables (case-insensitive).
                 local lower = trimmed:lower()
-                if constants.HNM_WINDOW_COUNTS[trimmed] or constants.TESTING_MONSTERS[trimmed] then
+                if constants.HNM_WINDOW_COUNTS[trimmed]
+                    or constants.TESTING_MONSTERS[trimmed]
+                    or constants.SKY_FARM_NMS[trimmed]
+                    or constants.GROUND_NMS[trimmed]
+                    or constants.HENMS[trimmed]
+                    or constants.SEA_NMS[trimmed] then
                     return
                 end
                 for _, existing in ipairs(config.customMonsters) do

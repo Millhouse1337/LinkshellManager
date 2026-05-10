@@ -15,23 +15,50 @@ function M.install(out, state, deps)
     local chat      = deps.chat
     local constants = deps.constants
 
-    -- Posts a captured ToD to the web app. The capture record sits in
-    -- state.todCaptures[index]; we mark it posting=true while the HTTP
-    -- call is in flight so the button can grey itself, then write the
-    -- server's response onto the record so the UI can render Repop time.
-    -- Synchronous (api.request blocks) but the call is small and fast.
-    out.on_post_tod = function(captureIndex)
+    -- Posts a captured ToD to the web app, OR updates an already-posted ToD's
+    -- claim status. The capture record sits in state.todCaptures[index]; we
+    -- mark it posting=true while the HTTP call is in flight so the buttons
+    -- can grey themselves, then write the server's response back so the UI
+    -- re-renders.
+    --
+    -- Two routes:
+    --   * cap.posted is nil   -> POST /api/addon/tod (creates the row)
+    --   * cap.posted exists   -> POST /api/addon/tod/{id}/claim (update only)
+    --
+    -- The second route exists because the loot-pool flow auto-creates the ToD
+    -- with claim=nil (Not Specified) before the user has decided; clicking
+    -- "Post (Claimed)" or "Post (Unclaimed)" on that row settles the status
+    -- without recreating the row (which would orphan the loot rows).
+    -- `claimed` is the user's explicit true/false from the launcher.
+    out.on_post_tod = function(captureIndex, claimed)
         local cap = state.todCaptures and state.todCaptures[captureIndex]
         if not cap then return end
-        if cap.posting or cap.posted then return end
+        if cap.posting then return end
         if not api.is_paired() then
             cap.postError = 'Not paired with web. Use /att link <code>.'
             return
         end
 
+        if cap.posted and cap.posted.todId then
+            cap.posting   = true
+            cap.postError = nil
+            local result, err = api.update_tod_claim(cap.posted.todId, claimed)
+            cap.posting = false
+            if not result then
+                cap.postError = tostring(err or 'unknown error')
+                print(chat.header('att') .. 'Update claim failed: ' .. cap.postError)
+                return
+            end
+            cap.posted.claim = (result.claim == true) or false
+            print(chat.header('att') .. string.format('ToD claim updated: %s -> %s',
+                tostring(cap.monster),
+                cap.posted.claim and 'Claimed' or 'Unclaimed'))
+            return
+        end
+
         cap.posting   = true
         cap.postError = nil
-        local result, err = api.post_tod(cap.monster, cap.callbackSec, cap.message)
+        local result, err = api.post_tod(cap.monster, cap.callbackSec, cap.message, claimed)
         cap.posting = false
 
         if not result then
@@ -49,15 +76,31 @@ function M.install(out, state, deps)
             and constants.format_posted_at(repopLocalTable)
             or  tostring(result.repopTimeUtc)
 
+        -- claim is tri-state on the wire: true / false / nil. Mirror it on
+        -- the cap record so the launcher can render "Not Specified" when the
+        -- user hasn't decided yet (loot-first auto-post). Distinguish with
+        -- ~= nil rather than a `result.claim and true or false` collapse so
+        -- nil doesn't get coerced into false.
+        local claimValue
+        if result.claim == true or result.claim == false then
+            claimValue = result.claim
+        else
+            claimValue = nil
+        end
         cap.posted = {
             todId          = result.todId,
             repopTimeUtc   = result.repopTimeUtc,
             repopFormatted = repopFormatted,
             cooldown       = result.cooldown,
             interval       = result.interval,
+            claim          = claimValue,
         }
-        print(chat.header('att') .. string.format('Posted ToD: %s (id %s)',
-            tostring(cap.monster), tostring(result.todId)))
+        local claimLabel
+        if claimValue == true then claimLabel = 'Claimed'
+        elseif claimValue == false then claimLabel = 'Unclaimed'
+        else claimLabel = 'Not Specified' end
+        print(chat.header('att') .. string.format('Posted ToD: %s (id %s, %s)',
+            tostring(cap.monster), tostring(result.todId), claimLabel))
     end
 
     -- Lazy-fetches the linkshell roster + loot structure used to
@@ -132,20 +175,29 @@ function M.install(out, state, deps)
         -- Auto-post the parent ToD if the user hasn't already done so.
         -- The server requires a parent Tod row for every TodLootDetail,
         -- so we transparently create one using the capture's monster +
-        -- detection time. The result is stashed back on cap.posted so
-        -- the ToD Capturing panel updates (Posted to web! + repop time)
-        -- the same way as if the user had clicked Post ToD manually.
+        -- detection time. The auto-post leaves claim=nil (Not Specified)
+        -- so the user can settle Claimed/Unclaimed afterward via the
+        -- buttons in the ToD Capturing panel — the launcher keeps both
+        -- buttons live as long as cap.posted.claim is nil.
         local todId = cap.posted and cap.posted.todId
         if not todId then
             drop.posting   = true
             drop.postError = nil
-            local todResult, todErr = api.post_tod(cap.monster, cap.callbackSec, cap.message)
+            local todResult, todErr = api.post_tod(cap.monster, cap.callbackSec, cap.message, nil)
             drop.posting = false
             if not todResult or not todResult.todId then
                 drop.postError = 'ToD auto-post failed: ' .. tostring(todErr or 'unknown error')
                 return
             end
             local repopLocalTable = constants.parse_iso_utc_to_local_table(todResult.repopTimeUtc)
+            -- Preserve nil for claim — this auto-post path explicitly leaves
+            -- claim Not Specified so the launcher buttons stay live.
+            local autoClaim
+            if todResult.claim == true or todResult.claim == false then
+                autoClaim = todResult.claim
+            else
+                autoClaim = nil
+            end
             cap.posted = {
                 todId          = todResult.todId,
                 repopTimeUtc   = todResult.repopTimeUtc,
@@ -154,6 +206,7 @@ function M.install(out, state, deps)
                     or  tostring(todResult.repopTimeUtc),
                 cooldown       = todResult.cooldown,
                 interval       = todResult.interval,
+                claim          = autoClaim,
             }
             todId = todResult.todId
             print(chat.header('att') .. string.format(

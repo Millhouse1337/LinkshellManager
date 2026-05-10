@@ -139,11 +139,21 @@ export class TodsTabComponent {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(tod);
     }
-    return Array.from(groups.entries()).map(([key, entries]) => ({
+    const result = Array.from(groups.entries()).map(([key, entries]) => ({
       key,
       latest: entries[0],
       history: entries.slice(1, 10)
     }));
+    // Order the Tracked Windows list by next repop ascending so the mob
+    // closest to popping (or already Ready, since their repop time is in
+    // the past) sits at the top. ToDs without a repop time fall to the
+    // bottom rather than the top.
+    result.sort((a, b) => {
+      const aRepop = a.latest.repopTime ? new Date(a.latest.repopTime).getTime() : Number.POSITIVE_INFINITY;
+      const bRepop = b.latest.repopTime ? new Date(b.latest.repopTime).getTime() : Number.POSITIVE_INFINITY;
+      return aRepop - bRepop;
+    });
+    return result;
   }
 
   protected isTodGroupExpanded(key: string): boolean {
@@ -253,6 +263,12 @@ export class TodsTabComponent {
   private resolveCooldownHours(): number {
     if (this.todDraft.cooldown === '72 Hour') {
       return 72;
+    }
+    if (this.todDraft.cooldown === '2 Hour') {
+      return 2;
+    }
+    if (this.todDraft.cooldown === '5 Min') {
+      return 5 / 60;
     }
     if (this.todDraft.cooldown === 'Other') {
       return Math.max(0, this.todCustomCooldownHours ?? 0);

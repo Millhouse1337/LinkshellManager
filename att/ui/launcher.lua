@@ -99,44 +99,61 @@ function M.draw(is_open, state, callbacks)
             end
         end
 
-        -- Header row (Web Sync indicator, LS dropdown, Refresh, Settings + TZ).
+        -- Header row (Web Sync indicator, LS dropdown, Compact toggle,
+        -- Refresh, Settings + TZ).
         header.draw(state, callbacks, do_full_refresh)
 
-        -- Two-column layout: left column carries the Web Sync controls
-        -- (Event Presets, Queued / Active Events, Action buttons); right
-        -- column carries the live work surfaces (Attendance, Loot Pool,
-        -- ToD Capturing). The footer (CSV Export + Close) sits below both
-        -- columns at full width. The negative bottom heights reserve
-        -- ~50px at the launcher's bottom for the footer.
-        local LEFT_COL_WIDTH = 470
         local COLS_BOTTOM    = -50
-        imgui.BeginChild('lhsCol', { LEFT_COL_WIDTH, COLS_BOTTOM }, false)
 
-        -- Web Sync (LSManager) — only visible when the addon is paired
-        -- with a web account. Order: Create Event toggle/form, Event
-        -- Presets, Queued list, Selection bar, Active list.
-        if api.is_paired() then
-            create_event.draw(state, callbacks, createEventCtx)
-            event_lists.draw(state, callbacks)
+        if state.launcherCompact then
+            -- Compact view: hide the left column entirely (Create Event,
+            -- Event Presets, Queued / Active Events) along with the right
+            -- column's Break Room and Action Bar — only Attendance, Loot
+            -- Pool, and ToD Capturing remain. The right column expands to
+            -- full window width since there's no left column to share with.
+            imgui.BeginChild('compactCol', { 0, COLS_BOTTOM }, false)
+            attendance_p.draw(state, callbacks)
+            imgui.Separator()
+            loot_pool.draw(state, callbacks)
+            imgui.Separator()
+            tod_capture.draw(state, callbacks)
+            imgui.EndChild()  -- /compactCol
+        else
+            -- Two-column layout: left column carries the Web Sync controls
+            -- (Event Presets, Queued / Active Events, Action buttons); right
+            -- column carries the live work surfaces (Attendance, Loot Pool,
+            -- ToD Capturing). The footer (CSV Export + Close) sits below both
+            -- columns at full width. The negative bottom heights reserve
+            -- ~50px at the launcher's bottom for the footer.
+            local LEFT_COL_WIDTH = 470
+            imgui.BeginChild('lhsCol', { LEFT_COL_WIDTH, COLS_BOTTOM }, false)
+
+            -- Web Sync (LSManager) — only visible when the addon is paired
+            -- with a web account. Order: Create Event toggle/form, Event
+            -- Presets, Queued list, Selection bar, Active list.
+            if api.is_paired() then
+                create_event.draw(state, callbacks, createEventCtx)
+                event_lists.draw(state, callbacks)
+            end
+
+            imgui.EndChild()  -- /lhsCol
+            imgui.SameLine()
+            imgui.BeginChild('rhsCol', { 0, COLS_BOTTOM }, false)
+
+            attendance_p.draw(state, callbacks)
+            break_room.draw(state, callbacks)
+            action_bar.draw(state, callbacks)
+
+            imgui.Separator()
+
+            loot_pool.draw(state, callbacks)
+
+            imgui.Separator()
+
+            tod_capture.draw(state, callbacks)
+
+            imgui.EndChild()  -- /rhsCol
         end
-
-        imgui.EndChild()  -- /lhsCol
-        imgui.SameLine()
-        imgui.BeginChild('rhsCol', { 0, COLS_BOTTOM }, false)
-
-        attendance_p.draw(state, callbacks)
-        break_room.draw(state, callbacks)
-        action_bar.draw(state, callbacks)
-
-        imgui.Separator()
-
-        loot_pool.draw(state, callbacks)
-
-        imgui.Separator()
-
-        tod_capture.draw(state, callbacks)
-
-        imgui.EndChild()  -- /rhsCol
 
         imgui.Separator()
 

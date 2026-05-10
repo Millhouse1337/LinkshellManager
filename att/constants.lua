@@ -53,6 +53,7 @@ end
 -- ever needs HNM-style multi-window attendance the table can grow into
 -- the same shape as TESTING_MONSTERS.
 constants.SKY_FARM_NMS = {
+    -- Pop / window NMs farmed for god-pop materials.
     ['Despot']           = true,
     ['Mother Globe']     = true,
     ['Zipacna']          = true,
@@ -61,7 +62,142 @@ constants.SKY_FARM_NMS = {
     ['Steam Cleaner']    = true,
     ['Brigandish Blade'] = true,
     ['Faust']            = true,
+    -- Sky Gods (popped from the items the farm NMs above drop). Kirin is
+    -- the final pop after the four gods, included so its kill line is
+    -- captured the same way as the rest of the Sky farm cycle.
+    ['Suzaku']           = true,
+    ['Seiryu']           = true,
+    ['Genbu']            = true,
+    ['Byakko']           = true,
+    ['Kirin']            = true,
 }
+
+-- Curated ground / overworld NMs (Bloodsucker, Simurgh, the Arthros, ...).
+-- Same role as SKY_FARM_NMS — included in defeat / loot pattern matching so
+-- the user doesn't have to add each one manually. Mirrors creditnames.txt's
+-- "-- NMS," section. These typically run a 21-24 hour repop, so they fall
+-- through to the server's default 22-hour cooldown (no SkyFarmNms cooldown
+-- override needed).
+constants.GROUND_NMS = {
+    ['Shikigami Weapon']    = true,
+    ['King Arthro']         = true,
+    ['King Vinegarroon']    = true,
+    ['Bloodsucker']         = true,
+    ['Simurgh']             = true,
+    ['Xolotl']              = true,
+    ['Serket']              = true,
+}
+
+-- Curated HENMs (Promyvion / Lumoria-tier overworld pops). Mirrors
+-- creditnames.txt's "-- HENMs," section. Listed separately from GROUND_NMS
+-- so the Settings panel can group them under their own header — players
+-- treat HENMs as a distinct tier from the regular ground NMs.
+constants.HENMS = {
+    ['Overlord Arthro']     = true,
+    ['Ruinous Rocs']        = true,
+    ['Sacred Scorpions']    = true,
+    ['Mammet-9999']         = true,
+    ['Ultimega']            = true,
+    ['Tonberry Sovereign']  = true,
+}
+
+-- Sea NMs (CoP Sea / Al'Taieu camp). Grouped by tier so the Settings panel
+-- can render each tier under its own subheading — players think of these
+-- as distinct camps, not one alphabetical pile. SEA_NMS is the flat dict
+-- the parser consumes; SEA_NMS_GROUPS preserves group order + labels for
+-- the UI. The two are kept in sync by the build loop below.
+constants.SEA_NMS_GROUPS = {
+    {
+        label = 'Tier 1 / Pop-item',
+        names = {
+            'Jailer of Temperance',
+            'Jailer of Fortitude',
+            'Jailer of Faith',
+            "Ix'aern (Monk)",
+            "Ix'aern (Dark Knight)",
+            "Ix'aern (Dragoon)",
+        }
+    },
+    {
+        label = 'Tier 2 Jailers',
+        names = {
+            'Jailer of Hope',
+            'Jailer of Justice',
+            'Jailer of Prudence',
+        }
+    },
+    {
+        label = 'Tier 3',
+        names = {
+            'Jailer of Love',
+        }
+    },
+    {
+        label = 'Final / Special',
+        names = {
+            -- Absolute Virtue is the canonical FFXI Sea endgame NM. Remove
+            -- (or extend) here if your linkshell tracks a different list.
+            'Absolute Virtue',
+        }
+    },
+}
+
+-- Names the chat-line parser scans for. Distinct from SEA_NMS_GROUPS
+-- because some mobs share a chat name (the three Ix'aern variants all
+-- show as "Ix'aern" in defeat / loot lines) and get disambiguated to a
+-- specific variant after the fact via MOB_ID_OVERRIDES.
+constants.SEA_NMS_PARSER_DICT = {
+    ['Jailer of Temperance'] = true,
+    ['Jailer of Fortitude']  = true,
+    ['Jailer of Faith']      = true,
+    ["Ix'aern"]              = true,  -- chat name for all three Ix'aern jobs
+    ['Jailer of Hope']       = true,
+    ['Jailer of Justice']    = true,
+    ['Jailer of Prudence']   = true,
+    ['Jailer of Love']       = true,
+    ['Absolute Virtue']      = true,
+}
+
+-- Mob server ID -> disambiguated display name. text_parser substitutes
+-- the variant name after a match on an AMBIGUOUS_NAMES entry, by reading
+-- the in-zone entity table to find the mob that just died.
+constants.MOB_ID_OVERRIDES = {
+    [16921018] = "Ix'aern (Dark Knight)",
+    [16921022] = "Ix'aern (Dragoon)",
+    [16916815] = "Ix'aern (Monk)",
+}
+
+-- Parser-matched names that need mob-ID disambiguation. Each key here must
+-- correspond to a name the parser can match on (so SEA_NMS_PARSER_DICT or
+-- one of the other dicts), and the resolved variant should appear in the
+-- relevant SEA / Sky / etc. group so the server's cooldown lookup works.
+constants.AMBIGUOUS_NAMES = {
+    ["Ix'aern"] = true,
+}
+
+-- Combined "everything we know about Sea" set, used by render_pump.lua's
+-- custom-monster de-dup so users can't accidentally add a name we'll match
+-- on our own. Includes both display variants (group names) and parser-only
+-- bare chat names.
+constants.SEA_NMS = {}
+for _, group in ipairs(constants.SEA_NMS_GROUPS) do
+    for _, name in ipairs(group.names) do
+        constants.SEA_NMS[name] = true
+    end
+end
+for name, _ in pairs(constants.SEA_NMS_PARSER_DICT) do
+    constants.SEA_NMS[name] = true
+end
+
+-- Strip the trailing " D<n>" suffix added by the launcher's per-monster
+-- Day input (Fafnir, Behemoth, Adamantoise) so lookups keyed by the
+-- canonical preset name still resolve. Idempotent for names without the
+-- suffix; safe to call on any string. Returns the input unchanged when
+-- given non-string values.
+function constants.canonical_event_name(name)
+    if type(name) ~= 'string' then return name end
+    return (name:gsub('%s+D%d+%s*$', ''))
+end
 
 function constants.window_count_for(name)
     if not name then return 1 end

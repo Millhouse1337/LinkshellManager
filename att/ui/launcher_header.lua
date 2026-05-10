@@ -65,14 +65,25 @@ function M.draw(state, callbacks, do_full_refresh)
         imgui.PopItemWidth()
     end
 
-    -- Refresh button at the top right of the launcher header.
+    -- Refresh button at the top right of the launcher header, with a
+    -- "Compact" checkbox immediately to its left. The checkbox toggles
+    -- state.launcherCompact, which the launcher uses to hide everything
+    -- except Attendance / Loot Pool / ToD Capturing.
     do
         local REFRESH_BTN_W = 90
+        local COMPACT_W     = 100  -- checkbox + label combined width
         local windowWidth = 600
         pcall(function()
             local ww = imgui.GetWindowWidth()
             if type(ww) == 'number' then windowWidth = ww end
         end)
+
+        imgui.SameLine(windowWidth - REFRESH_BTN_W - COMPACT_W - 24)
+        local compactPtr = { state.launcherCompact and true or false }
+        if imgui.Checkbox('Compact##launcherCompact', compactPtr) then
+            state.launcherCompact = compactPtr[1]
+        end
+
         imgui.SameLine(windowWidth - REFRESH_BTN_W - 16)
         if imgui.Button('Refresh##topRefresh', { REFRESH_BTN_W, 0 }) then
             do_full_refresh()
