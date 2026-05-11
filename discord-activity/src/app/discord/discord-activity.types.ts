@@ -107,6 +107,9 @@ export interface ActivityLinkshellSettings {
   enableItems: boolean;
   enableRevenue: boolean;
   dkpRoundingIncrement: ActivityDkpRoundingIncrement;
+  // Names of monsters the linkshell admin has elected to hide from the
+  // ToD Tracker (Dashboard + ToDs tab). Empty when none are hidden.
+  hiddenTodMonsters: string[];
 }
 
 export interface ActivityLinkshellPermissions {

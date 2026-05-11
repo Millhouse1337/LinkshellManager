@@ -1,0 +1,55 @@
+// Scoped styles for events-tab. Previously these lived in
+// activity-home.component.scss but Angular's ViewEncapsulation.Emulated
+// scopes the parent's styles to the parent's DOM only, so the child
+// events-tab template received no styling — the <ul> rendered as a default
+// bulleted vertical list. Wiring this file via styleUrl in
+// events-tab.component.ts puts the styles back on the matching elements.
+
+.attendance-window-tabs {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  gap: 4px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.attendance-window-tabs > li {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.attendance-window-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  color: var(--fg-3, #a1a1aa);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  padding: 6px 12px;
+}
+
+.attendance-window-tab:hover {
+  color: var(--fg, #fafafa);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+
+.attendance-window-tab.is-active {
+  color: var(--fg, #fafafa);
+  background: var(--surface, rgba(255, 255, 255, 0.06));
+  border-color: var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.attendance-window-pane__meta {
+  font-size: 11px;
+  color: var(--fg-3, #a1a1aa);
+  margin-bottom: 8px;
+}

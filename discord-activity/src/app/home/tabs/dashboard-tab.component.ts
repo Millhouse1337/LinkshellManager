@@ -543,8 +543,16 @@ export class DashboardTabComponent {
 
   protected selectedDashboardTods() {
     const selectedId = this.selectedDashboardLinkshellId();
+    // Per-linkshell hidden-mob list, configured in the Customize form.
+    // Names compared case-insensitively after trimming so casing in the
+    // textarea doesn't have to be exact.
+    const link = this.activity.overview()?.linkshells?.find(l => l.id === selectedId);
+    const hidden = new Set(
+      (link?.settings?.hiddenTodMonsters ?? []).map(name => name.trim().toLowerCase())
+    );
     return [...(this.activity.overview()?.recentTods ?? [])]
       .filter(tod => tod.linkshellId === selectedId)
+      .filter(tod => !hidden.has((tod.monsterName ?? '').trim().toLowerCase()))
       .sort((left, right) => {
         const leftTime = left.time ? new Date(left.time).getTime() : 0;
         const rightTime = right.time ? new Date(right.time).getTime() : 0;

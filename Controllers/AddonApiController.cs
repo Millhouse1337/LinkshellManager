@@ -211,7 +211,12 @@ public sealed partial class AddonApiController : ControllerBase
     public sealed record AddonAttendanceRequest(
         DateTime? RecordedAtUtc,
         List<AddonAttendanceEntry> Entries,
-        int? WindowSequence = null);
+        int? WindowSequence = null,
+        // The addon's currently-logged-in character name. Used to identify
+        // which entry represents the token issuer so we can backfill their
+        // linkshell membership / AppUser CharacterName on first attendance
+        // post when those columns were left blank at signup time.
+        string? SelfCharacterName = null);
 
     public sealed record AddonBreakRequest(int ParticipantId);
 

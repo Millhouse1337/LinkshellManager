@@ -105,11 +105,15 @@ public class DkpHistoryController : Controller
         viewModel.PageSize = DkpHistoryViewModel.DefaultPageSize;
         viewModel.PageNumber = Math.Clamp(page, 1, viewModel.TotalPages);
 
+        // Running balance is computed by walking the ledger in chronological
+        // (oldest-first) order so each entry's "after" balance is correct.
+        // The user-facing table wants the opposite — newest first — so we
+        // reverse the materialized projection before applying pagination.
         var runningBalance = 0d;
         viewModel.SelectedAppUserId = selectedAppUserId;
         viewModel.SelectedMemberName = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CharacterName;
         viewModel.CurrentBalance = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CurrentBalance;
-        viewModel.Entries = ledgerEntries
+        var projected = ledgerEntries
             .Select(entry =>
             {
                 runningBalance += entry.Amount;
@@ -129,6 +133,10 @@ public class DkpHistoryController : Controller
                     Details = entry.Details
                 };
             })
+            .ToList();
+        projected.Reverse();
+
+        viewModel.Entries = projected
             .Skip((viewModel.PageNumber - 1) * viewModel.PageSize)
             .Take(viewModel.PageSize)
             .ToList();

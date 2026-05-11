@@ -74,6 +74,14 @@ export class ActivityQueuePanelComponent {
       this.createModel.eventType = value;
     }
     this.eventTypeError = false;
+    // HNM events are addon-driven — End time and Duration aren't known
+    // up front (the kill happens whenever the mob pops). Auto-flip both
+    // toggles to "Not specified" the first time the user selects HNM,
+    // and re-derive end-from-duration if they switch away.
+    if (value === 'HNM') {
+      this.onEndTimeNotSpecifiedChange(true);
+      this.onDurationNotSpecifiedChange(true);
+    }
   }
 
   protected onJobQuantityNotSpecifiedChange(index: number, checked: boolean): void {
@@ -215,6 +223,18 @@ export class ActivityQueuePanelComponent {
 
   protected canManageAnyLinkshell(): boolean {
     return this.linkshellMemberships().some(link => this.canManageLinkshell(link.id));
+  }
+
+  // HNM events get their start time from the addon's window-post flow, not
+  // the Activity. Block the click before it hits the server (the server
+  // rejects HNM starts anyway, but doing the check here lets us show a
+  // friendlier popup instead of a generic action error toast).
+  protected attemptStartEvent(event: { id: number; type?: string | null }): void {
+    if ((event.type ?? '').trim().toUpperCase() === 'HNM') {
+      window.alert('HNM events are started with the in-game addon (Att launcher). Use /attend in-game to start this event.');
+      return;
+    }
+    void this.activity.startEvent(event.id);
   }
 
   protected isMemberMode(): boolean {

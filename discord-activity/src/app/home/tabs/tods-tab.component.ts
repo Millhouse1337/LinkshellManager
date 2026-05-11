@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateTodInput,
@@ -35,6 +35,44 @@ export class TodsTabComponent {
   // The single-instance ToD delete confirmation modal lives in the parent so
   // it remains mounted regardless of which tab is active.
   @Input({ required: true }) deleteTodFn!: (todId: number, monsterName: string) => void;
+
+  // The Log ToD form is rendered inside a native <dialog> opened with
+  // showModal() so it floats above the rest of the tab content. Triggered
+  // from the "Log ToD" button in the section header (new) or by clicking
+  // Edit on an existing ToD row (re-uses the same form).
+  private readonly logTodDialog = viewChild<ElementRef<HTMLDialogElement>>('logTodDialog');
+
+  protected openLogTodForm(): void {
+    this.cancelTodEdit();   // resets draft + clears editingTodId
+    this.openLogTodDialog();
+  }
+
+  private openLogTodDialog(): void {
+    // Defer until Angular has rendered the @if'd dialog element.
+    setTimeout(() => {
+      const dialog = this.logTodDialog()?.nativeElement;
+      if (dialog && !dialog.open) {
+        dialog.showModal();
+      }
+    });
+  }
+
+  protected closeLogTodDialog(): void {
+    const dialog = this.logTodDialog()?.nativeElement;
+    if (dialog && dialog.open) {
+      dialog.close();
+    }
+  }
+
+  // Native <dialog> click events fire on both the dialog box and its
+  // ::backdrop. The backdrop hits register with target === the dialog
+  // element itself (not a child), so a click outside the form area = close.
+  protected onLogTodDialogClick(event: MouseEvent): void {
+    if (event.target === this.logTodDialog()?.nativeElement) {
+      this.closeLogTodDialog();
+      this.cancelTodEdit();
+    }
+  }
 
   protected readonly todMonsterOptions = [...TOD_MONSTER_OPTIONS];
   protected readonly todCooldownOptions = [...TOD_COOLDOWN_OPTIONS];
@@ -102,8 +140,16 @@ export class TodsTabComponent {
 
   protected selectedDashboardTods() {
     const selectedId = this.selectedDashboardLinkshellId();
+    // Per-linkshell hidden-mob list, configured in the Customize form.
+    // Names are compared case-insensitively after trimming so the user
+    // doesn't have to match casing exactly when typing them in.
+    const hidden = new Set(
+      (this.linkshellSettingsFor(selectedId)?.hiddenTodMonsters ?? [])
+        .map(name => name.trim().toLowerCase())
+    );
     return [...(this.activity.overview()?.recentTods ?? [])]
       .filter(tod => tod.linkshellId === selectedId)
+      .filter(tod => !hidden.has((tod.monsterName ?? '').trim().toLowerCase()))
       .sort((left, right) => {
         const leftTime = left.time ? new Date(left.time).getTime() : 0;
         const rightTime = right.time ? new Date(right.time).getTime() : 0;
@@ -419,6 +465,7 @@ export class TodsTabComponent {
       }
       this.editingTodId = null;
       this.resetTodDraft(linkshellId);
+      this.closeLogTodDialog();
     } catch {
       // Service already exposes the action error state.
     }
@@ -502,12 +549,20 @@ export class TodsTabComponent {
     this.todImagePath = tod.imagePath ?? null;
     this.updateTodRepopTime();
 
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    // Open the modal instead of scrolling to the (no-longer-inline) form.
+    this.openLogTodDialog();
   }
 
   protected cancelTodEdit(): void {
     this.editingTodId = null;
     this.resetTodDraft();
+  }
+
+  // Cancel button inside the dialog — wipes the edit/draft state and
+  // closes the modal in one go.
+  protected cancelLogTodForm(): void {
+    this.cancelTodEdit();
+    this.closeLogTodDialog();
   }
 
   private resetTodDraft(selectedLinkshellId = this.selectedDashboardLinkshellId()): void {

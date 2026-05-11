@@ -54,6 +54,12 @@ public class Linkshell
 
     public bool EnableRevenue { get; set; } = true;
 
+    // Pipe-separated list of monster names to hide from this linkshell's
+    // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing
+    // hidden. Pipe separator avoids the comma collision risk if FFXI ever
+    // grows a mob name with a comma in it. Edited from the Customize panel.
+    public string HiddenTodMonsters { get; set; } = string.Empty;
+
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 
     public ICollection<Event> Events { get; set; } = new List<Event>();

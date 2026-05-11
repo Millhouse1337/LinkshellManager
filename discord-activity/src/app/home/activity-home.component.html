@@ -19,8 +19,14 @@
   }
 
   <!-- ===== Identity bar ===== -->
+  <!-- Brand mark + wordmark are inlined here on the same row as the linkshell
+       name and refresh/user controls so the header reads as a single strip,
+       not two stacked rows. -->
   <div class="identity">
     <div class="identity-left">
+      <div class="brand-bar__mark" aria-hidden="true">L</div>
+      <span class="brand-bar__name">LinkshellManager</span>
+      <span class="identity-divider" aria-hidden="true">·</span>
       <span class="identity-ls">{{ primaryLinkshellName() }}</span>
       @if (primaryMemberCount() > 0) {
         <span class="identity-badge">{{ primaryMemberCount() }} members</span>

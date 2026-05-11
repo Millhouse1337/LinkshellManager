@@ -379,12 +379,20 @@ end
 -- entries: array of { characterName, mainJob, subJob, zone }
 -- windowSequence: optional 1-based HNM window number. Pass nil for non-HNM events
 -- (server will treat the post as the legacy single-window verify).
-function api.post_attendance(eventId, entries, windowSequence)
-    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/attendance', {
+-- selfCharacterName: the addon's currently logged-in character. Server uses
+-- this to backfill the token issuer's linkshell membership / AppUser
+-- CharacterName when those columns are still blank, so the user's own
+-- attendance entry doesn't silently fall into the unmatched bucket.
+function api.post_attendance(eventId, entries, windowSequence, selfCharacterName)
+    local body = {
         recordedAtUtc  = os.date('!%Y-%m-%dT%H:%M:%SZ'),
         entries        = entries,
-        windowSequence = windowSequence
-    })
+        windowSequence = windowSequence,
+    }
+    if selfCharacterName and selfCharacterName ~= '' then
+        body.selfCharacterName = selfCharacterName
+    end
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/attendance', body)
 end
 
 -- Posts a captured HNM ToD to the web app's existing ToD list. Server fills

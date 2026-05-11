@@ -3,6 +3,36 @@
   min-height: 100%;
 }
 
+// Brand mark + wordmark live inside the identity row so the header reads as
+// a single strip. Visual treatment mirrors the web app's sidebar (gradient
+// "L" + wordmark, sized small enough to share the row comfortably).
+.brand-bar__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent, #7c5cff) 0%, #6366f1 100%);
+  display: grid;
+  place-items: center;
+  color: #0a0a0b;
+  font-weight: 700;
+  font-size: 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset;
+  flex-shrink: 0;
+}
+
+.brand-bar__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, #fafafa);
+  letter-spacing: -0.01em;
+}
+
+.identity-divider {
+  color: var(--fg-3, #a1a1aa);
+  font-size: 13px;
+  margin: 0 2px;
+}
+
 .coming-soon-banner {
   margin: 16px 0 20px;
   padding: 24px 16px;
@@ -16,47 +46,8 @@
   border-radius: 10px;
 }
 
-.attendance-window-tabs {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-}
-
-.attendance-window-tab {
-  background: transparent;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
-  color: var(--fg-3, #a1a1aa);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font: inherit;
-  padding: 6px 12px;
-}
-
-.attendance-window-tab:hover {
-  color: var(--fg, #fafafa);
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
-}
-
-.attendance-window-tab.is-active {
-  color: var(--fg, #fafafa);
-  background: var(--surface, rgba(255, 255, 255, 0.06));
-  border-color: var(--border, rgba(255, 255, 255, 0.08));
-}
-
-.attendance-window-pane__meta {
-  font-size: 11px;
-  color: var(--fg-3, #a1a1aa);
-  margin-bottom: 8px;
-}
+// Attendance-window tab styles moved to events-tab.component.scss so
+// Angular's view encapsulation actually reaches the elements they target.
 
 /* Game Addon (att) pairing modal — Configurations tab. */
 .addon-modal-backdrop {

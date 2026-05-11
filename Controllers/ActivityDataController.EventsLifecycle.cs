@@ -220,6 +220,19 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // HNM events run on the in-game addon's window timing — start events
+        // for them must come from the addon (POST /api/addon/events/{id}/start),
+        // never the Activity / web app, otherwise the post-by-window roster
+        // workflow gets out of sync. Reject up front with a clear message the
+        // UI can surface.
+        if (string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                error = "HNM events are started with the in-game addon. Use the Att launcher to start this event."
+            });
+        }
+
         var absentIds = request?.AbsentParticipantIds;
         if (absentIds is { Count: > 0 })
         {

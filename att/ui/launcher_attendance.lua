@@ -61,6 +61,42 @@ function M.draw(state, callbacks)
         local windowSeq     = state.windowSequence or 0
         local isHnmEvent    = windowMax > 1
         local rosterChildId = 'arRoster'
+
+        -- Scope filter (HNM Style / Claim-Kill only). Radio row narrows
+        -- which entities the next zone-scan counts as attendees:
+        --   Party    → just the player's party (slots 0-5)
+        --   Alliance → the full alliance (slots 0-17)
+        --   Zone     → everyone in the credit zone (historical behavior)
+        -- The selection is mirrored into attendance.set_scope every frame
+        -- so the gather functions read a fresh value without needing to
+        -- know about state. Non-HNM events hide the picker entirely and
+        -- the scope is forced back to 'zone' so single-window scans never
+        -- silently narrow their roster based on a leftover HNM choice.
+        if isHnmEvent then
+            state.attendanceScopeFilter = state.attendanceScopeFilter or 'zone'
+            -- Keep the scope picker on the same row as "Attendance for: ..."
+            -- so the header stays a single visual strip instead of stacking.
+            imgui.SameLine()
+            imgui.TextDisabled('  Scope:')
+            imgui.SameLine()
+            if imgui.RadioButton('Party##attScopeParty',
+                    state.attendanceScopeFilter == 'party') then
+                state.attendanceScopeFilter = 'party'
+            end
+            imgui.SameLine()
+            if imgui.RadioButton('Alliance##attScopeAlliance',
+                    state.attendanceScopeFilter == 'alliance') then
+                state.attendanceScopeFilter = 'alliance'
+            end
+            imgui.SameLine()
+            if imgui.RadioButton('Zone##attScopeZone',
+                    state.attendanceScopeFilter == 'zone') then
+                state.attendanceScopeFilter = 'zone'
+            end
+            attendance.set_scope(state.attendanceScopeFilter)
+        else
+            attendance.set_scope('zone')
+        end
         -- Negative BeginChild height = fill to within N pixels of the
         -- launcher's bottom. Reserve room for: Loot Pool panel
         -- (~150px: separator + header + scrollable content child +

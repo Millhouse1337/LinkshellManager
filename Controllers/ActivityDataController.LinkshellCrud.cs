@@ -227,6 +227,13 @@ public sealed partial class ActivityDataController
         {
             linkshell.DkpRoundingIncrement = NormalizeDkpRounding(request.DkpRoundingIncrement);
         }
+        // null in the request = leave unchanged. An explicitly empty list
+        // clears the hidden-mob list. The serializer trims, drops blanks,
+        // and de-dupes so the stored value stays clean.
+        if (request.HiddenTodMonsters is not null)
+        {
+            linkshell.HiddenTodMonsters = SerializeHiddenTodMonsters(request.HiddenTodMonsters);
+        }
 
         var memberships = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == linkshellId)

@@ -241,6 +241,22 @@ public class TodController : Controller
                 .ToListAsync()
             : new List<string>();
 
+        // Per-linkshell hidden-mob list (configured from the Activity's
+        // Customize panel). Filter the list out before mapping so hidden
+        // monsters don't appear in the legacy MVC ToD table either.
+        var hiddenMonsters = selectedLinkshellId > 0
+            ? await _context.Linkshells
+                .AsNoTracking()
+                .Where(ls => ls.Id == selectedLinkshellId)
+                .Select(ls => ls.HiddenTodMonsters)
+                .FirstOrDefaultAsync() ?? string.Empty
+            : string.Empty;
+        var hiddenSet = new HashSet<string>(
+            hiddenMonsters.Split('|', StringSplitOptions.RemoveEmptyEntries)
+                          .Select(s => s.Trim())
+                          .Where(s => s.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+
         var todEntities = selectedLinkshellId > 0
             ? await _context.Tods
                 .AsNoTracking()
@@ -250,6 +266,12 @@ public class TodController : Controller
                 .ThenByDescending(item => item.Id)
                 .ToListAsync()
             : new List<Tod>();
+        if (hiddenSet.Count > 0)
+        {
+            todEntities = todEntities
+                .Where(t => !hiddenSet.Contains((t.MonsterName ?? string.Empty).Trim()))
+                .ToList();
+        }
 
         var todDraft = source?.Tod ?? new Tod();
         todDraft.LinkshellId = selectedLinkshellId;

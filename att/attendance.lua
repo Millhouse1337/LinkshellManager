@@ -11,6 +11,36 @@ local messages  = require('messages')
 
 attendance.data = {} -- entries: { name, jobsMain, jobsSub, zone, zid, time }
 
+-- Scope filter for multi-window (HNM / Claim-Kill) scans. Set by the
+-- launcher attendance panel via attendance.set_scope; consumed by
+-- gather_zone / gather_current_zone to narrow zone-scan hits to just the
+-- player's party (slots 0-5), the full alliance (slots 0-17), or everyone
+-- in the credit zone (the historical behavior, 'zone'). Non-HNM scans
+-- ignore this and always treat everyone in-credit as eligible.
+attendance.scope = 'zone'
+
+function attendance.set_scope(scope)
+    if scope == 'party' or scope == 'alliance' or scope == 'zone' then
+        attendance.scope = scope
+    end
+end
+
+-- Builds a name-set for the active scope. Returns nil for 'zone' (and any
+-- unrecognised value) so callers can short-circuit the filter cheaply when
+-- no narrowing is needed.
+local function build_scope_set(scope)
+    if scope ~= 'party' and scope ~= 'alliance' then return nil end
+    local pm = AshitaCore:GetMemoryManager():GetParty()
+    if not pm then return nil end
+    local names = {}
+    local hi = (scope == 'party') and 5 or 17
+    for i = 0, hi do
+        local n = pm:GetMemberName(i)
+        if n and n ~= '' then names[n:lower()] = true end
+    end
+    return names
+end
+
 -- Helper: Check if zid is in event credit
 local function zid_in_credit(eventName, zid)
     -- DEBUG
@@ -116,6 +146,9 @@ end
 
 function attendance.gather_zone(eventName)
     local entries = memory.scan_zone_list()
+    -- Pre-build the scope name-set so the per-entry filter is an O(1)
+    -- table lookup. Nil means "zone" (no narrowing — historical behavior).
+    local scopeSet = build_scope_set(attendance.scope)
     local seen = {}
     for _, row in ipairs(attendance.data) do
         seen[row.name:gsub('^X%s+', ''):lower()] = true
@@ -126,12 +159,15 @@ function attendance.gather_zone(eventName)
         local key = name:lower()
         local is_seen = seen[key]
         local is_credit = zid_in_credit(eventName, info.zid)
-        
+        local in_scope = (scopeSet == nil) or scopeSet[key] == true
+
         if attendance.debug then
-            print(string.format('[att-dbg] Candidate: "%s" (ZID:%d) | Seen:%s | Credit:%s', name, info.zid, tostring(is_seen), tostring(is_credit)))
+            print(string.format('[att-dbg] Candidate: "%s" (ZID:%d) | Seen:%s | Credit:%s | Scope[%s]:%s',
+                name, info.zid, tostring(is_seen), tostring(is_credit),
+                tostring(attendance.scope), tostring(in_scope)))
         end
 
-        if not is_seen and is_credit then
+        if not is_seen and is_credit and in_scope then
             attendance.add_entry(name, info.mj, info.sj, info.zid)
             seen[key] = true
             added = added + 1
@@ -147,6 +183,10 @@ end
 function attendance.gather_current_zone()
     local self_zid = memory.get_current_zone_id()
     local entries = memory.scan_zone_list()
+    -- Same party/alliance narrowing the credit-zone scan applies. 'zone'
+    -- (the default) leaves scopeSet nil so every entity in the user's
+    -- current zone is eligible, matching the historical behavior.
+    local scopeSet = build_scope_set(attendance.scope)
     local seen = {}
     for _, row in ipairs(attendance.data) do
         seen[row.name:gsub('^X%s+', ''):lower()] = true
@@ -155,7 +195,8 @@ function attendance.gather_current_zone()
     local added = 0
     for name, info in pairs(entries) do
         local key = name:lower()
-        if not seen[key] and info.zid == self_zid then
+        local in_scope = (scopeSet == nil) or scopeSet[key] == true
+        if not seen[key] and info.zid == self_zid and in_scope then
             attendance.add_entry(name, info.mj, info.sj, info.zid)
             seen[key] = true
             added = added + 1

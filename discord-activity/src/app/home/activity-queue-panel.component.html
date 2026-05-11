@@ -132,7 +132,7 @@
 
         @if (isDkpModeForSelectedLinkshell()) {
           <label>
-            <span>DKP/hour</span>
+            <span>{{ createModel.eventType === 'HNM' ? 'DKP/window' : 'DKP/hour' }}</span>
             <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
           </label>
         }
@@ -302,7 +302,7 @@
                     type="button"
                     class="action-button"
                     [disabled]="activity.busyEventId() === event.id"
-                    (click)="activity.startEvent(event.id)">
+                    (click)="attemptStartEvent(event)">
                     {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
                   </button>
                   <button
@@ -389,7 +389,7 @@
                     type="button"
                     class="action-button action-button--secondary"
                     [disabled]="activity.busyEventId() === event.id"
-                    (click)="activity.startEvent(event.id)">
+                    (click)="attemptStartEvent(event)">
                     {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
                   </button>
                   <button

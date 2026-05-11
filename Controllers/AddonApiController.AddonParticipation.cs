@@ -321,16 +321,87 @@ public sealed partial class AddonApiController
         // events (single-window events award DKP at end-of-event, not per post).
         var creditedAttendees = new List<object>();
 
-        // Pre-load all linkshell memberships in one query so we can match without a roundtrip per entry.
-        var memberships = await _dbContext.AppUserLinkshells
+        // Pre-load all linkshell memberships + their AppUser so we can index by
+        // every name the player might be known by (the membership row's own
+        // CharacterName, plus the AppUser's CharacterName / AltCharacterName1 /
+        // AltCharacterName2). This makes the addon match work even when the
+        // membership CharacterName was left null at pair time or when the player
+        // logs in as one of their alts.
+        var membershipsWithUser = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(m => m.LinkshellId == token.LinkshellId && m.AppUserId != null)
+            .Join(_dbContext.Users.AsNoTracking(),
+                  m => m.AppUserId,
+                  u => u.Id,
+                  (m, u) => new { Membership = m, User = u })
             .ToListAsync(cancellationToken);
 
-        var membershipByName = memberships
-            .Where(m => !string.IsNullOrWhiteSpace(m.CharacterName))
-            .GroupBy(m => m.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        // Build the lookup by trying every candidate name. First-write-wins, so
+        // the membership's own CharacterName takes precedence over alts when both
+        // resolve to different members (rare but possible if two players share an
+        // alt name).
+        var membershipByName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in membershipsWithUser)
+        {
+            foreach (var candidate in new[]
+                     {
+                         pair.Membership.CharacterName,
+                         pair.User.CharacterName,
+                         pair.User.AltCharacterName1,
+                         pair.User.AltCharacterName2,
+                     })
+            {
+                if (string.IsNullOrWhiteSpace(candidate)) continue;
+                var key = candidate.Trim();
+                if (!membershipByName.ContainsKey(key))
+                {
+                    membershipByName[key] = pair.Membership;
+                }
+            }
+        }
+
+        // Self-identification backfill: when the addon tells us which character
+        // it's currently logged in as, ensure the token issuer's membership and
+        // AppUser both carry that name. This rescues the common signup path
+        // where the user pairs the addon before ever filling out a character
+        // name in the website profile — without it their own attendance posts
+        // silently fall into `unmatched` because there's nothing to match
+        // against. Tracked entities so EF persists the changes on SaveChanges
+        // below; we re-read by AppUserId rather than reusing the AsNoTracking
+        // copies above.
+        if (!string.IsNullOrWhiteSpace(request.SelfCharacterName))
+        {
+            var selfName = request.SelfCharacterName.Trim();
+            var issuerId = token.IssuedToAppUserId;
+
+            var issuerMembership = await _dbContext.AppUserLinkshells
+                .FirstOrDefaultAsync(
+                    m => m.LinkshellId == token.LinkshellId && m.AppUserId == issuerId,
+                    cancellationToken);
+            var issuerUser = await _dbContext.Users
+                .FirstOrDefaultAsync(u => u.Id == issuerId, cancellationToken);
+
+            if (issuerMembership is not null)
+            {
+                if (string.IsNullOrWhiteSpace(issuerMembership.CharacterName))
+                {
+                    issuerMembership.CharacterName = selfName;
+                }
+                if (issuerUser is not null && string.IsNullOrWhiteSpace(issuerUser.CharacterName))
+                {
+                    issuerUser.CharacterName = selfName;
+                }
+
+                // Make sure the lookup picks up the freshly-known name even
+                // though membershipsWithUser was loaded AsNoTracking — point
+                // the dictionary at the (now-tracked) issuer membership so
+                // downstream entry resolution finds it.
+                if (!membershipByName.ContainsKey(selfName))
+                {
+                    membershipByName[selfName] = issuerMembership;
+                }
+            }
+        }
 
         // Resolve every entry to a membership up-front so we can pre-load existing
         // participations and per-window credits in single queries instead of per-row.

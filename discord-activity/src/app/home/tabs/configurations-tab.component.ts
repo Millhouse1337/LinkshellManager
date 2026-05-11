@@ -9,6 +9,7 @@ import {
   ActivityLootStructure,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
+import { TOD_BUILT_IN_MONSTER_GROUPS } from '../activity-home.types';
 
 @Component({
   selector: 'app-configurations-tab',
@@ -130,7 +131,8 @@ export class ConfigurationsTabComponent {
         enableDkp: settings?.enableDkp ?? null,
         enableItems: settings?.enableItems ?? null,
         enableRevenue: settings?.enableRevenue ?? null,
-        dkpRoundingIncrement: settings?.dkpRoundingIncrement ?? null
+        dkpRoundingIncrement: settings?.dkpRoundingIncrement ?? null,
+        hiddenTodMonsters: settings?.hiddenTodMonsters ?? null
       });
       this.cancelEditLinkshell();
     } catch {
@@ -364,6 +366,10 @@ export class ConfigurationsTabComponent {
     enableItems: boolean;
     enableRevenue: boolean;
     dkpRoundingIncrement: ActivityDkpRoundingIncrement;
+    // Lower-cased names of monsters the linkshell wants hidden from the
+    // ToD Tracker. Lower-case for comparison stability — re-cased to the
+    // canonical built-in label on save.
+    hiddenTodMonsters: Set<string>;
   } = {
     lootStructure: 'Dkp',
     enableHnmSection: true,
@@ -375,8 +381,11 @@ export class ConfigurationsTabComponent {
     enableDkp: true,
     enableItems: true,
     enableRevenue: true,
-    dkpRoundingIncrement: 'Quarter'
+    dkpRoundingIncrement: 'Quarter',
+    hiddenTodMonsters: new Set<string>()
   };
+
+  protected readonly todMonsterGroups = TOD_BUILT_IN_MONSTER_GROUPS;
 
   protected customizeDirty = false;
 
@@ -406,7 +415,43 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableItems = settings.enableItems;
     this.customizeDraft.enableRevenue = settings.enableRevenue;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
+    // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
+    // for compare stability — restored to canonical case on save.
+    this.customizeDraft.hiddenTodMonsters = new Set(
+      (settings.hiddenTodMonsters ?? []).map(name => name.trim().toLowerCase())
+    );
     this.customizeDirty = false;
+  }
+
+  // Per-monster toggle state. Bound through ngModel via these helpers so
+  // the template can stay declarative without leaking Set internals.
+  protected isMonsterHidden(name: string): boolean {
+    return this.customizeDraft.hiddenTodMonsters.has(name.trim().toLowerCase());
+  }
+
+  protected onMonsterHiddenChange(name: string, hidden: boolean): void {
+    const key = name.trim().toLowerCase();
+    if (hidden) {
+      this.customizeDraft.hiddenTodMonsters.add(key);
+    } else {
+      this.customizeDraft.hiddenTodMonsters.delete(key);
+    }
+    this.onCustomizeFieldChange();
+  }
+
+  // Re-emits the hidden Set as canonical-case names for the wire DTO. Walks
+  // TOD_BUILT_IN_MONSTER_GROUPS so the recasing matches whatever the addon
+  // sends as the canonical label.
+  private buildHiddenTodMonstersPayload(): string[] {
+    const out: string[] = [];
+    for (const group of TOD_BUILT_IN_MONSTER_GROUPS) {
+      for (const name of group.names) {
+        if (this.customizeDraft.hiddenTodMonsters.has(name.trim().toLowerCase())) {
+          out.push(name);
+        }
+      }
+    }
+    return out;
   }
 
   protected onCustomizeFieldChange(): void {
@@ -433,7 +478,8 @@ export class ConfigurationsTabComponent {
         enableDkp: this.customizeDraft.enableDkp,
         enableItems: this.customizeDraft.enableItems,
         enableRevenue: this.customizeDraft.enableRevenue,
-        dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement
+        dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement,
+        hiddenTodMonsters: this.buildHiddenTodMonstersPayload()
       });
       this.customizeDirty = false;
       this.syncCustomizeDraft();

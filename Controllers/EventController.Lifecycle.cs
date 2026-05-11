@@ -264,6 +264,16 @@ public partial class EventController
             return Forbid();
         }
 
+        // Match the POST-side guard in CancelEvent: a live event can't be
+        // deleted, only ended. Block the confirmation page so a hand-crafted
+        // URL (or stale browser tab) doesn't take the user somewhere the
+        // submit would just bounce.
+        if (eventToDelete.CommencementStartTime.HasValue)
+        {
+            TempData["Error"] = "Live events cannot be deleted. End the event first.";
+            return RedirectToAction(nameof(Index));
+        }
+
         return View(eventToDelete);
     }
 
@@ -337,6 +347,16 @@ public partial class EventController
         if (!CanManageLinkshell(membership))
         {
             return Forbid();
+        }
+
+        // HNM events run on the in-game addon's window timing — the post-by
+        // -window roster workflow gets out of sync if start fires from the
+        // web app, so reject and surface a clear message via TempData. The
+        // Index view reads from TempData["StartError"] (added below).
+        if (string.Equals((eventToStart.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["StartError"] = "HNM events are started with the in-game addon. Use the Att launcher to start this event.";
+            return RedirectToAction(nameof(Index));
         }
 
         eventToStart.CommencementStartTime ??= DateTime.UtcNow;

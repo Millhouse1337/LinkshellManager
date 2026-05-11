@@ -91,15 +91,12 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        // Running balance is computed in chronological (oldest-first) order so
+        // each entry's "after" balance is correct, then the list is reversed
+        // so the activity UI shows the most recent entry at the top.
         var runningBalance = 0d;
-        return Ok(new ActivityDkpHistoryDto(
-            selectedLinkshellId,
-            selectedLinkshell.Linkshell?.LinkshellName ?? "Unknown linkshell",
-            selectedAppUserId,
-            memberDtos.First(member => member.AppUserId == selectedAppUserId).CharacterName,
-            memberDtos.First(member => member.AppUserId == selectedAppUserId).CurrentBalance,
-            memberDtos,
-            ledgerEntries.Select(entry =>
+        var projected = ledgerEntries
+            .Select(entry =>
             {
                 runningBalance += entry.Amount;
                 return new ActivityDkpLedgerEntryDto(
@@ -115,7 +112,18 @@ public sealed partial class ActivityDataController
                     entry.EventEndTime,
                     entry.ItemName,
                     entry.Details);
-            }).ToList()));
+            })
+            .ToList();
+        projected.Reverse();
+
+        return Ok(new ActivityDkpHistoryDto(
+            selectedLinkshellId,
+            selectedLinkshell.Linkshell?.LinkshellName ?? "Unknown linkshell",
+            selectedAppUserId,
+            memberDtos.First(member => member.AppUserId == selectedAppUserId).CharacterName,
+            memberDtos.First(member => member.AppUserId == selectedAppUserId).CurrentBalance,
+            memberDtos,
+            projected));
     }
 
     [HttpPost("dkp-audit")]

@@ -33,6 +33,14 @@
     </div>
 </div>
 
+@if (TempData["StartError"] is string startError && !string.IsNullOrWhiteSpace(startError))
+{
+    <div class="card fade d1" style="border:1px solid var(--accent);padding:14px 16px;margin-bottom:16px">
+        <div style="font-weight:600;color:var(--fg);margin-bottom:4px">Cannot start event</div>
+        <div style="color:var(--fg-2);font-size:14px">@startError</div>
+    </div>
+}
+
 @if (!Model.Any())
 {
     <div class="card fade d2">
@@ -82,6 +90,17 @@ else
                         {
                             <a class="btn primary sm" asp-action="Start" asp-route-eventId="@item.Event.Id">View</a>
                         }
+                        else if (string.Equals((item.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+                        {
+                            @* HNM events are addon-only-startable. Render a disabled
+                               button with a hover hint so officers see why they
+                               can't start it from the web. The server-side
+                               StartEvent guard rejects this anyway. *@
+                            <button class="btn ghost sm" type="button" disabled
+                                    title="HNM events are started with the in-game addon (Att launcher)">
+                                Start (addon-only)
+                            </button>
+                        }
                         else
                         {
                             <form asp-action="StartEvent" method="post" style="display:inline">
@@ -90,7 +109,13 @@ else
                             </form>
                         }
                         <a class="btn ghost sm" asp-action="Edit" asp-route-id="@item.Event.Id">Edit</a>
-                        <a class="btn ghost sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
+                        @* Delete is hidden while an event is live so an officer
+                           can't wipe an active run mid-flight; the run has to
+                           be ended (or archived via End event) first. *@
+                        @if (!isLive)
+                        {
+                            <a class="btn ghost sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
+                        }
                     </div>
                 </div>
 

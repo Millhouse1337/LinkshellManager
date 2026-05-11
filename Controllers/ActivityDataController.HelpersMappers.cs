@@ -17,7 +17,9 @@ public sealed partial class ActivityDataController
     {
         if (linkshell is null)
         {
-            return new ActivityLinkshellSettingsDto("Dkp", true, true, true, true, true, true, true, true, true, "Quarter");
+            return new ActivityLinkshellSettingsDto(
+                "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
+                Array.Empty<string>());
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -31,7 +33,41 @@ public sealed partial class ActivityDataController
             linkshell.EnableDkp,
             linkshell.EnableItems,
             linkshell.EnableRevenue,
-            NormalizeDkpRounding(linkshell.DkpRoundingIncrement));
+            NormalizeDkpRounding(linkshell.DkpRoundingIncrement),
+            ParseHiddenTodMonsters(linkshell.HiddenTodMonsters));
+    }
+
+    // Splits the pipe-separated storage form into a clean list of names
+    // (trimmed, non-empty). Pipe avoids comma collisions if FFXI ever
+    // grows a mob name with a comma in it.
+    private static IReadOnlyList<string> ParseHiddenTodMonsters(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
+        var parts = raw.Split('|', StringSplitOptions.RemoveEmptyEntries);
+        var list = new List<string>(parts.Length);
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Length > 0) list.Add(trimmed);
+        }
+        return list;
+    }
+
+    // Joins the wire form back into the pipe-separated storage form.
+    // Drops empty / whitespace-only entries and de-dupes case-insensitively
+    // so the stored value stays clean.
+    internal static string SerializeHiddenTodMonsters(IReadOnlyList<string>? names)
+    {
+        if (names is null || names.Count == 0) return string.Empty;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var kept = new List<string>(names.Count);
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var trimmed = name.Trim();
+            if (seen.Add(trimmed)) kept.Add(trimmed);
+        }
+        return string.Join('|', kept);
     }
 
     private static string NormalizeDkpRounding(string? raw)

@@ -57,7 +57,7 @@ function M.draw(state, callbacks)
     end
 
     if actionIsHnmEvent and state.linkedEventId then
-        local POST_BTN_W   = 220
+        local POST_BTN_W   = 280
         local END_BTN_W    = 120
         local barWindowWidth = 600
         pcall(function()

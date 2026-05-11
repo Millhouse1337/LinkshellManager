@@ -52,7 +52,11 @@ public sealed record ActivityLinkshellSettingsDto(
     bool EnableDkp,
     bool EnableItems,
     bool EnableRevenue,
-    string DkpRoundingIncrement);
+    string DkpRoundingIncrement,
+    // Mob names the linkshell admin has chosen to hide from the ToD Tracker.
+    // Stored on the server as a single pipe-separated string; the wire DTO
+    // surfaces them as a list to keep the client side ergonomic.
+    IReadOnlyList<string> HiddenTodMonsters);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -506,7 +510,9 @@ public sealed record ActivityUpdateLinkshellRequest(
     bool? EnableDkp,
     bool? EnableItems,
     bool? EnableRevenue,
-    string? DkpRoundingIncrement);
+    string? DkpRoundingIncrement,
+    // null = leave unchanged, [] = clear, [...names] = replace.
+    IReadOnlyList<string>? HiddenTodMonsters);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
 

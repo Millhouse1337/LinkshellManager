@@ -79,10 +79,23 @@ function M.install(out, state, deps)
             end
         end
 
-        -- 4. Post attendance (if there's anyone to post).
+        -- 4. Post attendance (if there's anyone to post). The addon's logged-in
+        -- character name accompanies every post so the server can backfill the
+        -- token issuer's CharacterName on first use — without that, a freshly-
+        -- paired user who hasn't filled in their website profile would silently
+        -- fall into the unmatched bucket and not appear in their own event.
         local syncSummary = 'No roster entries.'
         if #entries > 0 then
-            local result, perr = api.post_attendance(eventId, entries, nextSequence)
+            local selfName = nil
+            do
+                local pm = AshitaCore and AshitaCore:GetMemoryManager()
+                                                   and AshitaCore:GetMemoryManager():GetParty()
+                if pm then
+                    local n = pm:GetMemberName(0)
+                    if n and n ~= '' then selfName = n end
+                end
+            end
+            local result, perr = api.post_attendance(eventId, entries, nextSequence, selfName)
             if result then
                 local unmatched = result.unmatched or {}
                 local windowTag = nextSequence and (' [window ' .. nextSequence .. ']') or ''

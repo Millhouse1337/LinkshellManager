@@ -16,10 +16,15 @@ local syncSettingsShowIdsPtr     = { false }
 local syncSettingsAddMonsterPtr  = { '' }
 local syncSettingsBoundFor       = nil  -- identity tracker so we re-prime
                                          -- the inputs when the window opens
+-- Tracks whether the settings window has been snapped to its preferred
+-- size this open. Reset when the window closes so the next open re-snaps,
+-- overriding any imgui.ini-saved size from a previous addon version.
+local syncSettingsSizeSnapped    = false
 
 function M.draw(is_open, state, callbacks)
     if not is_open then
         syncSettingsBoundFor = nil
+        syncSettingsSizeSnapped = false
         return false
     end
 
@@ -35,7 +40,34 @@ function M.draw(is_open, state, callbacks)
         syncSettingsBoundFor        = cfg
     end
 
-    imgui.SetNextWindowSize({ 640, 720 }, ImGuiCond_FirstUseEver)
+    -- Use ImGuiCond_Always on the first frame of each open so the preferred
+    -- size beats any value persisted in imgui.ini by a previous addon
+    -- version; subsequent frames let the user drag-resize freely.
+    if not syncSettingsSizeSnapped then
+        imgui.SetNextWindowSize({ 500, 700 }, ImGuiCond_Always)
+        syncSettingsSizeSnapped = true
+    else
+        imgui.SetNextWindowSize({ 500, 700 }, ImGuiCond_FirstUseEver)
+    end
+
+    -- Settings-window opacity (driven by its own slider further down in
+    -- the body). Mirror the main launcher's full-mode fade so the body
+    -- and title bar dim while widgets stay readable. Only push when the
+    -- user has actually dialed below 1.0; at full opacity we leave the
+    -- Ashita theme untouched.
+    local settingsStylePushed = false
+    if (state.settingsAlpha or 1.0) < 1.0 then
+        local mult = state.settingsAlpha or 1.0
+        if mult < 0 then mult = 0 end
+        imgui.PushStyleColor(ImGuiCol_WindowBg,          { 0.06, 0.06, 0.06, 0.94 * mult })
+        imgui.PushStyleColor(ImGuiCol_ChildBg,           { 0.06, 0.06, 0.06, 0.30 * mult })
+        imgui.PushStyleColor(ImGuiCol_TitleBg,           { 0.55, 0.18, 0.18, 1.00 * mult })
+        imgui.PushStyleColor(ImGuiCol_TitleBgActive,     { 0.65, 0.22, 0.22, 1.00 * mult })
+        imgui.PushStyleColor(ImGuiCol_TitleBgCollapsed,  { 0.55, 0.18, 0.18, 0.75 * mult })
+        imgui.PushStyleColor(ImGuiCol_Border,            { 0.40, 0.40, 0.40, 0.50 * mult })
+        settingsStylePushed = true
+    end
+
     local openPtr = { is_open }
     if imgui.Begin('att Settings', openPtr) then
         imgui.Text('Default DKP rates for events created from the addon:')
@@ -64,6 +96,40 @@ function M.draw(is_open, state, callbacks)
         imgui.SameLine()
         if imgui.Checkbox('Show Event IDs', syncSettingsShowIdsPtr) then
             -- bound directly; nothing else to do
+        end
+
+        imgui.Dummy({ 0, 10 })
+        imgui.Separator()
+        imgui.Dummy({ 0, 6 })
+
+        -- Per-window opacity sliders. Live-bound to state — moving the
+        -- slider takes effect the same frame, no Save required. Main and
+        -- Settings clamp 0..1 since their defaults are fully opaque;
+        -- Compact goes up to 2 because its defaults are already faded.
+        imgui.Text('Window Opacity')
+        imgui.TextDisabled('  Drag a slider to fade that window. 1.00 = default look.')
+
+        local function alpha_slider(label, key, lo, hi)
+            local cur = state[key] or 1.0
+            local ptr = { cur }
+            imgui.Text(label)
+            imgui.SameLine(160)
+            imgui.PushItemWidth(-8)
+            if imgui.SliderFloat('##alpha_' .. key, ptr, lo, hi, '%.2f') then
+                state[key] = ptr[1]
+            end
+            imgui.PopItemWidth()
+        end
+
+        alpha_slider('Main window',     'launcherMainAlpha',    0.0, 1.0)
+        alpha_slider('Compact window',  'launcherCompactAlpha', 0.0, 1.0)
+        alpha_slider('Settings window', 'settingsAlpha',        0.0, 1.0)
+
+        imgui.Dummy({ 0, 4 })
+        if imgui.Button('Reset to default##opacityReset', { 160, 0 }) then
+            state.launcherMainAlpha    = 1.0
+            state.launcherCompactAlpha = 1.0
+            state.settingsAlpha        = 1.0
         end
 
         imgui.Dummy({ 0, 10 })
@@ -316,6 +382,13 @@ function M.draw(is_open, state, callbacks)
         end
 
         imgui.End()
+    end
+
+    -- Balance the 6 PushStyleColor calls made for settings-window fade.
+    -- Must run regardless of Begin's return so the style stack stays sane
+    -- when the window is collapsed.
+    if settingsStylePushed then
+        imgui.PopStyleColor(6)
     end
 
     return openPtr[1]

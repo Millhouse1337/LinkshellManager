@@ -87,6 +87,13 @@ function M.create()
         -- Capturing sections so the panel takes less screen real estate
         -- during routine farm runs. False = full launcher with all panels.
         launcherCompact      = false,
+        -- Per-window opacity multipliers, all driven by sliders in the
+        -- Settings window. 1.0 = fully opaque (default), 0.0 = invisible.
+        -- Same range/semantics across all three windows so the sliders
+        -- read consistently.
+        launcherMainAlpha    = 1.0,
+        launcherCompactAlpha = 1.0,
+        settingsAlpha        = 1.0,
 
         -- Per-monster day number inputs for the HNM Event Presets that
         -- traditionally track a day-of-monster counter (Fafnir, Behemoth,
@@ -98,6 +105,14 @@ function M.create()
         -- record, Discord activity).
         eventPresetDayInputs = {},
         lastScannedFor       = nil,   -- name of event the launcher last scanned for (avoids re-scanning the same selection)
+
+        -- Attendance scope filter for multi-window (HNM / Claim-Kill) events.
+        -- Narrows zone-scan results to just the player's party, the full
+        -- alliance, or everyone in the credit zone (current behaviour).
+        -- Values: 'party' | 'alliance' | 'zone'. Only the launcher UI for
+        -- multi-window events surfaces the picker; non-HNM events always
+        -- treat this as 'zone' regardless of the stored value.
+        attendanceScopeFilter = 'zone',
 
         -- ToD Capture: ring buffer of recent HNM defeat lines plus dedup state.
         -- Newest capture lives at todCaptures[1]; nothing here is persisted.

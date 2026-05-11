@@ -31,6 +31,7 @@ import {
   selector: 'app-events-tab',
   imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, ActivitySidebarPanelComponent],
   templateUrl: './events-tab.component.html',
+  styleUrl: './events-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventsTabComponent {

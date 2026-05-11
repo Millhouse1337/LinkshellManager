@@ -28,9 +28,32 @@ function M.handle(state, deps, e)
     -- 122, 36, ...). The patterns below are specific enough that random
     -- chat won't false-match, so we let any incoming line through and let
     -- the pattern engine be the gate.
-    local raw = e.message_modified or e.message
-    local clean = helpers.clean_str(raw or '')
+    --
+    -- Hardening for chat-modifier addons (SimpleLog, Catseye, etc.):
+    --   * Try BOTH e.message_modified and the raw e.message — if another
+    --     addon mangles the modified line beyond what our patterns can
+    --     read, the original is still untouched and falls back cleanly.
+    --   * Run an extra control-byte scrub on each candidate after the
+    --     standard clean_str pass. clean_str strips the canonical 2-byte
+    --     color sequences (\031X, \030X) but leaves stray solo control
+    --     bytes (0x1E / 0x1F without payload) intact, and those bytes
+    --     can sit between words and defeat the literal-space patterns.
+    local function scrub(s)
+        if s == nil or s == '' then return '' end
+        s = s:gsub('[%z\1-\31]', ' '):gsub('%s+', ' ')
+        return s
+    end
+    local cleanModified = scrub(helpers.clean_str(e.message_modified or ''))
+    local cleanOriginal = scrub(helpers.clean_str(e.message or ''))
+    -- Pick one canonical 'clean' value for downstream code that captures
+    -- the full chat line (cap.message etc.) — prefer the modified form
+    -- since that's what the user actually sees in their chat log.
+    local clean = (cleanModified ~= '' and cleanModified) or cleanOriginal
     if clean == '' then return end
+
+    -- Both candidates the defeat / loot patterns try in order. Same string
+    -- twice when no other addon is modifying chat — cheap.
+    local candidates = { cleanModified, cleanOriginal }
 
     -- Match against canonical singles (Tiamat, "King Behemoth", etc.) and
     -- the testing presets. Iterating constants tables (not state.linkedEventName)
@@ -45,12 +68,19 @@ function M.handle(state, deps, e)
     -- so HNMs like Tiamat / Fafnir / Behemoth (no "the") capture too.
     local function defeat_pattern_hits(monsterName)
         local esc = monsterName:gsub('(%W)', '%%%1')
-        return clean:find('defeats the ' .. esc .. '%.', 1)
-            or clean:find('defeats ' .. esc .. '%.', 1)
-            or clean:find('[Tt]he ' .. esc .. ' was defeated by', 1)
-            or clean:find('[Tt]he ' .. esc .. ' falls to the ground', 1)
-            or clean:find('%f[%w]' .. esc .. ' was defeated by', 1)
-            or clean:find('%f[%w]' .. esc .. ' falls to the ground', 1)
+        for _, candidate in ipairs(candidates) do
+            if candidate ~= '' then
+                if candidate:find('defeats the ' .. esc .. '%.', 1)
+                or candidate:find('defeats ' .. esc .. '%.', 1)
+                or candidate:find('[Tt]he ' .. esc .. ' was defeated by', 1)
+                or candidate:find('[Tt]he ' .. esc .. ' falls to the ground', 1)
+                or candidate:find('%f[%w]' .. esc .. ' was defeated by', 1)
+                or candidate:find('%f[%w]' .. esc .. ' falls to the ground', 1) then
+                    return true
+                end
+            end
+        end
+        return false
     end
 
     local function find_defeat_match(tbl)
@@ -114,8 +144,17 @@ function M.handle(state, deps, e)
         -- enough that random chat won't false-match.
         local function loot_capture_for(monsterName)
             local esc = monsterName:gsub('(%W)', '%%%1')
-            return clean:match('You find ([^%.]+) on the ' .. esc .. '%.')
-                or clean:match('You find ([^%.]+) on ' .. esc .. '%.')
+            -- Same multi-candidate strategy the defeat scanner uses, so
+            -- a chat-modifier addon mangling message_modified can't
+            -- silently drop loot drops either.
+            for _, candidate in ipairs(candidates) do
+                if candidate ~= '' then
+                    local item = candidate:match('You find ([^%.]+) on the ' .. esc .. '%.')
+                                or candidate:match('You find ([^%.]+) on ' .. esc .. '%.')
+                    if item then return item end
+                end
+            end
+            return nil
         end
 
         local function find_loot_match(tbl)
@@ -210,14 +249,13 @@ function M.handle(state, deps, e)
         return
     end
 
-    -- The chat line with stray control bytes (color/auto-translate residues
-    -- that survived clean_str) replaced with a single space, so the message
-    -- the server receives — and parses for the killer's name — is the same
-    -- shape as what the user sees in the ToD Capturing panel. Captured at
-    -- (wall-clock at callback time, second precision) carries the actual
-    -- ToD value, since FFXI's optional [HH:MM:SS] chat-prefix requires a
-    -- client setting most users don't have on.
-    local stripped = clean:gsub('[%z\1-\31]', ' '):gsub('%s+', ' '):gsub('%s+$', '')
+    -- The chat line for the capture record. `clean` is already control-byte
+    -- scrubbed and whitespace-collapsed at the top of the handler; only a
+    -- trailing-whitespace trim is needed here. Captured at (wall-clock at
+    -- callback time, second precision) carries the actual ToD value, since
+    -- FFXI's optional [HH:MM:SS] chat-prefix requires a client setting most
+    -- users don't have on.
+    local stripped = clean:gsub('%s+$', '')
 
     table.insert(state.todCaptures, 1, {
         monster      = hitName,

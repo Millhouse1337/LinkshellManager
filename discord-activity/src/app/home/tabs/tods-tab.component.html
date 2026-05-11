@@ -4,6 +4,9 @@
           <div class="section-label">ToD Tracker</div>
         </div>
         <div class="section-head-right">
+          @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+            <button type="button" class="btn primary sm" (click)="openLogTodForm()">+ Log ToD</button>
+          }
           <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
           @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
             <span class="tag accent">{{ dashboardLinkshell.name }}</span>
@@ -143,14 +146,17 @@
         }
       </div>
 
-      <!-- Log ToD form -->
+      <!-- Log ToD form (modal) -->
       @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
-        <div class="card">
+        <dialog #logTodDialog class="event-edit-modal-dialog" (click)="onLogTodDialogClick($event)">
           <div class="card-head">
             <div class="card-title">{{ editingTodId !== null ? 'Edit ToD' : 'Log ToD' }}</div>
-            @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-              <span class="tag accent">{{ dashboardLinkshell.name }}</span>
-            }
+            <div class="card-head-right">
+              @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+                <span class="tag accent">{{ dashboardLinkshell.name }}</span>
+              }
+              <button type="button" class="btn ghost sm" (click)="cancelLogTodForm()">Close</button>
+            </div>
           </div>
           <div class="card-body">
             <form class="form-grid tod-form" (ngSubmit)="submitTod()">
@@ -294,15 +300,13 @@
                 <button type="submit" class="btn primary" [disabled]="activity.busyTodSave() || isUploadingTodImage">
                   {{ activity.busyTodSave() ? 'Saving...' : (editingTodId !== null ? 'Save changes' : 'Log ToD') }}
                 </button>
-                @if (editingTodId !== null) {
-                  <button type="button" class="btn ghost" (click)="cancelTodEdit()" [disabled]="activity.busyTodSave()">
-                    Cancel edit
-                  </button>
-                }
+                <button type="button" class="btn ghost" (click)="cancelLogTodForm()" [disabled]="activity.busyTodSave()">
+                  Cancel
+                </button>
               </div>
             </form>
           </div>
-        </div>
+        </dialog>
       } @else {
         <div class="card">
           <div class="empty-state empty-state--compact">

@@ -64,3 +64,87 @@ export const HNM_NAMES: ReadonlySet<string> = new Set([
   'Vrtra',
   'Bahamut'
 ]);
+
+// All built-in monster names the addon's parser knows about, grouped by
+// category for display. Mirrors the per-table constants in att/constants.lua
+// (HNM_WINDOW_COUNTS, SKY_FARM_NMS, GROUND_NMS, HENMS, SEA_NMS_GROUPS).
+// Sea Tier 1 / Pop-item names are kept ordered as a single Sea group since
+// the addon also pools them in the Settings panel.
+export interface TodMonsterGroup {
+  label: string;
+  names: readonly string[];
+}
+
+export const TOD_BUILT_IN_MONSTER_GROUPS: readonly TodMonsterGroup[] = [
+  {
+    label: 'HNMs',
+    names: [
+      'Adamantoise',
+      'Aspidochelone',
+      'Behemoth',
+      'Fafnir',
+      'Jormungand',
+      'King Behemoth',
+      'Nidhogg',
+      'Tiamat',
+      'Vrtra',
+    ]
+  },
+  {
+    label: 'Sky NMs',
+    names: [
+      'Brigandish Blade',
+      'Byakko',
+      'Despot',
+      'Faust',
+      'Genbu',
+      'Kirin',
+      'Mother Globe',
+      'Olla Grande',
+      'Seiryu',
+      'Steam Cleaner',
+      'Suzaku',
+      'Ullikummi',
+      'Zipacna',
+    ]
+  },
+  {
+    label: 'Sea NMs',
+    names: [
+      'Absolute Virtue',
+      "Ix'aern (Dark Knight)",
+      "Ix'aern (Dragoon)",
+      "Ix'aern (Monk)",
+      'Jailer of Faith',
+      'Jailer of Fortitude',
+      'Jailer of Hope',
+      'Jailer of Justice',
+      'Jailer of Love',
+      'Jailer of Prudence',
+      'Jailer of Temperance',
+    ]
+  },
+  {
+    label: 'Other NMs',
+    names: [
+      'Bloodsucker',
+      'King Arthro',
+      'King Vinegarroon',
+      'Serket',
+      'Shikigami Weapon',
+      'Simurgh',
+      'Xolotl',
+    ]
+  },
+  {
+    label: 'HENMs',
+    names: [
+      'Mammet-9999',
+      'Overlord Arthro',
+      'Ruinous Rocs',
+      'Sacred Scorpions',
+      'Tonberry Sovereign',
+      'Ultimega',
+    ]
+  },
+];

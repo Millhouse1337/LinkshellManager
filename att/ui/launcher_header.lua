@@ -11,6 +11,33 @@ local M = {}
 -- launcher's local state and the persistent input pointers. Passing it in
 -- keeps the section pure UI code.
 function M.draw(state, callbacks, do_full_refresh)
+    -- Compact mode keeps only the Compact checkbox + Refresh button on the
+    -- header row so the launcher reads as a clean stack of section chevrons.
+    -- Everything else (Web Sync tag, LS dropdown, Settings, Timezone) is
+    -- restored as soon as the user unchecks Compact.
+    if state.launcherCompact then
+        local REFRESH_BTN_W = 90
+        local COMPACT_W     = 100  -- checkbox + label combined width
+        local windowWidth = 600
+        pcall(function()
+            local ww = imgui.GetWindowWidth()
+            if type(ww) == 'number' then windowWidth = ww end
+        end)
+        -- SetCursorPosX (not SameLine) because nothing has been rendered on
+        -- this row yet — SameLine with no preceding item is undefined.
+        imgui.SetCursorPosX(math.max(8, windowWidth - REFRESH_BTN_W - COMPACT_W - 24))
+        local compactPtr = { state.launcherCompact and true or false }
+        if imgui.Checkbox('Compact##launcherCompact', compactPtr) then
+            state.launcherCompact = compactPtr[1]
+        end
+        imgui.SameLine()
+        if imgui.Button('Refresh##topRefresh', { REFRESH_BTN_W, 0 }) then
+            do_full_refresh()
+        end
+        imgui.Separator()
+        return
+    end
+
     -- Web Sync indicator on the far left of the header row (when paired).
     if api.is_paired() then
         imgui.TextColored({ 0.5, 0.85, 1.0, 1.0 }, '[Web Sync Activated]')
