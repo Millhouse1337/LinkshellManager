@@ -213,8 +213,8 @@
               </div>
 
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
-                <label class="customize-form__field">
-                  <span>DKP rounding increment</span>
+                <label class="customize-form__field" style="margin-top:18px">
+                  <span style="font-weight:600;font-size:13px;color:var(--fg)">DKP rounding increment</span>
                   <select name="dkpRoundingIncrementDraft"
                     [ngModel]="customizeDraft.dkpRoundingIncrement"
                     (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
@@ -286,26 +286,38 @@
               </div>
             </div>
 
-            <div class="customize-form__row">
-              <div class="customize-form__row-label">Hidden ToD monsters</div>
+            <div class="customize-form__row" style="margin-top:24px">
+              <div class="customize-form__row-label" style="font-weight:600;font-size:13px;color:var(--fg);margin-bottom:4px">Hide ToD Mobs</div>
               <div class="customize-form__row-body">
                 <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
                   Toggle a monster on to hide it from the Tracked Windows panel on the Dashboard and ToDs tab.
                 </div>
                 @for (group of todMonsterGroups; track group.label) {
-                  <div style="margin-bottom:14px">
-                    <div style="font-size:12px;font-weight:600;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">{{ group.label }}</div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 14px">
-                      @for (monster of group.names; track monster) {
-                        <label class="customize-form__toggle">
-                          <input type="checkbox"
-                            [name]="'hiddenTod_' + monster"
-                            [ngModel]="isMonsterHidden(monster)"
-                            (ngModelChange)="onMonsterHiddenChange(monster, $event)" />
-                          <span>{{ monster }}</span>
-                        </label>
-                      }
-                    </div>
+                  <div style="margin-bottom:10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+                    <!-- Section header is a button so the whole strip is clickable.
+                         Chevron rotates 90deg when expanded. -->
+                    <button type="button"
+                            (click)="toggleTodHideGroup(group.label)"
+                            [attr.aria-expanded]="todHideGroupExpanded[group.label] ? 'true' : 'false'"
+                            style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 12px;background:transparent;border:0;color:var(--fg-2);font:inherit;text-align:left;cursor:pointer">
+                      <span
+                        style="display:inline-block;width:10px;font-size:10px;transition:transform 0.15s ease"
+                        [style.transform]="todHideGroupExpanded[group.label] ? 'rotate(90deg)' : 'rotate(0deg)'">▶</span>
+                      <span style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">{{ group.label }}</span>
+                    </button>
+                    @if (todHideGroupExpanded[group.label]) {
+                      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 14px;padding:0 12px 12px">
+                        @for (monster of group.names; track monster) {
+                          <label class="customize-form__toggle">
+                            <input type="checkbox"
+                              [name]="'hiddenTod_' + monster"
+                              [ngModel]="isMonsterHidden(monster)"
+                              (ngModelChange)="onMonsterHiddenChange(monster, $event)" />
+                            <span>{{ monster }}</span>
+                          </label>
+                        }
+                      </div>
+                    }
                   </div>
                 }
               </div>
@@ -437,7 +449,7 @@
             }
             @if (canManageAddonTokens()) {
               <button type="button" class="btn primary sm" (click)="openAddonPairingModal()">
-                + Generate pairing code
+                + Get Code
               </button>
             }
           </div>

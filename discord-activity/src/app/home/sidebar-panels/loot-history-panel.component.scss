@@ -9,7 +9,13 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 200px;
+  // `flex: 1 1 200px` instead of plain `min-width: 200px` so the inputs
+  // grow to share the available width on desktop AND fill the row on
+  // phone. Before, each filter was pinned to 200px and any leftover
+  // space was wasted to the right (visible as huge empty bands next
+  // to the inputs on a phone-portrait viewport).
+  flex: 1 1 200px;
+  min-width: 0;
 
   // Bumped from 11px/--fg-3 to 12px/--fg-2 plus 600 weight so the
   // "Winner contains" / "Item contains" labels read clearly instead of
@@ -33,6 +39,170 @@
   padding-top: 0;
   padding-bottom: 8px;
   border-top: none;
+}
+
+// --- Phone: table → card layout ---
+//
+// On a phone, jamming 8 columns (When / Source / Context / Item / Winner
+// / DKP / Status / Actions) into a ~400px viewport either wraps every
+// single word ("May / 12, / 2026 / at / 10:43 / AM") or forces a
+// horizontal scroll the user has to fight with. Instead, transform the
+// table into a vertical stack of cards — one card per loot record with
+// the field labels embedded — so each record reads top-to-bottom like a
+// native mobile list item.
+//
+// Implementation note: this is pure CSS over the existing `<table>`
+// markup. We hide `thead`, turn each `tr` into a grid, and use
+// `td:nth-child(N)::before` to inject the field labels (no markup
+// change needed). The reason-row stays as a continuation of the card
+// above by tucking under the previous row with a negative top margin
+// and a matching background.
+@media (max-width: 600px) {
+  .loot-history-panel .table-wrap {
+    // Phone cards don't need horizontal scroll; let the wrap collapse
+    // any leftover overflow guard from the desktop table.
+    overflow-x: visible;
+  }
+
+  .loot-history-panel .data-table,
+  .loot-history-panel .data-table tbody,
+  .loot-history-panel .data-table tr,
+  .loot-history-panel .data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .loot-history-panel .data-table thead {
+    // Column labels are surfaced inline per cell via `::before` below.
+    display: none;
+  }
+
+  .loot-history-panel .data-table {
+    border: 0;
+  }
+
+  .loot-history-panel .data-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .loot-history-panel .data-table tbody tr {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "source  when     actions"
+      "item    item     dkp"
+      "context context  context"
+      "winner  winner   winner"
+      "status  status   status";
+    column-gap: 10px;
+    row-gap: 6px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-elev, rgba(255, 255, 255, 0.02));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border-radius: 8px;
+  }
+
+  .loot-history-panel .data-table tbody td {
+    border: 0;
+    padding: 0;
+    // Allow long item names / contexts to wrap nicely instead of
+    // splitting one character per line.
+    word-break: break-word;
+  }
+
+  // Map the <td>s onto named grid areas in the same order they appear
+  // in the markup: When / Source / Context / Item / Winner / DKP /
+  // Status / Actions.
+  .loot-history-panel .data-table tbody td:nth-child(1) {
+    grid-area: when;
+    font-size: 11px;
+    color: var(--fg-3, #a1a1aa);
+    text-align: right;
+  }
+  .loot-history-panel .data-table tbody td:nth-child(2) {
+    grid-area: source;
+    justify-self: start;
+  }
+  .loot-history-panel .data-table tbody td:nth-child(3) {
+    grid-area: context;
+    font-size: 12px;
+    color: var(--fg-2, #d4d4d8);
+  }
+  .loot-history-panel .data-table tbody td:nth-child(3)::before {
+    content: "Context: ";
+    color: var(--fg-3, #a1a1aa);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+  }
+  .loot-history-panel .data-table tbody td:nth-child(4) {
+    grid-area: item;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--fg, #fafafa);
+  }
+  .loot-history-panel .data-table tbody td:nth-child(5) {
+    grid-area: winner;
+    font-size: 12px;
+    color: var(--fg-2, #d4d4d8);
+  }
+  .loot-history-panel .data-table tbody td:nth-child(5)::before {
+    content: "Winner: ";
+    color: var(--fg-3, #a1a1aa);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+  }
+  .loot-history-panel .data-table tbody td:nth-child(6) {
+    grid-area: dkp;
+    font-weight: 600;
+    text-align: right;
+    color: var(--fg, #fafafa);
+  }
+  .loot-history-panel .data-table tbody td:nth-child(6)::before {
+    content: "DKP ";
+    color: var(--fg-3, #a1a1aa);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 4px;
+  }
+  .loot-history-panel .data-table tbody td:nth-child(7) {
+    grid-area: status;
+  }
+  .loot-history-panel .data-table tbody td:nth-child(8) {
+    grid-area: actions;
+    justify-self: end;
+  }
+
+  // Reason-row (only present when a loot record has been edited) gets
+  // tucked visually onto the bottom of the card above it: same
+  // background, square top corners, no top border. The negative top
+  // margin overlaps the parent `gap` so it appears stitched on rather
+  // than floating as its own card.
+  .loot-history-panel .data-table tbody tr.loot-history-panel__reason-row {
+    display: block;
+    grid-template-areas: none;
+    padding: 0 12px 10px;
+    margin-top: -8px;
+    background: var(--bg-elev, rgba(255, 255, 255, 0.02));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+  }
+  .loot-history-panel .data-table tbody tr.loot-history-panel__reason-row td {
+    display: block;
+    text-align: left;
+  }
+  .loot-history-panel .data-table tbody tr.loot-history-panel__reason-row td::before {
+    content: none;
+  }
 }
 
 // --- Edit modal (mirrors the auction-form modal pattern) ---

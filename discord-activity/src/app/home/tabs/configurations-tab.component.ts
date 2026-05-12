@@ -387,6 +387,16 @@ export class ConfigurationsTabComponent {
 
   protected readonly todMonsterGroups = TOD_BUILT_IN_MONSTER_GROUPS;
 
+  // Per-group expand/collapse state for the "Hide ToD Mobs" picker.
+  // Keyed by group.label, defaulting all sections to collapsed so the
+  // panel is compact on first open. Officers expand only the groups they
+  // care about toggling.
+  protected todHideGroupExpanded: Record<string, boolean> = {};
+
+  protected toggleTodHideGroup(label: string): void {
+    this.todHideGroupExpanded[label] = !this.todHideGroupExpanded[label];
+  }
+
   protected customizeDirty = false;
 
   protected customizeTargetLinkshellId(): number {

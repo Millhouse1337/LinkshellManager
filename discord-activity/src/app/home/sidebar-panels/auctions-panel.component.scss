@@ -6,6 +6,18 @@
 // even on tall viewports where centering would otherwise overlap them.
 $auction-modal-top-offset: 112px;
 $auction-modal-bottom-offset: 24px;
+// On phones the identity bar collapses to a small strip, so we can
+// pull the dialog much closer to the top and reclaim vertical room
+// for the form. Bottom offset is also tightened — combined this gives
+// the form ~85px more height on small viewports so the Create button
+// is reachable without fighting the OS scroll chrome.
+// Phone: pull the dialog all the way up to the tab bar and let it
+// occupy almost the entire viewport. With 5+ form rows + an items
+// list + sticky footer, every reclaimed pixel goes toward making the
+// content scroll less and feel like a native bottom sheet instead of
+// a tiny centered card.
+$auction-modal-top-offset-mobile: 40px;
+$auction-modal-bottom-offset-mobile: 0px;
 
 .auction-form-modal-backdrop {
   position: fixed;
@@ -20,6 +32,19 @@ $auction-modal-bottom-offset: 24px;
   justify-content: center;
   z-index: 100;
   padding: $auction-modal-top-offset 16px $auction-modal-bottom-offset;
+  // Prevent the touch gesture from bubbling out to the page below the
+  // backdrop. Without this, dragging on the dim area (or any non-
+  // scrolling part of the dialog) lets the mobile browser interpret it
+  // as a page scroll / pull-to-refresh, which causes the modal to
+  // repaint and visually "snap back" to the top.
+  overscroll-behavior: contain;
+  touch-action: none;
+
+  // Phone: zero horizontal padding so the dialog can go edge-to-edge
+  // and the form fields get the full viewport width.
+  @media (max-width: 600px) {
+    padding: $auction-modal-top-offset-mobile 0 $auction-modal-bottom-offset-mobile;
+  }
 }
 
 .auction-form-modal-dialog {
@@ -39,6 +64,20 @@ $auction-modal-bottom-offset: 24px;
   flex-direction: column;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+
+  // Phone: full-bleed sheet. Square the corners against the edges and
+  // drop the side border (top border carries the visual separation
+  // from the tab bar above). Shadow is removed because there's nothing
+  // around the dialog to shadow onto.
+  @media (max-width: 600px) {
+    max-height: calc(100dvh - #{$auction-modal-top-offset-mobile + $auction-modal-bottom-offset-mobile});
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    max-width: 100%;
+    box-shadow: none;
+  }
 }
 
 // Inside the modal, the form fills the dialog and becomes the scroll
@@ -53,6 +92,19 @@ $auction-modal-bottom-offset: 24px;
   padding: 16px;
   min-height: 0;
   overflow-y: auto;
+  // Contain the scroll within the form: when the user reaches the top
+  // or bottom edge, the gesture stops here instead of chaining out to
+  // the backdrop / page. Without this, mobile browsers treat the
+  // overscroll as a pull-to-refresh / URL-bar-reveal, which is what
+  // makes the modal "snap back to the top" on every drag attempt.
+  overscroll-behavior: contain;
+  // Tell the OS this region accepts vertical pans — without an explicit
+  // touch-action, some gestures get re-interpreted as scrolls on the
+  // parent or as page zoom.
+  touch-action: pan-y;
+  // iOS momentum scrolling. Modern Safari ignores this but it remains
+  // necessary for the older Discord mobile webview.
+  -webkit-overflow-scrolling: touch;
 }
 
 // Pin the form's header (title + Close button) and footer (action
@@ -86,37 +138,107 @@ $auction-modal-bottom-offset: 24px;
   font-weight: 600;
 }
 
-// Per-item bid input. Naked <input> elements inside the activity inherit
-// the OS palette and read as disabled-grey on dark theme; theme it
-// explicitly so the field matches the rest of the dark UI.
-.bid-input {
-  width: 72px;
-  height: 28px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--fg, #fafafa);
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.14));
-  border-radius: 6px;
-  outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
-  -moz-appearance: textfield;
-  appearance: textfield;
+// On phone, the auction create/edit form is rendered INLINE at the
+// bottom of the panel instead of as a floating modal. Trying to use a
+// fixed-position overlay inside the Discord iframe on a phone fights
+// constantly with mobile browser chrome (URL bar reveal, pull-to-
+// refresh, sticky-element scroll quirks) and made the Create button
+// unreachable in earlier attempts.
+//
+// The HTML / Angular logic doesn't change — the same `.auction-form-
+// modal-backdrop` + `.auction-form-modal-dialog` markup is used. We
+// just strip the fixed positioning and sticky header/footer behaviour
+// so the form sits in normal document flow. The component's TS calls
+// `scrollIntoView` on the anchor when the form opens so the user lands
+// on it instead of having to scroll the panel down by hand.
+@media (max-width: 600px) {
+  .auction-form-modal-backdrop {
+    // Disable the dim overlay and all modal-positioning entirely;
+    // become a normal inline block element.
+    position: static;
+    inset: auto;
+    background: transparent;
+    display: block;
+    padding: 16px 0 0;
+    z-index: auto;
+    overscroll-behavior: auto;
+    touch-action: auto;
+  }
+
+  .auction-form-modal-dialog {
+    // Inline section, not a floating dialog.
+    background: var(--surface, #1f1f23);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--r-md, 10px);
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    display: block;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  // The form is no longer the scroll surface — the page itself scrolls.
+  // Strip the overflow / touch / scroll-chaining rules and let the form
+  // be a normal block.
+  .auction-form-modal-dialog > .create-form {
+    padding: 12px;
+    margin: 0;
+    min-height: 0;
+    overflow: visible;
+    overscroll-behavior: auto;
+    touch-action: auto;
+    -webkit-overflow-scrolling: auto;
+    gap: 10px;
+  }
+
+  // No sticky behaviour — the header/footer scroll with the page like
+  // any other section, since there's no inner scroll container.
+  .auction-form-modal-dialog > .create-form > .create-form__header {
+    position: static;
+    top: auto;
+    margin: 0 0 4px;
+    padding: 0 0 10px;
+    background: transparent;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  }
+
+  .auction-form-modal-dialog > .create-form > .create-form__actions {
+    position: static;
+    bottom: auto;
+    margin: 8px 0 0;
+    padding: 10px 0 0;
+    background: transparent;
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  }
+
+  // Drop the descriptive subtitle on phone — keeps the header compact.
+  .auction-form-modal-dialog .create-form__header p {
+    display: none;
+  }
+
+  // Per-item card: collapse the inner grid to a single column on phone
+  // so Source / Item name / Item type / Starting DKP / Notes each get
+  // the full row width.
+  .auction-form-modal-dialog .invite-section .create-form--compact {
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border-radius: var(--r-sm, 6px);
+    background: var(--bg-elev, rgba(255, 255, 255, 0.02));
+  }
+
+  .auction-form-modal-dialog .invite-section .create-form--compact > .create-form__grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .auction-form-modal-dialog .invite-section .create-form--compact > .create-form__actions {
+    margin-top: 8px;
+  }
 }
-.bid-input::-webkit-inner-spin-button,
-.bid-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.bid-input::placeholder {
-  color: var(--fg-3, #a1a1aa);
-  opacity: 1;
-}
-.bid-input:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.22);
-}
-.bid-input:focus-visible {
-  border-color: var(--accent, #7c5cff);
-  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
-}
+
+// .bid-input is the canonical themed input class. Defined globally in
+// discord-activity/src/styles/_forms.scss so both this panel's per-row
+// bid input AND other panels (loot-history filters, etc.) get the same
+// look without each component having to redeclare the rules.

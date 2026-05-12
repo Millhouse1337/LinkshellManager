@@ -46,99 +46,6 @@
       </div>
     </div>
 
-    @if (isAuctionFormOpen) {
-      <div class="auction-form-modal-backdrop" (click)="closeAuctionForm()">
-        <div class="auction-form-modal-dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
-      <form class="create-form create-form--compact" (ngSubmit)="submitAuctionForm()">
-        <div class="create-form__header">
-          <div>
-            <strong>{{ editingAuctionId ? 'Edit auction' : 'Create auction' }}</strong>
-            <p>Schedule the window, add item rows, and manually start it when you are ready.</p>
-          </div>
-          <button type="button" class="action-button action-button--secondary" (click)="closeAuctionForm()">Close</button>
-        </div>
-
-        <div class="create-form__grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-          <label>
-            <span>Title</span>
-            <input [(ngModel)]="auctionFormModel.title" name="auctionTitle" required />
-          </label>
-          <label>
-            <span>Start time</span>
-            <input [(ngModel)]="auctionFormModel.startTimeLocal" name="auctionStartTime" type="datetime-local" required />
-          </label>
-          <label>
-            <span>End time</span>
-            <input [(ngModel)]="auctionFormModel.endTimeLocal" name="auctionEndTime" type="datetime-local" required />
-          </label>
-        </div>
-
-        <div class="invite-section">
-          <div class="panel__header">
-            <h3>Items</h3>
-            <button type="button" class="action-button action-button--secondary" (click)="addAuctionFormItem()">Add item</button>
-          </div>
-
-          @for (item of auctionFormModel.items; track $index) {
-            <div class="create-form create-form--compact">
-              <div class="create-form__grid">
-                <label>
-                  <span>Source</span>
-                  <select [ngModel]="auctionItemFromInventory[$index] ? 'inventory' : 'external'"
-                    (ngModelChange)="onAuctionItemSourceModeChange($index, $event)"
-                    [name]="'auctionItemSource' + $index">
-                    <option value="inventory">From Inventory</option>
-                    <option value="external">Not From Inventory</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Item name</span>
-                  @if (auctionItemFromInventory[$index]) {
-                    <select [ngModel]="item.sourceItemId"
-                      (ngModelChange)="onAuctionItemInventoryPick($index, $event)"
-                      [name]="'auctionItemInv' + $index" required>
-                      <option [ngValue]="null">Select item...</option>
-                      @for (inv of inventoryItemsForAuctionForm(); track inv.id) {
-                        <option [ngValue]="inv.id">{{ inv.itemName }} ({{ inv.quantity }} on hand)</option>
-                      }
-                    </select>
-                  } @else {
-                    <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
-                  }
-                </label>
-                <label>
-                  <span>Item type</span>
-                  <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index"
-                    [readonly]="auctionItemFromInventory[$index]" />
-                </label>
-                <label>
-                  <span>Starting DKP</span>
-                  <input [(ngModel)]="item.startingBidDkp" [name]="'auctionItemBid' + $index" type="number" min="0" />
-                </label>
-                <label>
-                  <span>Notes</span>
-                  <input [(ngModel)]="item.notes" [name]="'auctionItemNotes' + $index" />
-                </label>
-              </div>
-              @if (auctionFormModel.items.length > 1) {
-                <div class="create-form__actions" style="justify-content:flex-end">
-                  <button type="button" class="action-button action-button--secondary" (click)="removeAuctionFormItem($index)">Remove Item</button>
-                </div>
-              }
-            </div>
-          }
-        </div>
-
-        <div class="create-form__actions" style="justify-content:flex-end">
-          <button type="submit" class="action-button" [disabled]="isSubmittingAuction">
-            {{ isSubmittingAuction ? (editingAuctionId ? 'Saving...' : 'Creating...') : (editingAuctionId ? 'Save auction' : 'Create auction') }}
-          </button>
-        </div>
-      </form>
-        </div>
-      </div>
-    }
-
     @if (!selectedLinkshell()) {
       <p class="notice">Select or join a linkshell before working with auctions.</p>
     } @else if (auctionsView() === 'active') {
@@ -454,5 +361,109 @@
       } @else {
         <p class="notice">Closed auctions will appear here after they are archived.</p>
       }
+    }
+
+    <!--
+      Create/edit-auction form. On desktop and tablet this renders as a
+      fixed-position modal (the `.auction-form-modal-backdrop` +
+      `.auction-form-modal-dialog` wrappers float above the page). On
+      phone (<=600px) the SCSS strips the fixed positioning so the same
+      markup renders inline at the bottom of the panel — the user
+      scrolls down to a normal form section instead of fighting an
+      overlay that competes with mobile browser chrome. Placed at the
+      very end of the panel so the inline-on-phone render lands AFTER
+      the auction board content.
+    -->
+    @if (isAuctionFormOpen) {
+      <div #auctionFormAnchor class="auction-form-modal-backdrop" (click)="closeAuctionForm()">
+        <div class="auction-form-modal-dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+      <form class="create-form create-form--compact" (ngSubmit)="submitAuctionForm()">
+        <div class="create-form__header">
+          <div>
+            <strong>{{ editingAuctionId ? 'Edit auction' : 'Create auction' }}</strong>
+            <p>Schedule the window, add item rows, and manually start it when you are ready.</p>
+          </div>
+          <button type="button" class="action-button action-button--secondary" (click)="closeAuctionForm()">Close</button>
+        </div>
+
+        <div class="create-form__grid create-form__grid--cols-3">
+          <label>
+            <span>Title</span>
+            <input [(ngModel)]="auctionFormModel.title" name="auctionTitle" required />
+          </label>
+          <label>
+            <span>Start time</span>
+            <input [(ngModel)]="auctionFormModel.startTimeLocal" name="auctionStartTime" type="datetime-local" required />
+          </label>
+          <label>
+            <span>End time</span>
+            <input [(ngModel)]="auctionFormModel.endTimeLocal" name="auctionEndTime" type="datetime-local" required />
+          </label>
+        </div>
+
+        <div class="invite-section">
+          <div class="panel__header">
+            <h3>Items</h3>
+            <button type="button" class="action-button action-button--secondary" (click)="addAuctionFormItem()">Add item</button>
+          </div>
+
+          @for (item of auctionFormModel.items; track $index) {
+            <div class="create-form create-form--compact">
+              <div class="create-form__grid">
+                <label>
+                  <span>Source</span>
+                  <select [ngModel]="auctionItemFromInventory[$index] ? 'inventory' : 'external'"
+                    (ngModelChange)="onAuctionItemSourceModeChange($index, $event)"
+                    [name]="'auctionItemSource' + $index">
+                    <option value="inventory">From Inventory</option>
+                    <option value="external">Not From Inventory</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Item name</span>
+                  @if (auctionItemFromInventory[$index]) {
+                    <select [ngModel]="item.sourceItemId"
+                      (ngModelChange)="onAuctionItemInventoryPick($index, $event)"
+                      [name]="'auctionItemInv' + $index" required>
+                      <option [ngValue]="null">Select item...</option>
+                      @for (inv of inventoryItemsForAuctionForm(); track inv.id) {
+                        <option [ngValue]="inv.id">{{ inv.itemName }} ({{ inv.quantity }} on hand)</option>
+                      }
+                    </select>
+                  } @else {
+                    <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
+                  }
+                </label>
+                <label>
+                  <span>Item type</span>
+                  <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index"
+                    [readonly]="auctionItemFromInventory[$index]" />
+                </label>
+                <label>
+                  <span>Starting DKP</span>
+                  <input [(ngModel)]="item.startingBidDkp" [name]="'auctionItemBid' + $index" type="number" min="0" />
+                </label>
+                <label>
+                  <span>Notes</span>
+                  <input [(ngModel)]="item.notes" [name]="'auctionItemNotes' + $index" />
+                </label>
+              </div>
+              @if (auctionFormModel.items.length > 1) {
+                <div class="create-form__actions" style="justify-content:flex-end">
+                  <button type="button" class="action-button action-button--secondary" (click)="removeAuctionFormItem($index)">Remove Item</button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="create-form__actions" style="justify-content:flex-end">
+          <button type="submit" class="action-button" [disabled]="isSubmittingAuction">
+            {{ isSubmittingAuction ? (editingAuctionId ? 'Saving...' : 'Creating...') : (editingAuctionId ? 'Save auction' : 'Create auction') }}
+          </button>
+        </div>
+      </form>
+        </div>
+      </div>
     }
   </article>

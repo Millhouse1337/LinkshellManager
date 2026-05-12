@@ -101,6 +101,40 @@ body {
 .identity-refresh svg.spinning { animation: identity-refresh-spin 0.9s linear infinite; }
 @keyframes identity-refresh-spin { to { transform: rotate(360deg); } }
 
+/* ===== Identity bar — mobile collapse =====
+   On phone-portrait widths (Discord activities run at ~390-412px), the
+   identity row is way too dense. Hide everything except the brand-mark
+   "L" pill, the linkshell name, and the clock. Users get the essentials
+   (which linkshell + what time) and the right-side member chip / refresh
+   button / role label / user-name / avatar bubble all drop away. They're
+   reachable from inside the tabs anyway. */
+@media (max-width: 600px) {
+  .brand-bar__name,
+  .identity-divider,
+  .identity-badge,
+  .identity-refresh,
+  .identity-role,
+  .identity-user,
+  .identity-av {
+    display: none;
+  }
+
+  /* Re-justify so the surviving items spread cleanly: brand-mark + ls
+     name pinned left, clock pinned right via space-between (which the
+     parent .identity already uses). The now-empty .identity-right
+     should collapse to zero width so space-between still produces the
+     expected layout. */
+  .identity-right {
+    display: none;
+  }
+
+  /* Tighten the identity bar padding on mobile so the surviving items
+     don't waste space and the tab strip below has more room. */
+  .identity {
+    padding: 6px 10px;
+  }
+}
+
 /* ===== Tab bar ===== */
 .tabs {
   position: sticky;

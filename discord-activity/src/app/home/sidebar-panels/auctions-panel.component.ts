@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, ViewChild, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAuctionItemInput,
@@ -35,6 +35,12 @@ export class AuctionsPanelComponent {
   protected isAuctionFormOpen = false;
   protected isSubmittingAuction = false;
   protected editingAuctionId: number | null = null;
+
+  // Anchor element so we can scrollIntoView when the form opens on phone
+  // (where it renders inline at the bottom of the panel rather than as
+  // a floating modal). On desktop the modal is fixed-position and this
+  // call is a harmless no-op visually.
+  @ViewChild('auctionFormAnchor') private auctionFormAnchor?: ElementRef<HTMLElement>;
   protected readonly auctionsView = signal<'active' | 'history'>('active');
 
   // Auction history is rendered as a flat table — one row per item across
@@ -102,6 +108,21 @@ export class AuctionsPanelComponent {
     this.auctionFormModel.endTimeLocal = '';
     this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }];
     this.auctionItemFromInventory = [true];
+    this.scrollFormIntoView();
+  }
+
+  // Phone: after the form's `@if` block has rendered, scroll it into
+  // view so the user lands on it instead of having to scroll down the
+  // long auction board to find the inline form. requestAnimationFrame
+  // waits one frame for Angular to render the new DOM nodes; without
+  // it, ViewChild is still undefined.
+  private scrollFormIntoView(): void {
+    requestAnimationFrame(() => {
+      this.auctionFormAnchor?.nativeElement?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
   }
 
   protected openEditAuctionForm(auction: {
@@ -137,6 +158,7 @@ export class AuctionsPanelComponent {
         }))
       : [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }];
     this.auctionItemFromInventory = this.auctionFormModel.items.map(item => item.sourceItemId != null);
+    this.scrollFormIntoView();
   }
 
   protected closeAuctionForm(): void {

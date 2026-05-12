@@ -100,3 +100,103 @@
 .panel-tab .ac-roster-search .form-input {
   width: 100%;
 }
+
+// --- Phone roster: 2-row card per member ---
+//
+// The desktop grid (`32px 1fr 100px 90px 90px`) needs ~410px of
+// horizontal room before column gaps. On a phone-portrait viewport
+// (~370px) the Status column is clipped off the right edge.
+//
+// On phone we restructure each row into a 2-row mini-card:
+//   [AV]  Name         DKP
+//   [AV]  Rank         Status
+// using `grid-template-areas`. The avatar spans both rows on the left,
+// the name/rank stack in the middle column, and DKP/Status stack on
+// the right. Nothing in the markup changes — the existing five flat
+// children are reassigned to named grid areas via CSS only.
+@media (max-width: 600px) {
+  .panel-tab .ac-roster-head {
+    // Column headers stop carrying information once the data is
+    // labeled by visual position; hide them so the card list reads
+    // cleanly top-to-bottom.
+    display: none;
+  }
+
+  // Force the row to fill the parent card width, then split into:
+  //   col 1: avatar (fixed 32px)
+  //   col 2: name + rank cluster (1fr — absorbs all leftover width)
+  //   col 3: DKP + status cluster (auto — flush right at card edge)
+  //
+  // Explicit `width: 100%` belt-and-braces guarantees the grid spans
+  // the full inner width even if a parent doesn't stretch the row.
+  .panel-tab .ac-roster .ac-roster-row {
+    width: 100%;
+    grid-template-columns: 32px 1fr auto;
+    grid-template-areas:
+      "av name dkp"
+      "av rank status";
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 10px 12px;
+    align-items: start;
+    justify-content: stretch;
+  }
+
+  .panel-tab .ac-roster .ac-roster-row > .ac-roster-av {
+    grid-area: av;
+    align-self: center;
+    justify-self: start;
+  }
+
+  .panel-tab .ac-roster .ac-roster-row > .ac-roster-name-cell {
+    grid-area: name;
+    // Minimum width 0 lets the name column shrink BELOW the intrinsic
+    // text width when there isn't enough room, but with `white-space:
+    // nowrap` on the name itself, the column will instead expand the
+    // grid as much as it can (no clip until the card boundary).
+    min-width: 0;
+    justify-self: start;
+  }
+
+  .panel-tab .ac-roster .ac-roster-row > .ac-roster-rank {
+    grid-area: rank;
+    font-size: 11px;
+    color: var(--fg-3);
+    justify-self: start;
+  }
+
+  .panel-tab .ac-roster .ac-roster-row > .ac-roster-dkp {
+    grid-area: dkp;
+    align-self: center;
+    justify-self: end;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  // The status cell in the markup is a plain unnamed <div> wrapping
+  // the .tag span — target it as the 5th child.
+  .panel-tab .ac-roster .ac-roster-row > div:nth-child(5) {
+    grid-area: status;
+    justify-self: end;
+    align-self: center;
+  }
+
+  // Keep the character name on a single line so "Millhouse" doesn't
+  // break into "Millh / ouse" mid-word. Overflow stays visible so an
+  // unusually long name simply pushes against the DKP column rather
+  // than getting truncated with an ellipsis.
+  .panel-tab .ac-roster .ac-roster-row > .ac-roster-name-cell .ac-roster-name {
+    white-space: nowrap;
+    overflow: visible;
+    line-height: 1.25;
+  }
+
+  // Alt names beneath can still wrap if needed — they're informational
+  // and usually short, but allowing a fallback wrap avoids extreme
+  // overflow on multi-alt rows.
+  .panel-tab .ac-roster .ac-roster-row > .ac-roster-name-cell .ac-roster-name-sub {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+}

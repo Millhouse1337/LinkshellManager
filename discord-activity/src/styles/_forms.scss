@@ -762,10 +762,33 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+// 3-column variant for forms that want a Title + Start + End style row.
+// Falls back to the same single-column stack as the parent at <900px so
+// each input has room to breathe instead of being squeezed to ~70px on
+// a phone. `.create-form__grid` itself collapses at the same breakpoint
+// in _responsive.scss; this modifier just needs to do the same when
+// active.
+.create-form__grid--cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .create-form__grid--cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .create-form label,
 .job-editor label {
   display: grid;
   gap: 4px;
+  // Grid children default to `min-width: auto`, which is the min-content
+  // width of their tallest child. `<input type="datetime-local">` reports
+  // a min-content width based on the full locale format string ("MM/DD/
+  // YYYY, HH:MM AM") which on narrow viewports exceeds the column and
+  // pushes the input past the modal edge. Forcing `min-width: 0` lets the
+  // input respect its parent's bounds and the `width: 100% + max-width:
+  // 100%` below take effect.
+  min-width: 0;
 }
 
 .create-form span,
@@ -790,6 +813,10 @@
 .roster-tools input,
 .ad-hoc-signup select {
   width: 100%;
+  // Safety net so a date/datetime/number input with a long native
+  // chrome (calendar icon, spinners) can never paint past its column.
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border-2);
   border-radius: var(--r-sm);
   background: var(--bg-elev);
@@ -866,10 +893,6 @@
   margin-top: 12px;
 }
 
-.job-editor__remove {
-  align-self: end;
-}
-
 .form-error {
   color: var(--danger, #ff6b6b);
   font-size: 12px;
@@ -896,22 +919,129 @@
 }
 
 .job-editor {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
-  padding: 12px;
+  // `auto-fit` lets the four selects (Role / Main job / Sub job /
+  // Quantity) wrap to new rows the moment a column would drop below
+  // ~170px, instead of waiting for a media-query breakpoint that may
+  // never fire inside Discord's iframe (it reports a wider viewport
+  // than what's actually visible on a phone). 170px is wide enough
+  // that the Quantity column's "Not specified" toggle sits inline
+  // next to the number input without wrapping.
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  // Row gap is wider than column gap so wrapped rows feel like
+  // distinct fields, not one squashed strip.
+  row-gap: 12px;
+  column-gap: 12px;
+  padding: 14px 14px 14px;
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--border);
+  // Anchor for the absolutely-positioned Remove (×) button in the
+  // top-right corner.
+  position: relative;
 }
 
+// Details textarea/input always spans the full row regardless of how
+// the four selects above wrap, so multiline text gets the full width.
 .job-editor__details {
-  grid-column: 1 / span 4;
+  grid-column: 1 / -1;
 }
 
-// The job-editor quantity column is only 1/4 of the form width — too narrow
-// for the default tod-day-number-row layout (input + toggle side by side).
-// Stack the input above the toggle so each gets full column width.
+// Remove button: pull it out of the grid flow and into the top-right
+// corner of the card so it doesn't eat a full row at the bottom of
+// every job entry. Restyle from a bulky filled action-button to a
+// small ghost "Remove" link so it reads as a secondary action on the
+// card rather than competing with the form fields.
+.job-editor__remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  // Compact "ghost" treatment that overrides the inherited
+  // action-button styles.
+  background: transparent;
+  border: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--danger, #ff6b6b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: var(--r-sm, 6px);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 107, 107, 0.08);
+    color: var(--danger, #ff6b6b);
+  }
+}
+
+// Give the top row of fields a little breathing room from the
+// absolute Remove button so the Quantity column's "Not specified"
+// label can never collide with it.
+.job-editor > label:nth-child(-n + 4) {
+  padding-right: 0;
+}
+
+// Restore default horizontal layout for the Quantity column's
+// input + toggle pair. The earlier 4-equal-column grid forced this
+// to stack vertically because the column was only ~25% of the row
+// width; the new 170px min-width gives each column enough room
+// (~200px+) to lay the input and the "Not specified" toggle on a
+// single row, which also vertically aligns Quantity's bottom edge
+// with the three selects to its left.
 .job-editor .tod-day-number-row {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// The number input itself should claim the leftover space so it
+// matches the visual width of the three selects.
+.job-editor .tod-day-number-row > input {
+  flex: 1 1 60px;
+  min-width: 0;
+}
+
+// And the toggle stays compact on the right.
+.job-editor .tod-day-number-row > .tod-toggle {
+  flex: 0 0 auto;
+}
+
+// Reusable themed input. Naked <input> elements inside the activity inherit
+// the OS palette and read as disabled-grey on dark theme; this class is the
+// canonical dark-mode look used by auction bid inputs, loot-history filters,
+// and any other panel that wants a modern themed input. Lives in the global
+// styles so every component picks it up regardless of Angular view
+// encapsulation (per-component .scss files only style their own template
+// elements).
+.bid-input {
+  width: 72px;
+  height: 28px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg, #fafafa);
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.14));
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.bid-input::-webkit-inner-spin-button,
+.bid-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.bid-input::placeholder {
+  color: var(--fg-3, #a1a1aa);
+  opacity: 1;
+}
+.bid-input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.bid-input:focus-visible {
+  border-color: var(--accent, #7c5cff);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
 }

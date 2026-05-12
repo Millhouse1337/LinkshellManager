@@ -126,6 +126,20 @@ export const TOD_BUILT_IN_MONSTER_GROUPS: readonly TodMonsterGroup[] = [
     ]
   },
   {
+    label: 'HENMs',
+    names: [
+      'Mammet-9999',
+      'Overlord Arthro',
+      'Ruinous Rocs',
+      'Sacred Scorpions',
+      'Tonberry Sovereign',
+      'Ultimega',
+    ]
+  },
+  // "Other NMs" stays last so the canonical categories (HNMs / Sky / Sea /
+  // HENMs) sit together at the top and the catch-all group settles at the
+  // bottom of the picker.
+  {
     label: 'Other NMs',
     names: [
       'Bloodsucker',
@@ -135,17 +149,6 @@ export const TOD_BUILT_IN_MONSTER_GROUPS: readonly TodMonsterGroup[] = [
       'Shikigami Weapon',
       'Simurgh',
       'Xolotl',
-    ]
-  },
-  {
-    label: 'HENMs',
-    names: [
-      'Mammet-9999',
-      'Overlord Arthro',
-      'Ruinous Rocs',
-      'Sacred Scorpions',
-      'Tonberry Sovereign',
-      'Ultimega',
     ]
   },
 ];
