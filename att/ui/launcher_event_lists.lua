@@ -9,6 +9,105 @@ local attendance = require('attendance')
 
 local M = {}
 
+-- Mutates `state` to link the given event row and restore its cached
+-- per-window state. Pulled out of the Active/Queued Selectable click
+-- handler so the compact-view dropdown can reuse the exact same flow —
+-- the only difference is what triggers the selection (combo pick vs.
+-- imgui.Selectable click). Both call this so behaviour stays in lock-
+-- step: linkedEventId/Name, pendingEventName, windowMax/Sequence/Rosters,
+-- windowStateByEvent cache hydration from the server when missing, plus
+-- an on_launcher_scan kick so attendance.data populates immediately.
+local function select_event(state, ev, callbacks)
+    state.linkedEventId    = ev.id
+    state.linkedEventName  = ev.name
+    state.pendingEventName = ev.name
+    state.windowStateByEvent = state.windowStateByEvent or {}
+    local entry = state.windowStateByEvent[ev.id]
+    local isMultiWindow = (tonumber(ev.windowCount) or constants.window_count_for(ev.name)) > 1
+    if entry then
+        state.windowMax      = entry.max
+        state.windowSequence = entry.sequence
+        state.windowRosters  = entry.rosters
+    elseif isMultiWindow and api.is_paired() then
+        local detail, derr = api.get_event(ev.id)
+        local rosters, postedAt, maxSeq = {}, {}, 0
+        if detail and detail.windows then
+            for _, w in ipairs(detail.windows) do
+                local seq = tonumber(w.sequenceNumber) or 0
+                if seq > 0 then
+                    local snap = {}
+                    for _, att in ipairs(w.attendees or {}) do
+                        snap[#snap + 1] = {
+                            name     = att.characterName or '',
+                            jobsMain = att.jobName or '',
+                            jobsSub  = att.subJobName or '',
+                            zone     = att.zone or '',
+                        }
+                    end
+                    rosters[seq] = snap
+                    local localTable = constants.parse_iso_utc_to_local_table(tostring(w.postedAt or ''))
+                    postedAt[seq] = constants.format_posted_at(localTable) or tostring(w.postedAt or '')
+                    if seq > maxSeq then maxSeq = seq end
+                end
+            end
+        elseif derr then
+            state.lastSyncSummary = 'Could not load event windows: ' .. tostring(derr)
+        end
+        state.windowMax      = tonumber(ev.windowCount) or constants.window_count_for(ev.name)
+        state.windowSequence = maxSeq
+        state.windowRosters  = rosters
+        state.windowStateByEvent[ev.id] = {
+            max      = state.windowMax,
+            sequence = state.windowSequence,
+            rosters  = state.windowRosters,
+            postedAt = postedAt,
+        }
+    else
+        state.windowMax      = tonumber(ev.windowCount) or constants.window_count_for(ev.name)
+        state.windowSequence = 0
+        state.windowRosters  = {}
+        state.windowStateByEvent[ev.id] = {
+            max      = state.windowMax,
+            sequence = state.windowSequence,
+            rosters  = state.windowRosters,
+            postedAt = {},
+        }
+    end
+    if callbacks.on_launcher_scan then
+        callbacks.on_launcher_scan(ev.name, false)
+        state.lastScannedFor = 'event:' .. tostring(ev.id)
+    end
+end
+
+-- Compact-view active-event picker. Renders an imgui combo populated with
+-- the linkshell's currently-live events; selecting one runs the same flow
+-- as clicking a row in the full-view Active Events list. The combo header
+-- shows the linked event name (or a "select event" hint) so the user can
+-- tell at a glance what's currently linked without expanding the
+-- Attendance section.
+function M.compact_active_event_picker(state, callbacks)
+    local active = {}
+    for _, ev in ipairs(state.webEvents or {}) do
+        if ev.isLive then active[#active + 1] = ev end
+    end
+    if #active == 0 then
+        imgui.TextDisabled('No active events')
+        return
+    end
+    local currentLabel = state.linkedEventName or 'Select active event'
+    if imgui.BeginCombo('##compactActiveEventPicker', currentLabel) then
+        for _, ev in ipairs(active) do
+            local name = ev.name or '<unnamed>'
+            local selected = (state.linkedEventId == ev.id)
+            if imgui.Selectable(name .. '##compactActEv_' .. tostring(ev.id), selected) then
+                select_event(state, ev, callbacks)
+            end
+            if selected then imgui.SetItemDefaultFocus() end
+        end
+        imgui.EndCombo()
+    end
+end
+
 function M.draw(state, callbacks)
     do
         imgui.Dummy({ 0, 6 })
@@ -128,75 +227,10 @@ function M.draw(state, callbacks)
             label = string.format('%s##syncev_%d', namePart, ev.id)
         end
         if imgui.Selectable(label, state.linkedEventId == ev.id, 0, { selW, 0 }) then
-            state.linkedEventId = ev.id
-            state.linkedEventName = ev.name
-            state.pendingEventName = ev.name
-            -- Load this event's HNM window state from the per-event map so
-            -- previously posted windows aren't lost when the user navigates
-            -- to another event and comes back. Server-supplied ev.windowCount
-            -- is the source of truth; fall back to the local constants table.
-            state.windowStateByEvent = state.windowStateByEvent or {}
-            local entry = state.windowStateByEvent[ev.id]
-            local isMultiWindow = (tonumber(ev.windowCount) or constants.window_count_for(ev.name)) > 1
-            if entry then
-                state.windowMax      = entry.max
-                state.windowSequence = entry.sequence
-                state.windowRosters  = entry.rosters
-            elseif isMultiWindow and api.is_paired() then
-                -- No local cache yet (fresh addon load, etc.) — pull the
-                -- event's posted windows from the server so the user sees
-                -- previously-posted attendance instead of an empty tab list.
-                local detail, derr = api.get_event(ev.id)
-                local rosters, postedAt, maxSeq = {}, {}, 0
-                if detail and detail.windows then
-                    for _, w in ipairs(detail.windows) do
-                        local seq = tonumber(w.sequenceNumber) or 0
-                        if seq > 0 then
-                            local snap = {}
-                            for _, att in ipairs(w.attendees or {}) do
-                                snap[#snap + 1] = {
-                                    name     = att.characterName or '',
-                                    jobsMain = att.jobName or '',
-                                    jobsSub  = att.subJobName or '',
-                                    zone     = att.zone or '',
-                                }
-                            end
-                            rosters[seq] = snap
-                            -- Convert the server's ISO-UTC postedAt into the
-                            -- viewer's local time so the "Posted at" line
-                            -- matches what the addon stores at post time.
-                            local localTable = constants.parse_iso_utc_to_local_table(tostring(w.postedAt or ''))
-                            postedAt[seq] = constants.format_posted_at(localTable) or tostring(w.postedAt or '')
-                            if seq > maxSeq then maxSeq = seq end
-                        end
-                    end
-                elseif derr then
-                    state.lastSyncSummary = 'Could not load event windows: ' .. tostring(derr)
-                end
-                state.windowMax      = tonumber(ev.windowCount) or constants.window_count_for(ev.name)
-                state.windowSequence = maxSeq
-                state.windowRosters  = rosters
-                state.windowStateByEvent[ev.id] = {
-                    max      = state.windowMax,
-                    sequence = state.windowSequence,
-                    rosters  = state.windowRosters,
-                    postedAt = postedAt,
-                }
-            else
-                state.windowMax      = tonumber(ev.windowCount) or constants.window_count_for(ev.name)
-                state.windowSequence = 0
-                state.windowRosters  = {}
-                state.windowStateByEvent[ev.id] = {
-                    max      = state.windowMax,
-                    sequence = state.windowSequence,
-                    rosters  = state.windowRosters,
-                    postedAt = {},
-                }
-            end
-            if callbacks.on_launcher_scan then
-                callbacks.on_launcher_scan(ev.name, false)
-                state.lastScannedFor = 'event:' .. tostring(ev.id)
-            end
+            -- All linkedEventId / windowState / on_launcher_scan setup lives
+            -- in select_event so the compact-view combo can reuse the same
+            -- flow without drift.
+            select_event(state, ev, callbacks)
         end
         -- Cancel action lives next to the Clear button below the lists,
         -- not per-row, so we don't render a button here.

@@ -1,0 +1,178 @@
+<article class="panel loot-history-panel" aria-labelledby="loot-history-heading">
+  <div class="section-head">
+    <div>
+      <p class="section-label">Loot</p>
+      <h2 id="loot-history-heading" class="section-title">Loot history</h2>
+    </div>
+    <div class="section-head-right">
+      <div class="view-tabs" role="tablist" aria-label="Loot source">
+        <button type="button" class="view-tab" role="tab"
+                [class.active]="sourceFilter() === 'all'"
+                [attr.aria-selected]="sourceFilter() === 'all'"
+                (click)="setSource('all')">All</button>
+        <button type="button" class="view-tab" role="tab"
+                [class.active]="sourceFilter() === 'tod'"
+                [attr.aria-selected]="sourceFilter() === 'tod'"
+                (click)="setSource('tod')">ToDs</button>
+        <button type="button" class="view-tab" role="tab"
+                [class.active]="sourceFilter() === 'event'"
+                [attr.aria-selected]="sourceFilter() === 'event'"
+                (click)="setSource('event')">Events</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="loot-history-panel__filters">
+    <label class="loot-history-panel__filter">
+      <span>Winner contains</span>
+      <input class="bid-input"
+             [ngModel]="winnerFilter()"
+             (ngModelChange)="winnerFilter.set($event)"
+             name="lootWinnerFilter" maxlength="64" />
+    </label>
+    <label class="loot-history-panel__filter">
+      <span>Item contains</span>
+      <input class="bid-input"
+             [ngModel]="itemFilter()"
+             (ngModelChange)="itemFilter.set($event)"
+             name="lootItemFilter" maxlength="64" />
+    </label>
+  </div>
+
+  @if (activity.lootHistoryBusy()) {
+    <p class="notice">Loading loot history...</p>
+  } @else if (filteredItems().length === 0) {
+    <p class="notice">No loot records match the current filters.</p>
+  } @else {
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Source</th>
+            <th>Context</th>
+            <th>Item</th>
+            <th>Winner</th>
+            <th class="num">DKP</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of filteredItems(); track row.lootDetailId + ':' + row.source) {
+            <tr>
+              <td>{{ formatTimestamp(row.occurredAt) }}</td>
+              <td>
+                @if (row.source === 'Tod') {
+                  <span class="tag default">ToD</span>
+                } @else {
+                  <span class="tag accent">Event</span>
+                }
+              </td>
+              <td>{{ row.context || '—' }}</td>
+              <td>{{ row.itemName || '—' }}</td>
+              <td>{{ row.itemWinner || '—' }}</td>
+              <td class="num">{{ row.winningDkpSpent ?? '—' }}</td>
+              <td>
+                @if (row.isEdited) {
+                  <span class="tag warn" [attr.title]="row.lastEditReason || 'Edited'">
+                    Edited
+                    @if (row.editedByCharacterName) {
+                      <span class="muted"> · {{ row.editedByCharacterName }}</span>
+                    }
+                  </span>
+                } @else {
+                  <span class="muted" style="font-size:11px">—</span>
+                }
+              </td>
+              <td>
+                @if (row.canEdit) {
+                  <button type="button" class="btn sm" (click)="openEdit(row)">Edit</button>
+                }
+              </td>
+            </tr>
+            @if (row.isEdited && row.lastEditReason) {
+              <tr class="loot-history-panel__reason-row">
+                <td colspan="8">
+                  <span class="muted" style="font-size:11px;font-style:italic">Reason: {{ row.lastEditReason }}</span>
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (totalPages() > 1) {
+      <div class="table-paginator">
+        <button type="button" class="btn sm" [disabled]="pageIndex() === 0" (click)="goPrev()">Prev</button>
+        <span class="muted" style="font-size:12px">
+          Page {{ pageIndex() + 1 }} of {{ totalPages() }}
+          &middot; {{ list()?.totalCount ?? 0 }} record{{ (list()?.totalCount ?? 0) === 1 ? '' : 's' }}
+        </span>
+        <button type="button" class="btn sm" [disabled]="pageIndex() + 1 >= totalPages()" (click)="goNext()">Next</button>
+      </div>
+    }
+  }
+
+  @if (editingItem(); as item) {
+    <div class="loot-edit-modal-backdrop" (click)="closeEdit()">
+      <div class="loot-edit-modal-dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+        <form class="loot-edit-form" (ngSubmit)="submitEdit()">
+          <div class="loot-edit-form__header">
+            <div>
+              <strong>Edit loot record</strong>
+              <p class="muted">{{ item.source === 'Tod' ? 'ToD' : 'Event' }}<span *ngIf="item.context"> · {{ item.context }}</span></p>
+            </div>
+            <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Close</button>
+          </div>
+
+          <div class="loot-edit-form__body">
+            <label>
+              <span>Item name</span>
+              <input class="bid-input" [(ngModel)]="editFormModel.itemName" name="editItemName" maxlength="256" required />
+            </label>
+
+            <label>
+              <span>Winner</span>
+              @if (rosterCharacterNames.length > 0) {
+                <select class="form-select" [(ngModel)]="editFormModel.itemWinner" name="editItemWinner" required>
+                  @for (name of rosterCharacterNames; track name) {
+                    <option [value]="name">{{ name }}</option>
+                  }
+                </select>
+              } @else {
+                <input class="bid-input" [(ngModel)]="editFormModel.itemWinner" name="editItemWinner" maxlength="256" required />
+              }
+            </label>
+
+            <label>
+              <span>DKP amount</span>
+              <input class="bid-input" type="number" min="0"
+                     [(ngModel)]="editFormModel.winningDkpSpent" name="editDkp" required />
+              <span class="muted" style="font-size:11px">For Hybrid linkshells this is a percent (0–100); for flat DKP it's the absolute amount.</span>
+            </label>
+
+            <label>
+              <span>Reason for edit</span>
+              <textarea class="bid-input" rows="3" maxlength="512"
+                        [(ngModel)]="editFormModel.reason" name="editReason"
+                        placeholder="Required — recorded on the loot row and the matching DKP ledger entries."></textarea>
+            </label>
+
+            @if (editError(); as err) {
+              <div class="loot-edit-form__error">{{ err }}</div>
+            }
+          </div>
+
+          <div class="loot-edit-form__footer">
+            <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Cancel</button>
+            <button type="submit" class="action-button" [disabled]="activity.busyLootEdit()">
+              {{ activity.busyLootEdit() ? 'Saving...' : 'Save loot edit' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+</article>

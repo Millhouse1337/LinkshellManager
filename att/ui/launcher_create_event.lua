@@ -73,8 +73,12 @@ function M.draw(state, callbacks, ctx)
             end
         end
         imgui.SameLine()
+        -- Label says "Wyrms" but the internal mode key stays 'HNM' so the
+        -- create-event API payload (type='HNM', windowCount=24) and every
+        -- downstream branch that reads state.selectedMode keeps working
+        -- without a coordinated rename across the server / addon protocol.
         local hnmPtr = { syncStyleChosen[1] and state.selectedMode == 'HNM' }
-        if imgui.Checkbox('HNM Style', hnmPtr) then
+        if imgui.Checkbox('Wyrms', hnmPtr) then
             if hnmPtr[1] then
                 state.selectedMode = 'HNM'
                 syncStyleChosen[1] = true
@@ -83,8 +87,11 @@ function M.draw(state, callbacks, ctx)
             end
         end
         imgui.SameLine()
+        -- Label says "Kings" but the internal mode key stays 'ClaimKill' for
+        -- the same protocol-compatibility reason as 'HNM' above (server
+        -- expects type='HNM' + windowCount=2 for this style).
         local claimKillPtr = { syncStyleChosen[1] and state.selectedMode == 'ClaimKill' }
-        if imgui.Checkbox('Claim/Kill', claimKillPtr) then
+        if imgui.Checkbox('Kings', claimKillPtr) then
             if claimKillPtr[1] then
                 state.selectedMode = 'ClaimKill'
                 syncStyleChosen[1] = true

@@ -105,6 +105,22 @@ function attendance.sort()
     end
 end
 
+-- Returns the local player's current main / sub job names (the strings
+-- the addon uses internally — "WAR", "BLM", "NONE", etc.) read straight
+-- off the party-memory manager. Used by the Join-event action-bar
+-- handler so the late-join payload always reflects the player's CURRENT
+-- jobs at click time, even if attendance.data is stale or hasn't been
+-- gathered yet for the linked event.
+function attendance.get_self_jobs()
+    local pm = AshitaCore:GetMemoryManager():GetParty()
+    if not pm then return 'NONE', 'NONE' end
+    local mj_id = pm:GetMemberMainJob(0) or 0
+    local sj_id = pm:GetMemberSubJob(0)  or 0
+    local mj = resources.attJobList[mj_id] or 'NONE'
+    local sj = resources.attJobList[sj_id] or 'NONE'
+    return mj, sj
+end
+
 -- Adds the local player to the roster if they aren't already in it.
 -- Always called at the end of a gather so the user themselves shows up
 -- regardless of whether the entity scan picked them up.

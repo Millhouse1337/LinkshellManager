@@ -170,6 +170,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.EventLocation).HasMaxLength(256);
                 entity.Property(item => item.ItemName).HasMaxLength(256);
                 entity.Property(item => item.Details).HasMaxLength(1024);
+                entity.Property(item => item.EditReason).HasMaxLength(512);
                 entity.HasOne(item => item.AppUser)
                     .WithMany()
                     .HasForeignKey(item => item.AppUserId)
@@ -183,6 +184,11 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.AppUserId, item.OccurredAt, item.Sequence });
+                // Index the loot-source FKs so the Loot History view can
+                // quickly find the edit-pair ledger entries for a given
+                // loot row without scanning the full ledger.
+                entity.HasIndex(item => item.SourceTodLootDetailId);
+                entity.HasIndex(item => item.SourceEventLootDetailId);
             });
 
             builder.Entity<Tod>(entity =>
@@ -208,6 +214,32 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("TodLootDetails");
                 entity.Property(item => item.ItemName).HasMaxLength(256);
                 entity.Property(item => item.ItemWinner).HasMaxLength(256);
+                entity.Property(item => item.EditedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.EditedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.LastEditReason).HasMaxLength(512);
+            });
+
+            builder.Entity<EventLootDetail>(entity =>
+            {
+                entity.ToTable("EventLootDetails");
+                entity.Property(item => item.ItemName).HasMaxLength(256);
+                entity.Property(item => item.ItemWinner).HasMaxLength(256);
+                entity.Property(item => item.EditedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.EditedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.LastEditReason).HasMaxLength(512);
+                // SetNull (not Cascade) so the loot row survives its parent
+                // Event being deleted at event-close time. The close-out
+                // flow stamps EventHistoryId before deleting the Event so
+                // the row stays discoverable via the new FK below.
+                entity.HasOne(item => item.Event)
+                    .WithMany(evt => evt.EventLootDetails)
+                    .HasForeignKey(item => item.EventId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(item => item.EventHistory)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventHistoryId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => item.EventHistoryId);
             });
 
             builder.Entity<Rule>(entity =>

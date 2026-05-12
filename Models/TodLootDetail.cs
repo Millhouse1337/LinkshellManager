@@ -20,4 +20,19 @@ public class TodLootDetail
     public int? WinningDkpSpent { get; set; }
 
     public double? ActualDeductedDkp { get; set; }
+
+    // Audit fields populated by LootEditService when an officer corrects this
+    // row. Read by the loot-history list to show an "Edited" tag and the most
+    // recent reason on hover; the full audit trail lives in DkpLedgerEntry
+    // pairs (LootEditRefund + LootEditSpent) tagged with the same reason.
+    public DateTime? EditedAt { get; set; }
+
+    [MaxLength(450)]
+    public string? EditedByAppUserId { get; set; }
+
+    [MaxLength(256)]
+    public string? EditedByCharacterName { get; set; }
+
+    [MaxLength(512)]
+    public string? LastEditReason { get; set; }
 }

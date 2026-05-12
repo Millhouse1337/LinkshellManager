@@ -5,6 +5,14 @@
     var currentUserId = ViewBag.CurrentUserId as string ?? string.Empty;
     var currentTime = ViewBag.CurrentTime is DateTime current ? current : DateTime.Now;
     var jsonOptions = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+    var hasLiveAuction = Model.Any(a =>
+    {
+        var started = a.Auction.StartedAt.HasValue
+            || (a.Auction.StartTime.HasValue && currentTime >= a.Auction.StartTime.Value);
+        var notEnded = !a.Auction.EndTime.HasValue || currentTime < a.Auction.EndTime.Value;
+        return started && notEnded;
+    });
 }
 
 <div class="page-head fade d1">
@@ -12,7 +20,10 @@
         <h1 class="page-title">Linkshell Auctions</h1>
         <div class="page-sub">
             <span><span class="num">@Model.Count</span> auctions</span>
-            <span class="live-dot">Live</span>
+            @if (hasLiveAuction)
+            {
+                <span class="live-dot">Live</span>
+            }
         </div>
     </div>
 </div>

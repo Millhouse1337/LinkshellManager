@@ -47,4 +47,5 @@ public class DkpHistoryEntryViewModel
     public DateTime? EventEndTime { get; set; }
     public string? ItemName { get; set; }
     public string? Details { get; set; }
+    public string? EditReason { get; set; }
 }

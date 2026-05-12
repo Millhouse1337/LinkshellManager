@@ -618,7 +618,16 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        item.Status = "Received";
+        var previousStatus = item.Status;
+        item.Status = AuctionInventoryService.ReceivedStatus;
+        await AuctionInventoryService.AdjustForStatusChangeAsync(
+            _dbContext,
+            item,
+            previousStatus,
+            item.Status,
+            item.AuctionHistory.LinkshellId,
+            DateTime.UtcNow,
+            cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -651,12 +660,21 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        item.Status = string.Equals(item.Status, "Received", StringComparison.OrdinalIgnoreCase) ? "Closed" : "Pending";
+        var previousStatus = item.Status;
+        item.Status = string.Equals(previousStatus, AuctionInventoryService.ReceivedStatus, StringComparison.OrdinalIgnoreCase) ? "Closed" : "Pending";
         if (string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId))
         {
             item.Status = "NoBids";
         }
 
+        await AuctionInventoryService.AdjustForStatusChangeAsync(
+            _dbContext,
+            item,
+            previousStatus,
+            item.Status,
+            item.AuctionHistory.LinkshellId,
+            DateTime.UtcNow,
+            cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }

@@ -464,6 +464,45 @@ export interface ActivityDkpLedgerEntry {
   eventEndTime?: string | null;
   itemName?: string | null;
   details?: string | null;
+  // Populated on "LootEditRefund" / "LootEditSpent" entries — the officer's
+  // reason for the loot correction. Rendered under the Details cell as an
+  // italic "Reason: ..." line so the audit trail is visible inline.
+  editReason?: string | null;
+}
+
+// One row in the unified Loot History view. The `source` discriminator
+// tells the client whether to call the /tod/{id}/edit or /event/{id}/edit
+// endpoint when the officer hits Save. `canEdit` is computed server-side
+// from the caller's CanAddLoot role flag so the UI just toggles the button.
+export interface ActivityLootHistoryItem {
+  lootDetailId: number;
+  source: 'Tod' | 'Event';
+  parentId: number;
+  context?: string | null;
+  occurredAt?: string | null;
+  itemName?: string | null;
+  itemWinner?: string | null;
+  winningDkpSpent?: number | null;
+  actualDeductedDkp?: number | null;
+  isEdited: boolean;
+  lastEditReason?: string | null;
+  editedAt?: string | null;
+  editedByCharacterName?: string | null;
+  canEdit: boolean;
+}
+
+export interface ActivityLootHistoryList {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: ActivityLootHistoryItem[];
+}
+
+export interface ActivityLootEditInput {
+  itemName: string;
+  itemWinner: string;
+  winningDkpSpent: number;
+  reason: string;
 }
 
 export interface ActivityDkpHistory {

@@ -12,6 +12,7 @@ export const TAB_NAMES = [
   'tods',
   'auctions',
   'dkp',
+  'loot',
   'endgame',
   'missions',
   'messages',

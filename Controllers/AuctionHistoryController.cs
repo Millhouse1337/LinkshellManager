@@ -1,11 +1,11 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -14,17 +14,20 @@ public class AuctionHistoryController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
-    private readonly IDateTimeZoneProvider _dateTimeZoneProvider;
+    private readonly TimeZoneConversionService _timeZones;
 
     public AuctionHistoryController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        IDateTimeZoneProvider dateTimeZoneProvider)
+        TimeZoneConversionService timeZones)
     {
         _context = context;
         _userManager = userManager;
-        _dateTimeZoneProvider = dateTimeZoneProvider;
+        _timeZones = timeZones;
     }
+
+    private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)
+        => _timeZones.ToUserTime(utcDateTime, timeZoneId);
 
     public async Task<IActionResult> Index()
     {
@@ -106,7 +109,15 @@ public class AuctionHistoryController : Controller
             return Forbid();
         }
 
-        auctionItem.Status = "Received";
+        var previousStatus = auctionItem.Status;
+        auctionItem.Status = AuctionInventoryService.ReceivedStatus;
+        await AuctionInventoryService.AdjustForStatusChangeAsync(
+            _context,
+            auctionItem,
+            previousStatus,
+            auctionItem.Status,
+            auctionItem.AuctionHistory.LinkshellId,
+            DateTime.UtcNow);
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }
@@ -134,7 +145,15 @@ public class AuctionHistoryController : Controller
             return Forbid();
         }
 
+        var previousStatus = auctionItem.Status;
         auctionItem.Status = "Pending";
+        await AuctionInventoryService.AdjustForStatusChangeAsync(
+            _context,
+            auctionItem,
+            previousStatus,
+            auctionItem.Status,
+            auctionItem.AuctionHistory.LinkshellId,
+            DateTime.UtcNow);
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }
@@ -143,27 +162,5 @@ public class AuctionHistoryController : Controller
     {
         return await _context.AppUserLinkshells
             .AnyAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId);
-    }
-
-    private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)
-    {
-        if (!utcDateTime.HasValue)
-        {
-            return null;
-        }
-
-        var instant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(utcDateTime.Value, DateTimeKind.Utc));
-        var zone = ResolveTimeZone(timeZoneId);
-        return instant.InZone(zone).ToDateTimeUnspecified();
-    }
-
-    private DateTimeZone ResolveTimeZone(string? timeZoneId)
-    {
-        if (!string.IsNullOrWhiteSpace(timeZoneId) && _dateTimeZoneProvider.Ids.Contains(timeZoneId))
-        {
-            return _dateTimeZoneProvider[timeZoneId];
-        }
-
-        return DateTimeZone.Utc;
     }
 }

@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -17,20 +16,20 @@ public class AccountController : Controller
     private readonly SignInManager<AppUser> _signInManager;
     private readonly ApplicationDbContext _context;
     private readonly AppUserProfileService _appUserProfileService;
-    private readonly IDateTimeZoneProvider _dateTimeZoneProvider;
+    private readonly TimeZoneConversionService _timeZones;
 
     public AccountController(
         UserManager<AppUser> userManager,
         SignInManager<AppUser> signInManager,
         ApplicationDbContext context,
         AppUserProfileService appUserProfileService,
-        IDateTimeZoneProvider dateTimeZoneProvider)
+        TimeZoneConversionService timeZones)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _context = context;
         _appUserProfileService = appUserProfileService;
-        _dateTimeZoneProvider = dateTimeZoneProvider;
+        _timeZones = timeZones;
     }
 
     [AllowAnonymous]
@@ -66,7 +65,7 @@ public class AccountController : Controller
             AltCharacterName2 = user.AltCharacterName2,
             TimeZone = user.TimeZone,
             ProfileImageData = user.ProfileImage,
-            AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_dateTimeZoneProvider.Ids),
+            AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_timeZones.AvailableZoneIds),
             ProfileComplete = !string.IsNullOrWhiteSpace(user.CharacterName)
                 && !string.IsNullOrWhiteSpace(user.TimeZone),
             HasLinkshell = hasLinkshell,
@@ -85,11 +84,11 @@ public class AccountController : Controller
         }
 
         var normalizedTimeZone = string.IsNullOrWhiteSpace(model.TimeZone) ? null : model.TimeZone.Trim();
-        if (normalizedTimeZone is not null && !_dateTimeZoneProvider.Ids.Contains(normalizedTimeZone))
+        if (normalizedTimeZone is not null && !_timeZones.IsKnownZone(normalizedTimeZone))
         {
             ModelState.AddModelError(nameof(model.TimeZone), "Use a valid IANA time zone such as America/New_York.");
             model.ProfileImageData = user.ProfileImage;
-            model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_dateTimeZoneProvider.Ids);
+            model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_timeZones.AvailableZoneIds);
             return View(nameof(Profile), model);
         }
 
@@ -109,7 +108,7 @@ public class AccountController : Controller
             }
 
             model.ProfileImageData = user.ProfileImage;
-            model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_dateTimeZoneProvider.Ids);
+            model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_timeZones.AvailableZoneIds);
             return View(nameof(Profile), model);
         }
 

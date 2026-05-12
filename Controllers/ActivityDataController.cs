@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
@@ -7,7 +6,6 @@ using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -27,7 +25,7 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly UserManager<AppUser> _userManager;
     private readonly IHostEnvironment _environment;
     private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
-    private readonly IDateTimeZoneProvider _dateTimeZoneProvider;
+    private readonly TimeZoneConversionService _timeZones;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -36,7 +34,7 @@ public sealed partial class ActivityDataController : ControllerBase
         UserManager<AppUser> userManager,
         IHostEnvironment environment,
         Microsoft.AspNetCore.Hosting.IWebHostEnvironment webHostEnvironment,
-        IDateTimeZoneProvider dateTimeZoneProvider)
+        TimeZoneConversionService timeZones)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -44,7 +42,7 @@ public sealed partial class ActivityDataController : ControllerBase
         _userManager = userManager;
         _environment = environment;
         _webHostEnvironment = webHostEnvironment;
-        _dateTimeZoneProvider = dateTimeZoneProvider;
+        _timeZones = timeZones;
     }
 
     [HttpGet("antiforgery")]
@@ -151,79 +149,5 @@ public sealed partial class ActivityDataController : ControllerBase
     }
 
     private bool TryConvertUserTimeZoneToUtc(string? localDateTimeValue, string? timeZoneId, out DateTime? utcDateTime)
-    {
-        utcDateTime = null;
-
-        if (string.IsNullOrWhiteSpace(localDateTimeValue))
-        {
-            return true;
-        }
-
-        var trimmed = localDateTimeValue.Trim();
-
-        if (HasExplicitUtcOffset(trimmed)
-            && DateTime.TryParse(
-                trimmed,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
-                out var parsedUtc))
-        {
-            utcDateTime = DateTime.SpecifyKind(parsedUtc, DateTimeKind.Utc);
-            return true;
-        }
-
-        if (!DateTime.TryParseExact(
-                trimmed,
-                ["yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss"],
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var localDateTime))
-        {
-            return false;
-        }
-
-        var zone = ResolveTimeZone(timeZoneId);
-        utcDateTime = zone.AtLeniently(LocalDateTime.FromDateTime(localDateTime)).ToDateTimeUtc();
-        return true;
-    }
-
-    private static bool HasExplicitUtcOffset(string value)
-    {
-        if (value.EndsWith("Z", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var tIndex = value.IndexOf('T');
-        if (tIndex < 0)
-        {
-            return false;
-        }
-
-        for (var i = value.Length - 1; i > tIndex; i--)
-        {
-            var c = value[i];
-            if (c == '+' || c == '-')
-            {
-                return true;
-            }
-            if (c == ':' || char.IsDigit(c))
-            {
-                continue;
-            }
-            return false;
-        }
-
-        return false;
-    }
-
-    private DateTimeZone ResolveTimeZone(string? timeZoneId)
-    {
-        if (!string.IsNullOrWhiteSpace(timeZoneId) && _dateTimeZoneProvider.Ids.Contains(timeZoneId))
-        {
-            return _dateTimeZoneProvider[timeZoneId];
-        }
-
-        return DateTimeZone.Utc;
-    }
+        => _timeZones.TryParseUserLocalOrUtc(localDateTimeValue, timeZoneId, out utcDateTime);
 }

@@ -222,6 +222,15 @@ public sealed partial class AddonApiController : ControllerBase
 
     public sealed record AddonVerifyReturnRequest(int LedgerEntryId);
 
+    // Late-join body for POST /events/{id}/join. JobType ("Main"/"Sub"/etc.)
+    // is optional because the addon scan doesn't always carry it; the server
+    // stores null when unset which matches the existing per-row data shape
+    // from PostAttendance.
+    public sealed record AddonJoinEventRequest(
+        string? MainJob,
+        string? SubJob,
+        string? JobType);
+
     public sealed record AddonAttendanceEntry(
         string CharacterName,
         string? MainJob,

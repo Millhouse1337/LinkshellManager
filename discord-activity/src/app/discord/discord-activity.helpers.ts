@@ -1,5 +1,13 @@
 import type { DiscordRpcErrorLike } from './discord-activity.types';
 
+// Forwards a `<input type="datetime-local">` value to the server **as a
+// naive ISO string** (no `Z`, no offset). The server's
+// TryConvertUserTimeZoneToUtc interprets naive input with the user's
+// PROFILE timezone, which is the source of truth — the previous version
+// of this function called `new Date(value).toISOString()`, which silently
+// re-interpreted the input with the BROWSER zone before stamping `Z`.
+// That short-circuited the server's profile-zone path and stored wrong
+// UTC instants whenever browser and profile zones differed.
 export function datetimeLocalToUtcIso(value?: string | null): string | null {
   if (!value) {
     return null;
@@ -8,11 +16,14 @@ export function datetimeLocalToUtcIso(value?: string | null): string | null {
   if (!trimmed) {
     return null;
   }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) {
+  // Reject anything that doesn't look like a datetime-local payload so we
+  // don't ship malformed strings to the server. Accepts both the
+  // minute-resolution form and the seconds-resolution form that the ToD
+  // input emits.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
     return null;
   }
-  return parsed.toISOString();
+  return trimmed;
 }
 
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

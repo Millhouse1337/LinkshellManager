@@ -1,11 +1,11 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -14,19 +14,16 @@ public partial class EventController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
-    private readonly ILogger<EventController> _logger;
-    private readonly IDateTimeZoneProvider _dateTimeZoneProvider;
+    private readonly TimeZoneConversionService _timeZones;
 
     public EventController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        ILogger<EventController> logger,
-        IDateTimeZoneProvider dateTimeZoneProvider)
+        TimeZoneConversionService timeZones)
     {
         _context = context;
         _userManager = userManager;
-        _logger = logger;
-        _dateTimeZoneProvider = dateTimeZoneProvider;
+        _timeZones = timeZones;
     }
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)
     {
@@ -147,43 +144,8 @@ public partial class EventController : Controller
     }
 
     private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)
-    {
-        if (!utcDateTime.HasValue)
-        {
-            return null;
-        }
-
-        var zone = ResolveTimeZone(timeZoneId);
-        var instant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(utcDateTime.Value, DateTimeKind.Utc));
-        return instant.InZone(zone).ToDateTimeUnspecified();
-    }
+        => _timeZones.ToUserTime(utcDateTime, timeZoneId);
 
     private DateTime? ConvertUserTimeZoneToUtc(DateTime? localDateTime, string? timeZoneId)
-    {
-        if (!localDateTime.HasValue)
-        {
-            return null;
-        }
-
-        var zone = ResolveTimeZone(timeZoneId);
-        var zonedDateTime = zone.AtLeniently(LocalDateTime.FromDateTime(localDateTime.Value));
-        return zonedDateTime.ToDateTimeUtc();
-    }
-
-    private DateTimeZone ResolveTimeZone(string? timeZoneId)
-    {
-        if (!string.IsNullOrWhiteSpace(timeZoneId) && _dateTimeZoneProvider.Ids.Contains(timeZoneId))
-        {
-            return _dateTimeZoneProvider[timeZoneId];
-        }
-
-        // Truncate user-supplied value before logging to keep arbitrary input
-        // bounded — log sinks that render structured fields as HTML/markdown
-        // can otherwise be tricked into rendering malicious payloads.
-        var safeTimeZoneId = string.IsNullOrEmpty(timeZoneId)
-            ? string.Empty
-            : timeZoneId.Length > 64 ? timeZoneId[..64] : timeZoneId;
-        _logger.LogWarning("Unknown time zone '{TimeZoneId}', falling back to UTC.", safeTimeZoneId);
-        return DateTimeZone.Utc;
-    }
+        => _timeZones.ToUtc(localDateTime, timeZoneId);
 }

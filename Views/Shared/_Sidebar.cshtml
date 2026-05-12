@@ -188,7 +188,7 @@
             </div>
         }
 
-        <button type="button" class="nav-item nav-group @IsExpanded("DkpHistory", "DkpAdjustment")" data-target="#nav-dkp">
+        <button type="button" class="nav-item nav-group @IsExpanded("DkpHistory", "DkpAdjustment", "LootHistory")" data-target="#nav-dkp">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
             DKP
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
@@ -199,6 +199,7 @@
             {
                 <a class="nav-sub-item create @IsSubActive("DkpAdjustment", "Index")" asp-controller="DkpAdjustment" asp-action="Index">DKP Adjustments</a>
             }
+            <a class="nav-sub-item @IsSubActive("LootHistory", "Index")" asp-controller="LootHistory" asp-action="Index">Loot History</a>
         </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("Linkshell")" data-target="#nav-config">

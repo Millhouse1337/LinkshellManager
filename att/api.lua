@@ -356,6 +356,20 @@ function api.deny_return(eventId, ledgerEntryId)
         { ledgerEntryId = tonumber(ledgerEntryId) })
 end
 
+-- Late-join a timed event the user wasn't originally scanned into. Mirrors
+-- the activity's quick-join surface — main job + sub job required, job type
+-- optional — and the server stamps IsQuickJoin=true + IsVerified=true so
+-- the new participation earns DKP from now forward. 400 if the event is
+-- already-ended, not yet commenced, HNM-style (multi-window), or the user
+-- is already attached.
+function api.join_event(eventId, mainJob, subJob, jobType)
+    return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/join', {
+        mainJob = mainJob,
+        subJob  = subJob,
+        jobType = jobType,
+    })
+end
+
 -- Fetches a single event including its posted HNM attendance windows + attendees.
 -- Used to rehydrate the addon's per-event window cache after an addon reload, so
 -- the user sees their previously-posted windows on re-selection.

@@ -204,9 +204,24 @@ function M.draw(is_open, state, callbacks)
             -- CollapsingHeader defaults to closed (no DefaultOpen flag),
             -- which is the requested "compressed by default" behaviour.
             imgui.BeginChild('compactCol', { 0, COLS_BOTTOM }, false)
+            -- Top-of-panel active-event picker. Replaces the hidden left-
+            -- column Active Events list so officers can still switch
+            -- between live events without leaving compact mode. Renders
+            -- nothing when no events are live (rather than an empty combo)
+            -- so the panel doesn't shift around mid-night when the
+            -- linkshell hasn't started anything yet.
+            event_lists.compact_active_event_picker(state, callbacks)
             if imgui.CollapsingHeader('Attendance##compactAttHeader') then
                 attendance_p.draw(state, callbacks)
             end
+            -- Break Room: no outer CollapsingHeader wrapper because
+            -- launcher_break_room.draw renders its OWN CollapsingHeader
+            -- (the "Break Room (N on break, M pending)" red bar). Calling
+            -- it directly keeps the same one-click expand UX users have in
+            -- full view, and it's a no-op when no event is linked or the
+            -- breakRoom hasn't loaded yet, so the panel stays clean while
+            -- the user is poking around without a live event selected.
+            break_room.draw(state, callbacks)
             if imgui.CollapsingHeader('Loot Pool##compactLootHeader') then
                 loot_pool.draw(state, callbacks)
             end

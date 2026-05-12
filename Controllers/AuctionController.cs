@@ -1,11 +1,11 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -14,16 +14,16 @@ public partial class AuctionController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
-    private readonly IDateTimeZoneProvider _dateTimeZoneProvider;
+    private readonly TimeZoneConversionService _timeZones;
 
     public AuctionController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        IDateTimeZoneProvider dateTimeZoneProvider)
+        TimeZoneConversionService timeZones)
     {
         _context = context;
         _userManager = userManager;
-        _dateTimeZoneProvider = dateTimeZoneProvider;
+        _timeZones = timeZones;
     }
 
     private async Task<AuctionViewModel> BuildAuctionViewModelAsync(AppUser user, AuctionViewModel? source = null)
@@ -211,35 +211,8 @@ public partial class AuctionController : Controller
     }
 
     private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)
-    {
-        if (!utcDateTime.HasValue)
-        {
-            return null;
-        }
-
-        var zone = ResolveTimeZone(timeZoneId);
-        var instant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(utcDateTime.Value, DateTimeKind.Utc));
-        return instant.InZone(zone).ToDateTimeUnspecified();
-    }
+        => _timeZones.ToUserTime(utcDateTime, timeZoneId);
 
     private DateTime? ConvertUserTimeZoneToUtc(DateTime? localDateTime, string? timeZoneId)
-    {
-        if (!localDateTime.HasValue)
-        {
-            return null;
-        }
-
-        var zone = ResolveTimeZone(timeZoneId);
-        return zone.AtLeniently(LocalDateTime.FromDateTime(localDateTime.Value)).ToDateTimeUtc();
-    }
-
-    private DateTimeZone ResolveTimeZone(string? timeZoneId)
-    {
-        if (!string.IsNullOrWhiteSpace(timeZoneId) && _dateTimeZoneProvider.Ids.Contains(timeZoneId))
-        {
-            return _dateTimeZoneProvider[timeZoneId];
-        }
-
-        return DateTimeZone.Utc;
-    }
+        => _timeZones.ToUtc(localDateTime, timeZoneId);
 }

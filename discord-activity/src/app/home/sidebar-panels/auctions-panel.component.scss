@@ -1,0 +1,122 @@
+// Auction create/edit form rendered as a centered modal so it doesn't
+// push the auction board down. Mirrors the existing addon-modal pattern
+// but with a wider dialog because the form is a multi-row grid.
+// Top offset that visually clears the identity bar (~40px) and tab bar
+// (~44px) so the modal never appears to sit "behind" the nav strip,
+// even on tall viewports where centering would otherwise overlap them.
+$auction-modal-top-offset: 112px;
+$auction-modal-bottom-offset: 24px;
+
+.auction-form-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  // Anchor the dialog a fixed distance below the top so it's always
+  // clearly below the linkshell nav (identity bar + tab bar). Centering
+  // looks wrong on tall viewports because the dialog ends up adjacent
+  // to the nav even when there's empty space below.
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 100;
+  padding: $auction-modal-top-offset 16px $auction-modal-bottom-offset;
+}
+
+.auction-form-modal-dialog {
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  width: 100%;
+  max-width: 880px;
+  // Use `dvh` so the cap matches the *visible* viewport when the browser
+  // shows/hides its dynamic chrome (mobile address bar, bookmark bar
+  // overlap). Bound the dialog so its outer edges respect the top/bottom
+  // offsets — never extends behind the nav, never clips the page below.
+  max-height: calc(100dvh - #{$auction-modal-top-offset + $auction-modal-bottom-offset});
+  // Stack header → scrollable body → footer; the form inside chooses
+  // its own internal layout but the dialog handles overall containment.
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+// Inside the modal, the form fills the dialog and becomes the scroll
+// surface. The form is a CSS grid in _forms.scss; the `min-height: 0`
+// override is critical so it can shrink below its intrinsic content
+// height and let `overflow-y: auto` actually clip. `scrollbar-gutter`
+// is intentionally NOT set — reserving a gutter creates a visible
+// off-color strip on the right edge when the form fits without
+// scrolling, breaking the dialog's clean rounded edge.
+.auction-form-modal-dialog > .create-form {
+  margin: 0;
+  padding: 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+// Pin the form's header (title + Close button) and footer (action
+// buttons) inside the scrollable form so the user can always close the
+// modal and submit regardless of scroll position. Background matches
+// `--surface` so scrolled content slides cleanly under the sticky bars.
+.auction-form-modal-dialog > .create-form > .create-form__header {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  margin: -16px -16px 0;
+  padding: 16px 16px 12px;
+  background: var(--surface, #1f1f23);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+.auction-form-modal-dialog > .create-form > .create-form__actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
+  margin: 0 -16px -16px;
+  padding: 12px 16px 16px;
+  background: var(--surface, #1f1f23);
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+}
+
+// Remaining-countdown chip in the auction header row — emphasised so
+// users can see at a glance how long until the auction ends.
+.panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__remaining {
+  color: var(--fg, #fafafa);
+  font-weight: 600;
+}
+
+// Per-item bid input. Naked <input> elements inside the activity inherit
+// the OS palette and read as disabled-grey on dark theme; theme it
+// explicitly so the field matches the rest of the dark UI.
+.bid-input {
+  width: 72px;
+  height: 28px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg, #fafafa);
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.14));
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.bid-input::-webkit-inner-spin-button,
+.bid-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.bid-input::placeholder {
+  color: var(--fg-3, #a1a1aa);
+  opacity: 1;
+}
+.bid-input:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.bid-input:focus-visible {
+  border-color: var(--accent, #7c5cff);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+}

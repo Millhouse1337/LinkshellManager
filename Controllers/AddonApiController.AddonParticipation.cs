@@ -592,6 +592,127 @@ public sealed partial class AddonApiController
         return Ok(new { removedId = attendee.Id });
     }
 
+    // Late-join: lets a regular member self-attach to an already-commenced
+    // timed event from the addon, without needing an officer to scan and
+    // post them. Mirrors the activity's ActivityDataController.QuickJoinAsync
+    // contract — same fields, same "already attached" guard — but uses the
+    // addon token to resolve the joining user and stamps IsVerified+ledger
+    // so the new participation earns DKP from the join moment forward
+    // (matching the officer-led PostAttendance path, not the looser
+    // activity quick-join which leaves IsVerified null).
+    [HttpPost("events/{eventId:int}/join")]
+    [AddonApiAuth]
+    public async Task<IActionResult> AddonJoinEventAsync(
+        int eventId,
+        [FromBody] AddonJoinEventRequest request,
+        CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+        if (string.IsNullOrWhiteSpace(token.IssuedToAppUserId))
+        {
+            return Unauthorized(new { error = "Token has no issuer; cannot self-join." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.MainJob) || string.IsNullOrWhiteSpace(request.SubJob))
+        {
+            return BadRequest(new { error = "Main job and sub job are required to join." });
+        }
+
+        var eventEntity = await _dbContext.Events
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "Event not found." });
+        }
+
+        if (eventEntity.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest(new { error = "Late join is only available after the event has started." });
+        }
+
+        // Windowed (HNM-style) events award DKP per posted window, not by
+        // duration, so a self-join would create a no-op AppUserEvent that
+        // never gets credited. Force officers to use the per-window Post
+        // flow for those instead of confusing members with a join button
+        // that silently doesn't pay out.
+        var windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
+        if (windowCount > 1)
+        {
+            return BadRequest(new { error = "Late join only applies to timed events. Ask an officer to post a window for HNM-style events." });
+        }
+
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(
+                m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId,
+                cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var existing = await _dbContext.AppUserEvents
+            .FirstOrDefaultAsync(
+                p => p.EventId == eventId && p.AppUserId == token.IssuedToAppUserId,
+                cancellationToken);
+        if (existing is not null)
+        {
+            return BadRequest(new { error = "You are already attached to this event." });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var characterName = membership.CharacterName;
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            var appUser = await _dbContext.Users
+                .FirstOrDefaultAsync(u => u.Id == token.IssuedToAppUserId, cancellationToken);
+            characterName = appUser?.CharacterName;
+        }
+
+        var participation = new AppUserEvent
+        {
+            AppUserId = token.IssuedToAppUserId,
+            EventId = eventId,
+            CharacterName = characterName,
+            JobName = request.MainJob.Trim(),
+            SubJobName = request.SubJob.Trim(),
+            JobType = string.IsNullOrWhiteSpace(request.JobType) ? null : request.JobType.Trim(),
+            StartTime = nowUtc,
+            EventDkp = 0,
+            IsQuickJoin = true,
+            IsVerified = true
+        };
+        _dbContext.AppUserEvents.Add(participation);
+
+        _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEvent = participation,
+            EventId = eventId,
+            AppUserId = token.IssuedToAppUserId,
+            ActionType = "Verify",
+            OccurredAt = nowUtc,
+            RequiresVerification = false,
+            VerifiedAt = nowUtc,
+            VerifiedBy = (token.Label ?? "att-addon") + " (self-join)",
+            Source = AddonSource
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new
+        {
+            success = true,
+            participationId = participation.Id,
+            characterName = participation.CharacterName,
+            jobName = participation.JobName,
+            subJobName = participation.SubJobName,
+            startTime = participation.StartTime
+        });
+    }
+
     // Returns the linkshell roster + its loot structure so the addon can
     // populate the Winner combo on the Loot Pool panel and label the DKP
     // field correctly (raw DKP for "Dkp", percentage for "Hybrid",

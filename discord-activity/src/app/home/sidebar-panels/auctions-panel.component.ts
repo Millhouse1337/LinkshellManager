@@ -12,6 +12,7 @@ import { formatElapsed, parseDate } from '../sidebar-panel.helpers';
   selector: 'app-auctions-panel',
   imports: [CommonModule, FormsModule],
   templateUrl: './auctions-panel.component.html',
+  styleUrl: './auctions-panel.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AuctionsPanelComponent {

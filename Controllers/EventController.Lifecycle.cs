@@ -625,6 +625,11 @@ public partial class EventController
             var amount = -lootDetail.WinningDkpSpent.GetValueOrDefault();
             winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
 
+            // Stamp the actual deducted amount onto the loot row so future
+            // Loot History edits can refund precisely (matches the ToD
+            // ActualDeductedDkp pattern in HelpersTods.AdjustTodLootDkpAsync).
+            lootDetail.ActualDeductedDkp = Math.Abs(amount);
+
             var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
             ledgerEntries.Add(new DkpLedgerEntry
             {
@@ -642,13 +647,25 @@ public partial class EventController
                 EventStartTime = eventEntity.StartTime,
                 EventEndTime = endTimeUtc,
                 ItemName = lootDetail.ItemName,
-                Details = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}."
+                Details = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.",
+                SourceEventLootDetailId = lootDetail.Id
             });
             nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
         }
 
         dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
-        dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
+
+        // Preserve EventLootDetails post-close so officers can edit them via
+        // Loot History. Re-parent each row to the new EventHistory and detach
+        // the EventId before the parent Event is deleted below. The
+        // EventLootDetail.EventId FK was changed to SetNull in
+        // AddLootHistoryAudit, so the Event delete won't cascade-remove them.
+        foreach (var lootDetail in eventEntity.EventLootDetails)
+        {
+            lootDetail.EventHistory = history;
+            lootDetail.Event = null;
+            lootDetail.EventId = null;
+        }
         dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
 
         var eventJobs = await dbContext.Jobs.Where(job => job.EventId == eventEntity.Id).ToListAsync();

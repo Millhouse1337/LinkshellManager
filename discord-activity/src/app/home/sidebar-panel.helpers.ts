@@ -87,12 +87,24 @@ export function resolveTimeZoneOptions(currentProfileTimeZone: string | null | u
   return Array.from(new Set(seedValues));
 }
 
+// Parses a server-emitted ISO 8601 timestamp into UTC millis-since-epoch.
+// After the UtcDateTimeJsonConverter was added on the server every response
+// includes an explicit `Z` suffix, so `new Date(value)` interprets the value
+// as UTC. This helper still defends against any old API path that ships a
+// naive datetime string (no zone indicator): we append `Z` before parsing
+// so it isn't silently re-interpreted as browser-local time, which used to
+// shift state comparisons (auctionStarted/Live/Ended, repop timers, etc.)
+// by the browser's UTC offset.
 export function parseDate(value?: string | null): number | null {
   if (!value) {
     return null;
   }
 
-  const parsed = new Date(value);
+  const trimmed = value.trim();
+  const hasExplicitZone =
+    /[Zz]$/.test(trimmed) || /[+\-]\d{2}:?\d{2}$/.test(trimmed);
+  const normalized = hasExplicitZone ? trimmed : `${trimmed}Z`;
+  const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
 }
 

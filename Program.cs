@@ -9,6 +9,7 @@ using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Options;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authentication.OAuth.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -112,6 +113,16 @@ var mvcBuilder = builder.Services.AddControllersWithViews(options =>
     // token. Bearer-authenticated requests (Discord Activity SPA, addon) bypass
     // this - see CookieAuthAntiforgeryFilter for the rationale.
     options.Filters.Add<CookieAuthAntiforgeryFilter>();
+}).AddJsonOptions(options =>
+{
+    // Force every DateTime on the wire to be UTC with an explicit `Z`
+    // suffix. Without this, EF Core hands back DateTimeKind.Unspecified
+    // for `timestamp without time zone` columns and the default serializer
+    // emits a naive ISO string, which the JS client then parses as
+    // browser-local time — quietly shifting every state comparison by
+    // the browser's UTC offset.
+    options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
+    options.JsonSerializerOptions.Converters.Add(new UtcNullableDateTimeJsonConverter());
 });
 var razorPagesBuilder = builder.Services.AddRazorPages();
 
@@ -132,6 +143,8 @@ builder.Services.AddScoped<AltCharacterValidator>();
 builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
+builder.Services.AddSingleton<TimeZoneConversionService>();
+builder.Services.AddScoped<LootEditService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {

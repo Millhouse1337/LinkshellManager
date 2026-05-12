@@ -467,7 +467,12 @@
                       }
                     </td>
                     <td>{{ entry.itemName || '—' }}</td>
-                    <td class="dkp-history-table__details">{{ entry.details || '—' }}</td>
+                    <td class="dkp-history-table__details">
+                      {{ entry.details || '—' }}
+                      @if (entry.editReason) {
+                        <div class="muted" style="font-size:11px;font-style:italic;margin-top:2px">Reason: {{ entry.editReason }}</div>
+                      }
+                    </td>
                     <td class="num" [class.text-success]="entry.amount > 0" [class.text-danger]="entry.amount < 0">
                       {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }}
                     </td>

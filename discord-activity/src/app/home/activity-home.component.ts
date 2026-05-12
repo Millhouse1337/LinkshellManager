@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityLinkshellSettings,
@@ -13,6 +13,7 @@ import { DashboardTabComponent } from './tabs/dashboard-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
 import { LinkshellTabComponent } from './tabs/linkshell-tab.component';
 import { TodsTabComponent } from './tabs/tods-tab.component';
+import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.component';
 
 @Component({
   selector: 'app-activity-home',
@@ -24,6 +25,7 @@ import { TodsTabComponent } from './tabs/tods-tab.component';
     DashboardTabComponent,
     EventsTabComponent,
     LinkshellTabComponent,
+    LootHistoryPanelComponent,
     TodsTabComponent
   ],
   templateUrl: './activity-home.component.html',
@@ -34,6 +36,90 @@ export class ActivityHomeComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly activeTab = signal<TabName>('dashboard');
   protected readonly reconnecting = signal(false);
+
+  // Wall-clock display for the identity bar. We tick once per minute since the
+  // header only shows hours/minutes; the initial timeout aligns the next tick
+  // with the wall-clock minute boundary so the display flips on time.
+  // The formatters are rebuilt whenever the configured profile zone changes so
+  // the header always matches what's saved on the profile.
+  private timeFmt: Intl.DateTimeFormat = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' });
+  private zoneFmt: Intl.DateTimeFormat = new Intl.DateTimeFormat([], { timeZoneName: 'short' });
+  private activeClockZone: string | null = null;
+  protected readonly currentTime = signal<string>('');
+  protected readonly currentZone = signal<string>('');
+
+  constructor() {
+    const destroyRef = inject(DestroyRef);
+
+    const profileZone = (): string => {
+      const fromOverview = this.activity.overview()?.appUser?.timeZone;
+      const fromLocal = this.activity.localUser()?.appUser?.timeZone;
+      return (fromOverview ?? fromLocal ?? '').trim();
+    };
+
+    const rebuildFormatters = (zone: string): void => {
+      const options: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+      const zoneOptions: Intl.DateTimeFormatOptions = { timeZoneName: 'short' };
+      if (zone) {
+        options.timeZone = zone;
+        zoneOptions.timeZone = zone;
+      }
+      try {
+        this.timeFmt = new Intl.DateTimeFormat([], options);
+        this.zoneFmt = new Intl.DateTimeFormat([], zoneOptions);
+        this.activeClockZone = zone;
+      } catch {
+        // A stale/invalid stored zone shouldn't break the header — keep the
+        // last working formatter and mark the active zone empty so we retry
+        // next tick if a valid zone arrives.
+        this.activeClockZone = '';
+      }
+    };
+
+    const tick = (): void => {
+      const desired = profileZone();
+      if (desired !== this.activeClockZone) {
+        rebuildFormatters(desired);
+      }
+      const now = new Date();
+      this.currentTime.set(this.timeFmt.format(now));
+      const zonePart = this.zoneFmt.formatToParts(now).find(p => p.type === 'timeZoneName');
+      this.currentZone.set(zonePart?.value ?? '');
+    };
+
+    rebuildFormatters(profileZone());
+    tick();
+    const msToNextMinute = 60000 - (Date.now() % 60000);
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const timeoutId = setTimeout(() => {
+      tick();
+      intervalId = setInterval(tick, 60000);
+    }, msToNextMinute);
+
+    // Re-tick immediately whenever the saved profile zone changes (e.g. the
+    // overview arrives after first paint, or the user updates their profile)
+    // so we don't sit on a stale zone for up to a minute.
+    effect(() => {
+      this.activity.overview()?.appUser?.timeZone;
+      this.activity.localUser()?.appUser?.timeZone;
+      tick();
+    });
+
+    // Once the overview lands, ask the service to auto-detect-and-save the
+    // browser zone if the saved value is still on its server default. The
+    // service is idempotent (autoDetectAttempted guard) so re-firing is safe.
+    effect(() => {
+      const overview = this.activity.overview();
+      if (overview?.appUser) {
+        void this.activity.detectAndSaveTimeZoneIfUnset();
+      }
+    });
+
+    destroyRef.onDestroy(() => {
+      clearTimeout(timeoutId);
+      if (intervalId !== null) clearInterval(intervalId);
+    });
+  }
 
   protected async reconnect(): Promise<void> {
     if (this.reconnecting()) return;
@@ -166,6 +252,17 @@ export class ActivityHomeComponent {
 
   protected primaryLinkshell() {
     return this.activity.overview()?.primaryLinkshell ?? null;
+  }
+
+  // Character names of every member on the primary linkshell, sorted for
+  // the Loot History edit modal's winner dropdown. Null/blank names are
+  // filtered so the dropdown never shows empty rows.
+  protected primaryLinkshellRosterNames(): string[] {
+    const members = this.primaryLinkshell()?.members ?? [];
+    return members
+      .map(m => m.characterName)
+      .filter((name): name is string => !!name && name.trim().length > 0)
+      .sort((a, b) => a.localeCompare(b));
   }
 
   protected primaryLinkshellSettings(): ActivityLinkshellSettings | null {

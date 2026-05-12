@@ -17,9 +17,15 @@ local is_self_row   = common.is_self_row
 function M.draw(state, callbacks)
     -- Attendance Results (merged from the old standalone window).
     do
+        local isCompact = state.launcherCompact and true or false
         imgui.Text('Attendance for: ' .. (state.pendingEventName or '<none>'))
-        imgui.SameLine()
-        imgui.TextDisabled(string.format('  Attendees: %d', #attendance.data))
+        -- Compact view strips the attendee count + zone-scope filters so the
+        -- header stays a single short line. Full mode keeps them so officers
+        -- can narrow which entities the next scan picks up.
+        if not isCompact then
+            imgui.SameLine()
+            imgui.TextDisabled(string.format('  Attendees: %d', #attendance.data))
+        end
 
         if state.launcherGather then
             imgui.SameLine()
@@ -74,24 +80,30 @@ function M.draw(state, callbacks)
         -- silently narrow their roster based on a leftover HNM choice.
         if isHnmEvent then
             state.attendanceScopeFilter = state.attendanceScopeFilter or 'zone'
-            -- Keep the scope picker on the same row as "Attendance for: ..."
-            -- so the header stays a single visual strip instead of stacking.
-            imgui.SameLine()
-            imgui.TextDisabled('  Scope:')
-            imgui.SameLine()
-            if imgui.RadioButton('Party##attScopeParty',
-                    state.attendanceScopeFilter == 'party') then
-                state.attendanceScopeFilter = 'party'
-            end
-            imgui.SameLine()
-            if imgui.RadioButton('Alliance##attScopeAlliance',
-                    state.attendanceScopeFilter == 'alliance') then
-                state.attendanceScopeFilter = 'alliance'
-            end
-            imgui.SameLine()
-            if imgui.RadioButton('Zone##attScopeZone',
-                    state.attendanceScopeFilter == 'zone') then
-                state.attendanceScopeFilter = 'zone'
+            -- Compact view keeps the scope value persistent (whatever was
+            -- chosen in full view stays active) but hides the radio buttons
+            -- so the header stays a clean single line. Officers who need to
+            -- change scope can flip back to full mode briefly.
+            if not isCompact then
+                -- Keep the scope picker on the same row as "Attendance for: ..."
+                -- so the header stays a single visual strip instead of stacking.
+                imgui.SameLine()
+                imgui.TextDisabled('  Scope:')
+                imgui.SameLine()
+                if imgui.RadioButton('Party##attScopeParty',
+                        state.attendanceScopeFilter == 'party') then
+                    state.attendanceScopeFilter = 'party'
+                end
+                imgui.SameLine()
+                if imgui.RadioButton('Alliance##attScopeAlliance',
+                        state.attendanceScopeFilter == 'alliance') then
+                    state.attendanceScopeFilter = 'alliance'
+                end
+                imgui.SameLine()
+                if imgui.RadioButton('Zone##attScopeZone',
+                        state.attendanceScopeFilter == 'zone') then
+                    state.attendanceScopeFilter = 'zone'
+                end
             end
             attendance.set_scope(state.attendanceScopeFilter)
         else
@@ -242,9 +254,16 @@ function M.draw(state, callbacks)
                         end
                     end
 
-                    local line = string.format('%s (%s | %s/%s)%s%s',
-                        r.name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?',
-                        timeSuffix, dkpSuffix)
+                    -- Compact view drops the "(zone | main/sub)" chunk to keep
+                    -- each live row short — same trim render_frozen_roster
+                    -- applies for the same reason. Full view keeps the
+                    -- detail since officers may need to verify the zone
+                    -- (claim/credit check) or job pick at a glance.
+                    local line = isCompact
+                        and string.format('%s%s%s', r.name, timeSuffix, dkpSuffix)
+                        or string.format('%s (%s | %s/%s)%s%s',
+                            r.name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?',
+                            timeSuffix, dkpSuffix)
                     if isLocalSelf then
                         imgui.TextColored(SELF_COLOR, line)
                     else
@@ -351,8 +370,106 @@ function M.draw(state, callbacks)
 
         -- Frozen roster for a posted window. Each row gets a Remove button so
         -- accidental posts can be undone server-side; the local snapshot is
-        -- pruned in lock-step so the UI reflects the change immediately.
+        -- pruned in lock-step so the UI reflects the change immediately. A
+        -- per-window Add picker at the top lets officers retroactively credit
+        -- a linkshell member who got missed when the window was originally
+        -- posted; the server endpoint dedupes against AppUserEventWindows so
+        -- adding someone who's already in the window is a safe no-op.
         local function render_frozen_roster(seq, snapshot)
+            -- Add-member row. Combo is populated from the linkshell roster so
+            -- typos can't bypass the server-side membership match. Falls back
+            -- to a free-text input when the roster hasn't loaded yet.
+            do
+                if state.rosterCache == nil and callbacks.on_load_roster then
+                    callbacks.on_load_roster(false)
+                end
+                state.frozenAddByWindow = state.frozenAddByWindow or {}
+                local picker = state.frozenAddByWindow[seq]
+                if picker == nil then
+                    picker = { name = '', posting = false, error = nil }
+                    state.frozenAddByWindow[seq] = picker
+                end
+
+                local rosterNames = (state.rosterCache and state.rosterCache.names) or {}
+                imgui.Text('Add member:')
+                imgui.SameLine()
+                imgui.PushItemWidth(200)
+                if #rosterNames == 0 then
+                    local p = { picker.name or '' }
+                    if imgui.InputText(string.format('##frozenAddName_%d', seq), p, 64) then
+                        picker.name = p[1] or ''
+                    end
+                else
+                    local current = picker.name or ''
+                    if imgui.BeginCombo(string.format('##frozenAddCombo_%d', seq),
+                            current ~= '' and current or 'Select member') then
+                        for _, name in ipairs(rosterNames) do
+                            local selected = (name == current)
+                            if imgui.Selectable(name, selected) then
+                                picker.name = name
+                            end
+                            if selected then imgui.SetItemDefaultFocus() end
+                        end
+                        imgui.EndCombo()
+                    end
+                end
+                imgui.PopItemWidth()
+                imgui.SameLine()
+
+                if picker.posting then
+                    imgui.TextDisabled('Adding...')
+                else
+                    if imgui.SmallButton(string.format('Add##frozenAddBtn_%d', seq)) then
+                        local name = (picker.name or ''):gsub('^%s+', ''):gsub('%s+$', '')
+                        if name == '' then
+                            picker.error = 'Pick a linkshell member first.'
+                        else
+                            picker.posting = true
+                            picker.error   = nil
+                            local entries  = { { characterName = name } }
+                            local result, perr = api.post_attendance(
+                                state.linkedEventId, entries, seq, get_self_name())
+                            picker.posting = false
+                            if perr then
+                                picker.error = tostring(perr)
+                                state.lastSyncSummary = 'Add failed: ' .. tostring(perr)
+                            elseif result then
+                                local unmatched = result.unmatched or {}
+                                local matched = tonumber(result.matched) or 0
+                                local alreadyVerified = tonumber(result.alreadyVerified) or 0
+                                if #unmatched > 0 then
+                                    picker.error = 'Not a linkshell member: ' .. tostring(unmatched[1])
+                                elseif matched > 0 then
+                                    -- Append to the local snapshot so the new row
+                                    -- shows up immediately. Server's creditedAttendees
+                                    -- carries jobs only if they were resolvable from
+                                    -- the membership row; otherwise we render '?'.
+                                    local credited = (result.creditedAttendees or {})[1]
+                                    table.insert(snapshot, {
+                                        name     = (credited and credited.characterName) or name,
+                                        zone     = '—',
+                                        jobsMain = (credited and credited.jobName) or '?',
+                                        jobsSub  = (credited and credited.subJobName) or '?',
+                                    })
+                                    state.lastSyncSummary = string.format(
+                                        'Added %s to window %d.', name, seq)
+                                    picker.name = ''
+                                elseif alreadyVerified > 0 then
+                                    picker.error = name .. ' was already credited for this window.'
+                                else
+                                    picker.error = 'Nothing changed (server reported no matches).'
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if picker.error then
+                    imgui.TextColored({ 1.0, 0.5, 0.5, 1.0 }, picker.error)
+                end
+                imgui.Separator()
+            end
+
             if not snapshot or #snapshot == 0 then
                 imgui.TextDisabled('No entries posted for this window.')
                 return
@@ -367,8 +484,15 @@ function M.draw(state, callbacks)
                 local cleanName = name:gsub('^X%s+', '')
                 local dkpSuffix = dkpPerWindow
                     and string.format('  +%g DKP', dkpPerWindow) or ''
-                imgui.Text(string.format('%s (%s | %s/%s)%s',
-                    name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?', dkpSuffix))
+                -- Compact view drops the "(zone | main/sub)" chunk so each
+                -- frozen row collapses to "Name +N DKP [Remove]". Full view
+                -- keeps the detail since officers reviewing a window may
+                -- want to see where each attendee was and what they were on.
+                local rowLine = isCompact
+                    and string.format('%s%s', name, dkpSuffix)
+                    or string.format('%s (%s | %s/%s)%s',
+                        name, r.zone or '?', r.jobsMain or '?', r.jobsSub or '?', dkpSuffix)
+                imgui.Text(rowLine)
                 imgui.SameLine()
                 if imgui.SmallButton(string.format('Remove##winrm_%d_%d', seq, i)) then
                     local _, perr = api.remove_window_attendee(state.linkedEventId, seq, cleanName)
@@ -445,21 +569,60 @@ function M.draw(state, callbacks)
             elseif type(active) == 'number'
                    and active >= 1
                    and active <= windowSeq then
-                local stamp = postedAt and postedAt[active]
-                if stamp then
-                    imgui.TextDisabled('Posted at ' .. stamp)
+                -- Compact view drops the "Posted at" stamp + DKP summary so
+                -- the panel stays tight; officers can flip to full mode for
+                -- the per-window audit info.
+                if not isCompact then
+                    local stamp = postedAt and postedAt[active]
+                    if stamp then
+                        imgui.TextDisabled('Posted at ' .. stamp)
+                    end
+                    -- Per-window DKP summary: per-attendee rate × posted entries.
+                    -- Mirrors the per-attendee "+N DKP" suffix below so users see
+                    -- both the unit rate and the window's total at a glance.
+                    local snap = state.windowRosters[active]
+                    local rate = dkp_per_window_for_active_event()
+                    if rate and snap and #snap > 0 then
+                        imgui.TextDisabled(string.format(
+                            '%g DKP / attendee × %d = %g DKP awarded this window',
+                            rate, #snap, rate * #snap))
+                    end
                 end
-                -- Per-window DKP summary: per-attendee rate × posted entries.
-                -- Mirrors the per-attendee "+N DKP" suffix below so users see
-                -- both the unit rate and the window's total at a glance.
-                local snap = state.windowRosters[active]
-                local rate = dkp_per_window_for_active_event()
-                if rate and snap and #snap > 0 then
-                    imgui.TextDisabled(string.format(
-                        '%g DKP / attendee × %d = %g DKP awarded this window',
-                        rate, #snap, rate * #snap))
+                render_frozen_roster(active, state.windowRosters[active])
+            end
+        end
+
+        -- Compact view hides the Action Bar (Post / End Event), so surface
+        -- the Post-next-window button INSIDE the roster's framed area, left-
+        -- aligned right below whichever tab is active. Only meaningful for
+        -- windowed (HNM-style) events with unposted windows remaining; non-
+        -- HNM events post via the main "Start & Post" button in full view's
+        -- action bar (no per-window concept).
+        if isCompact and isHnmEvent and state.linkedEventId then
+            if windowSeq < windowMax then
+                local nextSeq = windowSeq + 1
+                local prefix = (nextSeq == 1) and 'Start & Post' or 'Post'
+                local label = string.format('%s: %s (%d/%d)##compactPostWindow',
+                    prefix,
+                    constants.window_label(state.linkedEventName, nextSeq, windowMax),
+                    nextSeq, windowMax)
+                -- Explicit width so the button hugs its label rather than
+                -- stretching across the frame. SmallButton would also work
+                -- but the heavier Button reads as a primary action which is
+                -- what this is.
+                if imgui.Button(label) and callbacks.on_start_and_post then
+                    local d = callbacks.event_defaults or {}
+                    state.lastSyncSummary = callbacks.on_start_and_post({
+                        eventId      = state.linkedEventId,
+                        eventName    = state.linkedEventName,
+                        isAutoCreate = false,
+                        csvOnStart   = state.launcherCsvOnStart,
+                        dkpPerHour   = tonumber(d.dkpPerHourRegular) or 0,
+                        dkpPerWindow = tonumber(d.dkpPerWindowHnm)   or 0,
+                    })
                 end
-                render_frozen_roster(active, snap)
+            else
+                imgui.TextDisabled(string.format('All %d windows posted.', windowMax))
             end
         end
         imgui.EndChild()

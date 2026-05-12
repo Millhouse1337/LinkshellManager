@@ -8,7 +8,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LinkshellManagerDiscordApp.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialBeta : Migration
+    public partial class InitialSchema : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -33,6 +33,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
                     CharacterName = table.Column<string>(type: "text", nullable: true),
+                    AltCharacterName1 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    AltCharacterName2 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     TimeZone = table.Column<string>(type: "text", nullable: true),
                     PrimaryLinkshellId = table.Column<int>(type: "integer", nullable: true),
                     PrimaryLinkshellName = table.Column<string>(type: "text", nullable: true),
@@ -208,7 +210,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     EnableEvents = table.Column<bool>(type: "boolean", nullable: false),
                     EnableDkp = table.Column<bool>(type: "boolean", nullable: false),
                     EnableItems = table.Column<bool>(type: "boolean", nullable: false),
-                    EnableRevenue = table.Column<bool>(type: "boolean", nullable: false)
+                    EnableRevenue = table.Column<bool>(type: "boolean", nullable: false),
+                    HiddenTodMonsters = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -454,6 +457,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     EventType = table.Column<string>(type: "text", nullable: true),
                     EventLocation = table.Column<string>(type: "text", nullable: true),
                     CreatorUserId = table.Column<string>(type: "text", nullable: true),
+                    StarterUserId = table.Column<string>(type: "text", nullable: true),
                     StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     CommencementStartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -629,7 +633,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     MonsterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     DayNumber = table.Column<int>(type: "integer", nullable: true),
                     Time = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Claim = table.Column<bool>(type: "boolean", nullable: false),
+                    Claim = table.Column<bool>(type: "boolean", nullable: true),
                     Cooldown = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
                     RepopTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Interval = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
@@ -704,7 +708,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     EventStartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     EventEndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     ItemName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    Details = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true)
+                    Details = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
+                    EditReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    SourceTodLootDetailId = table.Column<int>(type: "integer", nullable: true),
+                    SourceEventLootDetailId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -798,20 +805,32 @@ namespace LinkshellManagerDiscordApp.Migrations
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    EventId = table.Column<int>(type: "integer", nullable: false),
-                    ItemName = table.Column<string>(type: "text", nullable: true),
-                    ItemWinner = table.Column<string>(type: "text", nullable: true),
-                    WinningDkpSpent = table.Column<int>(type: "integer", nullable: true)
+                    EventId = table.Column<int>(type: "integer", nullable: true),
+                    EventHistoryId = table.Column<int>(type: "integer", nullable: true),
+                    ItemName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    ItemWinner = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    WinningDkpSpent = table.Column<int>(type: "integer", nullable: true),
+                    ActualDeductedDkp = table.Column<double>(type: "double precision", nullable: true),
+                    EditedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EditedByAppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    EditedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    LastEditReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_EventLootDetails", x => x.Id);
                     table.ForeignKey(
+                        name: "FK_EventLootDetails_EventHistories_EventHistoryId",
+                        column: x => x.EventHistoryId,
+                        principalTable: "EventHistories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
                         name: "FK_EventLootDetails_Events_EventId",
                         column: x => x.EventId,
                         principalTable: "Events",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -893,7 +912,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                     ItemName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     ItemWinner = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     WinningDkpSpent = table.Column<int>(type: "integer", nullable: true),
-                    ActualDeductedDkp = table.Column<double>(type: "double precision", nullable: true)
+                    ActualDeductedDkp = table.Column<double>(type: "double precision", nullable: true),
+                    EditedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EditedByAppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    EditedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    LastEditReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -1214,6 +1237,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                 columns: new[] { "LinkshellId", "AppUserId", "OccurredAt", "Sequence" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_DkpLedgerEntries_SourceEventLootDetailId",
+                table: "DkpLedgerEntries",
+                column: "SourceEventLootDetailId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DkpLedgerEntries_SourceTodLootDetailId",
+                table: "DkpLedgerEntries",
+                column: "SourceTodLootDetailId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_EventAttendanceWindows_EventId_SequenceNumber",
                 table: "EventAttendanceWindows",
                 columns: new[] { "EventId", "SequenceNumber" },
@@ -1223,6 +1256,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "IX_EventHistories_LinkshellId",
                 table: "EventHistories",
                 column: "LinkshellId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EventLootDetails_EventHistoryId",
+                table: "EventLootDetails",
+                column: "EventHistoryId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventLootDetails_EventId",

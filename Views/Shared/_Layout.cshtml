@@ -107,6 +107,12 @@
                         <span class="here">@pageTitle</span>
                     </div>
 
+                    <div class="topbar-clock" id="topbar-clock" aria-live="off"
+                         data-clock-tz="@(currentUser?.TimeZone ?? string.Empty)">
+                        <span class="topbar-clock__time" data-clock-time>--:--</span>
+                        <span class="topbar-clock__zone" data-clock-zone></span>
+                    </div>
+
                     <div class="topbar-actions">
                         <a class="avatar-btn" asp-controller="Account" asp-action="Profile" title="Profile">
                             @if (profileImage is not null)

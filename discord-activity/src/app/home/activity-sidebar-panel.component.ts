@@ -363,8 +363,16 @@ export class ActivitySidebarPanelComponent {
     switch (entryType) {
       case 'LootSpent':
         return 'Loot Spent';
+      case 'LootRefund':
+        return 'Loot Refund';
+      case 'LootEditRefund':
+        return 'Loot Edit · Refund';
+      case 'LootEditSpent':
+        return 'Loot Edit · Spent';
       case 'EventEarned':
         return 'Event Earned';
+      case 'AuctionSpent':
+        return 'Auction Spent';
       case 'AuditAdjustment':
         return 'Audit · Adjustment';
       case 'AuditMisc':

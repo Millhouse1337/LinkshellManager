@@ -47,6 +47,8 @@
     </div>
 
     @if (isAuctionFormOpen) {
+      <div class="auction-form-modal-backdrop" (click)="closeAuctionForm()">
+        <div class="auction-form-modal-dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
       <form class="create-form create-form--compact" (ngSubmit)="submitAuctionForm()">
         <div class="create-form__header">
           <div>
@@ -119,8 +121,8 @@
                 </label>
               </div>
               @if (auctionFormModel.items.length > 1) {
-                <div class="create-form__actions">
-                  <button type="button" class="action-button action-button--secondary" (click)="removeAuctionFormItem($index)">Remove row</button>
+                <div class="create-form__actions" style="justify-content:flex-end">
+                  <button type="button" class="action-button action-button--secondary" (click)="removeAuctionFormItem($index)">Remove Item</button>
                 </div>
               }
             </div>
@@ -133,6 +135,8 @@
           </button>
         </div>
       </form>
+        </div>
+      </div>
     }
 
     @if (!selectedLinkshell()) {
@@ -145,7 +149,6 @@
           <table class="data-table auction-active-table">
             <thead>
               <tr>
-                <th>Auction</th>
                 <th>Item</th>
                 <th>Type</th>
                 <th class="num">Start</th>
@@ -157,46 +160,71 @@
             </thead>
             <tbody>
               @for (auction of pagedActiveAuctions(); track auction.id) {
-                @if (auction.items.length === 0) {
-                  <tr class="auction-group-start">
-                    <td>
-                      <div><strong>{{ auction.title || 'Untitled auction' }}</strong></div>
-                      <div>
+                <!-- Auction header row: title, status, time window, and
+                     auction-level controls (Edit / Start / End / Close).
+                     Spans the full table width so it visually groups the
+                     item rows that follow underneath. -->
+                <tr class="auction-header-row">
+                  <td colspan="7">
+                    <div class="auction-header">
+                      <div class="auction-header__title">
+                        <strong>{{ auction.title || 'Untitled auction' }}</strong>
                         @if (auctionStatusTagClass(auction)) {
                           <span class="tag {{ auctionStatusTagClass(auction) }}">{{ auctionStatusLabel(auction) }}</span>
                         } @else {
                           <span class="tag">{{ auctionStatusLabel(auction) }}</span>
                         }
                       </div>
-                      <div class="muted" style="font-size:11px">{{ auctionTimeWindowLabel(auction) }}</div>
-                    </td>
-                    <td colspan="6"><span class="muted">No items.</span></td>
-                    <td>
-                      @if (auction.canEdit) {
-                        <button type="button" class="btn sm" (click)="openEditAuctionForm(auction)">Edit</button>
-                      }
-                    </td>
+                      <div class="auction-header__meta muted">
+                        <span>{{ auctionTimeWindowLabel(auction) }}</span>
+                        <span>By {{ auction.createdBy || 'Unknown' }}</span>
+                        @if (auctionState(auction) !== 'ended') {
+                          <span class="auction-header__remaining">{{ auctionRemainingLabel(auction) }}: {{ auctionTimerValue(auction) }}</span>
+                        }
+                      </div>
+                      <div class="auction-header__actions">
+                        @if (auction.canEdit) {
+                          <button type="button" class="btn sm" (click)="openEditAuctionForm(auction)">Edit</button>
+                        }
+                        @if (auction.canStart) {
+                          <button
+                            type="button"
+                            class="btn primary sm"
+                            [disabled]="activity.busyAuctionId() === auction.id"
+                            (click)="startAuction(auction.id)">
+                            {{ activity.busyAuctionId() === auction.id ? '…' : 'Start' }}
+                          </button>
+                        }
+                        @if (auction.canEnd) {
+                          <button
+                            type="button"
+                            class="btn warning-fill sm"
+                            [disabled]="activity.busyAuctionId() === auction.id"
+                            (click)="endAuction(auction.id)">
+                            End Auction
+                          </button>
+                        }
+                        @if (auction.canClose && closingAuctionId !== auction.id) {
+                          <button
+                            type="button"
+                            class="btn danger-outline sm"
+                            [disabled]="activity.busyAuctionId() === auction.id"
+                            (click)="beginCloseAuction(auction.id)">
+                            Close auction
+                          </button>
+                        }
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+
+                @if (auction.items.length === 0) {
+                  <tr class="auction-empty-row">
+                    <td colspan="7"><span class="muted">No items.</span></td>
                   </tr>
                 } @else {
-                  @for (item of auction.items; track item.id; let first = $first) {
-                    <tr [class.auction-group-start]="first" [class.auction-row-ended]="auctionState(auction) === 'ended'">
-                      <td>
-                        @if (first) {
-                          <div><strong>{{ auction.title || 'Untitled auction' }}</strong></div>
-                          <div>
-                            @if (auctionStatusTagClass(auction)) {
-                              <span class="tag {{ auctionStatusTagClass(auction) }}">{{ auctionStatusLabel(auction) }}</span>
-                            } @else {
-                              <span class="tag">{{ auctionStatusLabel(auction) }}</span>
-                            }
-                          </div>
-                          <div class="muted" style="font-size:11px">{{ auctionTimeWindowLabel(auction) }}</div>
-                          <div class="muted" style="font-size:11px">By {{ auction.createdBy || 'Unknown' }}</div>
-                          @if (auctionState(auction) !== 'ended') {
-                            <div class="muted" style="font-size:11px">{{ auctionRemainingLabel(auction) }}: {{ auctionTimerValue(auction) }}</div>
-                          }
-                        }
-                      </td>
+                  @for (item of auction.items; track item.id) {
+                    <tr class="auction-item-row" [class.auction-row-ended]="auctionState(auction) === 'ended'">
                       <td>
                         <span class="item-type-dot {{ itemDotClass(item.itemType) }}" aria-hidden="true" style="margin-right:6px"></span>
                         {{ item.itemName || 'Item' }}
@@ -226,13 +254,13 @@
                         @if (auctionState(auction) !== 'ended' && auction.status === 'Live') {
                           <div style="display:flex;gap:4px;align-items:center">
                             <input
+                              class="bid-input"
                               [ngModel]="getAuctionBidDraft(item.id)"
                               (ngModelChange)="auctionBidDrafts[item.id] = $event"
                               [name]="'auctionBidDraft' + item.id"
                               type="number"
                               min="1"
-                              [placeholder]="'Min ' + itemMinBid(item)"
-                              style="width:72px" />
+                              [placeholder]="'Min ' + itemMinBid(item)" />
                             <button
                               type="button"
                               [class]="auctionState(auction) === 'ending' ? 'btn warning-fill sm' : 'btn primary sm'"
@@ -246,48 +274,14 @@
                         }
                       </td>
                       <td>
-                        <div style="display:flex;gap:4px;flex-wrap:wrap">
-                          <button type="button" class="btn ghost sm" (click)="toggleAuctionBids(item.id)">
-                            {{ expandedAuctionBidItems[item.id] ? 'Hide Bids' : 'View Bids' }}
-                          </button>
-                          @if (first) {
-                            @if (auction.canEdit) {
-                              <button type="button" class="btn sm" (click)="openEditAuctionForm(auction)">Edit</button>
-                            }
-                            @if (auction.canStart) {
-                              <button
-                                type="button"
-                                class="btn primary sm"
-                                [disabled]="activity.busyAuctionId() === auction.id"
-                                (click)="startAuction(auction.id)">
-                                {{ activity.busyAuctionId() === auction.id ? '…' : 'Start' }}
-                              </button>
-                            }
-                            @if (auction.canEnd) {
-                              <button
-                                type="button"
-                                class="btn warning-fill sm"
-                                [disabled]="activity.busyAuctionId() === auction.id"
-                                (click)="endAuction(auction.id)">
-                                End Auction
-                              </button>
-                            }
-                            @if (auction.canClose && closingAuctionId !== auction.id) {
-                              <button
-                                type="button"
-                                class="btn danger-outline sm"
-                                [disabled]="activity.busyAuctionId() === auction.id"
-                                (click)="beginCloseAuction(auction.id)">
-                                Close auction
-                              </button>
-                            }
-                          }
-                        </div>
+                        <button type="button" class="btn ghost sm" (click)="toggleAuctionBids(item.id)">
+                          {{ expandedAuctionBidItems[item.id] ? 'Hide Bids' : 'View Bids' }}
+                        </button>
                       </td>
                     </tr>
                     @if (expandedAuctionBidItems[item.id]) {
                       <tr class="auction-bid-history-row">
-                        <td colspan="8">
+                        <td colspan="7">
                           <div class="bid-history">
                             @if (auctionBids(item.id).length > 0) {
                               @for (bid of auctionBids(item.id); track bid.id; let bidIdx = $index) {
@@ -311,7 +305,7 @@
                   }
                   @if (closingAuctionId === auction.id) {
                     <tr class="auction-close-row">
-                      <td colspan="8">
+                      <td colspan="7">
                         <div class="auction-close-panel">
                           <div class="auction-close-panel__head">
                             <strong>Close auction &amp; record item delivery</strong>

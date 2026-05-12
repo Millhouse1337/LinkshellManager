@@ -269,11 +269,13 @@ public sealed class DiscordIdentityService
                 if (appUser is null)
                 {
                     isNewAppUser = true;
+                    // TimeZone is left null intentionally. The clients auto-detect the
+                    // browser zone on first page load via /api/activity/profile/detect-time-zone
+                    // and persist it there, so we don't lock new users into UTC.
                     appUser = new AppUser
                     {
                         UserName = $"discord-{discordUser.Id}",
-                        CharacterName = discordUser.GlobalName ?? discordUser.Username,
-                        TimeZone = "UTC"
+                        CharacterName = discordUser.GlobalName ?? discordUser.Username
                     };
 
                     var createResult = await _userManager.CreateAsync(appUser);
@@ -287,12 +289,6 @@ public sealed class DiscordIdentityService
                 if (string.IsNullOrWhiteSpace(appUser.CharacterName))
                 {
                     appUser.CharacterName = discordUser.GlobalName ?? discordUser.Username;
-                    shouldUpdateAppUser = true;
-                }
-
-                if (string.IsNullOrWhiteSpace(appUser.TimeZone))
-                {
-                    appUser.TimeZone = "UTC";
                     shouldUpdateAppUser = true;
                 }
 

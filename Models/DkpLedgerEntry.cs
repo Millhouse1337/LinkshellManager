@@ -53,4 +53,20 @@ public class DkpLedgerEntry
 
     [MaxLength(1024)]
     public string? Details { get; set; }
+
+    // Populated when this ledger entry was produced by the Loot History edit
+    // flow (EntryType = "LootEditRefund" / "LootEditSpent"). Surfaces in the
+    // DKP-history view as an "Edited" tag with the reason on hover. Null on
+    // organic earn/spend/refund entries.
+    [MaxLength(512)]
+    public string? EditReason { get; set; }
+
+    // Optional back-references so a ledger entry can be traced to the loot
+    // row it was generated from. Exactly one is set on edit-driven entries,
+    // both null on legacy / non-loot entries. Not foreign-key-enforced — the
+    // loot row could be deleted later, and we want the ledger to remain
+    // immutable regardless.
+    public int? SourceTodLootDetailId { get; set; }
+
+    public int? SourceEventLootDetailId { get; set; }
 }

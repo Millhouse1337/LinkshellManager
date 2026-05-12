@@ -1,0 +1,179 @@
+@model LinkshellManagerDiscordApp.ViewModels.LootHistoryIndexViewModel
+@{
+    ViewData["Title"] = "Loot History";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Loot History</h1>
+        <div class="page-sub">
+            <span>All recorded loot · ToDs and Events</span>
+            @if (!string.IsNullOrWhiteSpace(Model.SelectedLinkshellName))
+            {
+                <span>·</span>
+                <span>@Model.SelectedLinkshellName</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    </div>
+</div>
+
+@if (TempData["LootHistoryMessage"] is string flash && !string.IsNullOrWhiteSpace(flash))
+{
+    <div class="card fade d1" style="border:1px solid var(--accent);padding:12px 14px;margin-bottom:12px">
+        <div style="color:var(--fg);font-size:14px">@flash</div>
+    </div>
+}
+
+<div class="fade d2" style="display:grid;gap:16px">
+    <div>
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Filters</div>
+            </div>
+            <div style="padding:4px 16px 16px">
+                <form method="get" class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;align-items:end">
+                    <div class="field">
+                        <label for="source">Source</label>
+                        <select class="form-select" id="source" name="source">
+                            @if (Model.SourceFilter == "all") { <option value="all" selected>All</option> } else { <option value="all">All</option> }
+                            @if (Model.SourceFilter == "tod") { <option value="tod" selected>ToDs</option> } else { <option value="tod">ToDs</option> }
+                            @if (Model.SourceFilter == "event") { <option value="event" selected>Events</option> } else { <option value="event">Events</option> }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="winner">Winner contains</label>
+                        <input class="form-control" id="winner" name="winner" value="@Model.WinnerFilter" maxlength="64" />
+                    </div>
+                    <div class="field">
+                        <label for="item">Item contains</label>
+                        <input class="form-control" id="item" name="item" value="@Model.ItemFilter" maxlength="64" />
+                    </div>
+                    <div class="field" style="grid-column:1/-1">
+                        <div style="display:flex;gap:8px">
+                            <button type="submit" class="btn primary">Apply filters</button>
+                            <a class="btn ghost" asp-action="Index">Reset</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Loot entries <span class="tag">@Model.TotalCount</span></div>
+            </div>
+            @if (Model.SelectedLinkshellId is null || Model.SelectedLinkshellId == 0)
+            {
+                <div class="empty">Join a linkshell to view Loot History.</div>
+            }
+            else if (!Model.Entries.Any())
+            {
+                <div class="empty">No loot records match the current filters.</div>
+            }
+            else
+            {
+                <table class="table themed">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Source</th>
+                            <th>Context</th>
+                            <th>Item</th>
+                            <th>Winner</th>
+                            <th class="num">DKP</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Model.Entries)
+                        {
+                            <tr>
+                                <td>@(entry.OccurredAt?.ToString("g") ?? "—")</td>
+                                <td>
+                                    @if (entry.Source == "Tod")
+                                    {
+                                        <span class="tag default">ToD</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="tag accent">Event</span>
+                                    }
+                                </td>
+                                <td>@(entry.Context ?? "—")</td>
+                                <td>@(entry.ItemName ?? "—")</td>
+                                <td>@(entry.ItemWinner ?? "—")</td>
+                                <td class="num">@(entry.WinningDkpSpent?.ToString() ?? "—")</td>
+                                <td>
+                                    @if (entry.IsEdited)
+                                    {
+                                        <span class="tag warn" title="@entry.LastEditReason">
+                                            Edited
+                                            @if (!string.IsNullOrWhiteSpace(entry.EditedByCharacterName))
+                                            {
+                                                @:by @entry.EditedByCharacterName
+                                            }
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted" style="font-size:11px">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (Model.CanEdit)
+                                    {
+                                        @if (entry.Source == "Tod")
+                                        {
+                                            <a class="btn sm" asp-action="EditTod" asp-route-lootDetailId="@entry.LootDetailId">Edit</a>
+                                        }
+                                        else
+                                        {
+                                            <a class="btn sm" asp-action="EditEvent" asp-route-lootDetailId="@entry.LootDetailId">Edit</a>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                            @if (entry.IsEdited && !string.IsNullOrWhiteSpace(entry.LastEditReason))
+                            {
+                                <tr>
+                                    <td colspan="8" style="padding-top:0;color:var(--fg-3);font-size:11px;font-style:italic">
+                                        Reason: @entry.LastEditReason
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+
+                @if (Model.TotalPages > 1)
+                {
+                    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border)">
+                        @if (Model.PageNumber > 1)
+                        {
+                            <a class="btn sm" asp-action="Index"
+                               asp-route-source="@Model.SourceFilter"
+                               asp-route-winner="@Model.WinnerFilter"
+                               asp-route-item="@Model.ItemFilter"
+                               asp-route-page="@(Model.PageNumber - 1)">Prev</a>
+                        }
+                        <span class="muted" style="font-size:12px">Page @Model.PageNumber of @Model.TotalPages</span>
+                        @if (Model.PageNumber < Model.TotalPages)
+                        {
+                            <a class="btn sm" asp-action="Index"
+                               asp-route-source="@Model.SourceFilter"
+                               asp-route-winner="@Model.WinnerFilter"
+                               asp-route-item="@Model.ItemFilter"
+                               asp-route-page="@(Model.PageNumber + 1)">Next</a>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>

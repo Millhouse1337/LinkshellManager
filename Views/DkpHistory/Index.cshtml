@@ -86,12 +86,26 @@
                     <tbody>
                         @foreach (var entry in Model.Entries)
                         {
-                            var isSpent = entry.EntryType == "LootSpent";
+                            // Tag classification: "LootSpent" + auction/event flat-spend types are
+                            // negative debits; loot-edit pair surfaces with a distinct "Edited" tag
+                            // so officers can see at a glance which entries came from a correction.
+                            var isLootEditRefund = entry.EntryType == "LootEditRefund";
+                            var isLootEditSpent = entry.EntryType == "LootEditSpent";
+                            var isLootEdit = isLootEditRefund || isLootEditSpent;
+                            var isSpent = entry.Amount < 0;
                             var amountColor = entry.Amount >= 0 ? "var(--success)" : "var(--danger)";
                             <tr>
                                 <td style="font-size:12px;color:var(--fg-3)">@(entry.OccurredAt?.ToString("g") ?? "—")</td>
                                 <td>
-                                    @if (isSpent)
+                                    @if (isLootEditRefund)
+                                    {
+                                        <span class="tag" title="Refund applied during a loot edit">Edit refund</span>
+                                    }
+                                    else if (isLootEditSpent)
+                                    {
+                                        <span class="tag warn" title="New debit applied during a loot edit">Edit spend</span>
+                                    }
+                                    else if (isSpent)
                                     {
                                         <span class="tag danger">Spent</span>
                                     }
@@ -118,6 +132,10 @@
                                     @if (!string.IsNullOrWhiteSpace(entry.Details))
                                     {
                                         <div style="color:var(--fg-4);font-size:11px">@entry.Details</div>
+                                    }
+                                    @if (isLootEdit && !string.IsNullOrWhiteSpace(entry.EditReason))
+                                    {
+                                        <div style="color:var(--fg-3);font-size:11px;font-style:italic;margin-top:2px">Reason: @entry.EditReason</div>
                                     }
                                 </td>
                                 <td style="text-align:right;font-family:var(--font-mono);color:@amountColor">@entry.Amount.ToString("+0.##;-0.##;0")</td>

@@ -111,15 +111,45 @@
 }
 
 /* Active-auctions table: each auction is a group of consecutive rows.
-   The first row of each auction gets a thicker top border so groups
-   are visually delineated. Bid-history and close panels render as
-   full-width rows beneath the auction's items and inherit the group
-   without an extra delineator. */
-.panel-tab .auction-active-table tbody tr.auction-group-start > td {
+   Each group starts with a dedicated header row holding the title,
+   status, and auction-level actions. Item rows follow below the header
+   row; bid-history and close panels render as full-width rows beneath
+   the items and inherit the group without an extra delineator. */
+.panel-tab .auction-active-table tbody tr.auction-header-row > td {
+  background: var(--surface-2, var(--surface));
   border-top: 2px solid var(--border-strong, var(--border));
+  padding: 12px 14px;
 }
-.panel-tab .auction-active-table tbody tr.auction-group-start:first-child > td {
+.panel-tab .auction-active-table tbody tr.auction-header-row:first-child > td {
   border-top: none;
+}
+.panel-tab .auction-active-table tbody tr.auction-header-row:hover {
+  background: transparent;
+}
+.panel-tab .auction-active-table tbody tr.auction-header-row .auction-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
 }
 .panel-tab .auction-active-table tbody tr.auction-row-ended > td {
   opacity: 0.7;

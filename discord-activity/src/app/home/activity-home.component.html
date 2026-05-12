@@ -32,6 +32,12 @@
         <span class="identity-badge">{{ primaryMemberCount() }} members</span>
       }
     </div>
+    <div class="identity-clock" aria-live="off">
+      <span class="identity-clock__time">{{ currentTime() }}</span>
+      @if (currentZone()) {
+        <span class="identity-clock__zone">{{ currentZone() }}</span>
+      }
+    </div>
     <div class="identity-right">
       <button
         type="button"
@@ -130,6 +136,17 @@
                 [class.active]="activeTab() === 'dkp'"
                 (click)="setActiveTab('dkp')">DKP</button>
       }
+      <!-- Loot History applies even to LootCouncil-mode linkshells (rename
+           with reason, no DKP math), so we don't gate on isDkpModeEnabled.
+           Still bound to the enableEvents/enableToDs feature toggles is
+           overkill — loot can come from either. Always render the tab. -->
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('loot')"
+              [attr.aria-controls]="panelId('loot')"
+              [attr.aria-selected]="activeTab() === 'loot'"
+              [attr.tabindex]="activeTab() === 'loot' ? 0 : -1"
+              [class.active]="activeTab() === 'loot'"
+              (click)="setActiveTab('loot')">Loot</button>
       <button type="button" class="tab" role="tab"
               [id]="tabId('linkshell')"
               [attr.aria-controls]="panelId('linkshell')"
@@ -228,6 +245,15 @@
   @if (activeTab() === 'dkp') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
       <app-activity-sidebar-panel [visibleSections]="['dkp']" />
+    </div>
+  }
+
+  <!-- ===== LOOT HISTORY TAB ===== -->
+  @if (activeTab() === 'loot') {
+    <div class="panel-tab fade" role="tabpanel" [id]="panelId('loot')" [attr.aria-labelledby]="tabId('loot')">
+      <app-loot-history-panel
+        [selectedLinkshellId]="primaryLinkshell()?.id ?? 0"
+        [rosterCharacterNames]="primaryLinkshellRosterNames()" />
     </div>
   }
 

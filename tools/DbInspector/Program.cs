@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 
 var argsList = args.ToList();
@@ -10,7 +11,19 @@ if (argsList.Count == 0)
 var connectionString = Environment.GetEnvironmentVariable("APP_CS");
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    Console.Error.WriteLine("APP_CS environment variable is required.");
+    // Fall back to the main app's user-secrets so the tool can run without the
+    // caller having to copy the connection string into APP_CS. Keeps the
+    // credential out of shell history and out of the tool caller's context.
+    const string appUserSecretsId = "aspnet-LinkshellManagerDiscordApp-097d4206-0f91-471a-b0bb-fb7302e26d5f";
+    var config = new ConfigurationBuilder()
+        .AddUserSecrets(appUserSecretsId)
+        .AddEnvironmentVariables()
+        .Build();
+    connectionString = config.GetConnectionString("DefaultConnection");
+}
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    Console.Error.WriteLine("APP_CS not set and ConnectionStrings:DefaultConnection not found in user-secrets.");
     return 1;
 }
 

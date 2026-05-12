@@ -111,7 +111,8 @@ public sealed partial class ActivityDataController
                     entry.EventStartTime,
                     entry.EventEndTime,
                     entry.ItemName,
-                    entry.Details);
+                    entry.Details,
+                    entry.EditReason);
             })
             .ToList();
         projected.Reverse();

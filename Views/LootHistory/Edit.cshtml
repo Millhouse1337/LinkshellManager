@@ -1,0 +1,116 @@
+@model LinkshellManagerDiscordApp.ViewModels.LootHistoryEditViewModel
+@{
+    ViewData["Title"] = "Edit Loot Record";
+    var formAction = string.Equals(Model.Source, "Tod", StringComparison.OrdinalIgnoreCase)
+        ? "EditTod"
+        : "EditEvent";
+    var lootStructure = (Model.LinkshellLootStructure ?? "Dkp").ToLowerInvariant();
+    var isHybrid = lootStructure == "hybrid";
+    var isLootCouncil = lootStructure == "lootcouncil";
+    var dkpLabel = isHybrid ? "Deduction %" : "DKP amount";
+    var dkpHint = isHybrid
+        ? "Hybrid linkshell — value is the percent of the winner's current balance to deduct (0–100)."
+        : isLootCouncil
+            ? "Loot Council linkshell — DKP amount has no effect on player balance."
+            : "Flat DKP deducted from the winner's balance.";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Edit loot record</h1>
+        <div class="page-sub">
+            <span>@(Model.Source == "Tod" ? "ToD" : "Event")</span>
+            @if (!string.IsNullOrWhiteSpace(Model.Context))
+            {
+                <span>·</span>
+                <span>@Model.Context</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Back to history</a>
+    </div>
+</div>
+
+<div class="card fade d2" style="padding:20px">
+    <form asp-action="@formAction" asp-route-lootDetailId="@Model.LootDetailId" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="LootDetailId" />
+        <input type="hidden" asp-for="Source" />
+        <input type="hidden" asp-for="Context" />
+        <input type="hidden" asp-for="CurrentItemName" />
+        <input type="hidden" asp-for="CurrentItemWinner" />
+        <input type="hidden" asp-for="CurrentWinningDkpSpent" />
+        <input type="hidden" asp-for="LinkshellLootStructure" />
+
+        <div asp-validation-summary="ModelOnly" class="text-danger" style="margin-bottom:12px"></div>
+
+        <div class="form-grid">
+            <div class="field">
+                <label asp-for="ItemName">Item name</label>
+                <input asp-for="ItemName" class="form-control" maxlength="256" />
+                <span asp-validation-for="ItemName" class="text-danger"></span>
+                @if (!string.IsNullOrWhiteSpace(Model.CurrentItemName))
+                {
+                    <span class="muted" style="font-size:11px">Was: @Model.CurrentItemName</span>
+                }
+            </div>
+
+            <div class="field">
+                <label asp-for="ItemWinner">Winner</label>
+                @if (Model.RosterCharacterNames.Any())
+                {
+                    <select asp-for="ItemWinner" class="form-select">
+                        @foreach (var name in Model.RosterCharacterNames)
+                        {
+                            @if (string.Equals(Model.ItemWinner, name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <option value="@name" selected>@name</option>
+                            }
+                            else
+                            {
+                                <option value="@name">@name</option>
+                            }
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input asp-for="ItemWinner" class="form-control" maxlength="256" />
+                }
+                <span asp-validation-for="ItemWinner" class="text-danger"></span>
+                @if (!string.IsNullOrWhiteSpace(Model.CurrentItemWinner))
+                {
+                    <span class="muted" style="font-size:11px">Was: @Model.CurrentItemWinner</span>
+                }
+            </div>
+
+            <div class="field">
+                <label asp-for="WinningDkpSpent">@dkpLabel</label>
+                <input asp-for="WinningDkpSpent" class="form-control" type="number" min="0" />
+                <span asp-validation-for="WinningDkpSpent" class="text-danger"></span>
+                <span class="muted" style="font-size:11px">@dkpHint</span>
+                @if (Model.CurrentWinningDkpSpent.HasValue)
+                {
+                    <span class="muted" style="font-size:11px">Was: @Model.CurrentWinningDkpSpent</span>
+                }
+            </div>
+
+            <div class="field" style="grid-column:1/-1">
+                <label asp-for="Reason">Reason for edit</label>
+                <textarea asp-for="Reason" class="form-control" rows="3" maxlength="512" placeholder="Why is this being changed? Required for the audit trail."></textarea>
+                <span asp-validation-for="Reason" class="text-danger"></span>
+                <span class="muted" style="font-size:11px">This reason is recorded on both the loot row and the matching DKP ledger entries.</span>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <button type="submit" class="btn primary">Save changes</button>
+            <a class="btn ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

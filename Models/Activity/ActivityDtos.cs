@@ -349,7 +349,10 @@ public sealed record ActivityDkpLedgerEntryDto(
     DateTime? EventStartTime,
     DateTime? EventEndTime,
     string? ItemName,
-    string? Details);
+    string? Details,
+    // Surfaces the officer's reason for "LootEditRefund" / "LootEditSpent"
+    // entries so the DKP history view can render "Edited" annotation.
+    string? EditReason);
 
 public sealed record ActivityAuctionDto(
     int Id,
@@ -588,3 +591,35 @@ public sealed record ActivityCreateAuctionRequest(
 public sealed record ActivityAuctionBidRequest(int BidAmount);
 
 public sealed record ActivityCloseAuctionRequest(IReadOnlyList<int>? DeliveredItemIds);
+
+// One row in the Loot History view. Unifies TodLootDetail + EventLootDetail
+// behind a `Source` discriminator so the client can render a single table.
+// ParentId is the Tod.Id (when Source == "Tod") or the Event.Id /
+// EventHistory.Id (when Source == "Event").
+public sealed record ActivityLootHistoryItemDto(
+    int LootDetailId,
+    string Source,
+    int ParentId,
+    string? Context,
+    DateTime? OccurredAt,
+    string? ItemName,
+    string? ItemWinner,
+    int? WinningDkpSpent,
+    double? ActualDeductedDkp,
+    bool IsEdited,
+    string? LastEditReason,
+    DateTime? EditedAt,
+    string? EditedByCharacterName,
+    bool CanEdit);
+
+public sealed record ActivityLootHistoryListDto(
+    int Page,
+    int PageSize,
+    int TotalCount,
+    IReadOnlyList<ActivityLootHistoryItemDto> Items);
+
+public sealed record ActivityLootEditRequest(
+    string? ItemName,
+    string? ItemWinner,
+    int? WinningDkpSpent,
+    string? Reason);

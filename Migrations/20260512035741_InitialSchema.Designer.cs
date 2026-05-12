@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LinkshellManagerDiscordApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260502190212_AddAltCharacterNames")]
-    partial class AddAltCharacterNames
+    [Migration("20260512035741_InitialSchema")]
+    partial class InitialSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -763,6 +763,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<string>("EditReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<string>("EntryType")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -802,11 +806,21 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SourceEventLootDetailId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SourceTodLootDetailId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("EventHistoryId");
+
+                    b.HasIndex("SourceEventLootDetailId");
+
+                    b.HasIndex("SourceTodLootDetailId");
 
                     b.HasIndex("LinkshellId", "AppUserId", "OccurredAt", "Sequence");
 
@@ -860,6 +874,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("StartTime")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StarterUserId")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("TimeStamp")
                         .HasColumnType("timestamp with time zone");
@@ -972,23 +989,48 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("EventId")
+                    b.Property<double?>("ActualDeductedDkp")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("EditedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EditedByAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("EditedByCharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("EventHistoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("EventId")
                         .HasColumnType("integer");
 
                     b.Property<string>("ItemName")
-                        .HasColumnType("text");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("ItemWinner")
-                        .HasColumnType("text");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("LastEditReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
                     b.Property<int?>("WinningDkpSpent")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EventHistoryId");
+
                     b.HasIndex("EventId");
 
-                    b.ToTable("EventLootDetails");
+                    b.ToTable("EventLootDetails", (string)null);
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Invite", b =>
@@ -1158,6 +1200,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<bool>("EnableToDs")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("HiddenTodMonsters")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("LinkshellName")
                         .HasColumnType("text");
@@ -1379,7 +1425,7 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<bool>("Claim")
+                    b.Property<bool?>("Claim")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Cooldown")
@@ -1439,6 +1485,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<double?>("ActualDeductedDkp")
                         .HasColumnType("double precision");
 
+                    b.Property<DateTime?>("EditedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EditedByAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("EditedByCharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("ItemName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -1446,6 +1503,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("ItemWinner")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<string>("LastEditReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
                     b.Property<int?>("TodId")
                         .HasColumnType("integer");
@@ -1879,13 +1940,19 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.EventLootDetail", b =>
                 {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.EventHistory", "EventHistory")
+                        .WithMany()
+                        .HasForeignKey("EventHistoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LinkshellManagerDiscordApp.Models.Event", "Event")
                         .WithMany("EventLootDetails")
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Event");
+
+                    b.Navigation("EventHistory");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Invite", b =>

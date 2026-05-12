@@ -1,0 +1,138 @@
+.loot-history-panel__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 14px;
+}
+
+.loot-history-panel__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+
+  span {
+    font-size: 11px;
+    color: var(--fg-3, #a1a1aa);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .bid-input {
+    width: 100%;
+  }
+}
+
+.loot-history-panel__reason-row > td {
+  padding-top: 0;
+  padding-bottom: 8px;
+  border-top: none;
+}
+
+// --- Edit modal (mirrors the auction-form modal pattern) ---
+
+$loot-modal-top-offset: 112px;
+$loot-modal-bottom-offset: 24px;
+
+.loot-edit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 100;
+  padding: $loot-modal-top-offset 16px $loot-modal-bottom-offset;
+}
+
+.loot-edit-modal-dialog {
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100dvh - #{$loot-modal-top-offset + $loot-modal-bottom-offset});
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.loot-edit-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.loot-edit-form__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
+
+  strong {
+    font-size: 14px;
+  }
+
+  p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--fg-3, #a1a1aa);
+  }
+}
+
+.loot-edit-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    > span:first-of-type {
+      font-size: 11px;
+      color: var(--fg-3, #a1a1aa);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+  }
+
+  textarea.bid-input {
+    width: 100%;
+    height: auto;
+    padding: 8px 10px;
+    resize: vertical;
+  }
+
+  // Override the bid-input fixed width when used in this form — the inputs
+  // here should fill the dialog column, not stay at the auction-board 72px.
+  .bid-input {
+    width: 100%;
+  }
+
+  .form-select {
+    width: 100%;
+  }
+}
+
+.loot-edit-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  flex-shrink: 0;
+}
+
+.loot-edit-form__error {
+  color: #e05a5a;
+  font-size: 12px;
+}

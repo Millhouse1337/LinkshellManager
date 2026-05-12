@@ -6,6 +6,7 @@ import { AddonTokenService } from './addon-token.service';
 import { AuctionService } from './auction.service';
 import { AuthService } from './auth.service';
 import { DkpService } from './dkp.service';
+import { LootHistoryService } from './loot-history.service';
 import { EventService } from './event.service';
 import { InviteService } from './invite.service';
 import { LinkshellContentService } from './linkshell-content.service';
@@ -26,6 +27,8 @@ import type {
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
   ActivityHistory,
+  ActivityLootEditInput,
+  ActivityLootHistoryList,
   ActivityHistoryDetail,
   ActivityItemInput,
   ActivityLinkshellRolePermissionsInput,
@@ -73,6 +76,9 @@ export type {
   ActivityLinkshellPermissions,
   ActivityLinkshellRole,
   ActivityLinkshellRolePermissionsInput,
+  ActivityLootEditInput,
+  ActivityLootHistoryItem,
+  ActivityLootHistoryList,
   ActivityLinkshellRolesResponse,
   ActivityLinkshellSearchResult,
   ActivityLinkshellSettings,
@@ -118,6 +124,7 @@ export class DiscordActivityService {
   private readonly inviteService = inject(InviteService);
   private readonly linkshellService = inject(LinkshellService);
   private readonly linkshellContentService = inject(LinkshellContentService);
+  private readonly lootHistoryService = inject(LootHistoryService);
   private readonly todService = inject(TodService);
 
   // --- Top-level state owned by the facade itself ---
@@ -162,6 +169,9 @@ export class DiscordActivityService {
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
   readonly busyDkpAudit = this.dkpService.busyDkpAudit;
+  readonly lootHistory = this.lootHistoryService.lootHistory;
+  readonly lootHistoryBusy = this.lootHistoryService.lootHistoryBusy;
+  readonly busyLootEdit = this.lootHistoryService.busyLootEdit;
   readonly auctions = this.auctionService.auctions;
   readonly auctionsBusy = this.auctionService.auctionsBusy;
   readonly auctionHistory = this.auctionService.auctionHistory;
@@ -485,15 +495,69 @@ export class DiscordActivityService {
     }
   }
 
+  // Posts the browser-detected IANA zone to the server when the user's saved
+  // TimeZone is still on the server default (null/empty/UTC). Mirrors the
+  // accepted value into the local + overview signals so the rest of the app
+  // (and the header clock) picks it up without a manual refresh.
+  private autoDetectAttempted = false;
+  async detectAndSaveTimeZoneIfUnset(): Promise<void> {
+    if (this.autoDetectAttempted) return;
+    const detected = (this.browserTimeZone || '').trim();
+    if (!detected) return;
+
+    const appUser = this.auth.overview()?.appUser;
+    const current = (appUser?.timeZone ?? '').trim();
+    const isUnset = current === '' || current.toUpperCase() === 'UTC';
+    if (!isUnset || current === detected) {
+      this.autoDetectAttempted = true;
+      return;
+    }
+    this.autoDetectAttempted = true;
+
+    try {
+      const result = await this.http.postActivityJson<{ applied: boolean; timeZone?: string }>(
+        '/api/activity/profile/detect-time-zone',
+        { timeZone: detected }
+      );
+      if (!result?.applied || !result.timeZone) return;
+
+      const overview = this.auth.overview();
+      if (overview?.appUser) {
+        this.auth.overview.set({
+          ...overview,
+          appUser: { ...overview.appUser, timeZone: result.timeZone }
+        });
+      }
+      const localUser = this.auth.localUser();
+      if (localUser?.appUser) {
+        this.auth.localUser.set({
+          ...localUser,
+          appUser: { ...localUser.appUser, timeZone: result.timeZone }
+        });
+      }
+    } catch {
+      // Best-effort — the next session will retry.
+    }
+  }
+
   // --- Rules / Announcements / Items / Revenue: see linkshellContentService ---
   // (delegates live in the facade-delegates section below)
 
   // --- Time / formatting helpers (kept on facade for consumer convenience) ---
+  //
+  // Profile-first priority: the user's saved IANA zone wins over the
+  // browser's detected zone. The auto-detect-on-load feature already
+  // backfills profile from the browser when it's unset, so the two
+  // agree in the common case. When they disagree (the user deliberately
+  // chose a different zone, or they're travelling), respecting the
+  // profile setting matches what the user explicitly configured and
+  // keeps every wall-clock on every screen consistent — which is the
+  // whole point of having a profile timezone in the first place.
   viewerTimeZone(): string {
     return (
-      this.browserTimeZone ||
       this.auth.overview()?.appUser?.timeZone ||
       this.auth.localUser()?.appUser?.timeZone ||
+      this.browserTimeZone ||
       'UTC'
     );
   }
@@ -584,6 +648,19 @@ export class DiscordActivityService {
   loadDkpHistory(linkshellId?: number | null, appUserId?: string | null): Promise<ActivityDkpHistory | null> { return this.dkpService.loadDkpHistory(linkshellId, appUserId); }
   clearDkpHistory(): void { this.dkpService.clearDkpHistory(); }
   submitDkpAudit(input: { linkshellId: number; targetAppUserId: string; mode: 'Adjust' | 'Misc'; relatedLedgerEntryId?: number | null; amount: number; reason: string }): Promise<boolean> { return this.dkpService.submitDkpAudit(input); }
+
+  // --- LootHistoryService ---
+  loadLootHistory(source: 'all' | 'tod' | 'event' = 'all', page: number = 1, pageSize: number = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(source, page, pageSize); }
+  async editTodLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
+    const ok = await this.lootHistoryService.editTodLoot(lootDetailId, input);
+    if (ok) { await this.auth.refreshOverview(); }
+    return ok;
+  }
+  async editEventLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
+    const ok = await this.lootHistoryService.editEventLoot(lootDetailId, input);
+    if (ok) { await this.auth.refreshOverview(); }
+    return ok;
+  }
 
   // --- TodService ---
   createTod(input: ActivityCreateTodInput): Promise<void> { return this.todService.createTod(input); }
