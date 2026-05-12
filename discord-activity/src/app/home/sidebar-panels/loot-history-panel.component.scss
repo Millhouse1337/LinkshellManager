@@ -1,25 +1,31 @@
 .loot-history-panel__filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 8px 0 14px;
+  gap: 14px;
+  margin: 12px 0 16px;
 }
 
 .loot-history-panel__filter {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
+  gap: 6px;
+  min-width: 200px;
 
-  span {
-    font-size: 11px;
-    color: var(--fg-3, #a1a1aa);
+  // Bumped from 11px/--fg-3 to 12px/--fg-2 plus 600 weight so the
+  // "Winner contains" / "Item contains" labels read clearly instead of
+  // looking like clipped half-text above the inputs.
+  > span {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-2, #d4d4d8);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
+    line-height: 1.4;
   }
 
   .bid-input {
     width: 100%;
+    height: 32px;
   }
 }
 

@@ -33,8 +33,12 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* View switcher */
-.auctions-panel .view-tabs {
+/* View switcher — generic styling so any panel that renders a
+   .view-tabs strip (auctions Active/History, loot-history
+   All/ToDs/Events, etc.) gets the same pill-tab look. The class names
+   live on whichever button the panel author wires up, so no per-panel
+   scope is needed. */
+.view-tabs {
   display: inline-flex;
   padding: 2px;
   border-radius: var(--r-md);
@@ -42,7 +46,7 @@
   border: 1px solid var(--border);
   gap: 1px;
 }
-.auctions-panel .view-tab {
+.view-tab {
   border: 0;
   background: transparent;
   padding: 4px 10px;
@@ -51,7 +55,10 @@
   border-radius: 4px;
   cursor: pointer;
 }
-.auctions-panel .view-tab.active {
+.view-tab:hover {
+  color: var(--fg-2);
+}
+.view-tab.active {
   background: var(--surface-3);
   color: var(--fg);
 }

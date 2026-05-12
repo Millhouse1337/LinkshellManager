@@ -7,10 +7,15 @@
 
 .hero,
 .summary-strip,
-.dashboard,
-.flash {
+.dashboard {
   width: 100%;
 }
+
+// .flash intentionally drops `width: 100%` — the tab-shell .flash rule
+// adds 14px horizontal margin, and combining width:100% with margin makes
+// the banner overflow the right edge of the .activity-shell container.
+// Block elements naturally fill the available width minus their margins,
+// so leaving width out lets the banner inset cleanly on both sides.
 
 .hero {
   display: grid;
