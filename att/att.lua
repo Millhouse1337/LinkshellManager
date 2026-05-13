@@ -80,6 +80,34 @@ migrations.run(config, settings)
 -- pair() / unpair() update the same table that gets saved to disk.
 api.set_config(config.api)
 
+-- Re-sync `config` whenever Ashita's settings library reloads the
+-- per-character settings file (libs/settings.lua does this on every
+-- character login / logout via the Zone Enter / Exit packet hooks at
+-- the bottom of that module).
+--
+-- Why this matters: the settings library scopes saved settings to
+-- `<AshitaPath>/config/addons/att/<CharName>_<ServerId>/settings.lua`.
+-- When the player logs in, the library reads that file into a fresh
+-- table and stores it in its own cache. Without this callback, our
+-- `local config` reference still points at the empty table loaded at
+-- addon-load time (when no character was active yet), so the addon
+-- behaves as if /att server and /att link were never run — the user
+-- has to re-pair every login even though the per-character file on
+-- disk has the correct URL and pairings.
+--
+-- The callback replaces the contents of `config` IN PLACE so every
+-- module that captured the table by reference (commands.lua,
+-- render_pump.lua, etc.) keeps reading the now-current data without
+-- needing a notification. The api module captured `config.api` (a
+-- sub-table that becomes a different object after the merge) so we
+-- explicitly rebind it via api.set_config.
+settings.register('settings', 'att_config_reload', function(reloaded)
+    if type(reloaded) ~= 'table' then return end
+    for k in pairs(config) do config[k] = nil end
+    for k, v in pairs(reloaded) do config[k] = v end
+    api.set_config(config.api)
+end)
+
 -- Global state. Single table, initialized once. Modules receive it explicitly.
 local state = state_defaults.create()
 

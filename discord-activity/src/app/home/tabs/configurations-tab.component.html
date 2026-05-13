@@ -469,7 +469,7 @@
               <thead>
                 <tr>
                   <th>Token</th>
-                  <th>Label</th>
+                  <th>Slot</th>
                   <th>Created</th>
                   <th>Last used</th>
                   <th class="num"></th>
@@ -483,9 +483,25 @@
                     <td>{{ formatAddonTokenDate(token.createdAt) }}</td>
                     <td>{{ formatAddonTokenDate(token.lastUsedAt) }}</td>
                     <td class="num">
-                      <button type="button" class="btn warn sm"
-                        [disabled]="activity.busyAddonTokens()"
-                        (click)="revokeAddonToken(token.id)">Revoke</button>
+                      @if (pendingRevokeTokenId() === token.id) {
+                        <!--
+                          Two-stage confirm: Discord Activities don't allow
+                          window.confirm(), so the first Revoke click flags
+                          this row and the buttons below replace the single
+                          Revoke until the user picks Confirm or Cancel.
+                        -->
+                        <button type="button" class="btn danger-fill sm"
+                          [disabled]="activity.busyAddonTokens()"
+                          (click)="confirmRevokeAddonToken(token.id)">Confirm</button>
+                        <button type="button" class="btn ghost sm"
+                          [disabled]="activity.busyAddonTokens()"
+                          (click)="cancelRevokeAddonToken()"
+                          style="margin-left:6px">Cancel</button>
+                      } @else {
+                        <button type="button" class="btn warn sm"
+                          [disabled]="activity.busyAddonTokens()"
+                          (click)="requestRevokeAddonToken(token.id)">Revoke</button>
+                      }
                     </td>
                   </tr>
                 }
@@ -505,12 +521,31 @@
         <button type="button" class="btn ghost sm" (click)="closeAddonPairingModal()">×</button>
       </div>
       <div class="addon-modal-body">
-        <label class="addon-modal-field">
-          <span>Label (optional)</span>
-          <input type="text" [(ngModel)]="addonModalLabel" maxlength="128"
-            placeholder="e.g. Nils — desktop"
-            [disabled]="!!addonGeneratedCode" />
-        </label>
+        <!--
+          Slot picker replaces the old free-text label. The att addon
+          binds each pairing to either LS1 or LS2 (the two equipped
+          linkpearl slots in FFXI); offering an arbitrary text label
+          allowed users to type strings the addon couldn't act on. Now
+          the only choice is "Slot 1" / "Slot 2", which doubles as the
+          token's listing label.
+        -->
+        <div class="addon-modal-field">
+          <span>Linkpearl slot</span>
+          <div class="addon-modal-slot-options">
+            <label class="addon-modal-slot-option">
+              <input type="radio" name="addonSlot" [value]="1"
+                [(ngModel)]="addonModalSlot"
+                [disabled]="!!addonGeneratedCode" />
+              <span>Slot 1</span>
+            </label>
+            <label class="addon-modal-slot-option">
+              <input type="radio" name="addonSlot" [value]="2"
+                [(ngModel)]="addonModalSlot"
+                [disabled]="!!addonGeneratedCode" />
+              <span>Slot 2</span>
+            </label>
+          </div>
+        </div>
         @if (addonGeneratedCode) {
           <div class="addon-modal-code">
             <div class="addon-modal-code__value">{{ addonGeneratedCode }}</div>

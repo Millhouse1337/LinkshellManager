@@ -117,6 +117,71 @@ public sealed partial class AddonApiController
         });
     }
 
+    // PATCH /api/addon/events/{eventId}
+    //
+    // Updates a live or queued event's DKP rate from the addon. The intended
+    // use case: an officer has an HNM event running, opens the att Settings
+    // popup, changes "HNM - DKP / Window" from 1 to 5, and clicks Save —
+    // the next window posted should credit 5 DKP, not the value the event
+    // was created with. The PostAttendance flow reads eventEntity.DkpPerHour
+    // when crediting per-window DKP, so the simplest path is to update that
+    // column whenever the user explicitly saves new defaults.
+    //
+    // The single DkpPerHour column is reused for both event flavors — the
+    // addon picks which of its two defaults (dkpPerHourRegular vs
+    // dkpPerWindowHnm) to send based on the event's window count.
+    //
+    // Idempotent: setting the same value is a no-op and returns 200.
+    [HttpPatch("events/{eventId:int}")]
+    [AddonApiAuth]
+    public async Task<IActionResult> UpdateEventAsync(
+        int eventId,
+        [FromBody] AddonUpdateEventRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.DkpPerHour is null)
+        {
+            return BadRequest(new { error = "dkpPerHour is required." });
+        }
+        if (request.DkpPerHour < 0)
+        {
+            return BadRequest(new { error = "dkpPerHour must be non-negative." });
+        }
+
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+
+        var eventEntity = await _dbContext.Events
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "Event not found." });
+        }
+        if (eventEntity.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
+        {
+            return Forbid();
+        }
+        if (eventEntity.EndTime is not null)
+        {
+            return BadRequest(new { error = "Cannot edit a closed event." });
+        }
+
+        eventEntity.DkpPerHour = request.DkpPerHour;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new
+        {
+            id = eventEntity.Id,
+            dkpPerHour = eventEntity.DkpPerHour
+        });
+    }
+
+    public sealed record AddonUpdateEventRequest(int? DkpPerHour);
+
     [HttpDelete("events/{eventId:int}")]
     [AddonApiAuth]
     public async Task<IActionResult> CancelEventAsync(int eventId, CancellationToken cancellationToken)

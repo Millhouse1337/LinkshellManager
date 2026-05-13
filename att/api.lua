@@ -311,6 +311,18 @@ function api.start_event(eventId)
     return request('POST', '/api/addon/events/' .. tostring(eventId) .. '/start')
 end
 
+-- Updates the DKP rate stored on an existing event. The server's per-window
+-- attendance credit reads eventEntity.DkpPerHour at post time, so updating
+-- this value makes the NEXT window post credit at the new rate. Called by
+-- the launcher's Settings save flow when the user changes the default DKP
+-- rate while an event is live (no-op if the new value equals the stored
+-- value). Returns { id, dkpPerHour } on success.
+function api.update_event_dkp(eventId, dkpPerHour)
+    return request('PATCH', '/api/addon/events/' .. tostring(eventId), {
+        dkpPerHour = tonumber(dkpPerHour)
+    })
+end
+
 -- Ends a running event. Server writes EventHistory + DkpLedgerEntry rows
 -- and removes the live Event / Jobs / participants / loot details. Returns
 -- { eventId, eventName } on success.

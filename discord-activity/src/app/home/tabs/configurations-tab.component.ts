@@ -501,7 +501,15 @@ export class ConfigurationsTabComponent {
   // ----- Game Addon (att) pairing -----
   protected readonly addonTokens = signal<ActivityAddonToken[]>([]);
   protected addonModalOpen = false;
-  protected addonModalLabel = '';
+  // Slot the user is generating a pairing code for. FFXI only supports
+  // two equipped linkpearl slots (LS1 / LS2), and the att addon's
+  // /att link command accepts a slot argument (1 or 2) to bind a code
+  // to a specific equipped pearl. Replacing the old free-text "Label"
+  // field with a 1/2 toggle makes the choice explicit and stops users
+  // from typing arbitrary strings that don't match anything the addon
+  // can parse. The chosen value is sent as the token's label so the
+  // listing still has a meaningful column to display.
+  protected addonModalSlot: 1 | 2 = 1;
   protected addonGeneratedCode: string | null = null;
   protected addonCountdownLabel = '';
   protected addonModalError: string | null = null;
@@ -527,7 +535,7 @@ export class ConfigurationsTabComponent {
   }
 
   protected openAddonPairingModal(): void {
-    this.addonModalLabel = '';
+    this.addonModalSlot = 1;
     this.addonGeneratedCode = null;
     this.addonCountdownLabel = '';
     this.addonModalError = null;
@@ -548,8 +556,12 @@ export class ConfigurationsTabComponent {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;
     this.addonModalError = null;
-    const result = await this.activity.createAddonPairingCode(
-      id, this.addonModalLabel.trim() || null);
+    // Persist the chosen slot as the token label ("Slot 1" / "Slot 2")
+    // so the listing's Slot column has a value to display and an officer
+    // glancing at the table can tell at a glance which equipped pearl
+    // each token is for.
+    const slotLabel = `Slot ${this.addonModalSlot}`;
+    const result = await this.activity.createAddonPairingCode(id, slotLabel);
     if (!result) {
       this.addonModalError = this.activity.actionError() ?? 'Could not generate pairing code.';
       return;
@@ -579,11 +591,35 @@ export class ConfigurationsTabComponent {
     this.addonCountdownTimer = setInterval(tick, 1000);
   }
 
-  protected async revokeAddonToken(tokenId: number): Promise<void> {
+  // Two-stage inline confirmation for revoking an addon token.
+  //
+  // We can't use `window.confirm()` here: Discord Activities run in an
+  // iframe without `allow-modals`, so any native confirm/alert/prompt
+  // dialog is suppressed by the browser and the call returns `false`
+  // immediately. Result: the user clicks Revoke and nothing happens.
+  //
+  // Instead, the first click on Revoke flags the row via
+  // `pendingRevokeTokenId`; the template swaps the button out for a
+  // "Confirm" + "Cancel" pair, and the second click on Confirm calls
+  // the API. Light-weight alternative to a full modal component.
+  protected readonly pendingRevokeTokenId = signal<number | null>(null);
+
+  protected requestRevokeAddonToken(tokenId: number): void {
+    this.pendingRevokeTokenId.set(tokenId);
+  }
+
+  protected cancelRevokeAddonToken(): void {
+    this.pendingRevokeTokenId.set(null);
+  }
+
+  protected async confirmRevokeAddonToken(tokenId: number): Promise<void> {
     const id = this.customizeTargetLinkshellId();
-    if (!id) return;
-    if (!window.confirm('Revoke this addon token? The addon will lose access immediately.')) return;
+    if (!id) {
+      this.pendingRevokeTokenId.set(null);
+      return;
+    }
     const ok = await this.activity.revokeAddonToken(tokenId, id);
+    this.pendingRevokeTokenId.set(null);
     if (ok) {
       this.addonModalLoadedFor = null;
       this.loadAddonTokensForCurrent();

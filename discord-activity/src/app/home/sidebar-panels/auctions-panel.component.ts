@@ -506,11 +506,27 @@ export class AuctionsPanelComponent {
     await this.activity.startAuction(auctionId, this.selectedLinkshellId);
   }
 
+  // Two-stage inline confirmation for ending an auction early.
+  // window.confirm() is suppressed in the Discord Activity iframe (no
+  // `allow-modals`), so a first click flags the auction and the
+  // template swaps the End button out for a Confirm/Keep pair. Second
+  // click on Confirm calls the API.
+  protected readonly pendingEndAuctionId = signal<number | null>(null);
+
+  protected requestEndAuction(auctionId: number): void {
+    this.pendingEndAuctionId.set(auctionId);
+  }
+
+  protected cancelEndAuction(): void {
+    this.pendingEndAuctionId.set(null);
+  }
+
   protected async endAuction(auctionId: number): Promise<void> {
-    if (!this.selectedLinkshellId) return;
-    if (!window.confirm('End this auction now? Bidding will stop immediately. You will then be able to close it and deliver the won items.')) {
+    if (!this.selectedLinkshellId) {
+      this.pendingEndAuctionId.set(null);
       return;
     }
+    this.pendingEndAuctionId.set(null);
     try {
       await this.activity.endAuction(auctionId, this.selectedLinkshellId);
     } catch {

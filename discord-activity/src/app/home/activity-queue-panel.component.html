@@ -312,13 +312,30 @@
                     (click)="openEditEventForm(event)">
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="confirmCancelEvent(event.id, event.name)">
-                    Cancel
-                  </button>
+                  @if (pendingCancelEventId() === event.id) {
+                    <button
+                      type="button"
+                      class="action-button action-button--danger"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="confirmCancelEvent(event.id)">
+                      Confirm cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="abortCancelEvent()">
+                      Keep
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="requestCancelEvent(event.id)">
+                      Cancel
+                    </button>
+                  }
                 }
               </div>
             </div>
@@ -399,13 +416,30 @@
                     (click)="openEditEventForm(event)">
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="confirmCancelEvent(event.id, event.name)">
-                    Cancel
-                  </button>
+                  @if (pendingCancelEventId() === event.id) {
+                    <button
+                      type="button"
+                      class="action-button action-button--danger"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="confirmCancelEvent(event.id)">
+                      Confirm cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="abortCancelEvent()">
+                      Keep
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="requestCancelEvent(event.id)">
+                      Cancel
+                    </button>
+                  }
                 </div>
               }
             </div>

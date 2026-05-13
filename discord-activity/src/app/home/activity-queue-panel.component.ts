@@ -5,6 +5,7 @@ import {
   Component,
   ElementRef,
   inject,
+  signal,
   viewChild
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -415,12 +416,23 @@ export class ActivityQueuePanelComponent {
     }
   }
 
-  protected async confirmCancelEvent(eventId: number, eventName?: string | null): Promise<void> {
-    const label = eventName?.trim() || 'this event';
-    if (!window.confirm(`Cancel ${label}? This removes all queued signups.`)) {
-      return;
-    }
+  // Two-stage inline confirmation for cancelling a queued event.
+  // window.confirm() is suppressed in the Discord Activity iframe (no
+  // `allow-modals`), so a first click flags the event and the template
+  // swaps the Cancel button out for a Confirm/Keep pair. Second click
+  // on Confirm calls the API.
+  protected readonly pendingCancelEventId = signal<number | null>(null);
 
+  protected requestCancelEvent(eventId: number): void {
+    this.pendingCancelEventId.set(eventId);
+  }
+
+  protected abortCancelEvent(): void {
+    this.pendingCancelEventId.set(null);
+  }
+
+  protected async confirmCancelEvent(eventId: number): Promise<void> {
+    this.pendingCancelEventId.set(null);
     await this.activity.cancelEvent(eventId);
   }
 

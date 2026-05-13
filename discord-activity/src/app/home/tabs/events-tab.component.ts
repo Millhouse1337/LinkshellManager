@@ -181,8 +181,23 @@ export class EventsTabComponent {
     this.activeWindowByEvent.update(map => ({ ...map, [eventId]: sequenceNumber }));
   }
 
-  protected async removeAttendanceWindowAttendee(attendeeId: number): Promise<void> {
-    if (!window.confirm('Remove this attendee from the window? They will need to be re-posted to count.')) return;
+  // Two-stage inline confirmation for removing a verified attendee.
+  // window.confirm() is suppressed in the Discord Activity iframe (no
+  // `allow-modals`), so a first click flags the attendee and the
+  // template swaps the Remove button out for a Confirm/Keep pair.
+  // Second click on Confirm calls the API.
+  protected readonly pendingRemoveAttendeeId = signal<number | null>(null);
+
+  protected requestRemoveAttendee(attendeeId: number): void {
+    this.pendingRemoveAttendeeId.set(attendeeId);
+  }
+
+  protected abortRemoveAttendee(): void {
+    this.pendingRemoveAttendeeId.set(null);
+  }
+
+  protected async confirmRemoveAttendee(attendeeId: number): Promise<void> {
+    this.pendingRemoveAttendeeId.set(null);
     const ok = await this.activity.removeAttendanceWindowAttendee(attendeeId);
     if (ok) {
       await this.activity.refreshOverview();

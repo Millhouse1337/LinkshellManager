@@ -287,16 +287,24 @@ function M.draw(state, callbacks)
                     -- or remove yourself from the local pre-post filter).
                     -- Officers acting on others: Force break, plus Verify /
                     -- Deny when the server has a pending self-return on file.
+                    --
+                    -- HNM/windowed events deliberately omit the Take break
+                    -- button: attendance is credited per posted window, not
+                    -- as accumulated time, so a "break" has no meaning. The
+                    -- button is suppressed for windowed events to keep the
+                    -- roster row uncluttered.
                     if serverP then
                         if serverP.isSelf then
-                            imgui.SameLine()
-                            if imgui.SmallButton('Take break##arBrk_' .. i) then
-                                local _, err = api.take_break(state.linkedEventId, serverP.id)
-                                if err then
-                                    state.lastSyncSummary = 'Break failed: ' .. tostring(err)
-                                else
-                                    state.lastSyncSummary = 'On break.'
-                                    state.breakRoom.lastFetchAt = 0
+                            if not isWindowedLive then
+                                imgui.SameLine()
+                                if imgui.SmallButton('Take break##arBrk_' .. i) then
+                                    local _, err = api.take_break(state.linkedEventId, serverP.id)
+                                    if err then
+                                        state.lastSyncSummary = 'Break failed: ' .. tostring(err)
+                                    else
+                                        state.lastSyncSummary = 'On break.'
+                                        state.breakRoom.lastFetchAt = 0
+                                    end
                                 end
                             end
                         elseif br.canModerate and not isLocalSelf then

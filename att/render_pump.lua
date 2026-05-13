@@ -22,6 +22,7 @@ function M.draw(state, deps)
     local chat        = deps.chat
     local settings    = deps.settings
     local config      = deps.config
+    local api         = deps.api
 
     -- Per-frame timers, polls, and zone-change detection.
     poll.tick(state, deps)
@@ -82,6 +83,46 @@ function M.draw(state, deps)
             on_settings_save  = function()
                 settings.save()
                 print(chat.header('att') .. 'Settings saved.')
+
+                -- If an HNM/Timed event is currently linked in the launcher,
+                -- push the just-saved default DKP rate to that event so the
+                -- next attendance window posted credits attendees at the
+                -- new rate. Server reads eventEntity.DkpPerHour at post
+                -- time; without this call it would keep crediting at the
+                -- value set when the event was originally created.
+                --
+                -- HNM (windowed) events use dkpPerWindowHnm; time-based
+                -- events use dkpPerHourRegular. Both flow into the same
+                -- DkpPerHour column server-side — semantics depend on
+                -- event type. No-op when nothing is linked, or when the
+                -- linked event has been closed since last refresh.
+                local linkedId = state.linkedEventId
+                if linkedId and state.webEvents then
+                    local linkedEv
+                    for _, ev in ipairs(state.webEvents) do
+                        if ev.id == linkedId then linkedEv = ev; break end
+                    end
+                    if linkedEv and linkedEv.isLive then
+                        local isHnm = (linkedEv.windowCount or 1) > 1
+                        local newRate = isHnm
+                            and (config.eventDefaults.dkpPerWindowHnm or 0)
+                            or  (config.eventDefaults.dkpPerHourRegular or 0)
+                        -- Idempotent: skip the network call when the stored
+                        -- value already matches what the user just saved.
+                        if (linkedEv.dkpPerHour or 0) ~= newRate then
+                            local _, err = api.update_event_dkp(linkedId, newRate)
+                            if err then
+                                print(chat.header('att') .. 'Event DKP update failed: ' .. tostring(err))
+                            else
+                                linkedEv.dkpPerHour = newRate
+                                print(chat.header('att') .. string.format(
+                                    'Linked event DKP updated to %d (%s).',
+                                    newRate,
+                                    isHnm and 'per window' or 'per hour'))
+                            end
+                        end
+                    end
+                end
             end,
         })
     end

@@ -35,16 +35,35 @@ body {
 
 /* ===== Identity bar ===== */
 .identity {
-  display: flex;
+  // 3-column grid (was flex + space-between). With flex space-between,
+  // the clock sat at the midpoint of the leftover space — when
+  // `.identity-left` and `.identity-right` weren't equal widths (e.g.
+  // longer linkshell name or longer user-name), the clock visibly
+  // drifted off-center. A 1fr auto 1fr grid forces the clock column
+  // to land at the true viewport center because each flanking column
+  // claims an equal share of the leftover space.
+  //
+  // On mobile, `.identity-right` is `display: none` (see media query
+  // below). The grid still allocates 1fr for the empty third column,
+  // so the clock stays centered between the brand cluster and the
+  // (empty) right edge — same centered look as desktop.
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 7px 16px;
   font-size: 12px;
   color: var(--fg-2);
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
-.identity-left { display: flex; align-items: center; gap: 8px; }
+.identity-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+.identity-clock { justify-self: center; }
+.identity-right { justify-self: end; }
 .identity-ls { font-weight: 500; color: var(--fg); font-size: 13px; }
 .identity-badge {
   font-family: var(--font-mono);

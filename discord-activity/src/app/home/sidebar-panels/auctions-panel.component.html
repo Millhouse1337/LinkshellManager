@@ -103,13 +103,31 @@
                           </button>
                         }
                         @if (auction.canEnd) {
-                          <button
-                            type="button"
-                            class="btn warning-fill sm"
-                            [disabled]="activity.busyAuctionId() === auction.id"
-                            (click)="endAuction(auction.id)">
-                            End Auction
-                          </button>
+                          @if (pendingEndAuctionId() === auction.id) {
+                            <button
+                              type="button"
+                              class="btn danger-fill sm"
+                              [disabled]="activity.busyAuctionId() === auction.id"
+                              (click)="endAuction(auction.id)">
+                              Confirm end
+                            </button>
+                            <button
+                              type="button"
+                              class="btn ghost sm"
+                              [disabled]="activity.busyAuctionId() === auction.id"
+                              (click)="cancelEndAuction()"
+                              style="margin-left:6px">
+                              Keep
+                            </button>
+                          } @else {
+                            <button
+                              type="button"
+                              class="btn warning-fill sm"
+                              [disabled]="activity.busyAuctionId() === auction.id"
+                              (click)="requestEndAuction(auction.id)">
+                              End Auction
+                            </button>
+                          }
                         }
                         @if (auction.canClose && closingAuctionId !== auction.id) {
                           <button

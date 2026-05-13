@@ -134,10 +134,22 @@
                               </div>
                               @if (canManageLinkshell(event.linkshellId)) {
                                 <div class="participant-list__actions">
-                                  <button type="button" class="btn ghost sm"
-                                    (click)="removeAttendanceWindowAttendee(attendee.id)">
-                                    Remove
-                                  </button>
+                                  @if (pendingRemoveAttendeeId() === attendee.id) {
+                                    <button type="button" class="btn danger-fill sm"
+                                      (click)="confirmRemoveAttendee(attendee.id)">
+                                      Confirm
+                                    </button>
+                                    <button type="button" class="btn ghost sm"
+                                      (click)="abortRemoveAttendee()"
+                                      style="margin-left:6px">
+                                      Keep
+                                    </button>
+                                  } @else {
+                                    <button type="button" class="btn ghost sm"
+                                      (click)="requestRemoveAttendee(attendee.id)">
+                                      Remove
+                                    </button>
+                                  }
                                 </div>
                               }
                             </li>
