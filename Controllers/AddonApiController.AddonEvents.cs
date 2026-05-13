@@ -286,6 +286,7 @@ public sealed partial class AddonApiController
         }
 
         var result = await EventController.EndEventCoreAsync(_dbContext, eventEntity);
+        await _sheetSync.EnqueueAsync(eventEntity.LinkshellId, cancellationToken);
 
         // For windowed events DkpPerHour is reused as DkpPerWindow (same column,
         // different semantic). Surface both names so the addon can format the

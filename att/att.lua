@@ -50,6 +50,7 @@ local utils          = require('utils')
 local commands       = require('commands')
 local text_parser    = require('text_parser')
 local render_pump    = require('render_pump')
+local player_jobs    = require('player_jobs')
 
 local config = settings.load(T{
     api = T{
@@ -116,21 +117,22 @@ local state = state_defaults.create()
 -- Adding a new dep is local to this table, so submodules don't grow new
 -- top-level requires of their own.
 local deps = {
-    imgui      = imgui,
-    chat       = chat,
-    struct     = struct,
-    resources  = resources,
-    memory     = memory,
-    attendance = attendance,
-    helpers    = helpers,
-    ui         = ui,
-    constants  = constants,
-    comp       = comp,
-    messages   = messages,
-    settings   = settings,
-    api        = api,
-    utils      = utils,
-    config     = config,
+    imgui       = imgui,
+    chat        = chat,
+    struct      = struct,
+    resources   = resources,
+    memory      = memory,
+    attendance  = attendance,
+    helpers     = helpers,
+    ui          = ui,
+    constants   = constants,
+    comp        = comp,
+    messages    = messages,
+    settings    = settings,
+    api         = api,
+    utils       = utils,
+    config      = config,
+    player_jobs = player_jobs,
 }
 
 --------------------------------------------------------------------------------

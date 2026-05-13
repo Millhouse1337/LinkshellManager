@@ -27,4 +27,7 @@ public class AppUserLinkshell
     public double? LinkshellDkp { get; set; }
 
     public DateTime? DateJoined { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public int[]? JobLevels { get; set; }
 }

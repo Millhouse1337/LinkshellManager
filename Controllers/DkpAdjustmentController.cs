@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,11 +14,13 @@ public class DkpAdjustmentController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly SheetSyncQueue _sheetSync;
 
-    public DkpAdjustmentController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public DkpAdjustmentController(ApplicationDbContext context, UserManager<AppUser> userManager, SheetSyncQueue sheetSync)
     {
         _context = context;
         _userManager = userManager;
+        _sheetSync = sheetSync;
     }
 
     public async Task<IActionResult> Index(int? linkshellId)
@@ -106,6 +109,7 @@ public class DkpAdjustmentController : Controller
         });
 
         await _context.SaveChangesAsync();
+        await _sheetSync.EnqueueAsync(membership.LinkshellId);
         TempData["DkpAdjustmentSuccess"] = $"Adjusted {membership.CharacterName}'s DKP by {input.Amount:+0.##;-0.##;0}.";
         return RedirectToAction(nameof(Index), new { linkshellId = input.LinkshellId });
     }

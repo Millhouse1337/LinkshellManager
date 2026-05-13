@@ -734,7 +734,8 @@ public sealed partial class AddonApiController
             {
                 CharacterName = link.CharacterName!,
                 Alt1 = link.AppUser != null ? link.AppUser.AltCharacterName1 : null,
-                Alt2 = link.AppUser != null ? link.AppUser.AltCharacterName2 : null
+                Alt2 = link.AppUser != null ? link.AppUser.AltCharacterName2 : null,
+                JobLevels = link.JobLevels
             })
             .OrderBy(row => row.CharacterName)
             .ToListAsync(cancellationToken);
@@ -750,7 +751,8 @@ public sealed partial class AddonApiController
                 return new
                 {
                     characterName = row.CharacterName,
-                    alts
+                    alts,
+                    jobLevels = row.JobLevels
                 };
             })
             .ToList();
@@ -761,6 +763,47 @@ public sealed partial class AddonApiController
             roster,
             lootStructure = ActivityDataController.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp")
         });
+    }
+
+    // Stores the calling player's job-level array on their AppUserLinkshell
+    // row so other addon installations can see (via /roster) which jobs each
+    // member has leveled. Used by the in-game loot panel's "Can equip" filter.
+    // Idempotent: overwrites the previous array on each call.
+    [HttpPost("character/jobs")]
+    [AddonApiAuth]
+    public async Task<IActionResult> PostCharacterJobsAsync(
+        [FromBody] AddonPostJobLevelsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var characterName = request.CharacterName?.Trim();
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            return BadRequest(new { error = "Character name is required." });
+        }
+        if (request.JobLevels is null || request.JobLevels.Length == 0)
+        {
+            return BadRequest(new { error = "JobLevels array is required." });
+        }
+
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+
+        // Membership guard: a token can only publish job levels for a character
+        // that is on its own linkshell roster. Match is case-insensitive on
+        // CharacterName, mirroring the loot-winner validation pattern.
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(link => link.LinkshellId == token.LinkshellId
+                && link.CharacterName != null
+                && link.CharacterName.ToLower() == characterName!.ToLower(),
+                cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        membership.JobLevels = request.JobLevels;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { success = true, characterName = membership.CharacterName });
     }
 
     // Posts a single TodLootDetail row attached to an existing Tod. Mirrors
@@ -841,6 +884,7 @@ public sealed partial class AddonApiController
             _dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
 
         return Ok(new
         {

@@ -1,0 +1,163 @@
+@model LinkshellManagerDiscordApp.ViewModels.LinkshellSheetViewModel
+@{
+    ViewData["Title"] = "Google Sheet";
+    var preview = TempData["SheetImportPreview"] as string;
+    var readRange = TempData["SheetImportReadRange"] as string ?? "Main!B7:C200";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Google Sheet Integration</h1>
+        <div class="page-sub">
+            <span>One-way sync from LSManager to a Google Sheet</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> · </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (TempData["SheetImportError"] is string err)
+{
+    <div class="alert alert-danger fade d2">@err</div>
+}
+@if (TempData["SheetConfigError"] is string cfgErr)
+{
+    <div class="alert alert-danger fade d2">@cfgErr</div>
+}
+@if (TempData["SheetConfigSuccess"] is string ok)
+{
+    <div class="alert alert-success fade d2">@ok</div>
+}
+@if (TempData["SheetImportSuccess"] is string imp)
+{
+    <div class="alert alert-success fade d2">@imp</div>
+}
+
+@if (!Model.IsOAuthConfigured)
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Google OAuth not configured</div>
+        </div>
+        <div class="empty">
+            The server admin must set <code>GoogleSheets:ClientId</code> and <code>GoogleSheets:ClientSecret</code> in app configuration to enable this feature.
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Step 1 — Connect Google account</div>
+        </div>
+        <div style="padding:12px 16px">
+            @if (Model.IsOAuthConnected)
+            {
+                <p>
+                    Connected as <strong>@Model.ConnectedGoogleEmail</strong>
+                    @if (Model.ConnectedAt.HasValue)
+                    {
+                        <text> · since @Model.ConnectedAt.Value.ToString("yyyy-MM-dd HH:mm") UTC</text>
+                    }
+                </p>
+                <form asp-action="Disconnect" asp-route-linkshellId="@Model.LinkshellId" method="post" style="display:inline">
+                    <button type="submit" class="btn" onclick="return confirm('Disconnect Google? Sync will pause until you reconnect.');">Disconnect</button>
+                </form>
+                <form asp-action="Connect" asp-route-linkshellId="@Model.LinkshellId" method="post" style="display:inline;margin-left:6px">
+                    <button type="submit" class="btn">Reconnect a different account</button>
+                </form>
+            }
+            else
+            {
+                <p>Authorize LSManager to read and write spreadsheets you own. You'll see Google's consent screen — grant the Sheets permission to continue.</p>
+                <form asp-action="Connect" asp-route-linkshellId="@Model.LinkshellId" method="post">
+                    <button type="submit" class="btn btn-primary">Connect Google account</button>
+                </form>
+            }
+        </div>
+    </div>
+
+    @if (Model.IsOAuthConnected)
+    {
+        <div class="card fade d3">
+            <div class="card-head">
+                <div class="card-title">Step 2 — Configure spreadsheet</div>
+            </div>
+            <form asp-action="SaveConfig" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
+                <div class="form-row">
+                    <label>Spreadsheet ID</label>
+                    <input type="text" name="spreadsheetId" value="@Model.SpreadsheetId" placeholder="e.g. 1YNfaF5AXbZoJdKrs21p29pfAl6Q9wJsQWafPztG3Nxk" style="width:100%" />
+                    <small>The long string between <code>/d/</code> and <code>/edit</code> in the sheet URL.</small>
+                </div>
+                <div class="form-row" style="margin-top:8px">
+                    <label>Tab name (optional)</label>
+                    <input type="text" name="tabName" value="@Model.TabName" placeholder="Main" />
+                    <small>Defaults to <code>Main</code>. Sync writes character names in column B and DKP in column C, rows 8-200.</small>
+                </div>
+                <div style="margin-top:12px">
+                    <button type="submit" class="btn">Save</button>
+                    @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+                    {
+                        <a class="btn" target="_blank" href="https://docs.google.com/spreadsheets/d/@Model.SpreadsheetId/edit">Open sheet</a>
+                    }
+                </div>
+            </form>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+        {
+            <div class="card fade d4">
+                <div class="card-head">
+                    <div class="card-title">Step 3 — Import existing balances (optional)</div>
+                </div>
+                <form asp-action="ImportPreview" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
+                    <div class="form-row">
+                        <label>Read range</label>
+                        <input type="text" name="readRange" value="@readRange" />
+                        <small>Range to read (e.g. <code>Main!B7:C200</code>). Column 1 = character name, column 2 = DKP. TOTAL rows are skipped.</small>
+                    </div>
+                    <div style="margin-top:12px">
+                        <button type="submit" class="btn">Preview import</button>
+                    </div>
+                </form>
+
+                @if (!string.IsNullOrWhiteSpace(preview))
+                {
+                    <div style="padding:8px 16px">
+                        <details>
+                            <summary>Preview details</summary>
+                            <pre style="max-height:400px;overflow:auto">@preview</pre>
+                        </details>
+                        <form asp-action="ImportCommit" asp-route-linkshellId="@Model.LinkshellId" method="post" style="margin-top:8px">
+                            <input type="hidden" name="readRange" value="@readRange" />
+                            <button type="submit" class="btn btn-primary" onclick="return confirm('Commit the import? This will set member DKP balances to the sheet values and write SheetImport ledger entries.');">Commit import</button>
+                        </form>
+                    </div>
+                }
+            </div>
+
+            <div class="card fade d5">
+                <div class="card-head">
+                    <div class="card-title">Manual resync</div>
+                </div>
+                <form asp-action="Resync" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
+                    <p>Pushes the current DB state to the sheet. Useful if the sheet was edited manually.</p>
+                    <button type="submit" class="btn">Resync now</button>
+                </form>
+            </div>
+
+            <div class="card fade d6">
+                <div class="card-head">
+                    <div class="card-title">Reconcile members</div>
+                </div>
+                <div style="padding:12px 16px">
+                    <p>Open the reconciliation page to review every sheet character side-by-side with Discord users in your linkshell — confirm each match one at a time so typos and renames don't silently divide records.</p>
+                    <a class="btn btn-primary" asp-controller="LinkshellReconciliation" asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">Reconcile members with sheet</a>
+                </div>
+            </div>
+        }
+    }
+}

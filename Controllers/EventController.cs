@@ -15,15 +15,18 @@ public partial class EventController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly SheetSyncQueue _sheetSync;
 
     public EventController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        SheetSyncQueue sheetSync)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
+        _sheetSync = sheetSync;
     }
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)
     {

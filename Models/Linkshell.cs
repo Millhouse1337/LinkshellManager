@@ -60,6 +60,19 @@ public class Linkshell
     // grows a mob name with a comma in it. Edited from the Customize panel.
     public string HiddenTodMonsters { get; set; } = string.Empty;
 
+    [MaxLength(128)]
+    public string? GoogleSpreadsheetId { get; set; }
+
+    [MaxLength(64)]
+    public string? GoogleSheetTabName { get; set; }
+
+    public string? GoogleOAuthRefreshTokenEnc { get; set; }
+
+    [MaxLength(256)]
+    public string? GoogleOAuthUserEmail { get; set; }
+
+    public DateTime? GoogleOAuthConnectedAt { get; set; }
+
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 
     public ICollection<Event> Events { get; set; } = new List<Event>();

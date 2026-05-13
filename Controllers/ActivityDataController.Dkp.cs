@@ -260,6 +260,7 @@ public sealed partial class ActivityDataController
         _dbContext.DkpLedgerEntries.Add(newEntry);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _sheetSync.EnqueueAsync(targetMembership.LinkshellId, cancellationToken);
         return Ok(new { success = true });
     }
 }

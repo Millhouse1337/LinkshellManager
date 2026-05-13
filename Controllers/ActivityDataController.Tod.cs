@@ -147,6 +147,7 @@ public sealed partial class ActivityDataController
             await AdjustTodLootDkpAsync(_dbContext, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
+            await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
         }
 
         return Ok(MapTodDto(tod));
@@ -184,6 +185,7 @@ public sealed partial class ActivityDataController
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
 
         return Ok(new { success = true });
     }
@@ -428,6 +430,8 @@ public sealed partial class ActivityDataController
         {
             tod.TodLootDetails = new List<TodLootDetail>();
         }
+
+        await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImage, StringComparison.Ordinal))
         {

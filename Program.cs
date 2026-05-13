@@ -137,6 +137,9 @@ builder.Services.AddOptions<DiscordOAuthOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<GoogleSheetsOptions>()
+    .Bind(builder.Configuration.GetSection("GoogleSheets"));
+
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<DiscordIdentityService>();
 builder.Services.AddScoped<AltCharacterValidator>();
@@ -145,6 +148,12 @@ builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
 builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<GoogleSheetsSyncService>();
+builder.Services.AddSingleton<SheetSyncQueue>();
+builder.Services.AddScoped<GoogleOAuthService>();
+builder.Services.AddScoped<SheetMigrationService>();
+builder.Services.AddHostedService<SheetSyncBackgroundService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {

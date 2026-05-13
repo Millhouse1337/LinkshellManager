@@ -464,6 +464,7 @@ public partial class EventController
         }
 
         await EndEventCoreAsync(_context, eventEntity);
+        await _sheetSync.EnqueueAsync(eventEntity.LinkshellId);
 
         return RedirectToAction(nameof(Index), "EventHistory");
     }

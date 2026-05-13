@@ -21,19 +21,22 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly UserManager<AppUser> _userManager;
     private readonly DiscordIdentityService _discordIdentityService;
     private readonly IHostEnvironment _environment;
+    private readonly SheetSyncQueue _sheetSync;
 
     public AddonApiController(
         ApplicationDbContext dbContext,
         AddonApiAuthService auth,
         UserManager<AppUser> userManager,
         DiscordIdentityService discordIdentityService,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        SheetSyncQueue sheetSync)
     {
         _dbContext = dbContext;
         _auth = auth;
         _userManager = userManager;
         _discordIdentityService = discordIdentityService;
         _environment = environment;
+        _sheetSync = sheetSync;
     }
 
     // Dual-auth resolver for the management endpoints: tries the Discord OAuth
@@ -255,4 +258,11 @@ public sealed partial class AddonApiController : ControllerBase
         string ItemName,
         string ItemWinner,
         int? WinningDkpSpent);
+
+    // Per-character job-level array published by the ATT addon so other
+    // installations can see who can equip a given drop. Index = FFXI job id
+    // (0..21), value = level (0 if unleveled).
+    public sealed record AddonPostJobLevelsRequest(
+        string CharacterName,
+        int[] JobLevels);
 }

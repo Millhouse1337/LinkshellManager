@@ -6,12 +6,28 @@
 local M = {}
 
 function M.tick(state, deps)
-    local imgui      = deps.imgui
-    local api        = deps.api
-    local attendance = deps.attendance
-    local memory     = deps.memory
-    local comp       = deps.comp
-    local utils      = deps.utils
+    local imgui       = deps.imgui
+    local api         = deps.api
+    local attendance  = deps.attendance
+    local memory      = deps.memory
+    local comp        = deps.comp
+    local utils       = deps.utils
+    local player_jobs = deps.player_jobs
+
+    -- Periodically republish the local player's job-level array so other
+    -- linkshell members can see who can equip a given drop. The internal
+    -- fingerprint check makes the actual POST a no-op until levels change.
+    -- We still throttle the memory scan itself to every 30s to avoid
+    -- reading the player struct on every frame.
+    do
+        local JOB_PUBLISH_SEC = 30
+        local now = os.time()
+        if player_jobs and api.is_paired()
+           and (state.lastJobPublishAt or 0) + JOB_PUBLISH_SEC <= now then
+            state.lastJobPublishAt = now
+            player_jobs.publish_if_changed()
+        end
+    end
 
     -- Show an ImGui-drawn cursor whenever any att window is open. Has a
     -- known DPI-related visual offset in fullscreen on HorizonXI/sugar

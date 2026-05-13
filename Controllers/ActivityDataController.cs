@@ -26,6 +26,7 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly IHostEnvironment _environment;
     private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly SheetSyncQueue _sheetSync;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -34,7 +35,8 @@ public sealed partial class ActivityDataController : ControllerBase
         UserManager<AppUser> userManager,
         IHostEnvironment environment,
         Microsoft.AspNetCore.Hosting.IWebHostEnvironment webHostEnvironment,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        SheetSyncQueue sheetSync)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -43,6 +45,7 @@ public sealed partial class ActivityDataController : ControllerBase
         _environment = environment;
         _webHostEnvironment = webHostEnvironment;
         _timeZones = timeZones;
+        _sheetSync = sheetSync;
     }
 
     [HttpGet("antiforgery")]

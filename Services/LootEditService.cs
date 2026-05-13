@@ -37,13 +37,16 @@ public sealed class LootEditService
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<LootEditService> _logger;
+    private readonly SheetSyncQueue _sheetSync;
 
     public LootEditService(
         ApplicationDbContext db,
-        ILogger<LootEditService> logger)
+        ILogger<LootEditService> logger,
+        SheetSyncQueue sheetSync)
     {
         _db = db;
         _logger = logger;
+        _sheetSync = sheetSync;
     }
 
     public async Task<LootEditResult> EditTodLootAsync(
@@ -121,6 +124,7 @@ public sealed class LootEditService
         detail.LastEditReason = request.Reason.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
         _logger.LogInformation(
             "Loot edit applied (ToD #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
             detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);
@@ -240,6 +244,7 @@ public sealed class LootEditService
         detail.LastEditReason = request.Reason.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
         _logger.LogInformation(
             "Loot edit applied (Event #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
             detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);

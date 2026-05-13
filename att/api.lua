@@ -456,13 +456,27 @@ function api.update_tod_claim(todId, claimed)
     })
 end
 
--- Returns { characterNames = {...}, roster = { { characterName, alts = {...} }, ... },
+-- Returns { characterNames = {...}, roster = { { characterName, alts = {...},
+--           jobLevels = {...} | nil }, ... },
 --           lootStructure = 'Dkp' | 'Hybrid' | 'LootCouncil' }
 -- for the linkshell the addon is paired to. `roster` carries each member's
--- linked alt character names (max 2, account-level). Older addon installs
--- can keep using the flat `characterNames` list; newer code prefers `roster`.
+-- linked alt character names (max 2, account-level) and a job-level array
+-- (1..24, index = FFXI job id + 1; nil if that member hasn't published yet).
+-- Older addon installs can keep using the flat `characterNames` list; newer
+-- code prefers `roster`.
 function api.list_roster()
     return request('GET', '/api/addon/roster')
+end
+
+-- Publishes the local player's full job-level array so other linkshell members
+-- can see which jobs the character has leveled (used by the loot-pool "Can
+-- equip" filter). Idempotent on the server side. `jobLevels` is a 24-int array
+-- whose JSON index = FFXI job id.
+function api.post_self_jobs(characterName, jobLevels)
+    return request('POST', '/api/addon/character/jobs', {
+        characterName = characterName,
+        jobLevels     = jobLevels,
+    })
 end
 
 -- Posts a single TodLootDetail row attached to an existing Tod. Server creates
