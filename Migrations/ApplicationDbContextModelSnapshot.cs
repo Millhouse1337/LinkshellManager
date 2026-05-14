@@ -509,6 +509,82 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("AppUserLinkshells");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CapturedByCharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EntryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UtcOffset")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId");
+
+                    b.ToTable("AttendanceSnapshots");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshotEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("MainJob")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int?>("MainJobLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SnapshotId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubJob")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int?>("SubJobLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Zone")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotId");
+
+                    b.ToTable("AttendanceSnapshotEntries");
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Auction", b =>
                 {
                     b.Property<int>("Id")
@@ -1231,6 +1307,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<bool>("SheetSyncEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Status")
                         .HasColumnType("text");
 
@@ -1288,6 +1367,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("CanModerateLiveEvent")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("CanSubmitAttendanceForApproval")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanSubmitTodForApproval")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsSystem")
                         .HasColumnType("boolean");
 
@@ -1338,6 +1423,253 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("AppUserId");
 
                     b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("MainJob")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("MainJobLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PendingAttendanceSnapshotSubmissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubJob")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("SubJobLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Zone")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PendingAttendanceSnapshotSubmissionId");
+
+                    b.ToTable("PendingAttendanceSnapshotEntries");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CapturedByCharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("EntryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewNotes")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmittedByAppUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtcOffset")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId");
+
+                    b.HasIndex("SubmittedByAppUserId");
+
+                    b.ToTable("PendingAttendanceSnapshotSubmissions");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceWindowMemberSubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("MainJob")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("MainJobLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PendingAttendanceWindowSubmissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubJob")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("SubJobLevel")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PendingAttendanceWindowSubmissionId");
+
+                    b.ToTable("PendingAttendanceWindowMemberSubmissions");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceWindowSubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EventId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewNotes")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmittedByAppUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("WindowIndex")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("LinkshellId");
+
+                    b.HasIndex("SubmittedByAppUserId");
+
+                    b.ToTable("PendingAttendanceWindowSubmissions");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodLootSubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ItemName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ItemWinner")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("PendingTodSubmissionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("WinningDkpSpent")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PendingTodSubmissionId");
+
+                    b.ToTable("PendingTodLootSubmissions");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodSubmission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool?>("Claim")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Cooldown")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("DayNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ImagePath")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Interval")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MonsterName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("RepopTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewNotes")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTime>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmittedByAppUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Time")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId");
+
+                    b.HasIndex("SubmittedByAppUserId");
+
+                    b.ToTable("PendingTodSubmissions");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.RevenueEntry", b =>
@@ -1825,6 +2157,28 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("Linkshell");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Linkshell");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshotEntry", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", "Snapshot")
+                        .WithMany("Entries")
+                        .HasForeignKey("SnapshotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Snapshot");
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Auction", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
@@ -2043,6 +2397,98 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("AppUser");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotEntry", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", "PendingAttendanceSnapshotSubmission")
+                        .WithMany("Entries")
+                        .HasForeignKey("PendingAttendanceSnapshotSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PendingAttendanceSnapshotSubmission");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", "SubmittedBy")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByAppUserId");
+
+                    b.Navigation("Linkshell");
+
+                    b.Navigation("SubmittedBy");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceWindowMemberSubmission", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PendingAttendanceWindowSubmission", "PendingAttendanceWindowSubmission")
+                        .WithMany("Members")
+                        .HasForeignKey("PendingAttendanceWindowSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PendingAttendanceWindowSubmission");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceWindowSubmission", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Event", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", "SubmittedBy")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByAppUserId");
+
+                    b.Navigation("Event");
+
+                    b.Navigation("Linkshell");
+
+                    b.Navigation("SubmittedBy");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodLootSubmission", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PendingTodSubmission", "PendingTodSubmission")
+                        .WithMany("LootRows")
+                        .HasForeignKey("PendingTodSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PendingTodSubmission");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodSubmission", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", "SubmittedBy")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByAppUserId");
+
+                    b.Navigation("Linkshell");
+
+                    b.Navigation("SubmittedBy");
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.RevenueEntry", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
@@ -2155,6 +2601,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("StatusLedgerEntries");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Auction", b =>
                 {
                     b.Navigation("AuctionItems");
@@ -2200,6 +2651,21 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("EventHistories");
 
                     b.Navigation("Events");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", b =>
+                {
+                    b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceWindowSubmission", b =>
+                {
+                    b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodSubmission", b =>
+                {
+                    b.Navigation("LootRows");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Tod", b =>

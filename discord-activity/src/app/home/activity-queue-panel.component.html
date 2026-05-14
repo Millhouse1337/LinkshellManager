@@ -298,13 +298,23 @@
                   {{ activity.busyEventId() === event.id ? 'Updating...' : 'Unsign' }}
                 </button>
                 @if (canManageLinkshell(event.linkshellId)) {
-                  <button
-                    type="button"
-                    class="action-button"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="attemptStartEvent(event)">
-                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
-                  </button>
+                  @if (isAddonOnlyStart(event)) {
+                    <button
+                      type="button"
+                      class="action-button"
+                      disabled
+                      title="HNM events are started with the in-game addon (/attend launcher).">
+                      Start (addon-only)
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="attemptStartEvent(event)">
+                      {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
+                    </button>
+                  }
                   <button
                     type="button"
                     class="action-button action-button--secondary"
@@ -402,13 +412,23 @@
               }
               @if (canManageLinkshell(event.linkshellId)) {
                 <div class="event-action-grid__manage">
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="attemptStartEvent(event)">
-                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
-                  </button>
+                  @if (isAddonOnlyStart(event)) {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      disabled
+                      title="HNM events are started with the in-game addon (/attend launcher).">
+                      Start (addon-only)
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="attemptStartEvent(event)">
+                      {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
+                    </button>
+                  }
                   <button
                     type="button"
                     class="action-button action-button--secondary"

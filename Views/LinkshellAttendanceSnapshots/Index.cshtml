@@ -1,0 +1,83 @@
+@model LinkshellManagerDiscordApp.ViewModels.LinkshellAttendanceSnapshotsViewModel
+@{
+    ViewData["Title"] = "Attendance Snapshots";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Attendance Snapshots</h1>
+        <div class="page-sub">
+            <span>Point-in-time alliance rosters captured from the ATT addon</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> · </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (Model.Snapshots.Count == 0)
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">No snapshots yet</div>
+        </div>
+        <div class="empty" style="padding:16px">
+            Run <code>/att now</code> in-game while in an alliance to capture a snapshot. It'll appear here within a few seconds.
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Recent snapshots <span class="tag">@Model.Snapshots.Count</span></div>
+        </div>
+        <div style="padding:0 0 8px 0">
+            @foreach (var s in Model.Snapshots)
+            {
+                var capturedDisplay = s.CapturedAtUtc.ToString("yyyy-MM-dd HH:mm");
+                var zoneLine = string.IsNullOrWhiteSpace(s.PrimaryZone) ? "—" : s.PrimaryZone!;
+                var byLine = string.IsNullOrWhiteSpace(s.CapturedByCharacterName) ? "(unknown)" : s.CapturedByCharacterName!;
+                <details style="border-top:1px solid var(--border,#222)">
+                    <summary style="padding:10px 16px;cursor:pointer;list-style:revert">
+                        <strong>@capturedDisplay</strong>
+                        <span style="color:var(--fg-muted,#888)"> UTC</span>
+                        <span style="color:var(--fg-muted,#888)"> · </span>
+                        <span>Captured by <strong>@byLine</strong></span>
+                        <span style="color:var(--fg-muted,#888)"> · </span>
+                        <span>@s.EntryCount member@(s.EntryCount == 1 ? "" : "s") in @zoneLine</span>
+                    </summary>
+                    <div style="padding:8px 16px 16px 32px;overflow-x:auto">
+                        <table style="width:100%;max-width:780px;border-collapse:collapse;font-size:13px">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left;padding:6px 10px">Character</th>
+                                    <th style="text-align:left;padding:6px 10px">Main</th>
+                                    <th style="text-align:left;padding:6px 10px">Sub</th>
+                                    <th style="text-align:left;padding:6px 10px">Zone</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var e in s.Entries)
+                            {
+                                var main = string.IsNullOrWhiteSpace(e.MainJob) ? "—"
+                                    : (e.MainJobLevel.HasValue ? $"{e.MainJob}{e.MainJobLevel}" : e.MainJob!);
+                                var sub  = string.IsNullOrWhiteSpace(e.SubJob)  ? "—"
+                                    : (e.SubJobLevel.HasValue  ? $"{e.SubJob}{e.SubJobLevel}"  : e.SubJob!);
+                                <tr style="border-top:1px solid var(--border,#222)">
+                                    <td style="padding:6px 10px"><strong>@e.CharacterName</strong></td>
+                                    <td style="padding:6px 10px">@main</td>
+                                    <td style="padding:6px 10px">@sub</td>
+                                    <td style="padding:6px 10px">@(string.IsNullOrWhiteSpace(e.Zone) ? "—" : e.Zone)</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            }
+        </div>
+    </div>
+}

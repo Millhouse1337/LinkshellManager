@@ -229,11 +229,13 @@ public sealed class LinkshellReconciliationController : Controller
                 AppUserId = appUserId,
                 LinkshellId = linkshellId,
                 EntryType = "SheetImport",
+                EventName = "Spreadsheet Import",
+                EventType = "Sheet",
                 Amount = delta,
                 Sequence = 1,
                 OccurredAt = now,
                 CharacterName = trimmedName,
-                Details = $"Reconciled with Google Sheet. Old: {oldDkp}, New: {sheetDkp}.",
+                Details = $"Balance reconciled from {oldDkp} to {sheetDkp}.",
             });
         }
 

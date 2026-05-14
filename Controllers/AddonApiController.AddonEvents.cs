@@ -60,7 +60,7 @@ public sealed partial class AddonApiController
             createdFromAddon = evt.creationSource == "Addon"
                 || (evt.creationSource is null
                     && (evt.details ?? string.Empty)
-                        .StartsWith("Created from att addon.", StringComparison.Ordinal))
+                        .StartsWith("Created from addon.", StringComparison.Ordinal))
         });
 
         return Ok(new { events });

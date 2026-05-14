@@ -143,10 +143,20 @@ public sealed partial class AddonApiController : ControllerBase
     private async Task<bool> TokenIssuerCanModerateAsync(
         AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return false;
+        var role = await GetTokenIssuerRoleAsync(token, linkshellId, cancellationToken);
+        return role?.CanModerateLiveEvent == true;
+    }
+
+    // Returns the LinkshellRole record for the AppUser that issued the token,
+    // or null if the AppUser is no longer a member of the linkshell. Callers
+    // inspect the returned role to evaluate Can* permissions.
+    private async Task<LinkshellRole?> GetTokenIssuerRoleAsync(
+        AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return null;
         var membership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
-        if (membership is null) return false;
+        if (membership is null) return null;
         var rank = string.IsNullOrWhiteSpace(membership.Rank) ? "Member" : membership.Rank.Trim();
         var role = await _dbContext.LinkshellRoles
             .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rank, cancellationToken);
@@ -155,7 +165,7 @@ public sealed partial class AddonApiController : ControllerBase
             role = await _dbContext.LinkshellRoles
                 .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == "Member", cancellationToken);
         }
-        return role?.CanModerateLiveEvent == true;
+        return role;
     }
 
     private async Task<string?> ResolveTokenIssuerNameAsync(

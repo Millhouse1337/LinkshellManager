@@ -1,0 +1,128 @@
+@model LinkshellManagerDiscordApp.ViewModels.EditPendingTodViewModel
+@{
+    ViewData["Title"] = "Review Pending ToD";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Review Pending ToD</h1>
+        <div class="page-sub">
+            <span>Submitted by @Model.SubmittedByDisplay</span>
+            <span class="dot"> · </span>
+            <span>@Model.SubmittedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> · </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+<form asp-action="ApproveTod" asp-route-linkshellId="@Model.LinkshellId" asp-route-submissionId="@Model.SubmissionId" method="post" class="create-form fade d2">
+    @Html.AntiForgeryToken()
+
+    <div class="create-form__header">
+        <div>
+            <strong>Edit before approving</strong>
+            <p>Tweak any field below; clicking Approve materializes a real ToD with these values and applies any DKP loot debits.</p>
+        </div>
+    </div>
+
+    <div class="create-form__grid">
+        <label>
+            <span>Monster</span>
+            <select name="MonsterName">
+                <option value="">Select monster name</option>
+                @foreach (var m in Model.MonsterOptions)
+                {
+                    <option value="@m" selected="@(string.Equals(m, Model.MonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@m</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span>Day number</span>
+            <input type="number" name="DayNumber" value="@Model.DayNumber" />
+        </label>
+        <label>
+            <span>Claim</span>
+            <select name="Claim">
+                <option value="">Not specified</option>
+                <option value="true" selected="@(Model.Claim == true ? "selected" : null)">Yes</option>
+                <option value="false" selected="@(Model.Claim == false ? "selected" : null)">No</option>
+            </select>
+        </label>
+        <label>
+            <span>Cooldown</span>
+            <select name="Cooldown">
+                @foreach (var c in Model.CooldownOptions)
+                {
+                    <option value="@c" selected="@(string.Equals(c, Model.Cooldown, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@c</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span>Interval</span>
+            <select name="Interval">
+                @foreach (var i in Model.IntervalOptions)
+                {
+                    <option value="@i" selected="@(string.Equals(i, Model.Interval, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@i</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span>Time of death (UTC)</span>
+            <input type="datetime-local" step="1" name="Time" value="@Model.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
+        </label>
+        <label>
+            <span>Repop time (UTC)</span>
+            <input type="datetime-local" step="1" name="RepopTime" value="@Model.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" />
+        </label>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ImagePath))
+    {
+        <div class="create-form__section">
+            <div class="create-form__section-head"><h3>Screenshot</h3></div>
+            <img src="@Model.ImagePath" alt="ToD screenshot" style="max-width:480px;max-height:320px;border:1px solid var(--border,#222);border-radius:4px" />
+        </div>
+    }
+
+    <div class="create-form__section">
+        <div class="create-form__section-head"><h3>Loot details (@Model.LootRows.Count)</h3></div>
+        @for (var i = 0; i < Model.LootRows.Count; i++)
+        {
+            var row = Model.LootRows[i];
+            <div class="create-form__item" style="display:grid;grid-template-columns:1fr 1fr 120px;gap:8px">
+                <label>
+                    <span>Item</span>
+                    <input type="text" name="LootRows[@i].ItemName" value="@row.ItemName" />
+                </label>
+                <label>
+                    <span>Winner</span>
+                    <select name="LootRows[@i].ItemWinner">
+                        <option value="">--</option>
+                        @foreach (var m in Model.LinkshellMembers)
+                        {
+                            <option value="@m" selected="@(string.Equals(m, row.ItemWinner, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@m</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>DKP</span>
+                    <input type="number" min="0" name="LootRows[@i].WinningDkpSpent" value="@row.WinningDkpSpent" />
+                </label>
+            </div>
+        }
+        @if (Model.LootRows.Count == 0)
+        {
+            <p style="color:var(--fg-4);padding:0 4px">No loot rows submitted.</p>
+        }
+    </div>
+
+    <div class="create-form__actions">
+        <button type="submit" class="btn btn-primary">Approve</button>
+        <button type="submit" class="btn" formaction="@Url.Action("RejectTod", new { linkshellId = Model.LinkshellId, submissionId = Model.SubmissionId })" onclick="return confirm('Reject this submission? The pending row will be deleted.');">Reject</button>
+        <a class="btn" asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">Back to queue</a>
+    </div>
+</form>

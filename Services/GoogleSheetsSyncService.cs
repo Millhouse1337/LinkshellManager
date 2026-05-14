@@ -85,13 +85,20 @@ public sealed class GoogleSheetsSyncService
         return _protector.Unprotect(ciphertext);
     }
 
-    public async Task<IList<IList<object>>?> ReadAsync(int linkshellId, string spreadsheetId, string range, CancellationToken cancellationToken)
+    public Task<IList<IList<object>>?> ReadAsync(int linkshellId, string spreadsheetId, string range, CancellationToken cancellationToken)
+        => ReadAsync(linkshellId, spreadsheetId, range, unformatted: false, cancellationToken);
+
+    public async Task<IList<IList<object>>?> ReadAsync(int linkshellId, string spreadsheetId, string range, bool unformatted, CancellationToken cancellationToken)
     {
         var service = await GetServiceAsync(linkshellId, cancellationToken)
             ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
         try
         {
             var request = service.Spreadsheets.Values.Get(spreadsheetId, range);
+            if (unformatted)
+            {
+                request.ValueRenderOption = SpreadsheetsResource.ValuesResource.GetRequest.ValueRenderOptionEnum.UNFORMATTEDVALUE;
+            }
             var response = await request.ExecuteAsync(cancellationToken);
             return response.Values;
         }

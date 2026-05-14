@@ -45,4 +45,8 @@ public class LinkshellRole
     public bool CanManageAuctions { get; set; }
 
     public bool CanCustomizeLinkshell { get; set; }
+
+    public bool CanSubmitTodForApproval { get; set; }
+
+    public bool CanSubmitAttendanceForApproval { get; set; }
 }

@@ -116,7 +116,39 @@ public sealed partial class ActivityDataController
             }
         }
 
+        // Three-tier permission check:
+        //   CanManageTods            -> immediate create (today's behaviour)
+        //   CanSubmitTodForApproval  -> queue as a pending submission
+        //   neither                  -> 403
+        var canManage = await CanAsync(membership, r => r.CanManageTods, cancellationToken);
+        var canSubmit = await CanAsync(membership, r => r.CanSubmitTodForApproval, cancellationToken);
+        if (!canManage && !canSubmit)
+        {
+            return Forbid();
+        }
+
         var nowUtc = DateTime.UtcNow;
+
+        if (!canManage)
+        {
+            // Member submit-for-approval path. Persist exactly what was sent.
+            var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
+            var input = new TodSubmissionInput(
+                monsterName,
+                request.DayNumber,
+                request.Claim,
+                todTimeUtc,
+                cooldown,
+                interval,
+                todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)),
+                SanitizeUploadedImagePath(request.ImagePath),
+                normalizedLootDetails
+                    .Select(l => new TodSubmissionLootInput(l.ItemName, l.ItemWinner, l.WinningDkpSpent))
+                    .ToList());
+            var submissionId = await approvalSvc.QueueTodAsync(request.LinkshellId, appUser.Id, input, cancellationToken);
+            return Ok(new { pending = true, submissionId });
+        }
+
         var tod = new Tod
         {
             LinkshellId = request.LinkshellId,
@@ -195,6 +227,7 @@ public sealed partial class ActivityDataController
     [RequestFormLimits(MultipartBodyLengthLimit = 2_200_000)]
     public async Task<IActionResult> UploadTodImageAsync(
         [FromForm] IFormFile? file,
+        [FromServices] TodImageUploadService uploads,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -203,87 +236,12 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to upload ToD images." });
         }
 
-        if (file is null || file.Length <= 0)
+        var result = await uploads.SaveAsync(file!, cancellationToken);
+        if (!result.Success)
         {
-            return BadRequest(new { error = "Choose an image to upload." });
+            return BadRequest(new { error = result.Error });
         }
-
-        if (file.Length > 2_000_000)
-        {
-            return BadRequest(new { error = "Images must be 2 MB or smaller." });
-        }
-
-        var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".webp" };
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!allowedExtensions.Contains(extension))
-        {
-            return BadRequest(new { error = "Only PNG, JPG, or WEBP images are supported." });
-        }
-
-        // Verify the file's magic bytes match its declared extension. Without
-        // this an attacker could upload an HTML/SVG/JS file renamed to .png
-        // and have it served from the same origin as the app.
-        byte[] fileBytes;
-        await using (var memory = new MemoryStream())
-        {
-            await file.CopyToAsync(memory, cancellationToken);
-            fileBytes = memory.ToArray();
-        }
-
-        var detectedExtension = DetectImageExtensionFromMagicBytes(fileBytes);
-        if (detectedExtension is null)
-        {
-            return BadRequest(new { error = "Uploaded file is not a recognized PNG, JPG, or WEBP image." });
-        }
-
-        // Use the detected extension (overrides whatever the client sent).
-        if (!allowedExtensions.Contains(detectedExtension))
-        {
-            return BadRequest(new { error = "Uploaded file is not a recognized PNG, JPG, or WEBP image." });
-        }
-
-        var webRoot = _webHostEnvironment.WebRootPath;
-        if (string.IsNullOrWhiteSpace(webRoot))
-        {
-            webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        }
-
-        var uploadsDir = Path.Combine(webRoot, "uploads", "tods");
-        Directory.CreateDirectory(uploadsDir);
-
-        var fileName = $"{Guid.NewGuid():N}{detectedExtension}";
-        var absolutePath = Path.Combine(uploadsDir, fileName);
-        await System.IO.File.WriteAllBytesAsync(absolutePath, fileBytes, cancellationToken);
-
-        var relativePath = $"/uploads/tods/{fileName}";
-        return Ok(new { imagePath = relativePath });
-    }
-
-    private static string? DetectImageExtensionFromMagicBytes(ReadOnlySpan<byte> bytes)
-    {
-        // PNG: 89 50 4E 47 0D 0A 1A 0A
-        if (bytes.Length >= 8 &&
-            bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 &&
-            bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A)
-        {
-            return ".png";
-        }
-
-        // JPEG: FF D8 FF
-        if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
-        {
-            return ".jpg";
-        }
-
-        // WEBP: 'RIFF' .... 'WEBP'
-        if (bytes.Length >= 12 &&
-            bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
-            bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
-        {
-            return ".webp";
-        }
-
-        return null;
+        return Ok(new { imagePath = result.ImagePath });
     }
 
     [HttpPost("tods/{todId:int}/update")]

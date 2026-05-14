@@ -39,6 +39,14 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<AddonPairingCode> AddonPairingCodes => Set<AddonPairingCode>();
         public DbSet<EventAttendanceWindow> EventAttendanceWindows => Set<EventAttendanceWindow>();
         public DbSet<AppUserEventWindow> AppUserEventWindows => Set<AppUserEventWindow>();
+        public DbSet<AttendanceSnapshot> AttendanceSnapshots => Set<AttendanceSnapshot>();
+        public DbSet<AttendanceSnapshotEntry> AttendanceSnapshotEntries => Set<AttendanceSnapshotEntry>();
+        public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
+        public DbSet<PendingTodLootSubmission> PendingTodLootSubmissions => Set<PendingTodLootSubmission>();
+        public DbSet<PendingAttendanceWindowSubmission> PendingAttendanceWindowSubmissions => Set<PendingAttendanceWindowSubmission>();
+        public DbSet<PendingAttendanceWindowMemberSubmission> PendingAttendanceWindowMemberSubmissions => Set<PendingAttendanceWindowMemberSubmission>();
+        public DbSet<PendingAttendanceSnapshotSubmission> PendingAttendanceSnapshotSubmissions => Set<PendingAttendanceSnapshotSubmission>();
+        public DbSet<PendingAttendanceSnapshotEntry> PendingAttendanceSnapshotEntries => Set<PendingAttendanceSnapshotEntry>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {

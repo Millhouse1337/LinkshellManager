@@ -47,10 +47,17 @@ public sealed class LinkshellSheetController : Controller
         if (user is null) return Challenge();
         if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
 
-        var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId);
-        if (linkshell is null) return NotFound();
+        var viewModel = await BuildViewModelAsync(linkshellId);
+        if (viewModel is null) return NotFound();
+        return View(viewModel);
+    }
 
-        var viewModel = new LinkshellSheetViewModel
+    private async Task<LinkshellSheetViewModel?> BuildViewModelAsync(int linkshellId)
+    {
+        var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId);
+        if (linkshell is null) return null;
+
+        return new LinkshellSheetViewModel
         {
             LinkshellId = linkshell.Id,
             LinkshellName = linkshell.LinkshellName,
@@ -60,8 +67,27 @@ public sealed class LinkshellSheetController : Controller
             IsOAuthConnected = !string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc),
             ConnectedGoogleEmail = linkshell.GoogleOAuthUserEmail,
             ConnectedAt = linkshell.GoogleOAuthConnectedAt,
+            SheetSyncEnabled = linkshell.SheetSyncEnabled,
         };
-        return View(viewModel);
+    }
+
+    [HttpPost("/linkshells/{linkshellId:int}/sheet/sync-toggle")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleSync(int linkshellId, [FromForm] bool enabled, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+        if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
+
+        var linkshell = await _db.Linkshells.FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
+        if (linkshell is null) return NotFound();
+
+        linkshell.SheetSyncEnabled = enabled;
+        await _db.SaveChangesAsync(cancellationToken);
+        TempData["SheetConfigSuccess"] = enabled
+            ? "Live sync to the sheet is now ENABLED. DKP changes will update column C of matching rows."
+            : "Live sync to the sheet is now DISABLED. The sheet won't be touched.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
     [HttpPost("/linkshells/{linkshellId:int}/sheet/connect")]
@@ -164,29 +190,31 @@ public sealed class LinkshellSheetController : Controller
         if (user is null) return Challenge();
         if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
 
-        var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
-        if (linkshell?.GoogleSpreadsheetId is null)
+        var viewModel = await BuildViewModelAsync(linkshellId);
+        if (viewModel is null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(viewModel.SpreadsheetId))
         {
             TempData["SheetImportError"] = "Configure a spreadsheet ID before previewing an import.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
+            return View("Index", viewModel);
         }
-        if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
+        if (!viewModel.IsOAuthConnected)
         {
             TempData["SheetImportError"] = "Connect a Google account before previewing an import.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
+            return View("Index", viewModel);
         }
 
         try
         {
-            var preview = await _migration.BuildPreviewAsync(linkshellId, linkshell.GoogleSpreadsheetId, readRange, cancellationToken);
-            TempData["SheetImportPreview"] = System.Text.Json.JsonSerializer.Serialize(preview);
-            TempData["SheetImportReadRange"] = preview.Range;
+            var preview = await _migration.BuildPreviewAsync(linkshellId, viewModel.SpreadsheetId!, readRange, cancellationToken);
+            viewModel.Preview = preview;
+            viewModel.PreviewRange = preview.Range;
         }
         catch (Exception ex)
         {
             TempData["SheetImportError"] = $"Preview failed: {ex.Message}";
         }
-        return RedirectToAction(nameof(Index), new { linkshellId });
+        return View("Index", viewModel);
     }
 
     [HttpPost("/linkshells/{linkshellId:int}/sheet/import-commit")]

@@ -144,29 +144,64 @@ public sealed class SheetSyncBackgroundService : BackgroundService
             return;
         }
 
+        if (!linkshell.SheetSyncEnabled)
+        {
+            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: sync disabled in settings.", linkshellId);
+            return;
+        }
+
         var members = await db.AppUserLinkshells
             .AsNoTracking()
-            .Where(m => m.LinkshellId == linkshellId)
-            .OrderBy(m => m.CharacterName)
+            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null)
             .Select(m => new { m.CharacterName, m.LinkshellDkp })
             .ToListAsync(cancellationToken);
 
-        var tab = string.IsNullOrWhiteSpace(linkshell.GoogleSheetTabName) ? _options.DefaultTabName : linkshell.GoogleSheetTabName;
-        var range = $"{tab}!{_options.DefaultWriteRange}";
+        if (members.Count == 0)
+        {
+            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: no members to push.", linkshellId);
+            return;
+        }
 
-        var values = new List<IList<object>>(capacity: members.Count);
+        var tab = string.IsNullOrWhiteSpace(linkshell.GoogleSheetTabName) ? _options.DefaultTabName : linkshell.GoogleSheetTabName;
+
+        // Read the sheet's column B to discover which row each member sits on.
+        // Per-row update only: we never clear, add, or remove rows. The leader
+        // owns the sheet's roster shape; we only touch column C values for
+        // names we can find.
+        var nameColumnRange = $"{tab}!B1:B500";
+        var nameColumn = await sheets.ReadAsync(linkshellId, linkshell.GoogleSpreadsheetId, nameColumnRange, unformatted: false, cancellationToken)
+                        ?? new List<IList<object>>();
+
+        var rowByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < nameColumn.Count; i++)
+        {
+            var cellRow = nameColumn[i];
+            if (cellRow == null || cellRow.Count == 0) continue;
+            var name = cellRow[0]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(name)) continue;
+            if (string.Equals(name, "TOTAL", StringComparison.OrdinalIgnoreCase)) continue;
+            // i is 0-indexed within the range starting at row 1, so the sheet row number is i + 1.
+            if (!rowByName.ContainsKey(name)) rowByName[name] = i + 1;
+        }
+
+        var updates = 0;
+        var skipped = 0;
         foreach (var member in members)
         {
-            if (string.IsNullOrWhiteSpace(member.CharacterName)) continue;
-            values.Add(new List<object> { member.CharacterName, member.LinkshellDkp ?? 0d });
+            var name = member.CharacterName?.Trim();
+            if (string.IsNullOrEmpty(name)) continue;
+            if (!rowByName.TryGetValue(name, out var rowNumber))
+            {
+                skipped++;
+                continue;
+            }
+            var cellRange = $"{tab}!C{rowNumber}";
+            var dkpValue = member.LinkshellDkp ?? 0d;
+            await sheets.WriteAsync(linkshellId, linkshell.GoogleSpreadsheetId, cellRange,
+                new List<IList<object>> { new List<object> { dkpValue } }, cancellationToken);
+            updates++;
         }
 
-        await sheets.ClearAsync(linkshellId, linkshell.GoogleSpreadsheetId, range, cancellationToken);
-        if (values.Count > 0)
-        {
-            await sheets.WriteAsync(linkshellId, linkshell.GoogleSpreadsheetId, range, values, cancellationToken);
-        }
-
-        _logger.LogInformation("Synced {Count} members for linkshell {LinkshellId} to sheet {SheetId}.", values.Count, linkshellId, linkshell.GoogleSpreadsheetId);
+        _logger.LogInformation("Per-row sync for linkshell {LinkshellId}: updated {Updates} cells, skipped {Skipped} members not on sheet.", linkshellId, updates, skipped);
     }
 }

@@ -266,9 +266,39 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
+        // Three-tier check: moderator → immediate post (today's behavior);
+        // submit-for-approval → queue a PendingAttendanceWindowSubmission;
+        // neither → 403.
+        var attendanceRole = await GetTokenIssuerRoleAsync(token, eventEntity.LinkshellId, cancellationToken);
+        var canModerate = attendanceRole?.CanModerateLiveEvent == true;
+        var canSubmitAttendance = attendanceRole?.CanSubmitAttendanceForApproval == true;
+        if (!canModerate && !canSubmitAttendance)
         {
             return Forbid();
+        }
+
+        if (!canModerate)
+        {
+            var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
+            var members = (request.Entries ?? new List<AddonAttendanceEntry>())
+                .Where(e => !string.IsNullOrWhiteSpace(e.CharacterName))
+                .Select(e => new AttendanceWindowMemberInput(
+                    e.CharacterName!.Trim(),
+                    string.IsNullOrWhiteSpace(e.MainJob) ? null : e.MainJob.Trim(),
+                    null,
+                    string.IsNullOrWhiteSpace(e.SubJob) ? null : e.SubJob.Trim(),
+                    null))
+                .ToList();
+            if (members.Count == 0)
+            {
+                return BadRequest(new { error = "At least one valid attendance entry is required." });
+            }
+            var submissionId = await approvalSvc.QueueAttendanceWindowAsync(
+                eventEntity.LinkshellId,
+                token.IssuedToAppUserId!,
+                new AttendanceWindowSubmissionInput(eventId, request.WindowSequence ?? 1, members),
+                cancellationToken);
+            return Ok(new { pending = true, submissionId, queued = members.Count });
         }
 
         // Auto-commence the event if it hasn't started yet (so attendance has a meaningful base time).
@@ -940,6 +970,31 @@ public sealed partial class AddonApiController
         // No server-side guesswork — chat-line parsing and active-event
         // heuristics produced too many false negatives on real linkshells.
         var claimed = request.Claim;
+
+        var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
+        var canManage = role?.CanManageTods == true;
+        var canSubmit = role?.CanSubmitTodForApproval == true;
+        if (!canManage && !canSubmit)
+        {
+            return Forbid();
+        }
+
+        if (!canManage)
+        {
+            var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
+            var input = new TodSubmissionInput(
+                monsterName,
+                null,
+                claimed,
+                defeatedAtUtc,
+                cooldown,
+                interval,
+                repopTimeUtc,
+                null,
+                Array.Empty<TodSubmissionLootInput>());
+            var submissionId = await approvalSvc.QueueTodAsync(token.LinkshellId, token.IssuedToAppUserId!, input, cancellationToken);
+            return Ok(new { pending = true, submissionId, monsterName });
+        }
 
         var tod = new Tod
         {

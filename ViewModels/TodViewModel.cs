@@ -61,6 +61,11 @@ public class TodManagerViewModel
     public List<string> IntervalOptions { get; set; } = SupportedIntervals.ToList();
 
     public List<string> CharacterNames { get; set; } = new();
+
+    // Drives the submit-button label on Create.cshtml. When false, the user has
+    // only CanSubmitTodForApproval (not CanManageTods) so the button reads
+    // "Submit for Approval" and a hint is shown explaining the review step.
+    public bool CanCreateImmediately { get; set; } = true;
 }
 
 public class TodTableRowViewModel

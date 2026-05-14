@@ -25,15 +25,18 @@ public class TodController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly SubmissionApprovalService _submissionApproval;
 
     public TodController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        SubmissionApprovalService submissionApproval)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
+        _submissionApproval = submissionApproval;
     }
 
     [HttpGet]
@@ -84,12 +87,35 @@ public class TodController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create(TodManagerViewModel model)
+    [RequestSizeLimit(2_200_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 2_200_000)]
+    public async Task<IActionResult> Create(
+        TodManagerViewModel model,
+        [FromForm] IFormFile? uploadImage,
+        [FromServices] TodImageUploadService uploads,
+        CancellationToken cancellationToken)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
         {
             return Challenge();
+        }
+
+        // Save the optional screenshot up front so its path is on the Tod
+        // record at insert time. Validation errors here surface in
+        // ModelState the same way the rest of the form does.
+        string? uploadedImagePath = null;
+        if (uploadImage is not null && uploadImage.Length > 0)
+        {
+            var uploadResult = await uploads.SaveAsync(uploadImage, cancellationToken);
+            if (!uploadResult.Success)
+            {
+                ModelState.AddModelError(nameof(uploadImage), uploadResult.Error ?? "Image upload failed.");
+            }
+            else
+            {
+                uploadedImagePath = uploadResult.ImagePath;
+            }
         }
 
         model.Tod ??= new Tod { Claim = true };
@@ -117,8 +143,41 @@ public class TodController : Controller
             return View(nameof(Create), await BuildViewModelAsync(user, model));
         }
 
+        var role = await GetEffectiveRoleAsync(user.Id, model.Tod.LinkshellId);
+        var canManage = role?.CanManageTods == true;
+        var canSubmitForApproval = role?.CanSubmitTodForApproval == true;
+        if (!canManage && !canSubmitForApproval)
+        {
+            return Forbid();
+        }
+
         var todTimeUtc = ConvertUserTimeZoneToUtc(model.Tod.Time, user.TimeZone);
         var occurredAtUtc = DateTime.UtcNow;
+
+        // Member submit-for-approval path: stash the submission as a pending row
+        // and bail before touching the live Tod / DKP tables.
+        if (!canManage)
+        {
+            var loot = model.Tod.Claim == true && !model.NoLoot
+                ? NormalizeLootDetails(model.TodLootDetails)
+                : new List<TodLootDetail>();
+
+            var input = new TodSubmissionInput(
+                model.Tod.MonsterName?.Trim(),
+                model.Tod.DayNumber,
+                model.Tod.Claim,
+                todTimeUtc,
+                model.Tod.Cooldown,
+                model.Tod.Interval,
+                todTimeUtc?.AddHours(ResolveCooldownHours(model.Tod.Cooldown)),
+                uploadedImagePath,
+                loot.Select(l => new TodSubmissionLootInput(l.ItemName, l.ItemWinner, l.WinningDkpSpent)).ToList());
+
+            await _submissionApproval.QueueTodAsync(model.Tod.LinkshellId, user.Id, input, cancellationToken);
+            TempData["TodSubmissionPending"] = "ToD submitted for officer approval.";
+            return RedirectToAction(nameof(Index));
+        }
+
         var newTod = new Tod
         {
             MonsterName = model.Tod.MonsterName?.Trim(),
@@ -131,7 +190,8 @@ public class TodController : Controller
             LinkshellId = model.Tod.LinkshellId,
             TimeStamp = occurredAtUtc,
             TotalTods = 1,
-            TotalClaims = model.Tod.Claim == true ? 1 : 0
+            TotalClaims = model.Tod.Claim == true ? 1 : 0,
+            ImagePath = uploadedImagePath,
         };
 
         _context.Tods.Add(newTod);
@@ -153,6 +213,19 @@ public class TodController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<LinkshellRole?> GetEffectiveRoleAsync(string appUserId, int linkshellId)
+    {
+        var rank = await _context.AppUserLinkshells
+            .Where(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId)
+            .Select(m => m.Rank)
+            .FirstOrDefaultAsync();
+        if (rank is null) return null;
+        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+        return await _context.LinkshellRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rankName);
     }
 
     [HttpGet]
@@ -288,6 +361,14 @@ public class TodController : Controller
             ? source.TodLootDetails
             : new List<TodLootDetail> { new() };
 
+        // CanCreateImmediately drives the submit-button label: members who only
+        // have CanSubmitTodForApproval see "Submit for Approval" + a hint that
+        // an officer will review.
+        var role = selectedLinkshellId > 0
+            ? await GetEffectiveRoleAsync(user.Id, selectedLinkshellId)
+            : null;
+        var canCreateImmediately = role?.CanManageTods == true;
+
         return new TodManagerViewModel
         {
             LinkshellId = selectedLinkshellId,
@@ -312,7 +393,8 @@ public class TodController : Controller
             MonsterOptions = TodManagerViewModel.SupportedMonsters.ToList(),
             CooldownOptions = TodManagerViewModel.SupportedCooldowns.ToList(),
             IntervalOptions = TodManagerViewModel.SupportedIntervals.ToList(),
-            CharacterNames = characterNames
+            CharacterNames = characterNames,
+            CanCreateImmediately = canCreateImmediately,
         };
     }
 

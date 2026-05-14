@@ -1,0 +1,68 @@
+@model LinkshellManagerDiscordApp.ViewModels.EditPendingAttendanceSnapshotViewModel
+@{
+    ViewData["Title"] = "Review Pending Snapshot";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Review Pending Snapshot</h1>
+        <div class="page-sub">
+            <span>Submitted by @Model.SubmittedByDisplay</span>
+            <span class="dot"> · </span>
+            <span>@Model.SubmittedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC</span>
+            <span class="dot"> · </span>
+            <span>Captured at @Model.CapturedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC</span>
+            @if (!string.IsNullOrWhiteSpace(Model.CapturedByCharacterName))
+            {
+                <span class="dot"> · </span>
+                <span>by @Model.CapturedByCharacterName</span>
+            }
+        </div>
+    </div>
+</div>
+
+<form asp-action="ApproveAttendanceSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-submissionId="@Model.SubmissionId" method="post" class="create-form fade d2">
+    @Html.AntiForgeryToken()
+
+    <div class="create-form__header">
+        <div>
+            <strong>Entries (@Model.Entries.Count)</strong>
+            <p>Uncheck any rows that shouldn't be saved. Approving creates the snapshot visible on the Attendance Snapshots page with the remaining entries.</p>
+        </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+            <tr>
+                <th style="padding:8px 12px">Include</th>
+                <th style="text-align:left;padding:8px 12px">Character</th>
+                <th style="text-align:left;padding:8px 12px">Main</th>
+                <th style="text-align:left;padding:8px 12px">Sub</th>
+                <th style="text-align:left;padding:8px 12px">Zone</th>
+            </tr>
+        </thead>
+        <tbody>
+        @for (var i = 0; i < Model.Entries.Count; i++)
+        {
+            var e = Model.Entries[i];
+            <tr style="border-top:1px solid var(--border,#222)">
+                <td style="text-align:center;padding:6px 12px">
+                    <input type="hidden" name="Entries[@i].Id" value="@e.Id" />
+                    <input type="checkbox" name="Entries[@i].Include" value="true" checked="@(e.Include ? "checked" : null)" />
+                    <input type="hidden" name="Entries[@i].Include" value="false" />
+                </td>
+                <td style="padding:6px 12px">@e.CharacterName</td>
+                <td style="padding:6px 12px">@(e.MainJob ?? "—")@(e.MainJobLevel.HasValue ? $" {e.MainJobLevel}" : "")</td>
+                <td style="padding:6px 12px">@(e.SubJob ?? "—")@(e.SubJobLevel.HasValue ? $" {e.SubJobLevel}" : "")</td>
+                <td style="padding:6px 12px">@(e.Zone ?? "—")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <div class="create-form__actions" style="margin-top:14px">
+        <button type="submit" class="btn btn-primary">Approve</button>
+        <button type="submit" class="btn" formaction="@Url.Action("RejectAttendanceSnapshot", new { linkshellId = Model.LinkshellId, submissionId = Model.SubmissionId })" onclick="return confirm('Reject this snapshot?');">Reject</button>
+        <a class="btn" asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">Back to queue</a>
+    </div>
+</form>

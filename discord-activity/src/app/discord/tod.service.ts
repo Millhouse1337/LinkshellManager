@@ -22,7 +22,9 @@ export class TodService {
     this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction('/api/activity/tods', {
+      // Use postActivityJson so we can inspect the {pending} flag the server
+      // returns when the caller has only CanSubmitTodForApproval (member-tier).
+      const response = await this.http.postActivityJson<{ pending?: boolean }>('/api/activity/tods', {
         linkshellId: input.linkshellId,
         monsterName: input.monsterName,
         dayNumber: input.dayNumber ?? null,
@@ -39,7 +41,9 @@ export class TodService {
         imagePath: input.imagePath ?? null
       });
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('ToD entry saved.');
+      this.auth.setActionMessage(response?.pending
+        ? 'ToD submitted for officer approval.'
+        : 'ToD entry saved.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Saving the ToD entry failed.'));
       throw error;

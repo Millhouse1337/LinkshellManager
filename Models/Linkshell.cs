@@ -73,6 +73,8 @@ public class Linkshell
 
     public DateTime? GoogleOAuthConnectedAt { get; set; }
 
+    public bool SheetSyncEnabled { get; set; } = false;
+
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 
     public ICollection<Event> Events { get; set; } = new List<Event>();

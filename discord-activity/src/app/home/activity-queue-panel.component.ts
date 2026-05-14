@@ -231,11 +231,19 @@ export class ActivityQueuePanelComponent {
   // rejects HNM starts anyway, but doing the check here lets us show a
   // friendlier popup instead of a generic action error toast).
   protected attemptStartEvent(event: { id: number; type?: string | null }): void {
-    if ((event.type ?? '').trim().toUpperCase() === 'HNM') {
+    if (this.isAddonOnlyStart(event)) {
       window.alert('HNM events are started with the in-game addon (Att launcher). Use /attend in-game to start this event.');
       return;
     }
     void this.activity.startEvent(event.id);
+  }
+
+  // HNM events are addon-only-startable; mirrors the web's
+  // "Start (addon-only)" disabled button at Views/Event/Index.cshtml.
+  // The server-side StartEvent guard rejects this regardless, but
+  // showing a disabled button is friendlier than an alert on click.
+  protected isAddonOnlyStart(event: { type?: string | null }): boolean {
+    return (event.type ?? '').trim().toUpperCase() === 'HNM';
   }
 
   protected isMemberMode(): boolean {

@@ -101,11 +101,13 @@ public sealed class SheetMigrationService
                     AppUserId = null,
                     LinkshellId = linkshellId,
                     EntryType = "SheetImport",
+                    EventName = "Spreadsheet Import",
+                    EventType = "Sheet",
                     Amount = row.Dkp,
                     Sequence = 1,
                     OccurredAt = now,
                     CharacterName = row.Name,
-                    Details = $"Placeholder created from Google Sheet {spreadsheetId} ({range}) with starting balance {row.Dkp}.",
+                    Details = $"Placeholder created with starting balance {row.Dkp}.",
                 });
                 result.Created++;
                 continue;
@@ -126,11 +128,13 @@ public sealed class SheetMigrationService
                 AppUserId = member.AppUserId,
                 LinkshellId = linkshellId,
                 EntryType = "SheetImport",
+                EventName = "Spreadsheet Import",
+                EventType = "Sheet",
                 Amount = delta,
                 Sequence = 1,
                 OccurredAt = now,
                 CharacterName = member.CharacterName,
-                Details = $"Imported from Google Sheet {spreadsheetId} ({range}). Old: {oldValue}, New: {row.Dkp}.",
+                Details = $"Balance updated from {oldValue} to {row.Dkp}.",
             });
 
             result.Updated++;
@@ -146,9 +150,12 @@ public sealed class SheetMigrationService
         var headerRange = $"{tab}!B6:L6";
         var dataRange = $"{tab}!B8:L200";
 
-        var headersRaw = await _sheets.ReadAsync(linkshellId, spreadsheetId, headerRange, cancellationToken)
+        // Header row uses formatted read so we get the human-readable column titles.
+        var headersRaw = await _sheets.ReadAsync(linkshellId, spreadsheetId, headerRange, unformatted: false, cancellationToken)
                         ?? new List<IList<object>>();
-        var dataRaw = await _sheets.ReadAsync(linkshellId, spreadsheetId, dataRange, cancellationToken)
+        // Data uses unformatted read so numeric zeros from formulas come back as 0
+        // instead of "" when the cell has a hide-zeros number format.
+        var dataRaw = await _sheets.ReadAsync(linkshellId, spreadsheetId, dataRange, unformatted: true, cancellationToken)
                      ?? new List<IList<object>>();
 
         var headers = new List<string>();
@@ -170,16 +177,33 @@ public sealed class SheetMigrationService
 
             if (!TryParseNumber(raw[1], out var dkp)) dkp = 0;
 
-            var cells = new List<string>(raw.Count);
-            for (var i = 0; i < raw.Count; i++)
+            var cellCount = Math.Max(raw.Count, headers.Count);
+            var cells = new List<string>(cellCount);
+            for (var i = 0; i < cellCount; i++)
             {
-                cells.Add(raw[i]?.ToString() ?? string.Empty);
+                var v = i < raw.Count ? raw[i] : null;
+                cells.Add(FormatCell(v));
             }
 
             rows.Add(new ReconciliationSheetRow(name, dkp, cells));
         }
 
         return new ReconciliationSheetData(headers, rows);
+    }
+
+    private static string FormatCell(object? value)
+    {
+        return value switch
+        {
+            null => string.Empty,
+            bool b => b ? "✓" : "",
+            double d => d.ToString("0.################", CultureInfo.InvariantCulture),
+            float f => f.ToString("0.################", CultureInfo.InvariantCulture),
+            long l => l.ToString(CultureInfo.InvariantCulture),
+            int i => i.ToString(CultureInfo.InvariantCulture),
+            decimal dec => dec.ToString("0.################", CultureInfo.InvariantCulture),
+            _ => value.ToString() ?? string.Empty,
+        };
     }
 
     private static List<SheetRow> ExtractRows(IList<IList<object>> raw)

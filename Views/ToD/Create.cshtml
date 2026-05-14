@@ -24,6 +24,7 @@
 else
 {
     <form asp-action="Create" method="post" id="tod-form" novalidate
+          enctype="multipart/form-data"
           data-character-names="@JsonSerializer.Serialize(Model.CharacterNames)"
           class="create-form fade d2">
         @Html.AntiForgeryToken()
@@ -115,6 +116,16 @@ else
 
         <input asp-for="NoLoot" type="hidden" id="no-loot" />
 
+        <div class="create-form__section">
+            <div class="create-form__section-head">
+                <h3>Screenshot (optional)</h3>
+                <p style="margin:4px 0 0;color:var(--fg-4);font-size:12px">PNG, JPG, or WEBP. 2 MB max. Attached to the ToD record and viewable in the ToD details.</p>
+            </div>
+            <label>
+                <input type="file" name="UploadImage" accept="image/png,image/jpeg,image/webp" />
+            </label>
+        </div>
+
         <div id="loot-section" class="create-form__section @(Model.Tod.Claim == true && !Model.NoLoot ? "" : "d-none")">
             <div class="create-form__section-head">
                 <h3>Loot details</h3>
@@ -163,13 +174,17 @@ else
                 <button type="button" class="btn ghost sm" id="remove-loot-row">Remove</button>
                 <button type="button" class="btn ghost sm" id="no-loot-button">No loot</button>
             </div>
-            <button type="submit" class="btn primary">Submit ToD</button>
+            <button type="submit" class="btn primary">@(Model.CanCreateImmediately ? "Submit ToD" : "Submit for Approval")</button>
         </div>
 
         <div id="submit-only-row"
              class="create-form__actions @(Model.Tod.Claim == true ? "d-none" : "")">
-            <button type="submit" class="btn primary">Submit ToD</button>
+            <button type="submit" class="btn primary">@(Model.CanCreateImmediately ? "Submit ToD" : "Submit for Approval")</button>
         </div>
+        @if (!Model.CanCreateImmediately)
+        {
+            <p style="margin-top:8px;color:var(--fg-4);font-size:12px">Your submission will be reviewed by an officer before it goes live.</p>
+        }
     </form>
 }
 

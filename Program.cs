@@ -148,6 +148,8 @@ builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
 builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();
+builder.Services.AddScoped<TodImageUploadService>();
+builder.Services.AddScoped<SubmissionApprovalService>();
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<GoogleSheetsSyncService>();
 builder.Services.AddSingleton<SheetSyncQueue>();
@@ -342,7 +344,7 @@ app.Use(async (ctx, next) =>
             "style-src 'self' 'unsafe-inline';",
             $"script-src 'self' 'nonce-{nonce}';",
             "object-src 'none';",
-            $"frame-src https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment};"
+            $"frame-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com https://docs.google.com https://accounts.google.com{devTunnelHostFragment};"
         );
 
         ctx.Response.Headers["Content-Security-Policy"] = csp;

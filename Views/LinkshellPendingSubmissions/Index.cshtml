@@ -1,0 +1,74 @@
+@model LinkshellManagerDiscordApp.ViewModels.LinkshellPendingSubmissionsViewModel
+@{
+    ViewData["Title"] = "Pending Submissions";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Pending Submissions</h1>
+        <div class="page-sub">
+            <span>Review member-submitted ToDs and attendance before they go live</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> · </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (TempData["PendingApprovalMessage"] is string msg)
+{
+    <div class="alert alert-success fade d2">@msg</div>
+}
+
+@if (Model.Rows.Count == 0)
+{
+    <div class="card fade d2">
+        <div class="empty">
+            No pending submissions. When members with the "Submit for Approval" permissions submit a ToD or attendance, it'll show up here for review.
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Queue <span class="tag">@Model.Rows.Count</span></div>
+        </div>
+        <div style="padding:0 0 8px 0">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;padding:8px 12px">Type</th>
+                        <th style="text-align:left;padding:8px 12px">Summary</th>
+                        <th style="text-align:left;padding:8px 12px">Submitted by</th>
+                        <th style="text-align:left;padding:8px 12px">When</th>
+                        <th style="padding:8px 12px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    var url = row.Type switch
+                    {
+                        "Tod" => Url.Action(nameof(LinkshellManagerDiscordApp.Controllers.LinkshellPendingSubmissionsController.EditTod), new { linkshellId = Model.LinkshellId, submissionId = row.Id }),
+                        "AttendanceWindow" => Url.Action(nameof(LinkshellManagerDiscordApp.Controllers.LinkshellPendingSubmissionsController.EditAttendanceWindow), new { linkshellId = Model.LinkshellId, submissionId = row.Id }),
+                        "AttendanceSnapshot" => Url.Action(nameof(LinkshellManagerDiscordApp.Controllers.LinkshellPendingSubmissionsController.EditAttendanceSnapshot), new { linkshellId = Model.LinkshellId, submissionId = row.Id }),
+                        _ => "#"
+                    };
+                    <tr style="border-top:1px solid var(--border,#222)">
+                        <td style="padding:8px 12px"><span class="tag">@row.Type</span></td>
+                        <td style="padding:8px 12px">@row.Summary</td>
+                        <td style="padding:8px 12px">@row.SubmittedByDisplay</td>
+                        <td style="padding:8px 12px;color:var(--fg-4)">@row.SubmittedAtUtc.ToString("yyyy-MM-dd HH:mm") UTC</td>
+                        <td style="padding:8px 12px;text-align:right">
+                            <a class="btn" href="@url">Review</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
