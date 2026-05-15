@@ -28,10 +28,14 @@ public partial class EventController
 
         int? selectedLinkshellId = user.PrimaryLinkshellId ?? linkshellIds.Cast<int?>().FirstOrDefault();
 
+        // True HNMs (EventType="HNM") live in the dedicated HNM section,
+        // so the generic Events page filters them out. Legacy HNM-named
+        // events without the type discriminator stay visible here.
         var events = await _context.Events
             .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
             .Where(evt => !selectedLinkshellId.HasValue || evt.LinkshellId == selectedLinkshellId.Value)
+            .Where(evt => evt.EventType == null || evt.EventType != "HNM")
             .OrderBy(evt => evt.StartTime)
             .ToListAsync();
 
@@ -124,6 +128,7 @@ public partial class EventController
             Duration = eventViewModel.Event.Duration,
             DkpPerHour = eventViewModel.Event.DkpPerHour,
             Details = eventViewModel.Event.Details,
+            AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim(),
             CreatorUserId = user.Id,
             TimeStamp = DateTime.UtcNow
         };
@@ -227,6 +232,7 @@ public partial class EventController
         eventToUpdate.Duration = eventViewModel.Event.Duration;
         eventToUpdate.DkpPerHour = eventViewModel.Event.DkpPerHour;
         eventToUpdate.Details = eventViewModel.Event.Details;
+        eventToUpdate.AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim();
 
         _context.Jobs.RemoveRange(eventToUpdate.Jobs);
         await _context.SaveChangesAsync();
@@ -464,7 +470,13 @@ public partial class EventController
         }
 
         await EndEventCoreAsync(_context, eventEntity);
-        await _sheetSync.EnqueueAsync(eventEntity.LinkshellId);
+        // AttInput append fires only for non-windowed events; HNM-style events
+        // (windowCount > 1) already appended per-window via PostAttendanceAsync.
+        var windowCount = eventEntity.WindowCountOverride ?? Services.HnmConfig.GetWindowCount(eventEntity.EventName);
+        if (windowCount <= 1)
+        {
+            await _sheetSync.EnqueueEventCloseAsync(eventEntity.Id);
+        }
 
         return RedirectToAction(nameof(Index), "EventHistory");
     }

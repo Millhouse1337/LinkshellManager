@@ -517,6 +517,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("AttInputAppendedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -527,19 +530,45 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("DuplicateOfSnapshotId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("EntryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("LinkedEventId")
                         .HasColumnType("integer");
 
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Name")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SnapshotStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Active");
+
                     b.Property<string>("UtcOffset")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<int?>("WindowEventId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("LinkshellId");
+                    b.HasIndex("DuplicateOfSnapshotId");
+
+                    b.HasIndex("LinkedEventId");
+
+                    b.HasIndex("WindowEventId");
+
+                    b.HasIndex("LinkshellId", "CapturedAtUtc");
 
                     b.ToTable("AttendanceSnapshots");
                 });
@@ -882,6 +911,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SheetAppendedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("SourceEventLootDetailId")
                         .HasColumnType("integer");
 
@@ -910,6 +942,13 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AttInputAppendedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AttInputEntryType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTime?>("CommencementStartTime")
                         .HasColumnType("timestamp with time zone");
@@ -948,6 +987,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SourceTodId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("StartTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -964,6 +1006,8 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId");
 
+                    b.HasIndex("SourceTodId");
+
                     b.ToTable("Events");
                 });
 
@@ -974,6 +1018,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AttInputAppendedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<double?>("DkpAmount")
                         .HasColumnType("double precision");
@@ -1242,6 +1289,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("AppUserId")
                         .HasColumnType("text");
 
+                    b.Property<string>("AttInputDefaultEntryType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("AttInputTabName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Details")
                         .HasColumnType("text");
 
@@ -1306,6 +1361,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ManualPointsTabName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<bool>("SheetSyncEnabled")
                         .HasColumnType("boolean");
@@ -1484,8 +1543,15 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("EntryCount")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("LinkedEventId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("ReviewNotes")
                         .HasMaxLength(512)
@@ -1502,6 +1568,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("character varying(8)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LinkedEventId");
 
                     b.HasIndex("LinkshellId");
 
@@ -1871,6 +1939,61 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("TodLootDetails", (string)null);
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByCharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("FirstCapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("LastCapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("NormalizedName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Open");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId", "LastCapturedAtUtc");
+
+                    b.HasIndex("LinkshellId", "Status", "NormalizedName");
+
+                    b.ToTable("WindowEvents", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -2159,13 +2282,34 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", b =>
                 {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", "DuplicateOfSnapshot")
+                        .WithMany()
+                        .HasForeignKey("DuplicateOfSnapshotId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Event", "LinkedEvent")
+                        .WithMany()
+                        .HasForeignKey("LinkedEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
                         .WithMany()
                         .HasForeignKey("LinkshellId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("LinkshellManagerDiscordApp.Models.WindowEvent", "WindowEvent")
+                        .WithMany("Snapshots")
+                        .HasForeignKey("WindowEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DuplicateOfSnapshot");
+
+                    b.Navigation("LinkedEvent");
+
                     b.Navigation("Linkshell");
+
+                    b.Navigation("WindowEvent");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshotEntry", b =>
@@ -2285,7 +2429,13 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Tod", "SourceTod")
+                        .WithMany()
+                        .HasForeignKey("SourceTodId");
+
                     b.Navigation("Linkshell");
+
+                    b.Navigation("SourceTod");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.EventAttendanceWindow", b =>
@@ -2410,6 +2560,11 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", b =>
                 {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Event", "LinkedEvent")
+                        .WithMany()
+                        .HasForeignKey("LinkedEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
                         .WithMany()
                         .HasForeignKey("LinkshellId")
@@ -2419,6 +2574,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", "SubmittedBy")
                         .WithMany()
                         .HasForeignKey("SubmittedByAppUserId");
+
+                    b.Navigation("LinkedEvent");
 
                     b.Navigation("Linkshell");
 
@@ -2530,6 +2687,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Tod");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEvent", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Linkshell");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -2671,6 +2839,11 @@ namespace LinkshellManagerDiscordApp.Migrations
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Tod", b =>
                 {
                     b.Navigation("TodLootDetails");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEvent", b =>
+                {
+                    b.Navigation("Snapshots");
                 });
 #pragma warning restore 612, 618
         }

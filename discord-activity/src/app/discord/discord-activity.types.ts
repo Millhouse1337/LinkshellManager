@@ -366,6 +366,62 @@ export interface ActivityAttendanceWindowAttendee {
   verifiedBy?: string | null;
 }
 
+export interface ActivityWindowEventsResponse {
+  openEvents: ActivityWindowEvent[];
+  closedEvents: ActivityWindowEvent[];
+  unlinkedSnapshots: ActivityWindowSnapshot[];
+  canManage: boolean;
+}
+
+export interface ActivityWindowEvent {
+  id: number;
+  linkshellId: number;
+  name?: string | null;
+  status: string;
+  firstCapturedAtUtc: string;
+  lastCapturedAtUtc: string;
+  createdByCharacterName?: string | null;
+  snapshotCount: number;
+  activeSnapshotCount: number;
+  duplicateSnapshotCount: number;
+  ignoredSnapshotCount: number;
+  combinedMemberCount: number;
+  snapshots: ActivityWindowSnapshot[];
+  combinedMembers: ActivityWindowCombinedMember[];
+}
+
+export interface ActivityWindowSnapshot {
+  id: number;
+  windowEventId?: number | null;
+  name?: string | null;
+  snapshotStatus: string;
+  duplicateOfSnapshotId?: number | null;
+  capturedAtUtc: string;
+  capturedByCharacterName?: string | null;
+  primaryZone?: string | null;
+  entryCount: number;
+  entries: ActivityWindowSnapshotEntry[];
+}
+
+export interface ActivityWindowSnapshotEntry {
+  characterName: string;
+  mainJob?: string | null;
+  mainJobLevel?: number | null;
+  subJob?: string | null;
+  subJobLevel?: number | null;
+  zone?: string | null;
+}
+
+export interface ActivityWindowCombinedMember {
+  characterName: string;
+  mainJob?: string | null;
+  mainJobLevel?: number | null;
+  subJob?: string | null;
+  subJobLevel?: number | null;
+  zone?: string | null;
+  snapshotCount: number;
+}
+
 export interface ActivityParticipation {
   id: number;
   characterName?: string | null;

@@ -127,6 +127,29 @@ public sealed class GoogleSheetsSyncService
         }
     }
 
+    // Appends rows to the end of a sheet without overwriting existing cells.
+    // Uses INSERT_ROWS so the formulas / data above the insertion point keep
+    // their row indices stable. USER_ENTERED so date strings, formula refs,
+    // etc. are parsed the same way a typed cell would be.
+    public async Task AppendAsync(int linkshellId, string spreadsheetId, string range, IList<IList<object>> values, CancellationToken cancellationToken)
+    {
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var body = new ValueRange { Values = values };
+            var request = service.Spreadsheets.Values.Append(body, spreadsheetId, range);
+            request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            request.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
+            await request.ExecuteAsync(cancellationToken);
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
     public async Task ClearAsync(int linkshellId, string spreadsheetId, string range, CancellationToken cancellationToken)
     {
         var service = await GetServiceAsync(linkshellId, cancellationToken)

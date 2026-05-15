@@ -69,4 +69,10 @@ public class DkpLedgerEntry
     public int? SourceTodLootDetailId { get; set; }
 
     public int? SourceEventLootDetailId { get; set; }
+
+    // Idempotency stamp for the ManualPoints sheet append. Set once after the
+    // audit's column + cell are successfully written so a retry / replay
+    // doesn't double-add. Null = not yet appended (Audit-type entries only;
+    // event-earn / loot-spend rows leave this null permanently).
+    public DateTime? SheetAppendedAt { get; set; }
 }

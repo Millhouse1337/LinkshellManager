@@ -41,6 +41,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<AppUserEventWindow> AppUserEventWindows => Set<AppUserEventWindow>();
         public DbSet<AttendanceSnapshot> AttendanceSnapshots => Set<AttendanceSnapshot>();
         public DbSet<AttendanceSnapshotEntry> AttendanceSnapshotEntries => Set<AttendanceSnapshotEntry>();
+        public DbSet<WindowEvent> WindowEvents => Set<WindowEvent>();
         public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
         public DbSet<PendingTodLootSubmission> PendingTodLootSubmissions => Set<PendingTodLootSubmission>();
         public DbSet<PendingAttendanceWindowSubmission> PendingAttendanceWindowSubmissions => Set<PendingAttendanceWindowSubmission>();
@@ -386,6 +387,50 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventAttendanceWindowId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.AppUserEventId, item.EventAttendanceWindowId }).IsUnique();
+            });
+
+            // AttendanceSnapshot -> Event (optional, SetNull on delete) so that
+            // removing an event leaves its linked snapshots intact but unlinked
+            // instead of failing the delete or cascading the snapshot away.
+            builder.Entity<AttendanceSnapshot>(entity =>
+            {
+                entity.HasOne(item => item.LinkedEvent)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkedEventId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(item => item.WindowEvent)
+                    .WithMany(item => item.Snapshots)
+                    .HasForeignKey(item => item.WindowEventId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(item => item.DuplicateOfSnapshot)
+                    .WithMany()
+                    .HasForeignKey(item => item.DuplicateOfSnapshotId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
+                entity.HasIndex(item => item.WindowEventId);
+                entity.Property(item => item.SnapshotStatus)
+                    .HasMaxLength(32)
+                    .HasDefaultValue(AttendanceSnapshotStatuses.Active);
+            });
+            builder.Entity<WindowEvent>(entity =>
+            {
+                entity.ToTable("WindowEvents");
+                entity.Property(item => item.Name).HasMaxLength(128);
+                entity.Property(item => item.NormalizedName).HasMaxLength(128);
+                entity.Property(item => item.Status)
+                    .HasMaxLength(32)
+                    .HasDefaultValue(WindowEventStatuses.Open);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.Notes).HasMaxLength(1024);
+                entity.HasIndex(item => new { item.LinkshellId, item.Status, item.NormalizedName });
+                entity.HasIndex(item => new { item.LinkshellId, item.LastCapturedAtUtc });
+            });
+            builder.Entity<PendingAttendanceSnapshotSubmission>(entity =>
+            {
+                entity.HasOne(item => item.LinkedEvent)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkedEventId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
         }
     }

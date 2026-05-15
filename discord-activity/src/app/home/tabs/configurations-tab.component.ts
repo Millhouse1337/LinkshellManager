@@ -502,8 +502,8 @@ export class ConfigurationsTabComponent {
   protected readonly addonTokens = signal<ActivityAddonToken[]>([]);
   protected addonModalOpen = false;
   // Slot the user is generating a pairing code for. FFXI only supports
-  // two equipped linkpearl slots (LS1 / LS2), and the att addon's
-  // /att link command accepts a slot argument (1 or 2) to bind a code
+  // two equipped linkpearl slots (LS1 / LS2), and the lsm addon's
+  // /lsm link command accepts a slot argument (1 or 2) to bind a code
   // to a specific equipped pearl. Replacing the old free-text "Label"
   // field with a 1/2 toggle makes the choice explicit and stops users
   // from typing arbitrary strings that don't match anything the addon

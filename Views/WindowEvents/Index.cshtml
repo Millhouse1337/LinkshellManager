@@ -1,0 +1,129 @@
+@model LinkshellManagerDiscordApp.ViewModels.WindowEventsViewModel
+@using LinkshellManagerDiscordApp.Models
+@{
+    ViewData["Title"] = "Window Events";
+
+    string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Window Events</h1>
+        <div class="page-sub">
+            <span>Alliance-wide snapshots posted from the LSM addon</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> &middot; </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (TempData["WindowEventError"] is string err)
+{
+    <div class="alert alert-danger fade d2">@err</div>
+}
+
+<div class="card fade d2">
+    <div class="card-head">
+        <div class="card-title">Addon flow</div>
+    </div>
+    <div style="padding:12px 16px;font-size:13px;color:var(--fg-muted,#aaa)">
+        <code>/lsm now Tiamat</code> creates or updates an open Window Event named Tiamat.
+        <code>/lsm now</code> lands under Unlinked Snapshots until a leader or officer attaches it.
+        Combined attendance counts unique characters from active snapshots only.
+    </div>
+</div>
+
+@if (Model.UnlinkedSnapshots.Count > 0)
+{
+    <div class="card fade d3">
+        <div class="card-head">
+            <div class="card-title">Unlinked Snapshots <span class="tag">@Model.UnlinkedSnapshots.Count</span></div>
+        </div>
+        <div style="padding:0 0 8px">
+            @foreach (var snapshot in Model.UnlinkedSnapshots)
+            {
+                <details style="border-top:1px solid var(--border,#222)">
+                    <summary style="padding:10px 16px;cursor:pointer;list-style:revert">
+                        <strong>@snapshot.CapturedAtDisplay</strong>
+                        <span style="color:var(--fg-muted,#888)"> &middot; </span>
+                        <span>Posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong></span>
+                        <span style="color:var(--fg-muted,#888)"> &middot; </span>
+                        <span>@snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
+                    </summary>
+                    @if (Model.CanManage)
+                    {
+                        <div style="padding:8px 16px 0 32px;display:flex;flex-wrap:wrap;gap:14px;align-items:center">
+                            <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" style="display:flex;gap:6px;align-items:center">
+                                @Html.AntiForgeryToken()
+                                <input type="text" name="name" value="@snapshot.Name" placeholder="Monster name" maxlength="128" required />
+                                <button type="submit" class="btn sm">Create / attach</button>
+                            </form>
+                            @if (Model.OpenEvents.Count > 0)
+                            {
+                                <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" style="display:flex;gap:6px;align-items:center">
+                                    @Html.AntiForgeryToken()
+                                    <select name="windowEventId">
+                                        @foreach (var ev in Model.OpenEvents)
+                                        {
+                                            <option value="@ev.Id">@Dash(ev.Name) (@ev.CombinedMemberCount members)</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="btn sm">Attach existing</button>
+                                </form>
+                            }
+                            <form asp-action="SetSnapshotStatus" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
+                                <button type="submit" class="btn sm ghost">Ignore</button>
+                            </form>
+                        </div>
+                    }
+                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot)
+                </details>
+            }
+        </div>
+    </div>
+}
+
+@if (Model.OpenEvents.Count == 0 && Model.UnlinkedSnapshots.Count == 0)
+{
+    <div class="card fade d3">
+        <div class="card-head"><div class="card-title">No Window Events yet</div></div>
+        <div class="empty" style="padding:16px">
+            Run <code>/lsm now Tiamat</code> in-game while in an alliance to create the first Window Event.
+        </div>
+    </div>
+}
+
+@foreach (var ev in Model.OpenEvents)
+{
+    @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+    {
+        ["LinkshellId"] = Model.LinkshellId,
+        ["CanManage"] = Model.CanManage,
+        ["IsClosed"] = false,
+    })
+}
+
+@if (Model.ClosedEvents.Count > 0)
+{
+    <div class="card fade d5">
+        <div class="card-head">
+            <div class="card-title">Recent Closed Window Events <span class="tag">@Model.ClosedEvents.Count</span></div>
+        </div>
+        <div style="padding:0 0 8px">
+            @foreach (var ev in Model.ClosedEvents)
+            {
+                @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+                {
+                    ["LinkshellId"] = Model.LinkshellId,
+                    ["CanManage"] = Model.CanManage,
+                    ["IsClosed"] = true,
+                })
+            }
+        </div>
+    </div>
+}

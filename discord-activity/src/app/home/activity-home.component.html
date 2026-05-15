@@ -99,18 +99,38 @@
           }
         </button>
       }
+      @if (isFeatureEnabled('enableHnmSection')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('hnm')"
+                [attr.aria-controls]="panelId('hnm')"
+                [attr.aria-selected]="activeTab() === 'hnm'"
+                [attr.tabindex]="activeTab() === 'hnm' ? 0 : -1"
+                [class.active]="activeTab() === 'hnm'"
+                (click)="setActiveTab('hnm')">
+          HNM
+        </button>
+      }
       @if (isFeatureEnabled('enableEvents')) {
         <button type="button" class="tab" role="tab"
-                [id]="tabId('events')"
-                [attr.aria-controls]="panelId('events')"
-                [attr.aria-selected]="activeTab() === 'events'"
-                [attr.tabindex]="activeTab() === 'events' ? 0 : -1"
-                [class.active]="activeTab() === 'events'"
-                (click)="setActiveTab('events')">
-          Events
+                [id]="tabId('timed-events')"
+                [attr.aria-controls]="panelId('timed-events')"
+                [attr.aria-selected]="activeTab() === 'timed-events'"
+                [attr.tabindex]="activeTab() === 'timed-events' ? 0 : -1"
+                [class.active]="activeTab() === 'timed-events'"
+                (click)="setActiveTab('timed-events')">
+          Timed Events
           @if (openEventsCount() > 0) {
             <span class="tab-badge default">{{ openEventsCount() }}</span>
           }
+        </button>
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('window-events')"
+                [attr.aria-controls]="panelId('window-events')"
+                [attr.aria-selected]="activeTab() === 'window-events'"
+                [attr.tabindex]="activeTab() === 'window-events' ? 0 : -1"
+                [class.active]="activeTab() === 'window-events'"
+                (click)="setActiveTab('window-events')">
+          Window Events
         </button>
       }
       @if (isFeatureEnabled('enableToDs')) {
@@ -220,10 +240,24 @@
     </div>
   }
 
+  <!-- ===== HNM TAB ===== -->
+  @if (activeTab() === 'hnm') {
+    <div role="tabpanel" [id]="panelId('hnm')" [attr.aria-labelledby]="tabId('hnm')">
+      <app-hnm-tab />
+    </div>
+  }
+
   <!-- ===== EVENTS TAB ===== -->
-  @if (activeTab() === 'events') {
-    <div role="tabpanel" [id]="panelId('events')" [attr.aria-labelledby]="tabId('events')">
+  @if (activeTab() === 'timed-events') {
+    <div role="tabpanel" [id]="panelId('timed-events')" [attr.aria-labelledby]="tabId('timed-events')">
       <app-events-tab />
+    </div>
+  }
+
+  <!-- ===== WINDOW EVENTS TAB ===== -->
+  @if (activeTab() === 'window-events') {
+    <div role="tabpanel" [id]="panelId('window-events')" [attr.aria-labelledby]="tabId('window-events')">
+      <app-window-events-tab />
     </div>
   }
 

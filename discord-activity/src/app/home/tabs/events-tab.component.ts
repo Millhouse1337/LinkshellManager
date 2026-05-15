@@ -96,12 +96,22 @@ export class EventsTabComponent {
 
   // ----- Event lists -----
 
+  // True HNM events (EventType="HNM") live in the dedicated HNM tab, so they're
+  // dropped from the generic Events tab to mirror the server-side filter.
+  private isHnmEvent(event: { type?: string | null }): boolean {
+    return (event.type ?? '').trim().toUpperCase() === 'HNM';
+  }
+
   protected liveEvents() {
-    return (this.activity.overview()?.activeEvents ?? []).filter(event => Boolean(event.commencementStartTime));
+    return (this.activity.overview()?.activeEvents ?? [])
+      .filter(event => Boolean(event.commencementStartTime))
+      .filter(event => !this.isHnmEvent(event));
   }
 
   protected queuedEvents() {
-    return (this.activity.overview()?.activeEvents ?? []).filter(event => !event.commencementStartTime);
+    return (this.activity.overview()?.activeEvents ?? [])
+      .filter(event => !event.commencementStartTime)
+      .filter(event => !this.isHnmEvent(event));
   }
 
   protected isLiveEventCollapsed(eventId: number): boolean {

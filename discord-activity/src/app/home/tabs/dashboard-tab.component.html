@@ -263,7 +263,7 @@
           <div class="card">
             <div class="card-head">
               <div class="card-title">Upcoming Events</div>
-              <button type="button" class="card-link" (click)="setActiveTab('events')">View all</button>
+              <button type="button" class="card-link" (click)="setActiveTab('timed-events')">View all</button>
             </div>
             @if (dashboardUpcomingEvents().length > 0) {
               <div class="upcoming-list">
@@ -469,7 +469,7 @@
         <div class="card">
           <div class="card-head">
             <div class="card-title">Recent activity</div>
-            <button type="button" class="card-link" (click)="setActiveTab('events')">Full log</button>
+            <button type="button" class="card-link" (click)="setActiveTab('timed-events')">Full log</button>
           </div>
           <div class="activity-filter-bar">
             <div class="seg-toggle">

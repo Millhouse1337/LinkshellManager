@@ -87,8 +87,8 @@ public class TodController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequestSizeLimit(2_200_000)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 2_200_000)]
+    [RequestSizeLimit(5_500_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 5_500_000)]
     public async Task<IActionResult> Create(
         TodManagerViewModel model,
         [FromForm] IFormFile? uploadImage,
@@ -229,6 +229,174 @@ public class TodController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> Edit(int id)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null) return Challenge();
+
+        var tod = await _context.Tods
+            .Include(t => t.TodLootDetails)
+            .FirstOrDefaultAsync(t => t.Id == id);
+        if (tod is null) return NotFound();
+
+        if (!await HasLinkshellAccessAsync(user.Id, tod.LinkshellId)) return Forbid();
+        var role = await GetEffectiveRoleAsync(user.Id, tod.LinkshellId);
+        if (role?.CanManageTods != true) return Forbid();
+
+        // Convert UTC -> user local for the datetime-local inputs the form binds to.
+        var localTime = ConvertUtcToUserTimeZone(tod.Time, user.TimeZone);
+        var localRepop = ConvertUtcToUserTimeZone(tod.RepopTime, user.TimeZone);
+
+        var model = await BuildViewModelAsync(user, new TodManagerViewModel
+        {
+            Tod = new Tod
+            {
+                Id = tod.Id,
+                LinkshellId = tod.LinkshellId,
+                MonsterName = tod.MonsterName,
+                DayNumber = tod.DayNumber,
+                Claim = tod.Claim,
+                Time = localTime,
+                Cooldown = tod.Cooldown,
+                Interval = tod.Interval,
+                RepopTime = localRepop,
+                ImagePath = tod.ImagePath,
+            },
+            TodLootDetails = tod.TodLootDetails
+                .Select(l => new TodLootDetail { Id = l.Id, ItemName = l.ItemName, ItemWinner = l.ItemWinner, WinningDkpSpent = l.WinningDkpSpent })
+                .ToList(),
+            NoLoot = tod.TodLootDetails.Count == 0,
+        });
+
+        return View(nameof(Create), model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(5_500_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 5_500_000)]
+    public async Task<IActionResult> Edit(
+        int id,
+        TodManagerViewModel model,
+        [FromForm] IFormFile? uploadImage,
+        [FromForm] bool clearImage,
+        [FromServices] TodImageUploadService uploads,
+        CancellationToken cancellationToken)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null) return Challenge();
+
+        var tod = await _context.Tods
+            .Include(t => t.TodLootDetails)
+            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+        if (tod is null) return NotFound();
+
+        if (!await HasLinkshellAccessAsync(user.Id, tod.LinkshellId)) return Forbid();
+        var role = await GetEffectiveRoleAsync(user.Id, tod.LinkshellId);
+        if (role?.CanManageTods != true) return Forbid();
+
+        // Preserve the existing image unless the officer uploaded a new one
+        // or explicitly clicked the clear checkbox/button.
+        string? newImagePath = tod.ImagePath;
+        if (uploadImage is not null && uploadImage.Length > 0)
+        {
+            var uploadResult = await uploads.SaveAsync(uploadImage, cancellationToken);
+            if (!uploadResult.Success)
+            {
+                ModelState.AddModelError(nameof(uploadImage), uploadResult.Error ?? "Image upload failed.");
+            }
+            else
+            {
+                newImagePath = uploadResult.ImagePath;
+            }
+        }
+        else if (clearImage)
+        {
+            newImagePath = null;
+        }
+
+        model.Tod ??= new Tod { Claim = true };
+        model.Tod.Id = id;
+        model.Tod.LinkshellId = tod.LinkshellId;
+        model.Tod.Cooldown = string.IsNullOrWhiteSpace(model.Tod.Cooldown)
+            ? GetDefaultCooldown(model.Tod.MonsterName)
+            : model.Tod.Cooldown.Trim();
+        model.Tod.Interval = string.IsNullOrWhiteSpace(model.Tod.Interval)
+            ? GetDefaultInterval(model.Tod.MonsterName)
+            : model.Tod.Interval.Trim();
+
+        var characterNames = await _context.AppUserLinkshells
+            .Where(link => link.LinkshellId == tod.LinkshellId)
+            .Select(link => link.CharacterName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .ToListAsync(cancellationToken);
+
+        ValidateTodSubmission(model, hasLinkshellAccess: true, characterNames);
+        if (!ModelState.IsValid)
+        {
+            return View(nameof(Create), await BuildViewModelAsync(user, model));
+        }
+
+        var todTimeUtc = ConvertUserTimeZoneToUtc(model.Tod.Time, user.TimeZone);
+        var occurredAtUtc = DateTime.UtcNow;
+
+        // Reverse DKP impact from existing loot, remove it, then apply the
+        // new set. Mirrors ActivityDataController.UpdateTodAsync.
+        if (tod.TodLootDetails.Count > 0)
+        {
+            await ActivityDataController.AdjustTodLootDkpAsync(_context, tod, tod.TodLootDetails.ToList(), occurredAtUtc, isRefund: true, cancellationToken);
+            _context.TodLootDetails.RemoveRange(tod.TodLootDetails);
+        }
+
+        var previousImage = tod.ImagePath;
+        tod.MonsterName = model.Tod.MonsterName?.Trim();
+        tod.DayNumber = model.Tod.DayNumber;
+        tod.Claim = model.Tod.Claim;
+        tod.Time = todTimeUtc;
+        tod.Cooldown = model.Tod.Cooldown;
+        tod.RepopTime = todTimeUtc?.AddHours(ResolveCooldownHours(model.Tod.Cooldown));
+        tod.Interval = model.Tod.Interval;
+        tod.TimeStamp = occurredAtUtc;
+        tod.TotalClaims = model.Tod.Claim == true ? 1 : 0;
+        tod.ImagePath = newImagePath;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var normalizedLootDetails = model.Tod.Claim == true && !model.NoLoot
+            ? NormalizeLootDetails(model.TodLootDetails)
+            : new List<TodLootDetail>();
+        if (normalizedLootDetails.Count > 0)
+        {
+            foreach (var lootDetail in normalizedLootDetails)
+            {
+                lootDetail.TodId = tod.Id;
+            }
+            await _context.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
+            await ActivityDataController.AdjustTodLootDkpAsync(_context, tod, normalizedLootDetails, occurredAtUtc, isRefund: false, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImagePath, StringComparison.Ordinal))
+        {
+            // Best-effort cleanup of the orphaned old file.
+            try
+            {
+                var webRoot = HttpContext.RequestServices.GetService<IWebHostEnvironment>()?.WebRootPath;
+                if (!string.IsNullOrWhiteSpace(webRoot))
+                {
+                    var rel = previousImage.TrimStart('/');
+                    var abs = Path.Combine(webRoot, rel);
+                    if (System.IO.File.Exists(abs)) System.IO.File.Delete(abs);
+                }
+            }
+            catch { /* ignore cleanup failures */ }
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet]
     public async Task<IActionResult> GetLootDetails(int id)
     {
         var user = await RequireCurrentUserAsync();
@@ -345,6 +513,11 @@ public class TodController : Controller
                 .Where(t => !hiddenSet.Contains((t.MonsterName ?? string.Empty).Trim()))
                 .ToList();
         }
+        // True HNMs live in the dedicated HNM section -- filter them out
+        // here so the generic ToD list isn't duplicating those rows.
+        todEntities = todEntities
+            .Where(t => !HnmConfig.IsTrueHnm(t.MonsterName))
+            .ToList();
 
         var todDraft = source?.Tod ?? new Tod();
         todDraft.LinkshellId = selectedLinkshellId;
@@ -385,12 +558,18 @@ public class TodController : Controller
                 Interval = item.Interval ?? string.Empty,
                 RepopTimeUtc = item.RepopTime,
                 Claim = item.Claim,
-                LootCount = item.TodLootDetails.Count
+                LootCount = item.TodLootDetails.Count,
+                ImagePath = item.ImagePath,
             }).ToList(),
             TodLootDetails = lootDetails,
             NoLoot = source?.NoLoot ?? false,
             Notifications = source?.Notifications ?? new List<string>(),
-            MonsterOptions = TodManagerViewModel.SupportedMonsters.ToList(),
+            // True HNMs are managed in the dedicated HNM section, so they're
+            // dropped from the legacy picker. Officers who want a manual
+            // HNM ToD on the web do so via the HNM dashboard.
+            MonsterOptions = TodManagerViewModel.SupportedMonsters
+                .Where(m => !HnmConfig.IsTrueHnm(m))
+                .ToList(),
             CooldownOptions = TodManagerViewModel.SupportedCooldowns.ToList(),
             IntervalOptions = TodManagerViewModel.SupportedIntervals.ToList(),
             CharacterNames = characterNames,

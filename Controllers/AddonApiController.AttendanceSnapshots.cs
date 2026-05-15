@@ -2,6 +2,7 @@ using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -19,7 +20,8 @@ public sealed partial class AddonApiController
         DateTime? CapturedAtUtc,
         string? CapturedByCharacterName,
         string? UtcOffset,
-        IReadOnlyList<AddonAttendanceSnapshotEntryDto>? Entries);
+        IReadOnlyList<AddonAttendanceSnapshotEntryDto>? Entries,
+        string? Name);
 
     [HttpPost("attendance-snapshots")]
     [AddonApiAuth]
@@ -55,10 +57,9 @@ public sealed partial class AddonApiController
             ? request.CapturedAtUtc.Value
             : nowUtc;
 
-        // Three-tier permission gate. Snapshots have no DKP effect but they
-        // are visible to all linkshell members on the Attendance Snapshots
-        // page, so an officer review gate stops members from spamming the
-        // public list.
+        // Snapshot posts have no immediate DKP effect. Members with submit
+        // permission can create them directly; leaders/officers review,
+        // merge, rename, or ignore them on the Window Events page.
         var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
         var canModerate = role?.CanModerateLiveEvent == true;
         var canSubmit = role?.CanSubmitAttendanceForApproval == true;
@@ -67,29 +68,14 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        if (!canModerate)
-        {
-            var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
-            var inputEntries = entries
-                .Select(e => new SnapshotEntryInput(
-                    TruncateString(e.CharacterName, 256) ?? string.Empty,
-                    TruncateString(e.MainJob, 8),
-                    e.MainJobLevel,
-                    TruncateString(e.SubJob, 8),
-                    e.SubJobLevel,
-                    TruncateString(e.Zone, 128)))
-                .ToList();
-            var submissionId = await approvalSvc.QueueSnapshotAsync(
-                token.LinkshellId,
-                token.IssuedToAppUserId!,
-                new SnapshotSubmissionInput(
-                    capturedAt,
-                    TruncateString(request.CapturedByCharacterName, 256),
-                    TruncateString(request.UtcOffset, 8),
-                    inputEntries),
-                cancellationToken);
-            return Ok(new { pending = true, submissionId, entryCount = inputEntries.Count });
-        }
+        var trimmedName = TruncateString(string.IsNullOrWhiteSpace(request.Name) ? null : request.Name.Trim(), 128);
+        var windowEvent = await FindOrCreateWindowEventAsync(
+            token.LinkshellId,
+            trimmedName,
+            capturedAt,
+            TruncateString(request.CapturedByCharacterName, 256),
+            nowUtc,
+            cancellationToken);
 
         var snapshot = new AttendanceSnapshot
         {
@@ -99,6 +85,9 @@ public sealed partial class AddonApiController
             UtcOffset = TruncateString(request.UtcOffset, 8),
             EntryCount = entries.Count,
             CreatedAtUtc = nowUtc,
+            Name = trimmedName,
+            WindowEventId = windowEvent?.Id,
+            SnapshotStatus = AttendanceSnapshotStatuses.Active,
         };
 
         foreach (var e in entries)
@@ -117,12 +106,138 @@ public sealed partial class AddonApiController
         _dbContext.AttendanceSnapshots.Add(snapshot);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        if (windowEvent is not null)
+        {
+            var possibleDuplicate = await FindLikelyDuplicateSnapshotAsync(snapshot, cancellationToken);
+            if (possibleDuplicate is not null)
+            {
+                snapshot.SnapshotStatus = AttendanceSnapshotStatuses.PossibleDuplicate;
+                snapshot.DuplicateOfSnapshotId = possibleDuplicate.Id;
+            }
+            windowEvent.FirstCapturedAtUtc = windowEvent.FirstCapturedAtUtc <= snapshot.CapturedAtUtc
+                ? windowEvent.FirstCapturedAtUtc
+                : snapshot.CapturedAtUtc;
+            windowEvent.LastCapturedAtUtc = windowEvent.LastCapturedAtUtc >= snapshot.CapturedAtUtc
+                ? windowEvent.LastCapturedAtUtc
+                : snapshot.CapturedAtUtc;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
         return Ok(new
         {
             snapshotId = snapshot.Id,
             entryCount = snapshot.EntryCount,
             capturedAtUtc = snapshot.CapturedAtUtc,
+            linkedEventId = (int?)null,
+            windowEventId = snapshot.WindowEventId,
+            snapshotStatus = snapshot.SnapshotStatus,
         });
+    }
+
+    private async Task<WindowEvent?> FindOrCreateWindowEventAsync(
+        int linkshellId,
+        string? name,
+        DateTime capturedAtUtc,
+        string? capturedByCharacterName,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeWindowEventName(name);
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        var staleCutoff = capturedAtUtc.AddHours(-24);
+        var existing = await _dbContext.WindowEvents
+            .Where(item =>
+                item.LinkshellId == linkshellId &&
+                item.Status == WindowEventStatuses.Open &&
+                item.NormalizedName == normalized &&
+                item.LastCapturedAtUtc >= staleCutoff)
+            .OrderByDescending(item => item.LastCapturedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var windowEvent = new WindowEvent
+        {
+            LinkshellId = linkshellId,
+            Name = name,
+            NormalizedName = normalized,
+            Status = WindowEventStatuses.Open,
+            CreatedAtUtc = nowUtc,
+            FirstCapturedAtUtc = capturedAtUtc,
+            LastCapturedAtUtc = capturedAtUtc,
+            CreatedByCharacterName = capturedByCharacterName,
+        };
+        _dbContext.WindowEvents.Add(windowEvent);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return windowEvent;
+    }
+
+    private async Task<AttendanceSnapshot?> FindLikelyDuplicateSnapshotAsync(
+        AttendanceSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        if (!snapshot.WindowEventId.HasValue || snapshot.Entries.Count == 0)
+        {
+            return null;
+        }
+
+        var names = snapshot.Entries
+            .Select(e => NormalizeWindowEventName(e.CharacterName))
+            .Where(n => n is not null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-15);
+        var toUtc = snapshot.CapturedAtUtc.AddMinutes(15);
+        var candidates = await _dbContext.AttendanceSnapshots
+            .Include(item => item.Entries)
+            .Where(item =>
+                item.Id != snapshot.Id &&
+                item.WindowEventId == snapshot.WindowEventId &&
+                item.SnapshotStatus != AttendanceSnapshotStatuses.Ignored &&
+                item.SnapshotStatus != AttendanceSnapshotStatuses.Duplicate &&
+                item.CapturedAtUtc >= fromUtc &&
+                item.CapturedAtUtc <= toUtc)
+            .ToListAsync(cancellationToken);
+
+        AttendanceSnapshot? best = null;
+        var bestOverlap = 0d;
+        foreach (var candidate in candidates)
+        {
+            var candidateNames = candidate.Entries
+                .Select(e => NormalizeWindowEventName(e.CharacterName))
+                .Where(n => n is not null)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (candidateNames.Count == 0) continue;
+
+            var overlap = names.Count(n => candidateNames.Contains(n!));
+            var denominator = Math.Min(names.Count, candidateNames.Count);
+            var ratio = denominator == 0 ? 0 : overlap / (double)denominator;
+            if (ratio > bestOverlap)
+            {
+                bestOverlap = ratio;
+                best = candidate;
+            }
+        }
+
+        return bestOverlap >= 0.75 ? best : null;
+    }
+
+    private static string? NormalizeWindowEventName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var parts = value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return string.Join(' ', parts).ToUpperInvariant();
     }
 
     private static string? TruncateString(string? value, int max)

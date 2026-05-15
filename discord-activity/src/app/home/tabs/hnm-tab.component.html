@@ -1,0 +1,119 @@
+<div class="panel-tab fade" role="tabpanel">
+  <div class="section-head">
+    <div>
+      <div class="section-label">HNM</div>
+      <div class="section-title">HNM repop schedule</div>
+      <div class="section-sub" style="color:var(--fg-muted,#888);font-size:12px;margin-top:4px">
+        Auto-created from the lsm addon's ToD posts. Closed events flow into AttInput as Entry Type = Kill.
+      </div>
+    </div>
+  </div>
+
+  @if (rows().length === 0) {
+    <div class="card" style="margin-top:12px">
+      <div class="card-body" style="padding:16px;color:var(--fg-muted,#888)">
+        No HNM ToDs captured yet. Post one via <code>/lsm</code> in-game to populate this dashboard.
+      </div>
+    </div>
+  } @else {
+    <div class="card" style="margin-top:12px">
+      <div class="card-body" style="padding:0">
+        @for (row of rows(); track row.monsterName) {
+          <div style="border-top:1px solid var(--border,#222)">
+            <button type="button"
+                    style="width:100%;text-align:left;background:none;border:0;color:inherit;padding:10px 16px;cursor:pointer"
+                    (click)="toggleExpanded(row.monsterName)">
+              <strong style="font-size:15px">{{ row.monsterName }}</strong>
+              @if (row.zone) {
+                <span style="color:var(--fg-muted,#888)"> · </span>
+                <span>{{ row.zone }}</span>
+              }
+              @if (row.isDayTracked && row.dayCycle) {
+                <span style="color:var(--fg-muted,#888)"> · </span>
+                <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(96,165,250,0.15);color:#60a5fa;font-size:12px">D1–D{{ row.dayCycle }}</span>
+              }
+              @if (!row.latestTod) {
+                <span style="color:var(--fg-muted,#888)"> · </span>
+                <span style="color:var(--fg-muted,#888);font-size:12px">No ToD captured yet</span>
+              } @else {
+                <span style="color:var(--fg-muted,#888)"> · </span>
+                <span style="font-size:12px">Last ToD <strong>{{ formatLocal(row.latestTod.time) }}</strong></span>
+                @if (row.latestTod.dayNumber && row.latestTod.dayNumber > 0) {
+                  <span style="color:var(--fg-muted,#888)"> · </span>
+                  <span style="font-size:12px">D{{ row.latestTod.dayNumber }}</span>
+                }
+              }
+              @if (row.linkedEvent) {
+                <span style="color:var(--fg-muted,#888)"> · </span>
+                <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(96,165,250,0.15);color:#60a5fa;font-size:12px">
+                  Event: {{ row.linkedEvent.name }} ({{ eventStateLabel(row.linkedEvent) }})
+                </span>
+              } @else if (row.latestTod) {
+                <span style="color:var(--fg-muted,#888)"> · </span>
+                <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:12px">No queued event</span>
+              }
+            </button>
+
+            @if (isExpanded(row.monsterName)) {
+              <div style="padding:8px 16px 16px 32px">
+                @if (row.latestTod) {
+                  <div style="margin-bottom:8px;font-size:13px">
+                    <strong>Repop:</strong>
+                    <span>{{ formatLocal(row.latestTod.repopTime) }}</span>
+                    @if (row.latestTod.cooldown) {
+                      <span style="color:var(--fg-muted,#888)"> · </span>
+                      <span>Cooldown {{ row.latestTod.cooldown }}</span>
+                    }
+                    <span style="color:var(--fg-muted,#888)"> · </span>
+                    <span>{{ claimLabel(row.latestTod.claim) }}</span>
+                  </div>
+                }
+
+                @if (row.linkedEvent) {
+                  <div style="margin-bottom:8px;font-size:13px;padding:8px 12px;border:1px solid var(--border,#222);border-radius:8px">
+                    <div>
+                      <strong>Next event:</strong> {{ row.linkedEvent.name }}
+                    </div>
+                    <div style="color:var(--fg-muted,#888);font-size:12px;margin-top:2px">
+                      Starts {{ formatLocal(row.linkedEvent.startTime) }}
+                      @if (row.linkedEvent.dkpPerHour != null) {
+                        <span> · {{ row.linkedEvent.dkpPerHour }} DKP/hr</span>
+                      }
+                      @if (row.linkedEvent.location) {
+                        <span> · {{ row.linkedEvent.location }}</span>
+                      }
+                    </div>
+                  </div>
+                }
+
+                @if (row.recentTods.length > 0) {
+                  <div style="font-size:12px;color:var(--fg-muted,#888);margin-bottom:4px">Recent ToDs</div>
+                  <table style="width:100%;max-width:780px;border-collapse:collapse;font-size:12px;margin-bottom:8px">
+                    <thead>
+                      <tr>
+                        <th style="text-align:left;padding:4px 8px">ToD</th>
+                        <th style="text-align:left;padding:4px 8px">Repop</th>
+                        <th style="text-align:left;padding:4px 8px">Day</th>
+                        <th style="text-align:left;padding:4px 8px">Claim</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (prev of row.recentTods; track prev.id) {
+                        <tr style="border-top:1px solid var(--border,#222)">
+                          <td style="padding:4px 8px">{{ formatLocal(prev.time) }}</td>
+                          <td style="padding:4px 8px">{{ formatLocal(prev.repopTime) }}</td>
+                          <td style="padding:4px 8px">{{ prev.dayNumber && prev.dayNumber > 0 ? 'D' + prev.dayNumber : '—' }}</td>
+                          <td style="padding:4px 8px">{{ claimLabel(prev.claim) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

@@ -14,6 +14,10 @@ public sealed class LinkshellSheetViewModel
     public DateTime? ConnectedAt { get; set; }
     public bool SheetSyncEnabled { get; set; }
 
+    public string? AttInputTabName { get; set; }
+    public string? AttInputDefaultEntryType { get; set; }
+    public string? ManualPointsTabName { get; set; }
+
     public string? PreviewRange { get; set; }
     public ImportPreview? Preview { get; set; }
 }

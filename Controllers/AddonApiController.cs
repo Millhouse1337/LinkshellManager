@@ -14,7 +14,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 [Route("api/addon")]
 public sealed partial class AddonApiController : ControllerBase
 {
-    private const string AddonSource = "att-addon";
+    private const string AddonSource = "lsm-addon";
 
     private readonly ApplicationDbContext _dbContext;
     private readonly AddonApiAuthService _auth;
@@ -22,6 +22,8 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly DiscordIdentityService _discordIdentityService;
     private readonly IHostEnvironment _environment;
     private readonly SheetSyncQueue _sheetSync;
+    private readonly HnmAutoEventService _hnmAutoEvent;
+    private readonly ILogger<AddonApiController> _logger;
 
     public AddonApiController(
         ApplicationDbContext dbContext,
@@ -29,7 +31,9 @@ public sealed partial class AddonApiController : ControllerBase
         UserManager<AppUser> userManager,
         DiscordIdentityService discordIdentityService,
         IHostEnvironment environment,
-        SheetSyncQueue sheetSync)
+        SheetSyncQueue sheetSync,
+        HnmAutoEventService hnmAutoEvent,
+        ILogger<AddonApiController> logger)
     {
         _dbContext = dbContext;
         _auth = auth;
@@ -37,6 +41,8 @@ public sealed partial class AddonApiController : ControllerBase
         _discordIdentityService = discordIdentityService;
         _environment = environment;
         _sheetSync = sheetSync;
+        _hnmAutoEvent = hnmAutoEvent;
+        _logger = logger;
     }
 
     // Dual-auth resolver for the management endpoints: tries the Discord OAuth
@@ -260,7 +266,12 @@ public sealed partial class AddonApiController : ControllerBase
         string? CapturedMessage,
         // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified
         // (auto-posted from the loot-pool flow before the user picked).
-        bool? Claim);
+        bool? Claim,
+        // Day cycle counter for day-tracked HNMs (Nidhogg/King Behemoth/
+        // Aspidochelone). The addon's launcher captures this via
+        // state.eventPresetDayInputs. Null/0 for non-day-tracked monsters
+        // and for HNMs where the officer left the day input blank.
+        int? DayNumber);
 
     public sealed record AddonUpdateTodClaimRequest(bool? Claim);
 
@@ -269,7 +280,7 @@ public sealed partial class AddonApiController : ControllerBase
         string ItemWinner,
         int? WinningDkpSpent);
 
-    // Per-character job-level array published by the ATT addon so other
+    // Per-character job-level array published by the LSM addon so other
     // installations can see who can equip a given drop. Index = FFXI job id
     // (0..21), value = level (0 if unleveled).
     public sealed record AddonPostJobLevelsRequest(

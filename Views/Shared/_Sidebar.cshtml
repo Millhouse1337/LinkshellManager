@@ -91,6 +91,11 @@
     </nav>
 
     <nav class="nav-section">
+        <a class="nav-item @IsOn("Hnm")" asp-controller="Hnm" asp-action="Index">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7l3 13h10l3-13"/><path d="M9 7V4h6v3"/><circle cx="12" cy="13" r="2"/></svg>
+            HNM System
+        </a>
+
         <button type="button" class="nav-item nav-group" data-target="#nav-endgame">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
             End Game
@@ -99,7 +104,6 @@
         <div id="nav-endgame" class="nav-sub">
             <a class="nav-sub-item" href="#">Sky</a>
             <a class="nav-sub-item" href="#">Sea</a>
-            <a class="nav-sub-item" href="#">HNM</a>
             <a class="nav-sub-item" href="#">Dynamis</a>
             <a class="nav-sub-item" href="#">Limbus</a>
         </div>
@@ -118,21 +122,21 @@
             <a class="nav-sub-item @IsSubActive("AuctionHistory")" asp-controller="AuctionHistory" asp-action="Index">Auction History</a>
         </div>
 
-        <button type="button" class="nav-item nav-group @IsExpanded("Event", "EventHistory", "LinkshellAttendanceSnapshots")" data-target="#nav-events">
+        <button type="button" class="nav-item nav-group @IsExpanded("Event", "EventHistory", "LinkshellAttendanceSnapshots", "WindowEvents")" data-target="#nav-events">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
             Event System
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
         </button>
         <div id="nav-events" class="nav-sub">
-            <a class="nav-sub-item @IsSubActive("Event", "Index")" asp-controller="Event" asp-action="Index">View Events</a>
+            <a class="nav-sub-item @IsSubActive("Event", "Index")" asp-controller="Event" asp-action="Index">Timed Events</a>
             @if (Allow(p => p.CanManageEvents))
             {
-                <a class="nav-sub-item create @IsSubActive("Event", "Create")" asp-controller="Event" asp-action="Create">Create Event</a>
+                <a class="nav-sub-item create @IsSubActive("Event", "Create")" asp-controller="Event" asp-action="Create">Create Timed Event</a>
             }
             <a class="nav-sub-item @IsSubActive("EventHistory")" asp-controller="EventHistory" asp-action="Index">Event History</a>
             @if (activeLinkshellId.HasValue)
             {
-                <a class="nav-sub-item @IsSubActive("LinkshellAttendanceSnapshots")" asp-controller="LinkshellAttendanceSnapshots" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Attendance Snapshots</a>
+                <a class="nav-sub-item @IsSubActive("WindowEvents")" asp-controller="WindowEvents" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Window Events</a>
             }
         </div>
 

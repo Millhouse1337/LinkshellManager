@@ -122,6 +122,26 @@
         <label for="Event_DkpPerHour">DKP/hour</label>
         <input class="form-control" id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" value="@Model.Event.DkpPerHour" />
     </div>
+    <div class="field" style="display:flex;flex-direction:column">
+        <label for="Event_AttInputEntryType">AttInput Entry Type</label>
+        <select class="form-control" id="Event_AttInputEntryType" name="Event.AttInputEntryType">
+            <option value="">(none — skip sheet sync)</option>
+            @{ var currentEntryType = Model.Event.AttInputEntryType; }
+            <option value="Misc Camp" selected="@(currentEntryType == "Misc Camp")">Misc Camp</option>
+            <option value="Kill" selected="@(currentEntryType == "Kill")">Kill</option>
+            <option value="Kings Camp" selected="@(currentEntryType == "Kings Camp")">Kings Camp</option>
+            <option value="Wyrms Camp" selected="@(currentEntryType == "Wyrms Camp")">Wyrms Camp</option>
+            @if (!string.IsNullOrWhiteSpace(currentEntryType)
+                 && currentEntryType != "Misc Camp"
+                 && currentEntryType != "Kill"
+                 && currentEntryType != "Kings Camp"
+                 && currentEntryType != "Wyrms Camp")
+            {
+                <option value="@currentEntryType" selected="selected">@currentEntryType</option>
+            }
+        </select>
+        <small style="color:var(--fg-4);font-size:11px;margin-top:2px">Category written to the K column of the AttInput tab. Leave blank to skip sheet sync for this event.</small>
+    </div>
     <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
         <label for="Event_Details">Details</label>
         <textarea class="form-control" id="Event_Details" name="Event.Details" rows="4">@Model.Event.Details</textarea>

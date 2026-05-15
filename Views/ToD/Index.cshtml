@@ -103,6 +103,11 @@ else
                                         {
                                             <button type="button" class="btn sm view-loot-btn" data-id="@latest.Id">Loot</button>
                                         }
+                                        @if (!string.IsNullOrWhiteSpace(latest.ImagePath))
+                                        {
+                                            <a class="btn sm" href="@latest.ImagePath" target="_blank" rel="noopener">Screenshot</a>
+                                        }
+                                        <a class="btn sm" asp-action="Edit" asp-route-id="@latest.Id">Edit</a>
                                         <form asp-action="Delete" asp-route-id="@latest.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this ToD entry?');">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn sm ghost" style="color:var(--danger)">Delete</button>
@@ -126,6 +131,11 @@ else
                                             {
                                                 <button type="button" class="btn sm view-loot-btn" data-id="@item.Id">Loot</button>
                                             }
+                                            @if (!string.IsNullOrWhiteSpace(item.ImagePath))
+                                            {
+                                                <a class="btn sm" href="@item.ImagePath" target="_blank" rel="noopener">Screenshot</a>
+                                            }
+                                            <a class="btn sm" asp-action="Edit" asp-route-id="@item.Id">Edit</a>
                                             <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this ToD entry?');">
                                                 @Html.AntiForgeryToken()
                                                 <button type="submit" class="btn sm ghost" style="color:var(--danger)">Delete</button>

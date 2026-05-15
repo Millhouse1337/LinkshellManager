@@ -26,6 +26,12 @@ body {
   padding: 0;
   display: block;
   gap: 0;
+  // Discord renders its own top chrome (close button, notification dot,
+  // profile cluster) above the activity iframe. Respect the safe-area
+  // inset on devices that report one, falling back to a fixed 12px so
+  // we don't clip into Discord's overlay on phone-portrait Discord
+  // activities (~390-412px wide).
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
 }
 
 .num {
@@ -122,29 +128,38 @@ body {
 
 /* ===== Identity bar — mobile collapse =====
    On phone-portrait widths (Discord activities run at ~390-412px), the
-   identity row is way too dense. Hide everything except the brand-mark
-   "L" pill, the linkshell name, and the clock. Users get the essentials
-   (which linkshell + what time) and the right-side member chip / refresh
-   button / role label / user-name / avatar bubble all drop away. They're
-   reachable from inside the tabs anyway. */
+   identity row is dense. Hide the noisy bits (wordmark, divider, members
+   badge, refresh control, role tag) but keep the member's name + avatar
+   pinned to the top-right so the user can confirm at a glance whose
+   account the activity is signed in as. */
 @media (max-width: 600px) {
   .brand-bar__name,
   .identity-divider,
   .identity-badge,
   .identity-refresh,
-  .identity-role,
-  .identity-user,
-  .identity-av {
+  .identity-role {
     display: none;
   }
 
-  /* Re-justify so the surviving items spread cleanly: brand-mark + ls
-     name pinned left, clock pinned right via space-between (which the
-     parent .identity already uses). The now-empty .identity-right
-     should collapse to zero width so space-between still produces the
-     expected layout. */
+  /* Keep the right-hand cluster visible so the user-name + avatar still
+     show. Use a flex layout that hugs the right edge of the identity bar
+     and stays compact. */
   .identity-right {
-    display: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .identity-user {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+  .identity-av {
+    width: 18px;
+    height: 18px;
+    font-size: 8px;
   }
 
   /* Tighten the identity bar padding on mobile so the surviving items

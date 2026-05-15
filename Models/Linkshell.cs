@@ -75,6 +75,24 @@ public class Linkshell
 
     public bool SheetSyncEnabled { get; set; } = false;
 
+    // Per-LS override of the AttInput tab name. Default is "AttInput", but
+    // each linkshell can rename their tab. The sync service appends rows here
+    // rather than overwriting Main!C so the user's existing formula chain
+    // (AttInput -> Tally -> Main!F -> Main!C) keeps working unchanged.
+    [MaxLength(64)]
+    public string? AttInputTabName { get; set; }
+
+    // Fallback Entry Type for snapshots / window posts that have no linked
+    // event with an AttInputEntryType set. Examples: "Misc Camp", "Kill".
+    [MaxLength(32)]
+    public string? AttInputDefaultEntryType { get; set; }
+
+    // Per-LS override of the ManualPoints tab name. Default is "ManualPoints".
+    // Each DKP audit appends a new column to this tab; the cell at the
+    // member's row gets the audit amount.
+    [MaxLength(64)]
+    public string? ManualPointsTabName { get; set; }
+
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 
     public ICollection<Event> Events { get; set; } = new List<Event>();

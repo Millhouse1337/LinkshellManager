@@ -49,8 +49,11 @@
                 </div>
               </div>
               @if (group.latest.imagePath) {
-                <a class="tod-image-thumb" [href]="group.latest.imagePath" target="_blank" rel="noopener">
-                  <img [src]="group.latest.imagePath" alt="ToD screenshot" />
+                <a class="tod-image-thumb"
+                   href="#"
+                   (click)="openTodImage($event, group.latest.imagePath)"
+                   rel="noopener">
+                  <img [src]="displayImagePath(group.latest.imagePath)" alt="ToD screenshot" />
                 </a>
               }
               <div class="tod-entry-actions">
@@ -246,7 +249,7 @@
                     <span class="form-label">Screenshot (optional)</span>
                     @if (todImagePath) {
                       <div class="tod-image-preview">
-                        <img [src]="todImagePath" alt="ToD screenshot" />
+                        <img [src]="displayImagePath(todImagePath)" alt="ToD screenshot" />
                         <button type="button" class="btn sm danger-outline" (click)="removeTodImage()">Remove image</button>
                       </div>
                     } @else {

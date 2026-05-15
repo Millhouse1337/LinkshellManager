@@ -68,6 +68,9 @@ public sealed class LinkshellSheetController : Controller
             ConnectedGoogleEmail = linkshell.GoogleOAuthUserEmail,
             ConnectedAt = linkshell.GoogleOAuthConnectedAt,
             SheetSyncEnabled = linkshell.SheetSyncEnabled,
+            AttInputTabName = linkshell.AttInputTabName,
+            AttInputDefaultEntryType = linkshell.AttInputDefaultEntryType,
+            ManualPointsTabName = linkshell.ManualPointsTabName,
         };
     }
 
@@ -85,7 +88,7 @@ public sealed class LinkshellSheetController : Controller
         linkshell.SheetSyncEnabled = enabled;
         await _db.SaveChangesAsync(cancellationToken);
         TempData["SheetConfigSuccess"] = enabled
-            ? "Live sync to the sheet is now ENABLED. DKP changes will update column C of matching rows."
+            ? "Live sync to the sheet is now ENABLED. Attendance + DKP audits append to AttInput / ManualPoints; column C is never overwritten."
             : "Live sync to the sheet is now DISABLED. The sheet won't be touched.";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
@@ -161,7 +164,12 @@ public sealed class LinkshellSheetController : Controller
 
     [HttpPost("/linkshells/{linkshellId:int}/sheet/config")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveConfig(int linkshellId, [FromForm] string? spreadsheetId, [FromForm] string? tabName)
+    public async Task<IActionResult> SaveConfig(int linkshellId,
+        [FromForm] string? spreadsheetId,
+        [FromForm] string? tabName,
+        [FromForm] string? attInputTabName,
+        [FromForm] string? attInputDefaultEntryType,
+        [FromForm] string? manualPointsTabName)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -172,13 +180,12 @@ public sealed class LinkshellSheetController : Controller
 
         linkshell.GoogleSpreadsheetId = string.IsNullOrWhiteSpace(spreadsheetId) ? null : spreadsheetId.Trim();
         linkshell.GoogleSheetTabName = string.IsNullOrWhiteSpace(tabName) ? null : tabName.Trim();
+        linkshell.AttInputTabName = string.IsNullOrWhiteSpace(attInputTabName) ? null : attInputTabName.Trim();
+        linkshell.AttInputDefaultEntryType = string.IsNullOrWhiteSpace(attInputDefaultEntryType) ? null : attInputDefaultEntryType.Trim();
+        linkshell.ManualPointsTabName = string.IsNullOrWhiteSpace(manualPointsTabName) ? null : manualPointsTabName.Trim();
 
         await _db.SaveChangesAsync();
         TempData["SheetConfigSuccess"] = "Google Sheet configuration saved.";
-        if (!string.IsNullOrWhiteSpace(linkshell.GoogleSpreadsheetId) && !string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
-        {
-            await _sheetSync.EnqueueAsync(linkshellId);
-        }
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 

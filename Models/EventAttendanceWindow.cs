@@ -31,5 +31,9 @@ public class EventAttendanceWindow
 
     public double? DkpAmount { get; set; }
 
+    // Idempotency stamp for AttInput appends. Set once after a successful
+    // append so retries / reposts don't duplicate rows in the sheet.
+    public DateTime? AttInputAppendedAt { get; set; }
+
     public ICollection<AppUserEventWindow> Attendees { get; set; } = new List<AppUserEventWindow>();
 }

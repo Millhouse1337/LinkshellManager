@@ -8,7 +8,7 @@ LinkshellManager (LSManager) is a three-piece system that keeps every part of yo
 | --- | --- | --- |
 | **Web App** | `https://your-host/` (any browser) | Full management — roster, DKP, items, revenue, auctions |
 | **Discord Activity** | Inside Discord — voice channel "Activities" tray | Quick member-facing experience while everyone's already in voice |
-| **In-Game Addon** (`att`) | Ashita v3 / HorizonXI client | Live attendance, ToD capture, loot logging, event creation — without alt-tabbing |
+| **In-Game Addon** (`lsm`) | Ashita v3 / HorizonXI client | Live attendance, ToD capture, loot logging, event creation — without alt-tabbing |
 
 All three share the **same database**. Anything done on the addon shows up in the web and Discord views in seconds.
 
@@ -110,18 +110,18 @@ Same data, packaged for Discord. Launch it from any voice channel: click the **r
 2. Scroll to **Addon Tokens** → click **+ Generate pairing code**.
 3. (Optional) add a label like "Nils — desktop".
 4. The code displays with a countdown — copy it. It expires in a few minutes.
-5. In FFXI, type `/att link <code>` (see Part 3).
+5. In FFXI, type `/lsm link <code>` (see Part 3).
 
 You can also generate codes from the web app at **Configurations → Customize Linkshell → Addon Tokens**.
 
 ---
 
-## Part 3 — The In-Game Addon (`att`)
+## Part 3 — The In-Game Addon (`lsm`)
 
 A Lua addon for **Ashita v3**. Captures attendance from `/sea` results, watches chat for ToDs, and (when paired) syncs everything to LSManager in real time.
 
 ### Installation
-1. Copy the `att` folder into your Ashita installation:  `Ashita/addons/att/`.
+1. Copy the `lsm` folder into your Ashita installation:  `Ashita/addons/lsm/`.
 2. In game, load it:
    ```
    /addon load att
@@ -136,10 +136,10 @@ The pairing flow is two short commands. You only run the *server* command on fir
 
 **Step 1 — point the addon at your LSManager server**
 ```
-/att server https://your-lsmanager-host
+/lsm server https://your-lsmanager-host
 ```
 The addon probes the URL right away. You'll see one of:
-- `Server OK (HTTP 401). Use /att link <code> [1|2] to pair.` — good, ready to pair.
+- `Server OK (HTTP 401). Use /lsm link <code> [1|2] to pair.` — good, ready to pair.
 - `Probe FAILED: ...` — URL is wrong or unreachable; check spelling and that the site is up.
 
 **Step 2 — generate a pairing code on the website or Discord Activity**
@@ -149,9 +149,9 @@ The addon probes the URL right away. You'll see one of:
 
 **Step 3 — link the addon to a pearl slot**
 ```
-/att link <code>           (defaults to LS1)
-/att link <code> 1         (LS pearl slot 1 — main linkshell)
-/att link <code> 2         (LS pearl slot 2 — second linkshell)
+/lsm link <code>           (defaults to LS1)
+/lsm link <code> 1         (LS pearl slot 1 — main linkshell)
+/lsm link <code> 2         (LS pearl slot 2 — second linkshell)
 ```
 On success: `Linked to <Linkshell Name> on LS1 [optional label]`. The addon now syncs to that linkshell whenever you use the LS1 (or LS2) pearl in game.
 
@@ -159,12 +159,12 @@ You can pair **two different linkshells** — one to LS1, one to LS2 — and the
 
 ### Check your status / unlink
 ```
-/att status                List server URL and current pairings
-/att list                   Same as status
-/att unlink                 Unlink everything
-/att unlink 1               Unlink LS1 only
-/att unlink 2               Unlink LS2 only
-/att unlink all             Same as bare /att unlink
+/lsm status                List server URL and current pairings
+/lsm list                   Same as status
+/lsm unlink                 Unlink everything
+/lsm unlink 1               Unlink LS1 only
+/lsm unlink 2               Unlink LS2 only
+/lsm unlink all             Same as bare /lsm unlink
 ```
 
 ### Day-to-day commands
@@ -177,23 +177,23 @@ This opens the launcher with: action bar, attendance roster, queued events from 
 
 **Take attendance for a known event**
 ```
-/att <event-alias>            e.g.  /att kirin    /att fafnir    /att "King Behemoth"
-/att <alias> ls               Restrict to LS pearl 1
-/att <alias> ls2              Restrict to LS pearl 2
-/att <alias> h                Write to HNM log
-/att <alias> e                Write to Event log
+/lsm <event-alias>            e.g.  /lsm kirin    /lsm fafnir    /lsm "King Behemoth"
+/lsm <alias> ls               Restrict to LS pearl 1
+/lsm <alias> ls2              Restrict to LS pearl 2
+/lsm <alias> h                Write to HNM log
+/lsm <alias> e                Write to Event log
 ```
 The addon issues `/sea <area> linkshell`, waits for the result list, builds attendance, then opens the attendance window. If paired, the result also posts to the web event.
 
 **Take attendance for the current zone**
 ```
-/att                          Use current zone, no /sea scan
-/att here                     Resolve event by current zone and run it
+/lsm                          Use current zone, no /sea scan
+/lsm here                     Resolve event by current zone and run it
 ```
 
 **Take attendance everywhere**
 ```
-/att all                      /sea all linkshell — global scan
+/lsm all                      /sea all linkshell — global scan
 ```
 
 **Show composition vs. roster**
@@ -204,7 +204,7 @@ The addon issues `/sea <area> linkshell`, waits for the result list, builds atte
 
 **Help window**
 ```
-/att help
+/lsm help
 ```
 
 ### ToD capture (automatic)
@@ -217,10 +217,10 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 
 **Diagnose missed captures:**
 ```
-/att tod debug                Toggle verbose capture logging
-/att tod debug on             Force on
-/att tod debug off            Force off
-/att tod clear                Clear local capture cache
+/lsm tod debug                Toggle verbose capture logging
+/lsm tod debug on             Force on
+/lsm tod debug off            Force off
+/lsm tod clear                Clear local capture cache
 ```
 
 ### Live event flow (when paired)
@@ -228,18 +228,18 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 1. **Officer creates an event** — on web, Discord, or in-game (the launcher's *Create Event* panel).
 2. **Members sign up** — from any of the three surfaces.
 3. **Event starts** — once it's in commencement, attendance windows open.
-4. **In-game**, anyone with the addon can run `/att <alias>` or `/att here` during each window. The addon scans, builds the roster, and posts attendance to the web.
+4. **In-game**, anyone with the addon can run `/lsm <alias>` or `/lsm here` during each window. The addon scans, builds the roster, and posts attendance to the web.
 5. **Breaks** — members can flag themselves as on-break from the launcher; officers can verify or moderate.
 6. **Loot** — winners and DKP spent are recorded against the event and against the ToD if the kill was tied to one.
 7. **Event ends** — it moves to **Event History** with the full attendance ledger and loot list.
 
 ### Debug & developer commands
 ```
-/att debug          Toggle the addon debug window
-/att debugmode      Toggle verbose console logging
-/att memscan        Find the entity-list pointer (if memory broke after a patch)
-/att memdump <addr> [count]
-/att api            Dump entity manager metatable
+/lsm debug          Toggle the addon debug window
+/lsm debugmode      Toggle verbose console logging
+/lsm memscan        Find the entity-list pointer (if memory broke after a patch)
+/lsm memdump <addr> [count]
+/lsm api            Dump entity manager metatable
 /findoffset         Deep-scan for entity list
 /apidump            Dump memory API methods
 ```
@@ -251,7 +251,7 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 1. **Officer** — on the web or Discord Activity, *Events → Create Event* "Kirin", DKP 5/hr, 18 slots.
 2. **Members** — sign up from Discord Activity or web.
 3. **Raid leader** — in game, `/attend` to open the launcher and confirm the queued event is loaded.
-4. **At pop** — leader runs `/att kirin ls h` — addon does `/sea limbus_zone linkshell`, builds the attendance, posts it to the live event, writes the local HNM log file.
+4. **At pop** — leader runs `/lsm kirin ls h` — addon does `/sea limbus_zone linkshell`, builds the attendance, posts it to the live event, writes the local HNM log file.
 5. **Kirin dies** — addon auto-captures the ToD and posts it to the linked linkshell.
 6. **Loot rolls** — winners are recorded with DKP spent.
 7. **Event ends** — leader closes it on web or Discord; the event moves to *Event History*; DKP balances update on every member's profile.
@@ -263,13 +263,13 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 
 **Web** — `https://your-host/` → Dashboard → use the sidebar.
 **Discord** — voice channel → Activities → LinkshellManager → tabs along the top.
-**Addon** — `/addon load att` → `/att server <url>` → generate code on web/Discord → `/att link <code> [1|2]` → `/attend` to open the launcher.
+**Addon** — `/addon load att` → `/lsm server <url>` → generate code on web/Discord → `/lsm link <code> [1|2]` → `/attend` to open the launcher.
 
 **Most-used in-game commands:**
 - `/attend` — open the launcher
-- `/att <event>` — take attendance
-- `/att here` — attendance for current zone
-- `/att status` — show pairings
-- `/att link <code> [1|2]` — pair to a linkshell
-- `/att unlink [1|2|all]` — unpair
-- `/att help` — open the in-game help window
+- `/lsm <event>` — take attendance
+- `/lsm here` — attendance for current zone
+- `/lsm status` — show pairings
+- `/lsm link <code> [1|2]` — pair to a linkshell
+- `/lsm unlink [1|2|all]` — unpair
+- `/lsm help` — open the in-game help window

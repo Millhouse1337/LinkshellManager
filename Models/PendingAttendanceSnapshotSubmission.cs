@@ -33,5 +33,16 @@ public class PendingAttendanceSnapshotSubmission
 
     public int EntryCount { get; set; }
 
+    [MaxLength(128)]
+    public string? Name { get; set; }
+
+    // Optional association captured at submission time (e.g. a leader pre-picks
+    // the event when submitting via web). Carries through to AttendanceSnapshot
+    // on approval. ON DELETE SET NULL for the same reason as on AttendanceSnapshot.
+    public int? LinkedEventId { get; set; }
+
+    [ForeignKey(nameof(LinkedEventId))]
+    public Event? LinkedEvent { get; set; }
+
     public ICollection<PendingAttendanceSnapshotEntry> Entries { get; set; } = new List<PendingAttendanceSnapshotEntry>();
 }

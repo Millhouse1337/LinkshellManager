@@ -97,7 +97,7 @@ public sealed partial class AddonApiController
             CreatorUserId = token.IssuedToAppUserId,
             StartTime = request.StartUtc ?? nowUtc,
             DkpPerHour = request.DkpPerHour,
-            Details = string.IsNullOrWhiteSpace(request.Details) ? "Created from att addon." : request.Details.Trim(),
+            Details = string.IsNullOrWhiteSpace(request.Details) ? "Created from lsm addon." : request.Details.Trim(),
             CreationSource = "Addon",
             // Persist explicit window-count override only when the addon
             // actually picked a multi-post style. Storing >=2 keeps the
@@ -286,7 +286,11 @@ public sealed partial class AddonApiController
         }
 
         var result = await EventController.EndEventCoreAsync(_dbContext, eventEntity);
-        await _sheetSync.EnqueueAsync(eventEntity.LinkshellId, cancellationToken);
+        var windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
+        if (windowCount <= 1)
+        {
+            await _sheetSync.EnqueueEventCloseAsync(eventEntity.Id, cancellationToken);
+        }
 
         // For windowed events DkpPerHour is reused as DkpPerWindow (same column,
         // different semantic). Surface both names so the addon can format the

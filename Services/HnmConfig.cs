@@ -84,6 +84,46 @@ public static class HnmConfig
         "Goblin Shaman"
     };
 
+    // Returns true when the given name refers to a curated HNM that participates
+    // in the streamlined HNM workflow (auto-event-from-ToD, dedicated dashboard).
+    // Mirrors the union of LongWindow/Short Window/Testing sets.
+    public static bool IsTrueHnm(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var trimmed = name.Trim();
+        return LongWindowHnms.Contains(trimmed)
+            || ShortWindowHnms.Contains(trimmed)
+            || TestingHnms.Contains(trimmed);
+    }
+
+    // Canonical camp zone per HNM. Used to pre-fill Event.EventLocation when
+    // the addon's ToD post auto-creates the next-repop event. Testing monsters
+    // are intentionally absent (their EventLocation is left null and the
+    // officer can fill it in if the QA flow needs a value).
+    public static readonly Dictionary<string, string> HnmZones = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Behemoth"]       = "Behemoth's Dominion",
+        ["King Behemoth"]  = "Behemoth's Dominion",
+        ["Fafnir"]         = "Dragon's Aery",
+        ["Nidhogg"]        = "Dragon's Aery",
+        ["Adamantoise"]    = "Qufim Island",
+        ["Aspidochelone"]  = "Qufim Island",
+        ["Tiamat"]         = "Attohwa Chasm",
+        ["Jormungand"]     = "Uleguerand Range",
+        ["Vrtra"]          = "King Ranperre's Tomb",
+    };
+
+    // HNMs that rotate through a day cycle (Nidhogg D1/D2/D3 etc.). The value
+    // is the cycle length, used only to render the day indicator on the
+    // dashboard. Day numbers themselves come from Tod.DayNumber (the addon's
+    // launcher captures them via state.eventPresetDayInputs).
+    public static readonly Dictionary<string, int> HnmDayCycles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Nidhogg"]       = 3,
+        ["King Behemoth"] = 5,
+        ["Aspidochelone"] = 3,
+    };
+
     public static int GetWindowCount(string? eventName)
     {
         if (string.IsNullOrWhiteSpace(eventName)) return 1;

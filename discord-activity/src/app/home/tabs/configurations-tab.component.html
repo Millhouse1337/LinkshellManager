@@ -11,102 +11,6 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">View Linkshells</div>
-          <span class="tag default num">{{ dashboardLinkshells().length }}</span>
-        </div>
-        @if (dashboardLinkshells().length > 0) {
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Linkshell</th>
-                  <th>Rank</th>
-                  <th>Status</th>
-                  <th class="num">DKP</th>
-                  <th class="num">Members</th>
-                  <th class="num">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (link of dashboardLinkshells(); track link.id) {
-                  <tr>
-                    <td>
-                      <div class="linkshell-name-cell">
-                        <strong>{{ link.name }}</strong>
-                        @if (link.id === activity.overview()?.appUser?.primaryLinkshellId) {
-                          <span class="tag success">Primary</span>
-                        }
-                      </div>
-                    </td>
-                    <td>{{ link.rank || '—' }}</td>
-                    <td>{{ link.status || '—' }}</td>
-                    <td class="num">{{ link.linkshellDkp ?? 0 | number }}</td>
-                    <td class="num">{{ link.memberCount }}</td>
-                    <td class="num">
-                      @if (isLinkshellLeader(link.rank)) {
-                        <div class="linkshell-row-actions">
-                          @if (pendingDeleteLinkshellId === link.id) {
-                            <button type="button" class="btn sm danger-outline"
-                              [disabled]="activity.busyLinkshellId() === link.id"
-                              (click)="confirmDeleteLinkshell(link)">
-                              {{ activity.busyLinkshellId() === link.id ? 'Deleting…' : 'Confirm' }}
-                            </button>
-                            <button type="button" class="btn ghost sm"
-                              [disabled]="activity.busyLinkshellId() === link.id"
-                              (click)="cancelDeleteLinkshell()">Cancel</button>
-                          } @else if (editingLinkshellId === link.id) {
-                            <button type="button" class="btn ghost sm" (click)="cancelEditLinkshell()">Close</button>
-                          } @else {
-                            <button type="button" class="btn ghost sm" (click)="beginEditLinkshell(link)">Edit</button>
-                            <button type="button" class="btn ghost sm" (click)="requestDeleteLinkshell(link)">Delete</button>
-                          }
-                        </div>
-                      } @else {
-                        <span class="muted">—</span>
-                      }
-                    </td>
-                  </tr>
-                  @if (editingLinkshellId === link.id && isLinkshellLeader(link.rank)) {
-                    <tr class="linkshell-row-edit">
-                      <td colspan="6">
-                        <form class="inline-form" (submit)="$event.preventDefault(); saveEditLinkshell()">
-                          <label>
-                            <span>Name</span>
-                            <input type="text" name="editLinkshellName"
-                              [(ngModel)]="linkshellEditDraft.name" maxlength="64" required />
-                          </label>
-                          <label>
-                            <span>Details</span>
-                            <textarea name="editLinkshellDetails"
-                              [(ngModel)]="linkshellEditDraft.details" rows="2"
-                              placeholder="Brief description, focus, or schedule"></textarea>
-                          </label>
-                          <div class="inline-form__actions" style="justify-content:flex-end">
-                            <button type="button" class="btn ghost sm"
-                              (click)="cancelEditLinkshell()"
-                              [disabled]="activity.busyLinkshellId() === link.id">Cancel</button>
-                            <button type="submit" class="btn primary sm"
-                              [disabled]="activity.busyLinkshellId() === link.id || !linkshellEditDraft.name.trim()">
-                              {{ activity.busyLinkshellId() === link.id ? 'Saving…' : 'Save changes' }}
-                            </button>
-                          </div>
-                        </form>
-                      </td>
-                    </tr>
-                  }
-                }
-              </tbody>
-            </table>
-          </div>
-        } @else {
-          <div class="empty-state empty-state--compact">
-            <div class="empty-state-desc">You're not a member of any linkshells yet.</div>
-          </div>
-        }
-      </div>
-
       @if (dashboardLinkshells().length > 1) {
         <div class="card">
           <div class="card-head">
@@ -212,23 +116,28 @@
                 </label>
               </div>
 
-              @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
-                <label class="customize-form__field" style="margin-top:18px">
-                  <span style="font-weight:600;font-size:13px;color:var(--fg)">DKP rounding increment</span>
-                  <select name="dkpRoundingIncrementDraft"
-                    [ngModel]="customizeDraft.dkpRoundingIncrement"
-                    (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
-                    <option value="Quarter">Nearest Quarter (0.25)</option>
-                    <option value="Half">Nearest Half (0.5)</option>
-                  </select>
-                </label>
-              }
             </div>
 
-            <div class="customize-form__section">
-              <strong>Feature toggles</strong>
-              <p class="muted">Hide sections your linkshell doesn't use.</p>
-              <div class="customize-form__toggles">
+            <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+              @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
+                <div class="customize-form__section" style="flex:0 0 260px">
+                  <strong>DKP rounding increment</strong>
+                  <p class="muted">Rounds earned DKP to the nearest increment.</p>
+                  <label class="customize-form__field">
+                    <select name="dkpRoundingIncrementDraft"
+                      [ngModel]="customizeDraft.dkpRoundingIncrement"
+                      (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
+                      <option value="Quarter">Nearest Quarter (0.25)</option>
+                      <option value="Half">Nearest Half (0.5)</option>
+                    </select>
+                  </label>
+                </div>
+              }
+
+              <div class="customize-form__section" style="flex:1 1 360px;min-width:280px">
+                <strong>Feature toggles</strong>
+                <p class="muted">Hide sections your linkshell doesn't use.</p>
+                <div class="customize-form__toggles">
                 <label class="customize-form__toggle">
                   <input type="checkbox" name="enableEndgameDraft"
                     [ngModel]="customizeDraft.enableEndgame"
@@ -283,6 +192,7 @@
                     (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
                   <span>Revenue tile on dashboard</span>
                 </label>
+              </div>
               </div>
             </div>
 
@@ -437,9 +347,9 @@
       <div class="card" (mouseenter)="loadAddonTokensForCurrent()">
         <div class="card-head">
           <div>
-            <div class="card-title">Game Addon (att)</div>
+            <div class="card-title">Game Addon (lsm)</div>
             <p class="muted" style="font-size:12px;margin:4px 0 0">
-              Generate a one-time pairing code, then in FFXI type <code>/att link &lt;code&gt;</code>
+              Generate a one-time pairing code, then in FFXI type <code>/lsm link &lt;code&gt;</code>
               to connect the addon to this linkshell.
             </p>
           </div>
@@ -522,7 +432,7 @@
       </div>
       <div class="addon-modal-body">
         <!--
-          Slot picker replaces the old free-text label. The att addon
+          Slot picker replaces the old free-text label. The lsm addon
           binds each pairing to either LS1 or LS2 (the two equipped
           linkpearl slots in FFXI); offering an arbitrary text label
           allowed users to type strings the addon couldn't act on. Now
@@ -550,7 +460,7 @@
           <div class="addon-modal-code">
             <div class="addon-modal-code__value">{{ addonGeneratedCode }}</div>
             <div class="muted" style="font-size:12px;margin-top:6px">
-              Expires in {{ addonCountdownLabel }}. In FFXI: <code>/att link &lt;code&gt;</code>
+              Expires in {{ addonCountdownLabel }}. In FFXI: <code>/lsm link &lt;code&gt;</code>
             </div>
           </div>
         }

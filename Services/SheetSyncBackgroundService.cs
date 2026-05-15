@@ -1,10 +1,12 @@
-using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Options;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace LinkshellManagerDiscordApp.Services;
 
+// Drains the SheetSyncQueue and dispatches AttInput append jobs to the
+// AttInputAppendService. Preserves the debounce + retry-with-backoff +
+// invalid-grant -> mark-disconnected scaffolding the old per-row sync had,
+// but the body of work is now "append rows to AttInput" not "overwrite Main!C".
 public sealed class SheetSyncBackgroundService : BackgroundService
 {
     private readonly SheetSyncQueue _queue;
@@ -26,7 +28,11 @@ public sealed class SheetSyncBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var pending = new HashSet<int>();
+        // Coalesce jobs that arrive within the debounce window so a busy
+        // event-end (many windows + close in quick succession) collapses
+        // into a single drain pass. Jobs are deduplicated by (kind, id) so
+        // double-enqueues don't translate to duplicate API calls.
+        var pending = new HashSet<SheetSyncJob>();
         var debounce = TimeSpan.FromSeconds(Math.Max(1, _options.DebounceSeconds));
 
         while (!stoppingToken.IsCancellationRequested)
@@ -50,13 +56,13 @@ public sealed class SheetSyncBackgroundService : BackgroundService
                 }
                 catch (OperationCanceledException) when (coalesceCts.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
                 {
-                    // Debounce window elapsed - flush pending IDs.
+                    // Debounce window elapsed - flush pending jobs.
                 }
 
-                foreach (var linkshellId in pending)
+                foreach (var job in pending)
                 {
                     if (stoppingToken.IsCancellationRequested) break;
-                    await TrySyncAsync(linkshellId, stoppingToken);
+                    await TryRunJobAsync(job, stoppingToken);
                 }
                 pending.Clear();
             }
@@ -72,10 +78,10 @@ public sealed class SheetSyncBackgroundService : BackgroundService
         }
     }
 
-    private async Task TrySyncAsync(int linkshellId, CancellationToken cancellationToken)
+    private async Task TryRunJobAsync(SheetSyncJob job, CancellationToken cancellationToken)
     {
         var attempt = 0;
-        var maxAttempts = 4;
+        const int maxAttempts = 4;
         var delay = TimeSpan.FromSeconds(2);
 
         while (attempt < maxAttempts)
@@ -83,7 +89,7 @@ public sealed class SheetSyncBackgroundService : BackgroundService
             attempt++;
             try
             {
-                await SyncAsync(linkshellId, cancellationToken);
+                await RunJobAsync(job, cancellationToken);
                 return;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -92,116 +98,47 @@ public sealed class SheetSyncBackgroundService : BackgroundService
             }
             catch (GoogleOAuthRevokedException ex)
             {
-                _logger.LogWarning(ex, "Refresh token rejected for linkshell {LinkshellId}; marking disconnected.", linkshellId);
+                _logger.LogWarning(ex, "Refresh token rejected during {Kind} job {Id}; marking disconnected.", job.Kind, job.TargetId);
                 using var scope = _scopeFactory.CreateScope();
                 var oauth = scope.ServiceProvider.GetRequiredService<GoogleOAuthService>();
-                try { await oauth.MarkDisconnectedAsync(linkshellId, cancellationToken); } catch (Exception clearEx) { _logger.LogWarning(clearEx, "Failed to clear OAuth state for linkshell {LinkshellId}.", linkshellId); }
+                try { await oauth.MarkDisconnectedAsync(ex.LinkshellId, cancellationToken); }
+                catch (Exception clearEx) { _logger.LogWarning(clearEx, "Failed to clear OAuth state for linkshell {LinkshellId}.", ex.LinkshellId); }
                 return;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Sheets sync attempt {Attempt}/{Max} failed for linkshell {LinkshellId}.", attempt, maxAttempts, linkshellId);
+                _logger.LogWarning(ex, "AttInput append attempt {Attempt}/{Max} failed for {Kind} job {Id}.", attempt, maxAttempts, job.Kind, job.TargetId);
                 if (attempt >= maxAttempts) break;
                 try { await Task.Delay(delay, cancellationToken); } catch (OperationCanceledException) { return; }
                 delay = TimeSpan.FromSeconds(Math.Min(60, delay.TotalSeconds * 2));
             }
         }
 
-        _logger.LogError("Sheets sync giving up after {Max} attempts for linkshell {LinkshellId}.", maxAttempts, linkshellId);
+        _logger.LogError("AttInput append giving up after {Max} attempts for {Kind} job {Id}.", maxAttempts, job.Kind, job.TargetId);
     }
 
-    private async Task SyncAsync(int linkshellId, CancellationToken cancellationToken)
+    private async Task RunJobAsync(SheetSyncJob job, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var sheets = scope.ServiceProvider.GetRequiredService<GoogleSheetsSyncService>();
 
-        if (!sheets.IsConfigured)
+        switch (job.Kind)
         {
-            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: Google Sheets not configured.", linkshellId);
-            return;
+            case SheetSyncJobKind.Snapshot:
+                await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
+                    .AppendSnapshotAsync(job.TargetId, cancellationToken);
+                break;
+            case SheetSyncJobKind.EventWindow:
+                await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
+                    .AppendEventWindowAsync(job.TargetId, cancellationToken);
+                break;
+            case SheetSyncJobKind.EventClose:
+                await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
+                    .AppendEventCloseAsync(job.TargetId, cancellationToken);
+                break;
+            case SheetSyncJobKind.DkpAudit:
+                await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
+                    .AppendAuditAsync(job.TargetId, cancellationToken);
+                break;
         }
-
-        var linkshell = await db.Linkshells
-            .AsNoTracking()
-            .FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
-
-        if (linkshell is null)
-        {
-            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: not found.", linkshellId);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(linkshell.GoogleSpreadsheetId))
-        {
-            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: no spreadsheet configured.", linkshellId);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
-        {
-            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: no Google account connected.", linkshellId);
-            return;
-        }
-
-        if (!linkshell.SheetSyncEnabled)
-        {
-            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: sync disabled in settings.", linkshellId);
-            return;
-        }
-
-        var members = await db.AppUserLinkshells
-            .AsNoTracking()
-            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null)
-            .Select(m => new { m.CharacterName, m.LinkshellDkp })
-            .ToListAsync(cancellationToken);
-
-        if (members.Count == 0)
-        {
-            _logger.LogDebug("Skipping sync for linkshell {LinkshellId}: no members to push.", linkshellId);
-            return;
-        }
-
-        var tab = string.IsNullOrWhiteSpace(linkshell.GoogleSheetTabName) ? _options.DefaultTabName : linkshell.GoogleSheetTabName;
-
-        // Read the sheet's column B to discover which row each member sits on.
-        // Per-row update only: we never clear, add, or remove rows. The leader
-        // owns the sheet's roster shape; we only touch column C values for
-        // names we can find.
-        var nameColumnRange = $"{tab}!B1:B500";
-        var nameColumn = await sheets.ReadAsync(linkshellId, linkshell.GoogleSpreadsheetId, nameColumnRange, unformatted: false, cancellationToken)
-                        ?? new List<IList<object>>();
-
-        var rowByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < nameColumn.Count; i++)
-        {
-            var cellRow = nameColumn[i];
-            if (cellRow == null || cellRow.Count == 0) continue;
-            var name = cellRow[0]?.ToString()?.Trim();
-            if (string.IsNullOrEmpty(name)) continue;
-            if (string.Equals(name, "TOTAL", StringComparison.OrdinalIgnoreCase)) continue;
-            // i is 0-indexed within the range starting at row 1, so the sheet row number is i + 1.
-            if (!rowByName.ContainsKey(name)) rowByName[name] = i + 1;
-        }
-
-        var updates = 0;
-        var skipped = 0;
-        foreach (var member in members)
-        {
-            var name = member.CharacterName?.Trim();
-            if (string.IsNullOrEmpty(name)) continue;
-            if (!rowByName.TryGetValue(name, out var rowNumber))
-            {
-                skipped++;
-                continue;
-            }
-            var cellRange = $"{tab}!C{rowNumber}";
-            var dkpValue = member.LinkshellDkp ?? 0d;
-            await sheets.WriteAsync(linkshellId, linkshell.GoogleSpreadsheetId, cellRange,
-                new List<IList<object>> { new List<object> { dkpValue } }, cancellationToken);
-            updates++;
-        }
-
-        _logger.LogInformation("Per-row sync for linkshell {LinkshellId}: updated {Updates} cells, skipped {Skipped} members not on sheet.", linkshellId, updates, skipped);
     }
 }

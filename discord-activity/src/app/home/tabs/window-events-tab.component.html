@@ -1,0 +1,154 @@
+<div class="panel-tab fade">
+  <div class="section-head">
+    <div>
+      <div class="section-label">Attendance</div>
+      <div class="section-title">Window Events</div>
+    </div>
+    <button type="button" class="btn sm" (click)="windows.load(primaryLinkshellId())" [disabled]="windows.busy()">Refresh</button>
+  </div>
+
+  @if (data(); as model) {
+    @if (model.unlinkedSnapshots.length > 0) {
+      <section class="card">
+        <div class="card-head"><div class="card-title">Unlinked Snapshots</div></div>
+        @for (snapshot of model.unlinkedSnapshots; track snapshot.id) {
+          <details class="window-row">
+            <summary>
+              <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
+              <span>Posted by {{ snapshot.capturedByCharacterName || '-' }}</span>
+              <span>{{ snapshot.entryCount }} members</span>
+            </summary>
+            @if (model.canManage) {
+              <div class="window-actions">
+                <input type="text" [ngModel]="attachName(snapshot)" (ngModelChange)="setAttachName(snapshot.id, $event)" placeholder="Monster name" />
+                <button type="button" class="btn sm" (click)="attachByName(snapshot)">Create / attach</button>
+                @if (model.openEvents.length > 0) {
+                  <select #existingEvent>
+                    @for (event of model.openEvents; track event.id) {
+                      <option [value]="event.id">{{ event.name || 'Window Event' }}</option>
+                    }
+                  </select>
+                  <button type="button" class="btn sm" (click)="attachExisting(snapshot, +existingEvent.value)">Attach existing</button>
+                }
+                <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
+              </div>
+            }
+            <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
+          </details>
+        }
+      </section>
+    }
+
+    @if (model.openEvents.length === 0 && model.unlinkedSnapshots.length === 0) {
+      <section class="card">
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">No Window Events yet.</div>
+        </div>
+      </section>
+    }
+
+    @for (event of model.openEvents; track event.id) {
+      <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: false, model: model }" />
+    }
+
+    @if (model.closedEvents.length > 0) {
+      <section class="card">
+        <div class="card-head"><div class="card-title">Closed Window Events</div></div>
+        @for (event of model.closedEvents; track event.id) {
+          <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: true, model: model }" />
+        }
+      </section>
+    }
+  } @else {
+    <section class="card">
+      <div class="empty-state empty-state--compact">
+        <div class="empty-state-desc">Loading Window Events...</div>
+      </div>
+    </section>
+  }
+</div>
+
+<ng-template #eventCard let-event="event" let-closed="closed" let-model="model">
+  <details class="card window-event-card" open>
+    <summary>
+      <strong>{{ event.name || 'Window Event' }}</strong>
+      <span>{{ formatDate(event.firstCapturedAtUtc) }}</span>
+      <span>{{ event.combinedMemberCount }} unique</span>
+      <span>{{ event.snapshotCount }} snapshots</span>
+      @if (event.duplicateSnapshotCount > 0) {
+        <span class="status-pill warn">{{ event.duplicateSnapshotCount }} review</span>
+      }
+      @if (closed) {
+        <span class="status-pill">Closed</span>
+      }
+    </summary>
+
+    @if (model.canManage) {
+      <div class="window-actions">
+        <input type="text" [ngModel]="renameDraft(event)" (ngModelChange)="setRenameDraft(event.id, $event)" />
+        <button type="button" class="btn sm" (click)="rename(event)">Rename</button>
+        @if (closed) {
+          <button type="button" class="btn sm" (click)="reopen(event)">Reopen</button>
+        } @else {
+          <button type="button" class="btn sm ghost" (click)="close(event)">Close</button>
+        }
+      </div>
+    }
+
+    <div class="subhead">Combined roster</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Character</th><th>Jobs</th><th>Zone</th><th>Snapshots</th></tr></thead>
+        <tbody>
+          @for (member of event.combinedMembers; track member.characterName) {
+            <tr>
+              <td><strong>{{ member.characterName }}</strong></td>
+              <td>{{ jobs(member) }}</td>
+              <td>{{ member.zone || '-' }}</td>
+              <td>{{ member.snapshotCount }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subhead">Posted snapshots</div>
+    @for (snapshot of event.snapshots; track snapshot.id) {
+      <details class="window-row">
+        <summary>
+          <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
+          <span>Posted by {{ snapshot.capturedByCharacterName || '-' }}</span>
+          <span>{{ snapshot.entryCount }} members</span>
+          @if (snapshot.snapshotStatus !== 'Active') {
+            <span class="status-pill warn">{{ snapshot.snapshotStatus }}</span>
+          }
+        </summary>
+        @if (model.canManage) {
+          <div class="window-actions">
+            <button type="button" class="btn sm" (click)="setSnapshotStatus(snapshot, 'Active')" [disabled]="snapshot.snapshotStatus === 'Active'">Use</button>
+            <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Duplicate')">Mark duplicate</button>
+            <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
+          </div>
+        }
+        <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
+      </details>
+    }
+  </details>
+</ng-template>
+
+<ng-template #snapshotTable let-snapshot="snapshot">
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Character</th><th>Jobs</th><th>Zone</th></tr></thead>
+      <tbody>
+        @for (entry of snapshot.entries; track entry.characterName) {
+          <tr>
+            <td><strong>{{ entry.characterName }}</strong></td>
+            <td>{{ jobs(entry) }}</td>
+            <td>{{ entry.zone || '-' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>

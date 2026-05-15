@@ -21,11 +21,19 @@ public sealed class SubmissionApprovalService
 {
     private readonly ApplicationDbContext _db;
     private readonly SheetSyncQueue _sheetSync;
+    private readonly HnmAutoEventService _hnmAutoEvent;
+    private readonly ILogger<SubmissionApprovalService> _logger;
 
-    public SubmissionApprovalService(ApplicationDbContext db, SheetSyncQueue sheetSync)
+    public SubmissionApprovalService(
+        ApplicationDbContext db,
+        SheetSyncQueue sheetSync,
+        HnmAutoEventService hnmAutoEvent,
+        ILogger<SubmissionApprovalService> logger)
     {
         _db = db;
         _sheetSync = sheetSync;
+        _hnmAutoEvent = hnmAutoEvent;
+        _logger = logger;
     }
 
     // ---------- Queue: submission entry points ----------
@@ -103,6 +111,7 @@ public sealed class SubmissionApprovalService
             CapturedByCharacterName = input.CapturedByCharacterName?.Trim(),
             UtcOffset = input.UtcOffset?.Trim(),
             EntryCount = (input.Entries?.Count) ?? 0,
+            Name = string.IsNullOrWhiteSpace(input.Name) ? null : input.Name.Trim(),
         };
 
         foreach (var entry in input.Entries ?? Enumerable.Empty<SnapshotEntryInput>())
@@ -177,6 +186,21 @@ public sealed class SubmissionApprovalService
         await _db.SaveChangesAsync(cancellationToken);
 
         await _sheetSync.EnqueueAsync(pending.LinkshellId, cancellationToken);
+
+        // Streamlined HNM workflow: mirror the immediate-addon path so an
+        // approved member-submitted ToD also kicks off auto-event creation
+        // when the captured monster is a tracked HNM. Failures here are
+        // logged but don't roll back the approval -- the materialized Tod
+        // is the contract of this method.
+        try
+        {
+            await _hnmAutoEvent.CreateAutoEventForTodAsync(tod.Id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HNM auto-event creation failed for approved tod {TodId}.", tod.Id);
+        }
+
         return ApprovalResult.Approved;
     }
 
@@ -318,6 +342,8 @@ public sealed class SubmissionApprovalService
             UtcOffset = pending.UtcOffset,
             EntryCount = pending.Entries.Count,
             CreatedAtUtc = DateTime.UtcNow,
+            Name = pending.Name,
+            LinkedEventId = pending.LinkedEventId,
         };
         _db.AttendanceSnapshots.Add(snapshot);
         await _db.SaveChangesAsync(cancellationToken);
@@ -399,6 +425,6 @@ public sealed record AttendanceWindowSubmissionInput(int EventId, int WindowInde
 
 public sealed record AttendanceWindowMemberInput(string CharacterName, string? MainJob, int? MainJobLevel, string? SubJob, int? SubJobLevel);
 
-public sealed record SnapshotSubmissionInput(DateTime CapturedAtUtc, string? CapturedByCharacterName, string? UtcOffset, IReadOnlyList<SnapshotEntryInput>? Entries);
+public sealed record SnapshotSubmissionInput(DateTime CapturedAtUtc, string? CapturedByCharacterName, string? UtcOffset, IReadOnlyList<SnapshotEntryInput>? Entries, string? Name = null);
 
 public sealed record SnapshotEntryInput(string CharacterName, string? MainJob, int? MainJobLevel, string? SubJob, int? SubJobLevel, string? Zone);

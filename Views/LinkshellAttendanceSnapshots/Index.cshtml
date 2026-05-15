@@ -7,7 +7,7 @@
     <div>
         <h1 class="page-title">Attendance Snapshots</h1>
         <div class="page-sub">
-            <span>Point-in-time alliance rosters captured from the ATT addon</span>
+            <span>Point-in-time alliance rosters captured from the LSM addon</span>
             @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
             {
                 <span class="dot"> · </span>
@@ -24,7 +24,7 @@
             <div class="card-title">No snapshots yet</div>
         </div>
         <div class="empty" style="padding:16px">
-            Run <code>/att now</code> in-game while in an alliance to capture a snapshot. It'll appear here within a few seconds.
+            Run <code>/lsm now</code> in-game while in an alliance to capture a snapshot. It'll appear here within a few seconds.
         </div>
     </div>
 }
@@ -37,18 +37,89 @@ else
         <div style="padding:0 0 8px 0">
             @foreach (var s in Model.Snapshots)
             {
-                var capturedDisplay = s.CapturedAtUtc.ToString("yyyy-MM-dd HH:mm");
                 var zoneLine = string.IsNullOrWhiteSpace(s.PrimaryZone) ? "—" : s.PrimaryZone!;
                 var byLine = string.IsNullOrWhiteSpace(s.CapturedByCharacterName) ? "(unknown)" : s.CapturedByCharacterName!;
                 <details style="border-top:1px solid var(--border,#222)">
                     <summary style="padding:10px 16px;cursor:pointer;list-style:revert">
-                        <strong>@capturedDisplay</strong>
-                        <span style="color:var(--fg-muted,#888)"> UTC</span>
+                        @if (!string.IsNullOrWhiteSpace(s.Name))
+                        {
+                            <strong style="font-size:15px">@s.Name</strong>
+                            <span style="color:var(--fg-muted,#888)"> · </span>
+                        }
+                        <strong>@s.CapturedAtUtcDisplay</strong>
+                        @if (!string.IsNullOrWhiteSpace(s.CapturedAtLocalDisplay))
+                        {
+                            <span style="color:#4ade80;margin-left:6px">[@s.CapturedAtLocalDisplay]</span>
+                        }
                         <span style="color:var(--fg-muted,#888)"> · </span>
                         <span>Captured by <strong>@byLine</strong></span>
                         <span style="color:var(--fg-muted,#888)"> · </span>
                         <span>@s.EntryCount member@(s.EntryCount == 1 ? "" : "s") in @zoneLine</span>
+                        @if (s.LinkedEventId.HasValue)
+                        {
+                            <span style="color:var(--fg-muted,#888)"> · </span>
+                            <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(96,165,250,0.15);color:#60a5fa;font-size:12px">
+                                Event: @(s.LinkedEventName ?? $"#{s.LinkedEventId}")@(s.LinkedEventIsLive ? " (LIVE)" : "")
+                            </span>
+                        }
+                        else
+                        {
+                            <span style="color:var(--fg-muted,#888)"> · </span>
+                            <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:12px">Not linked</span>
+                        }
                     </summary>
+                    @if (Model.CanRename)
+                    {
+                        <form asp-action="Rename" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@s.Id" method="post" style="padding:6px 16px 0 32px;display:flex;gap:6px;align-items:center">
+                            @Html.AntiForgeryToken()
+                            <label style="font-size:12px;color:var(--fg-muted,#888)">Name</label>
+                            <input type="text" name="name" value="@s.Name" maxlength="128" placeholder="(unnamed)" style="flex:1;max-width:320px" />
+                            <button type="submit" class="btn sm">Save</button>
+                        </form>
+                    }
+                    @if (Model.CanManageEvents)
+                    {
+                        if (s.LinkedEventId.HasValue)
+                        {
+                            <form asp-action="Unlink" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@s.Id" method="post" style="padding:6px 16px 0 32px">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn sm ghost">Unlink from event</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <div style="padding:6px 16px 0 32px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+                                @* Link to an existing queued or live event. Disabled when there's nothing to pick. *@
+                                <form asp-action="Link" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@s.Id" method="post" style="display:flex;gap:6px;align-items:center">
+                                    @Html.AntiForgeryToken()
+                                    <label style="font-size:12px;color:var(--fg-muted,#888)">Link to event</label>
+                                    <select name="eventId" @(Model.SelectableEvents.Count == 0 ? "disabled" : "")>
+                                        @if (Model.SelectableEvents.Count == 0)
+                                        {
+                                            <option value="">(no queued or live events)</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="">-- select event --</option>
+                                            @foreach (var opt in Model.SelectableEvents)
+                                            {
+                                                <option value="@opt.Id">@opt.Name@(opt.IsLive ? " (LIVE)" : "")</option>
+                                            }
+                                        }
+                                    </select>
+                                    <button type="submit" class="btn sm" @(Model.SelectableEvents.Count == 0 ? "disabled" : "")>Link</button>
+                                </form>
+                                @* Quick-create event — single name field; server defaults the rest. *@
+                                <form asp-action="QuickCreateEvent" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@s.Id" method="post" style="display:flex;gap:6px;align-items:center">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="primaryZone" value="@s.PrimaryZone" />
+                                    <label style="font-size:12px;color:var(--fg-muted,#888)">Quick-create event</label>
+                                    <input type="text" name="name" placeholder="Event name" maxlength="64" required style="min-width:180px" />
+                                    <button type="submit" class="btn sm">Create</button>
+                                </form>
+                            </div>
+                        }
+                    }
                     <div style="padding:8px 16px 16px 32px;overflow-x:auto">
                         <table style="width:100%;max-width:780px;border-collapse:collapse;font-size:13px">
                             <thead>

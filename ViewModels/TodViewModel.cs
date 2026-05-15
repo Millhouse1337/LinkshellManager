@@ -89,4 +89,6 @@ public class TodTableRowViewModel
     public bool? Claim { get; init; }
 
     public int LootCount { get; init; }
+
+    public string? ImagePath { get; init; }
 }

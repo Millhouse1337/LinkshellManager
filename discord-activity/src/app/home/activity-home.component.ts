@@ -11,8 +11,10 @@ import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
+import { HnmTabComponent } from './tabs/hnm-tab.component';
 import { LinkshellTabComponent } from './tabs/linkshell-tab.component';
 import { TodsTabComponent } from './tabs/tods-tab.component';
+import { WindowEventsTabComponent } from './tabs/window-events-tab.component';
 import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.component';
 
 @Component({
@@ -24,9 +26,11 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     ConfigurationsTabComponent,
     DashboardTabComponent,
     EventsTabComponent,
+    HnmTabComponent,
     LinkshellTabComponent,
     LootHistoryPanelComponent,
-    TodsTabComponent
+    TodsTabComponent,
+    WindowEventsTabComponent
   ],
   templateUrl: './activity-home.component.html',
   styleUrl: './activity-home.component.scss',

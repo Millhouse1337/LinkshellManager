@@ -340,7 +340,7 @@ public sealed partial class AddonApiController
             }
         }
 
-        var verifiedBy = (token.Label ?? "att-addon") + " (att)";
+        var verifiedBy = (token.Label ?? "lsm-addon") + " (lsm)";
 
         var matched = 0;
         var alreadyVerified = 0;
@@ -569,6 +569,14 @@ public sealed partial class AddonApiController
 
         var ledgerIds = pendingLedgers.Select(l => l.Id).ToList();
 
+        // Fire-and-forget AttInput append for this window. Skipped silently
+        // when sheet integration is disabled, AttInputEntryType is null, or
+        // the window has already been appended (idempotency stamp).
+        if (attendanceWindow is not null)
+        {
+            await _sheetSync.EnqueueEventWindowAsync(attendanceWindow.Id, cancellationToken);
+        }
+
         return Ok(new
         {
             matched,
@@ -727,7 +735,7 @@ public sealed partial class AddonApiController
             OccurredAt = nowUtc,
             RequiresVerification = false,
             VerifiedAt = nowUtc,
-            VerifiedBy = (token.Label ?? "att-addon") + " (self-join)",
+            VerifiedBy = (token.Label ?? "lsm-addon") + " (self-join)",
             Source = AddonSource
         });
 
@@ -979,12 +987,18 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        // Normalize the optional day cycle number. 0 / negative -> null so the
+        // auto-event helpers don't render "Nidhogg D0".
+        var dayNumber = request.DayNumber.HasValue && request.DayNumber.Value > 0
+            ? request.DayNumber
+            : null;
+
         if (!canManage)
         {
             var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
             var input = new TodSubmissionInput(
                 monsterName,
-                null,
+                dayNumber,
                 claimed,
                 defeatedAtUtc,
                 cooldown,
@@ -1000,7 +1014,7 @@ public sealed partial class AddonApiController
         {
             LinkshellId = token.LinkshellId,
             MonsterName = monsterName,
-            DayNumber = null,
+            DayNumber = dayNumber,
             Claim = claimed,
             Time = defeatedAtUtc,
             Cooldown = cooldown,
@@ -1015,6 +1029,20 @@ public sealed partial class AddonApiController
         _dbContext.Tods.Add(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Streamlined HNM workflow: queue the next-repop event automatically
+        // when the captured monster is a tracked HNM. Failures here must not
+        // bubble up -- the ToD itself is the contract of this endpoint, the
+        // auto-event is a downstream convenience.
+        int? autoEventId = null;
+        try
+        {
+            autoEventId = await _hnmAutoEvent.CreateAutoEventForTodAsync(tod.Id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "HNM auto-event creation failed for tod {TodId}.", tod.Id);
+        }
+
         return Ok(new
         {
             todId = tod.Id,
@@ -1023,7 +1051,8 @@ public sealed partial class AddonApiController
             repopTimeUtc = tod.RepopTime,
             cooldown = tod.Cooldown,
             interval = tod.Interval,
-            claim = tod.Claim
+            claim = tod.Claim,
+            autoEventId
         });
     }
 

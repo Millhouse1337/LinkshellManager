@@ -99,7 +99,7 @@ else
             <div style="padding:12px 16px">
                 @if (Model.SheetSyncEnabled)
                 {
-                    <p>DKP changes in the app update column C of the matching row in your sheet. Per-row updates only — rows for characters not in the app are never touched, added, or removed.</p>
+                    <p>The app appends rows to your <code>AttInput</code> tab (attendance + window posts + event close) and new columns to your <code>ManualPoints</code> tab (one column per DKP audit). Your <code>Main</code> tab formulas roll the totals up automatically — column C is never overwritten.</p>
                     <form asp-action="ToggleSync" asp-route-linkshellId="@Model.LinkshellId" method="post">
                         <input type="hidden" name="enabled" value="false" />
                         <button type="submit" class="btn" onclick="return confirm('Disable live sync? The sheet will stop receiving DKP updates.');">Disable live sync</button>
@@ -127,9 +127,24 @@ else
                     <small>The long string between <code>/d/</code> and <code>/edit</code> in the sheet URL.</small>
                 </div>
                 <div class="form-row" style="margin-top:8px">
-                    <label>Tab name (optional)</label>
+                    <label>Main tab name (optional)</label>
                     <input type="text" name="tabName" value="@Model.TabName" placeholder="Main" />
-                    <small>Defaults to <code>Main</code>. Sync writes character names in column B and DKP in column C, rows 8-200.</small>
+                    <small>Defaults to <code>Main</code>. Used for the reconciliation page's read of B7:L200.</small>
+                </div>
+                <div class="form-row" style="margin-top:8px">
+                    <label>AttInput tab name (optional)</label>
+                    <input type="text" name="attInputTabName" value="@Model.AttInputTabName" placeholder="AttInput" />
+                    <small>Defaults to <code>AttInput</code>. The app appends one row per attendee/snapshot here. Your column-C formula is never overwritten.</small>
+                </div>
+                <div class="form-row" style="margin-top:8px">
+                    <label>Default Entry Type for snapshots without a linked event (optional)</label>
+                    <input type="text" name="attInputDefaultEntryType" value="@Model.AttInputDefaultEntryType" placeholder="e.g. Misc Camp" />
+                    <small>Used for <code>/lsm now</code> snapshots when no event is linked. Examples: <code>Misc Camp</code>, <code>Kill</code>, <code>Kings Camp</code>, <code>Wyrms Camp</code>.</small>
+                </div>
+                <div class="form-row" style="margin-top:8px">
+                    <label>ManualPoints tab name (optional)</label>
+                    <input type="text" name="manualPointsTabName" value="@Model.ManualPointsTabName" placeholder="ManualPoints" />
+                    <small>Defaults to <code>ManualPoints</code>. Each DKP audit adds a new column to this tab (header = <code>M/D Audit: reason</code>, value in the affected member's row).</small>
                 </div>
                 <div style="margin-top:12px">
                     <button type="submit" class="btn">Save</button>
@@ -208,9 +223,13 @@ else
 
                         @if (preview.MissingMembers.Count > 0)
                         {
-                            <details open style="margin-top:8px">
+                            <details open style="margin-top:8px" id="missing-details">
                                 <summary>Sheet characters not yet in this linkshell — will be created as placeholders (@preview.MissingMembers.Count)</summary>
-                                <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
+                                <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap">
+                                    <input type="text" id="missing-search" placeholder="Search character name…" autocomplete="off" style="flex:1;min-width:200px;max-width:320px;padding:4px 8px" />
+                                    <span id="missing-count" style="font-size:12px;color:var(--fg-muted,#888)"></span>
+                                </div>
+                                <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px" id="missing-table">
                                     <thead><tr>
                                         <th style="text-align:left;padding:6px 10px">Character</th>
                                         <th style="text-align:right;padding:6px 10px">Sheet DKP</th>
@@ -225,7 +244,59 @@ else
                                     }
                                     </tbody>
                                 </table>
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:13px">
+                                    <button type="button" class="btn sm" id="missing-prev">‹ Prev</button>
+                                    <span id="missing-page-indicator" style="color:var(--fg-muted,#888)">Page 1 / 1</span>
+                                    <button type="button" class="btn sm" id="missing-next">Next ›</button>
+                                </div>
                             </details>
+                            <script nonce="@Html.CspNonce()">
+                                (function () {
+                                    var PAGE_SIZE = 15;
+                                    var table = document.getElementById('missing-table');
+                                    if (!table) return;
+                                    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+                                    var search = document.getElementById('missing-search');
+                                    var indicator = document.getElementById('missing-page-indicator');
+                                    var countLabel = document.getElementById('missing-count');
+                                    var prev = document.getElementById('missing-prev');
+                                    var next = document.getElementById('missing-next');
+                                    var page = 0;
+                                    var filter = '';
+
+                                    function render() {
+                                        var visible = filter
+                                            ? rows.filter(function (r) {
+                                                var cell = r.firstElementChild;
+                                                return cell && cell.textContent.toLowerCase().indexOf(filter) !== -1;
+                                            })
+                                            : rows;
+                                        var totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+                                        if (page >= totalPages) page = totalPages - 1;
+                                        if (page < 0) page = 0;
+                                        var start = page * PAGE_SIZE;
+                                        var end = start + PAGE_SIZE;
+                                        for (var i = 0; i < rows.length; i++) rows[i].style.display = 'none';
+                                        var slice = visible.slice(start, end);
+                                        for (var j = 0; j < slice.length; j++) slice[j].style.display = '';
+                                        indicator.textContent = 'Page ' + (page + 1) + ' / ' + totalPages;
+                                        countLabel.textContent = filter
+                                            ? visible.length + ' matched of ' + rows.length
+                                            : rows.length + ' total';
+                                        prev.disabled = page === 0;
+                                        next.disabled = page >= totalPages - 1;
+                                    }
+
+                                    search.addEventListener('input', function () {
+                                        filter = search.value.trim().toLowerCase();
+                                        page = 0;
+                                        render();
+                                    });
+                                    prev.addEventListener('click', function () { page--; render(); });
+                                    next.addEventListener('click', function () { page++; render(); });
+                                    render();
+                                })();
+                            </script>
                         }
 
                         <form asp-action="ImportCommit" asp-route-linkshellId="@Model.LinkshellId" method="post" style="margin-top:12px">

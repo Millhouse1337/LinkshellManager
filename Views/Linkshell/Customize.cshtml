@@ -185,7 +185,7 @@
             <div class="card-title">Game Addon (att)</div>
             <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
                 Generate a one-time pairing code, then in FFXI type
-                <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/att link &lt;code&gt;</code>
+                <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/lsm link &lt;code&gt;</code>
                 to connect the addon to this linkshell.
             </div>
         </div>
@@ -219,15 +219,44 @@
                 <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
             </div>
             <div class="mt-modal__body">
+                @* Lets the leader pick which linkshell the code is for + which
+                   in-FFXI linkpearl slot it binds to, without leaving the
+                   Customize page. Generated token's label = "Slot N" so the
+                   token list shows the slot. *@
                 <div class="field" style="margin-bottom:14px">
-                    <label for="addonPairLabel">Label (optional)</label>
-                    <input type="text" id="addonPairLabel" class="form-control" placeholder="e.g. Nils — desktop" maxlength="128" />
+                    <label for="addonPairLinkshell">Linkshell</label>
+                    <select id="addonPairLinkshell" class="form-select" style="margin-top:6px;width:100%">
+                        @foreach (var linkshell in Model.ManageableLinkshells)
+                        {
+                            if (linkshell.Id == Model.LinkshellId)
+                            {
+                                <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                            }
+                            else
+                            {
+                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="field" style="margin-bottom:14px">
+                    <label>Linkpearl slot</label>
+                    <div style="display:flex;gap:16px;margin-top:6px">
+                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="addonPairSlot" value="1" checked />
+                            <span>Slot 1</span>
+                        </label>
+                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="addonPairSlot" value="2" />
+                            <span>Slot 2</span>
+                        </label>
+                    </div>
                 </div>
                 <div id="addonPairCodeWrapper" style="display:none">
                     <div style="text-align:center;margin:12px 0">
                         <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
                         <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
-                            Expires in <span id="addonPairCountdown">10:00</span>. In FFXI: <code>/att link &lt;code&gt;</code>
+                            Expires in <span id="addonPairCountdown">10:00</span>. In FFXI: <code>/lsm link &lt;code&gt;</code>
                         </div>
                     </div>
                 </div>
@@ -649,19 +678,47 @@
                 setAddonPairError('');
                 addonPairCodeWrapper.style.display = 'none';
                 addonPairCode.textContent = '';
-                document.getElementById('addonPairLabel').value = '';
+                // Default to Slot 1 on every open. Re-enable inputs the
+                // previous generation may have locked.
+                var slotRadios = document.querySelectorAll('input[name="addonPairSlot"]');
+                slotRadios.forEach(function (r) {
+                    r.checked = (r.value === '1');
+                    r.disabled = false;
+                });
+                var lsSelect = document.getElementById('addonPairLinkshell');
+                if (lsSelect) {
+                    lsSelect.disabled = false;
+                    // Reset to the current page's linkshell each time the
+                    // modal opens; user can change it before generating.
+                    lsSelect.value = String(addonLinkshellId);
+                }
                 openModal('addonPairModal');
             });
 
             addonPairCreateBtn.addEventListener('click', function () {
                 setAddonPairError('');
                 addonPairCreateBtn.disabled = true;
-                var label = document.getElementById('addonPairLabel').value.trim();
+                var selectedSlot = document.querySelector('input[name="addonPairSlot"]:checked');
+                var slotValue = selectedSlot ? selectedSlot.value : '1';
+                // The picker lets leaders generate codes for any linkshell
+                // they manage without leaving this page; fall back to the page
+                // LS if the dropdown was somehow cleared.
+                var lsSelect = document.getElementById('addonPairLinkshell');
+                var lsId = lsSelect && lsSelect.value ? parseInt(lsSelect.value, 10) : addonLinkshellId;
+                if (!lsId) {
+                    setAddonPairError('Pick a linkshell to generate a code for.');
+                    addonPairCreateBtn.disabled = false;
+                    return;
+                }
+                // Mirror the Discord Activity: persist the chosen slot as
+                // the token label ("Slot 1" / "Slot 2") so the listing's Slot
+                // column shows which pearl each code belongs to.
+                var label = 'Slot ' + slotValue;
                 fetch('/api/addon/management/pairing-code', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: withCsrf({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ linkshellId: addonLinkshellId, label: label || null })
+                    body: JSON.stringify({ linkshellId: lsId, label: label })
                 }).then(function (res) {
                     if (!res.ok) {
                         return res.text().then(function (txt) {
@@ -676,6 +733,14 @@
                     if (!data) return;
                     addonPairCode.textContent = data.code;
                     addonPairCodeWrapper.style.display = 'block';
+                    // Lock the slot + linkshell selection once a code is
+                    // issued so the displayed code can't drift from the
+                    // label/LS saved on the token.
+                    document.querySelectorAll('input[name="addonPairSlot"]').forEach(function (r) {
+                        r.disabled = true;
+                    });
+                    var lockedLs = document.getElementById('addonPairLinkshell');
+                    if (lockedLs) lockedLs.disabled = true;
                     startCountdown((data.expiresInMinutes || 10) * 60);
                 }).catch(function () {
                     setAddonPairError('Network error generating pairing code.');

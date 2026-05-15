@@ -2,13 +2,17 @@
 @model LinkshellManagerDiscordApp.ViewModels.TodManagerViewModel
 
 @{
-    ViewData["Title"] = "Add ToD";
+    var isEditMode = (Model.Tod?.Id ?? 0) > 0;
+    var pageHeading = isEditMode ? "Edit ToD" : "Add ToD";
+    var formHeader = isEditMode ? "Update ToD" : "Submit ToD";
+    var formAction = isEditMode ? "Edit" : "Create";
+    ViewData["Title"] = pageHeading;
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
 }
 
 <div class="page-head fade d1">
     <div>
-        <h1 class="page-title">Add ToD</h1>
+        <h1 class="page-title">@pageHeading</h1>
         <div class="page-sub">
             <span>@selectedLinkshellName</span>
         </div>
@@ -23,19 +27,25 @@
 }
 else
 {
-    <form asp-action="Create" method="post" id="tod-form" novalidate
+    <form asp-action="@formAction"
+          asp-route-id="@(isEditMode ? (int?)Model.Tod!.Id : null)"
+          method="post" id="tod-form" novalidate
           enctype="multipart/form-data"
           data-character-names="@JsonSerializer.Serialize(Model.CharacterNames)"
           class="create-form fade d2">
         @Html.AntiForgeryToken()
         <input asp-for="Tod.LinkshellId" type="hidden" />
+        @if (isEditMode)
+        {
+            <input asp-for="Tod.Id" type="hidden" />
+        }
 
         <div asp-validation-summary="ModelOnly" class="alert alert-danger"
              style="display:@(ViewData.ModelState.IsValid ? "none" : "block"); margin-bottom:14px;"></div>
 
         <div class="create-form__header">
             <div>
-                <strong>Submit ToD</strong>
+                <strong>@formHeader</strong>
                 <p>Log a kill, calculate the next repop window, and record any loot.</p>
             </div>
             <span class="tag accent">@selectedLinkshellName</span>
@@ -119,12 +129,64 @@ else
         <div class="create-form__section">
             <div class="create-form__section-head">
                 <h3>Screenshot (optional)</h3>
-                <p style="margin:4px 0 0;color:var(--fg-4);font-size:12px">PNG, JPG, or WEBP. 2 MB max. Attached to the ToD record and viewable in the ToD details.</p>
+                <p style="margin:4px 0 0;color:var(--fg-4);font-size:12px">PNG, JPG, or WEBP. 5 MB max. Attached to the ToD record and viewable in the ToD details.</p>
             </div>
+            @if (isEditMode && !string.IsNullOrWhiteSpace(Model.Tod?.ImagePath))
+            {
+                <div id="existing-image" style="margin-bottom:10px">
+                    <div style="font-size:12px;color:var(--fg-4);margin-bottom:4px">Current screenshot:</div>
+                    <a href="@Model.Tod.ImagePath" target="_blank" rel="noopener">
+                        <img src="@Model.Tod.ImagePath" alt="Current screenshot"
+                             style="max-width:280px;max-height:200px;border-radius:6px;border:1px solid var(--border,#222);display:block" />
+                    </a>
+                    <label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--fg-4)">
+                        <input type="checkbox" name="clearImage" value="true" />
+                        Remove this screenshot on save
+                    </label>
+                </div>
+            }
             <label>
-                <input type="file" name="UploadImage" accept="image/png,image/jpeg,image/webp" />
+                <span style="display:block;font-size:12px;color:var(--fg-4);margin-bottom:4px">@(isEditMode && !string.IsNullOrWhiteSpace(Model.Tod?.ImagePath) ? "Replace screenshot:" : "")</span>
+                <input type="file" name="UploadImage" id="upload-image" accept="image/png,image/jpeg,image/webp" />
             </label>
+            <div id="upload-image-preview" style="display:none;margin-top:10px">
+                <img id="upload-image-thumb" alt="Screenshot preview"
+                     style="max-width:280px;max-height:200px;border-radius:6px;border:1px solid var(--border,#222);display:block" />
+                <button type="button" id="upload-image-clear"
+                        style="margin-top:6px;padding:4px 10px;font-size:12px;background:transparent;border:1px solid var(--border,#222);border-radius:4px;color:var(--fg-4);cursor:pointer">
+                    Remove screenshot
+                </button>
+            </div>
         </div>
+        <script nonce="@Html.CspNonce()">
+            (function () {
+                var input = document.getElementById('upload-image');
+                var preview = document.getElementById('upload-image-preview');
+                var thumb = document.getElementById('upload-image-thumb');
+                var clearBtn = document.getElementById('upload-image-clear');
+                if (!input || !preview || !thumb || !clearBtn) return;
+                var currentUrl = null;
+
+                function show(file) {
+                    if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+                    currentUrl = URL.createObjectURL(file);
+                    thumb.src = currentUrl;
+                    preview.style.display = 'block';
+                }
+                function hide() {
+                    if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+                    thumb.removeAttribute('src');
+                    preview.style.display = 'none';
+                    input.value = '';
+                }
+
+                input.addEventListener('change', function () {
+                    var f = input.files && input.files[0];
+                    if (f) show(f); else hide();
+                });
+                clearBtn.addEventListener('click', hide);
+            })();
+        </script>
 
         <div id="loot-section" class="create-form__section @(Model.Tod.Claim == true && !Model.NoLoot ? "" : "d-none")">
             <div class="create-form__section-head">

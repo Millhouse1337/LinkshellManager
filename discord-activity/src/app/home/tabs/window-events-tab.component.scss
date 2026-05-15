@@ -1,0 +1,68 @@
+.window-event-card,
+.window-row {
+  margin-top: 12px;
+}
+
+.window-event-card > summary,
+.window-row > summary {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.window-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+}
+
+.window-actions input,
+.window-actions select {
+  min-height: 32px;
+  min-width: 150px;
+}
+
+.subhead {
+  padding: 10px 12px 4px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--muted);
+}
+
+.status-pill.warn {
+  background: rgba(251, 191, 36, 0.16);
+  color: #fbbf24;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  padding: 0 12px 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}

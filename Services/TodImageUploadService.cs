@@ -4,7 +4,7 @@ namespace LinkshellManagerDiscordApp.Services;
 
 public sealed class TodImageUploadService
 {
-    public const int MaxBytes = 2_000_000;
+    public const int MaxBytes = 5_000_000;
 
     private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,7 +26,7 @@ public sealed class TodImageUploadService
         }
         if (file.Length > MaxBytes)
         {
-            return TodImageUploadResult.Fail("Images must be 2 MB or smaller.");
+            return TodImageUploadResult.Fail("Images must be 5 MB or smaller.");
         }
 
         var declaredExtension = Path.GetExtension(file.FileName).ToLowerInvariant();

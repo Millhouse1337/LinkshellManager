@@ -8,7 +8,9 @@ export const TAB_NAMES = [
   'dashboard',
   'profile',
   'linkshell',
-  'events',
+  'hnm',
+  'timed-events',
+  'window-events',
   'tods',
   'auctions',
   'dkp',
@@ -53,6 +55,9 @@ export const LONG_WINDOW_TOD_MONSTERS: ReadonlySet<string> = new Set([
 // True HNMs only (not Sky farm pops, ground NMs, HENMs, or Sea NMs).
 // Used by the dashboard "HNM Claims" donut so the chart isn't dominated by
 // unrelated kills like Genbu / Mother Globe / etc.
+// Mirrors Services/HnmConfig.cs (LongWindow + Short Window + Testing) so the
+// activity tabs filter the same monsters out of the generic ToD / Event
+// views that the server pushes into the dedicated HNM section.
 export const HNM_NAMES: ReadonlySet<string> = new Set([
   'Fafnir',
   'Nidhogg',
@@ -63,7 +68,10 @@ export const HNM_NAMES: ReadonlySet<string> = new Set([
   'Tiamat',
   'Jormungand',
   'Vrtra',
-  'Bahamut'
+  'Bahamut',
+  // Testing presets -- mirror HnmConfig.TestingHnms.
+  'Goblin Furrier',
+  'Goblin Shaman'
 ]);
 
 // All built-in monster names the addon's parser knows about, grouped by

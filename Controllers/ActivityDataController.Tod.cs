@@ -4,6 +4,7 @@ using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -223,8 +224,8 @@ public sealed partial class ActivityDataController
     }
 
     [HttpPost("tods/upload-image")]
-    [RequestSizeLimit(2_200_000)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 2_200_000)]
+    [RequestSizeLimit(5_500_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 5_500_000)]
     public async Task<IActionResult> UploadTodImageAsync(
         [FromForm] IFormFile? file,
         [FromServices] TodImageUploadService uploads,
@@ -242,6 +243,37 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = result.Error });
         }
         return Ok(new { imagePath = result.ImagePath });
+    }
+
+    // GET /api/activity/uploads/tods/{fileName}
+    // Proxies uploaded ToD screenshots so the Discord Activity (which only
+    // has /api/* mapped through Discord's proxy) can fetch them.  Files
+    // live in wwwroot/uploads/tods/ -- the same place the web serves them
+    // directly. Validates the filename so callers can't escape the
+    // uploads directory.
+    [HttpGet("uploads/tods/{fileName}")]
+    [AllowAnonymous]
+    public IActionResult GetTodImage(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return NotFound();
+        if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\')) return NotFound();
+
+        var webRoot = _webHostEnvironment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot)) return NotFound();
+
+        var absolutePath = Path.Combine(webRoot, "uploads", "tods", fileName);
+        if (!System.IO.File.Exists(absolutePath)) return NotFound();
+
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        var contentType = extension switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+
+        return PhysicalFile(absolutePath, contentType);
     }
 
     [HttpPost("tods/{todId:int}/update")]

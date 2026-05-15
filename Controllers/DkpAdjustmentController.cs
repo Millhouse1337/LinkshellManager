@@ -96,7 +96,7 @@ public class DkpAdjustmentController : Controller
 
         membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) + input.Amount;
 
-        _context.DkpLedgerEntries.Add(new DkpLedgerEntry
+        var ledgerEntry = new DkpLedgerEntry
         {
             AppUserId = membership.AppUserId,
             LinkshellId = membership.LinkshellId,
@@ -106,10 +106,11 @@ public class DkpAdjustmentController : Controller
             OccurredAt = DateTime.UtcNow,
             CharacterName = membership.CharacterName,
             Details = input.Reason.Trim()
-        });
+        };
+        _context.DkpLedgerEntries.Add(ledgerEntry);
 
         await _context.SaveChangesAsync();
-        await _sheetSync.EnqueueAsync(membership.LinkshellId);
+        await _sheetSync.EnqueueDkpAuditAsync(ledgerEntry.Id);
         TempData["DkpAdjustmentSuccess"] = $"Adjusted {membership.CharacterName}'s DKP by {input.Amount:+0.##;-0.##;0}.";
         return RedirectToAction(nameof(Index), new { linkshellId = input.LinkshellId });
     }

@@ -1,0 +1,32 @@
+@model LinkshellManagerDiscordApp.ViewModels.WindowSnapshotRow
+@{
+    string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
+    string Jobs(AttendanceSnapshotEntryRow row)
+    {
+        var main = string.IsNullOrWhiteSpace(row.MainJob) ? "-" : row.MainJob + (row.MainJobLevel?.ToString() ?? "");
+        var sub = string.IsNullOrWhiteSpace(row.SubJob) ? "-" : row.SubJob + (row.SubJobLevel?.ToString() ?? "");
+        return $"{main}/{sub}";
+    }
+}
+
+<div style="padding:8px 16px 16px 32px;overflow-x:auto">
+    <table style="width:100%;max-width:780px;border-collapse:collapse;font-size:13px">
+        <thead>
+            <tr>
+                <th style="text-align:left;padding:6px 10px">Character</th>
+                <th style="text-align:left;padding:6px 10px">Jobs</th>
+                <th style="text-align:left;padding:6px 10px">Zone</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var entry in Model.Entries)
+        {
+            <tr style="border-top:1px solid var(--border,#222)">
+                <td style="padding:6px 10px"><strong>@entry.CharacterName</strong></td>
+                <td style="padding:6px 10px">@Jobs(entry)</td>
+                <td style="padding:6px 10px">@Dash(entry.Zone)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

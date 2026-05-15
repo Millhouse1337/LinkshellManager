@@ -41,7 +41,7 @@ public class Event
     public string? Details { get; set; }
 
     // Identifies who created the event so clients can show source-specific
-    // controls (e.g. the att addon shows a Cancel button only on rows it
+    // controls (e.g. the lsm addon shows a Cancel button only on rows it
     // created itself). Currently set to "Addon" by AddonApiController; null
     // for everything else (web app, legacy rows). Keep this short — it's an
     // internal discriminator, not a free-form label.
@@ -53,6 +53,27 @@ public class Event
     // sets this to 2 so a user-named event gets the same 2-post UI as a
     // ShortWindowHnm. Null = fall back to name-based detection (default).
     public int? WindowCountOverride { get; set; }
+
+    // Maps this event to a row category in the linkshell's Google Sheet AttInput
+    // tab. Examples: "Misc Camp", "Kill", "Kings Camp", "Wyrms Camp". Null means
+    // "do not append AttInput rows for this event" -- snapshots / window posts /
+    // event-close awards for this event simply skip the sheet.
+    [MaxLength(32)]
+    public string? AttInputEntryType { get; set; }
+
+    // Idempotency stamp for the event-close AttInput append. Set once after
+    // the row batch is successfully written so a retry / re-end doesn't
+    // create duplicate AttInput rows. Null = not yet appended.
+    public DateTime? AttInputAppendedAt { get; set; }
+
+    // Set when this event was auto-created from a ToD post (HNM workflow).
+    // Links back to the originating Tod row so the HNM dashboard can render
+    // the source ToD alongside the queued event. Null for manually-created
+    // events.
+    public int? SourceTodId { get; set; }
+
+    [ForeignKey(nameof(SourceTodId))]
+    public Tod? SourceTod { get; set; }
 
     public ICollection<Job> Jobs { get; set; } = new List<Job>();
 

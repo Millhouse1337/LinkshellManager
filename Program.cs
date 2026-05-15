@@ -155,6 +155,9 @@ builder.Services.AddSingleton<GoogleSheetsSyncService>();
 builder.Services.AddSingleton<SheetSyncQueue>();
 builder.Services.AddScoped<GoogleOAuthService>();
 builder.Services.AddScoped<SheetMigrationService>();
+builder.Services.AddScoped<AttInputAppendService>();
+builder.Services.AddScoped<ManualPointsAppendService>();
+builder.Services.AddScoped<HnmAutoEventService>();
 builder.Services.AddHostedService<SheetSyncBackgroundService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>

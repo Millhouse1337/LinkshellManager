@@ -15,6 +15,7 @@ import {
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
+  HNM_NAMES,
   LONG_WINDOW_TOD_MONSTERS,
   TOD_COOLDOWN_OPTIONS,
   TOD_INTERVAL_OPTIONS,
@@ -74,7 +75,11 @@ export class TodsTabComponent {
     }
   }
 
-  protected readonly todMonsterOptions = [...TOD_MONSTER_OPTIONS];
+  // True HNMs are managed in the dedicated HNM tab; drop them from the
+  // generic ToD form's monster picker. "Other" + custom name stays available
+  // for any edge case where someone really wants to log a manual HNM ToD
+  // outside the streamlined workflow.
+  protected readonly todMonsterOptions = TOD_MONSTER_OPTIONS.filter(m => !HNM_NAMES.has(m));
   protected readonly todCooldownOptions = [...TOD_COOLDOWN_OPTIONS];
   protected readonly todIntervalOptions = [...TOD_INTERVAL_OPTIONS];
   protected readonly todDraft: ActivityCreateTodInput = {
@@ -97,6 +102,36 @@ export class TodsTabComponent {
   protected todImagePath: string | null = null;
   protected isUploadingTodImage = false;
   protected editingTodId: number | null = null;
+
+  // Discord's URL mapping only proxies /api/* through to the backend.
+  // Static uploads at /uploads/tods/... would 404 inside the activity
+  // iframe (discordsays.com origin). Rewrite to the API proxy endpoint
+  // (GET /api/activity/uploads/tods/{file}) so the same image resolves
+  // through Discord's mapping. Paths that don't match are returned
+  // unchanged so external URLs / data URIs still work.
+  protected displayImagePath(path: string | null | undefined): string | null {
+    if (!path) return null;
+    if (path.startsWith('/uploads/tods/')) {
+      return '/api/activity/uploads/tods/' + path.substring('/uploads/tods/'.length);
+    }
+    return path;
+  }
+
+  // Click handler for the ToD screenshot thumbnail. Plain <a target="_blank">
+  // is blocked by Discord's embed sandbox, so route the click through the
+  // Discord SDK's openExternalLink (falls back to window.open outside the
+  // iframe -- e.g. ng serve during dev).
+  protected openTodImage(event: Event, path: string | null | undefined): void {
+    event.preventDefault();
+    const resolved = this.displayImagePath(path);
+    if (!resolved) return;
+    // Build an absolute URL so Discord's openExternalLink has something to
+    // navigate to (relative paths would resolve against discordsays.com).
+    const absolute = resolved.startsWith('http')
+      ? resolved
+      : window.location.origin + resolved;
+    void this.activity.openExternalLink(absolute);
+  }
 
   public constructor() {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
@@ -150,6 +185,9 @@ export class TodsTabComponent {
     return [...(this.activity.overview()?.recentTods ?? [])]
       .filter(tod => tod.linkshellId === selectedId)
       .filter(tod => !hidden.has((tod.monsterName ?? '').trim().toLowerCase()))
+      // True HNMs are managed in the dedicated HNM tab, so they're dropped
+      // from the generic ToDs list to match the server-side filter.
+      .filter(tod => !HNM_NAMES.has((tod.monsterName ?? '').trim()))
       .sort((left, right) => {
         const leftTime = left.time ? new Date(left.time).getTime() : 0;
         const rightTime = right.time ? new Date(right.time).getTime() : 0;

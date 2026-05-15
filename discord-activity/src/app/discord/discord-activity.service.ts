@@ -668,6 +668,42 @@ export class DiscordActivityService {
   deleteTod(todId: number): Promise<void> { return this.todService.deleteTod(todId); }
   uploadTodImage(file: File): Promise<string | null> { return this.todService.uploadTodImage(file); }
 
+  // Rewrites a server-stored upload path (e.g. /uploads/tods/abc123.png) so it
+  // hits the activity's API proxy. The Activity runs at <clientId>.discordsays.com
+  // where Discord only proxies paths configured in URL Mappings -- typically
+  // /api/* but NOT /uploads/*. Routing the image through /api/activity/uploads/...
+  // means a single API mapping covers both the JSON endpoints and the file fetch.
+  resolveUploadUrl(path: string | null | undefined): string | null {
+    if (!path) return null;
+    const trimmed = path.trim();
+    if (!trimmed) return null;
+    // Already absolute URL (http/https or already pointing at our API path).
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (trimmed.startsWith('/api/activity/uploads/')) return trimmed;
+    // Map /uploads/<rest> -> /api/activity/uploads/<rest>.
+    const match = trimmed.match(/^\/?uploads\/(.+)$/);
+    if (match) return '/api/activity/uploads/' + match[1];
+    return trimmed;
+  }
+
+  // Opens a URL outside the Discord iframe. The Embedded App SDK exposes
+  // commands.openExternalLink which lets the activity launch a regular browser
+  // tab; plain <a target="_blank"> is blocked by Discord's embed sandbox.
+  async openExternalLink(url: string): Promise<void> {
+    if (!url) return;
+    try {
+      if (this.sdk && this.sdk.commands && typeof this.sdk.commands.openExternalLink === 'function') {
+        await this.sdk.commands.openExternalLink({ url });
+        return;
+      }
+    } catch (error) {
+      console.warn('openExternalLink failed; falling back to window.open', error);
+    }
+    // Fallback for non-embedded contexts (e.g. running the activity directly
+    // in a browser tab during development).
+    window.open(url, '_blank', 'noopener');
+  }
+
   // --- AuctionService ---
   loadAuctions(linkshellId?: number | null): Promise<void> { return this.auctionService.loadAuctions(linkshellId); }
   loadAuctionHistory(linkshellId?: number | null): Promise<void> { return this.auctionService.loadAuctionHistory(linkshellId); }
