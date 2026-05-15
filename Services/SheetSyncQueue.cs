@@ -38,6 +38,15 @@ public sealed class SheetSyncQueue
         return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.DkpAudit, dkpLedgerEntryId), cancellationToken);
     }
 
+    // Posts the entire Window Event roster (header row + one row per unique
+    // active character) to the linkshell's Google Sheet AttInput tab. Fired
+    // by the officer's Post to DKP Sheet button -- snapshot capture itself
+    // no longer auto-enqueues, so this is the one user-initiated push.
+    public ValueTask EnqueueWindowEventPostAsync(int windowEventId, CancellationToken cancellationToken = default)
+    {
+        return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.WindowEventPost, windowEventId), cancellationToken);
+    }
+
     // Legacy entry point. Kept temporarily to avoid breaking older call sites
     // during the migration to typed jobs; treats the linkshellId as a no-op
     // since the column-C overwrite has been removed. Callers should migrate
@@ -60,4 +69,5 @@ public enum SheetSyncJobKind
     EventWindow,
     EventClose,
     DkpAudit,
+    WindowEventPost,
 }

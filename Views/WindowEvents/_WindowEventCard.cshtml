@@ -4,6 +4,7 @@
     var linkshellId = (int)(ViewData["LinkshellId"] ?? 0);
     var canManage = (bool)(ViewData["CanManage"] ?? false);
     var isClosed = (bool)(ViewData["IsClosed"] ?? false);
+    var alreadyPosted = Model.PostedToSheetAt.HasValue;
     string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
     string Jobs(WindowCombinedMemberRow row)
     {
@@ -54,6 +55,47 @@
                 <form asp-action="Close" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="btn sm ghost">Close</button>
+                </form>
+            }
+            <form asp-action="Delete" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post"
+                  onsubmit="return confirm('Delete Window Event &quot;@(Model.Name ?? "(unnamed)")&quot;? Snapshots attached to it will move back to Unlinked Snapshots. Rows already pushed to Google Sheets remain.');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn sm danger-outline">Delete</button>
+            </form>
+        </div>
+
+        <div style="padding:0 16px 12px 32px">
+            @if (alreadyPosted)
+            {
+                <div style="font-size:13px;color:var(--fg-muted,#aaa)">
+                    Posted to DKP sheet on <strong>@Model.PostedToSheetDisplay</strong>
+                    @if (Model.DkpAmount.HasValue)
+                    {
+                        <text> &middot; @Model.DkpAmount DKP &middot; @Dash(Model.EntryType)</text>
+                    }
+                </div>
+            }
+            else
+            {
+                <form asp-action="PostToSheet" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id"
+                      method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"
+                      onsubmit="return confirm('Post @(Model.CombinedMemberCount) row(s) to the DKP sheet AttInput tab? This cannot be undone.');">
+                    @Html.AntiForgeryToken()
+                    <label style="font-size:13px">DKP:
+                        <input type="number" name="dkpAmount" step="0.25" min="0"
+                               value="@(Model.DkpAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "1.5")"
+                               style="width:80px;margin-left:4px" required />
+                    </label>
+                    <label style="font-size:13px">Entry Type:
+                        <select name="entryType" required style="margin-left:4px">
+                            <option value="">(select)</option>
+                            @foreach (var type in WindowEventEntryTypes.All)
+                            {
+                                <option value="@type" selected="@(Model.EntryType == type)">@type</option>
+                            }
+                        </select>
+                    </label>
+                    <button type="submit" class="btn sm">Post to DKP Sheet</button>
                 </form>
             }
         </div>

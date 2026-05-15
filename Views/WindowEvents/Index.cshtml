@@ -24,14 +24,19 @@
 {
     <div class="alert alert-danger fade d2">@err</div>
 }
+@if (TempData["WindowEventStatus"] is string statusMsg)
+{
+    <div class="alert alert-success fade d2">@statusMsg</div>
+}
 
-<div class="card fade d2">
+<div class="card fade d2" style="margin-bottom:14px">
     <div class="card-head">
-        <div class="card-title">Addon flow</div>
+        <div class="card-title">Instructions</div>
     </div>
     <div style="padding:12px 16px;font-size:13px;color:var(--fg-muted,#aaa)">
-        <code>/lsm now Tiamat</code> creates or updates an open Window Event named Tiamat.
-        <code>/lsm now</code> lands under Unlinked Snapshots until a leader or officer attaches it.
+        <code>/lsm now &lt;Monster Name&gt;</code> creates new or updates existing Window Events.
+        <code>/lsm now</code> will land under Unlinked Snapshots until a leader or officer attaches it.
+        Having a typo will also land under Unlinked Snapshots.
         Combined attendance counts unique characters from active snapshots only.
     </div>
 </div>
@@ -93,7 +98,7 @@
     <div class="card fade d3">
         <div class="card-head"><div class="card-title">No Window Events yet</div></div>
         <div class="empty" style="padding:16px">
-            Run <code>/lsm now Tiamat</code> in-game while in an alliance to create the first Window Event.
+            Run <code>/lsm now &lt;Monster Name&gt;</code> in-game while in an alliance to create the first Window Event.
         </div>
     </div>
 }

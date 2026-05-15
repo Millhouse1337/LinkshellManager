@@ -123,6 +123,9 @@ public sealed partial class AddonApiController
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        // Sheet sync is officer-initiated on the Window Events page (Post
+        // to DKP Sheet button) so the officer can review the combined roster
+        // and set DKP + Entry Type before any rows land in the spreadsheet.
         return Ok(new
         {
             snapshotId = snapshot.Id,

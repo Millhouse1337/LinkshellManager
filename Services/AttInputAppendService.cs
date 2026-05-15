@@ -12,7 +12,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // short-circuits without re-appending.
 //
 // Column layout (matches the user's existing sheet):
-//   A Player | B Jobs | C Date | D Time + UTC offset | E (blank)
+//   A Player | B Jobs | C Date | D Time | E UTC offset
 //   F Location | G (blank) | H Player Name (duplicate)
 //   I Camp Window | J DKP | K Entry Type
 public sealed class AttInputAppendService
@@ -144,6 +144,129 @@ public sealed class AttInputAppendService
         _logger.LogInformation("AttInput append: window {WindowId} -> {Count} rows.", windowId, rows.Count);
     }
 
+    // Posts a Window Event's combined roster to the linkshell's AttInput tab.
+    // Layout per the user's sheet:
+    //   * 1 header / separator row carrying the event's name in column A so
+    //     each event group is visually delimited
+    //   * 1 row per unique active-snapshot character, using the event's
+    //     DkpAmount in column J and EntryType in column K
+    // Active = SnapshotStatus == Active. Duplicate / Ignored snapshots and
+    // their entries are excluded so the sheet matches what the Window Events
+    // card shows in the Combined Members table.
+    public async Task AppendWindowEventAsync(int windowEventId, CancellationToken cancellationToken)
+    {
+        var windowEvent = await _db.WindowEvents
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .FirstOrDefaultAsync(w => w.Id == windowEventId, cancellationToken);
+        if (windowEvent is null)
+        {
+            _logger.LogDebug("AttInput skip: window-event {Id} not found.", windowEventId);
+            return;
+        }
+        if (windowEvent.PostedToSheetAt.HasValue)
+        {
+            _logger.LogDebug("AttInput skip: window-event {Id} already posted at {When}.",
+                windowEventId, windowEvent.PostedToSheetAt);
+            return;
+        }
+        if (!windowEvent.DkpAmount.HasValue)
+        {
+            _logger.LogDebug("AttInput skip: window-event {Id} has no DkpAmount set.", windowEventId);
+            return;
+        }
+        if (!WindowEventEntryTypes.IsValid(windowEvent.EntryType))
+        {
+            _logger.LogDebug("AttInput skip: window-event {Id} has invalid EntryType {Type}.",
+                windowEventId, windowEvent.EntryType);
+            return;
+        }
+
+        var linkshell = await LoadConfiguredLinkshellAsync(windowEvent.LinkshellId, cancellationToken);
+        if (linkshell is null) return;
+
+        // Build the combined member list: one entry per unique character name
+        // from Active snapshots only. Use the most recent snapshot's entry
+        // for jobs / zone so the displayed roster matches the card.
+        var activeEntries = windowEvent.Snapshots
+            .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
+            .SelectMany(s => s.Entries.Select(e => new { Snapshot = s, Entry = e }))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Entry.CharacterName))
+            .ToList();
+
+        var combined = activeEntries
+            .GroupBy(x => x.Entry.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(x => x.Snapshot.CapturedAtUtc).First())
+            .ToList();
+
+        if (combined.Count == 0)
+        {
+            _logger.LogDebug("AttInput skip: window-event {Id} has no active snapshot entries.", windowEventId);
+            return;
+        }
+
+        var rows = new List<IList<object>>(combined.Count + 1);
+
+        // Header / separator row. Keep every formula-sensitive column blank;
+        // only column C carries the snapshot/window title, and the entire row
+        // is colored after append so it visually separates the event block.
+        var displayName = string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name!;
+        rows.Add(new List<object>
+        {
+            string.Empty,
+            string.Empty,
+            displayName,
+            string.Empty,
+            string.Empty,
+            string.Empty, string.Empty, string.Empty, string.Empty,
+            string.Empty, string.Empty,
+        });
+
+        foreach (var item in combined)
+        {
+            rows.Add(BuildRow(
+                playerName: item.Entry.CharacterName,
+                jobs: BuildJobsCell(item.Entry.MainJob, item.Entry.MainJobLevel, item.Entry.SubJob, item.Entry.SubJobLevel),
+                whenUtc: item.Snapshot.CapturedAtUtc,
+                utcOffset: item.Snapshot.UtcOffset,
+                location: item.Entry.Zone,
+                campWindow: 1,
+                dkp: windowEvent.DkpAmount.Value,
+                entryType: windowEvent.EntryType!));
+        }
+
+        var appendResponse = await AppendRowsAsync(linkshell, rows, cancellationToken);
+        if (TryGetFirstAppendedRow(appendResponse?.Updates?.UpdatedRange, out var headerRowNumber))
+        {
+            var tab = string.IsNullOrWhiteSpace(linkshell.AttInputTabName) ? DefaultTabName : linkshell.AttInputTabName!;
+            await _sheets.FormatRowAsync(
+                linkshell.Id,
+                linkshell.GoogleSpreadsheetId!,
+                tab,
+                headerRowNumber,
+                red: 1.0f,
+                green: 0.93f,
+                blue: 0.72f,
+                cancellationToken);
+        }
+
+        windowEvent.PostedToSheetAt = DateTime.UtcNow;
+        // Stamp every contributing snapshot so the legacy per-snapshot append
+        // path (still wired for SetSnapshotStatus / AttachSnapshot if ever
+        // re-enabled) doesn't double-post these rows.
+        var nowUtc = DateTime.UtcNow;
+        foreach (var snapshot in windowEvent.Snapshots)
+        {
+            if (snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Active && !snapshot.AttInputAppendedAt.HasValue)
+            {
+                snapshot.AttInputAppendedAt = nowUtc;
+            }
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("AttInput append: window-event {Id} -> 1 header + {Count} rows.",
+            windowEventId, combined.Count);
+    }
+
     public async Task AppendEventCloseAsync(int eventId, CancellationToken cancellationToken)
     {
         var evt = await _db.Events
@@ -231,11 +354,14 @@ public sealed class AttInputAppendService
         return linkshell;
     }
 
-    private async Task AppendRowsAsync(Linkshell linkshell, IList<IList<object>> rows, CancellationToken cancellationToken)
+    private async Task<Google.Apis.Sheets.v4.Data.AppendValuesResponse> AppendRowsAsync(
+        Linkshell linkshell,
+        IList<IList<object>> rows,
+        CancellationToken cancellationToken)
     {
         var tab = string.IsNullOrWhiteSpace(linkshell.AttInputTabName) ? DefaultTabName : linkshell.AttInputTabName!;
         var range = $"{tab}!A:K";
-        await _sheets.AppendAsync(linkshell.Id, linkshell.GoogleSpreadsheetId!, range, rows, cancellationToken);
+        return await _sheets.AppendAsync(linkshell.Id, linkshell.GoogleSpreadsheetId!, range, rows, cancellationToken);
     }
 
     private static IList<object> BuildRow(
@@ -249,15 +375,31 @@ public sealed class AttInputAppendService
         string entryType)
     {
         var date = whenUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var time = whenUtc.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
-        var offsetTag = string.IsNullOrWhiteSpace(utcOffset) ? "UTC+0000" : utcOffset!;
+        var time = whenUtc.ToString("h:mm:ss tt", CultureInfo.InvariantCulture);
+        // Sheet rows historically use the "UTC-0500" shape. The addon's
+        // os.date('%z') hands us a bare "-0500" with no prefix, so normalize
+        // to always include the "UTC" tag instead of letting raw signed
+        // offsets leak into column D and break the formula chain.
+        string offsetTag;
+        if (string.IsNullOrWhiteSpace(utcOffset))
+        {
+            offsetTag = "UTC+0000";
+        }
+        else if (utcOffset!.StartsWith("UTC", StringComparison.OrdinalIgnoreCase))
+        {
+            offsetTag = utcOffset;
+        }
+        else
+        {
+            offsetTag = "UTC" + utcOffset;
+        }
         return new List<object>
         {
             playerName ?? string.Empty,            // A Player
             jobs ?? string.Empty,                  // B Jobs
             date,                                  // C Date REQ
-            $"{time} {offsetTag}",                 // D Time + UTC offset
-            string.Empty,                          // E (blank)
+            time,                                  // D Time
+            offsetTag,                             // E UTC offset
             location ?? string.Empty,              // F Location
             string.Empty,                          // G (blank)
             playerName ?? string.Empty,            // H Player Name (duplicate per user's layout)
@@ -279,5 +421,19 @@ public sealed class AttInputAppendService
         if (string.IsNullOrEmpty(sub)) return main;
         if (string.IsNullOrEmpty(main)) return sub;
         return $"{main}/{sub}";
+    }
+
+    private static bool TryGetFirstAppendedRow(string? updatedRange, out int rowNumber)
+    {
+        rowNumber = 0;
+        if (string.IsNullOrWhiteSpace(updatedRange)) return false;
+
+        // Examples:
+        //   AttInput!A11945:K11963
+        //   'Att Input'!A11945:K11963
+        var bangIndex = updatedRange.LastIndexOf('!');
+        var rangePart = bangIndex >= 0 ? updatedRange[(bangIndex + 1)..] : updatedRange;
+        var match = System.Text.RegularExpressions.Regex.Match(rangePart, @"^[A-Z]+(?<row>\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success && int.TryParse(match.Groups["row"].Value, out rowNumber);
     }
 }

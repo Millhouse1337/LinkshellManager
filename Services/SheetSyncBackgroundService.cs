@@ -139,6 +139,10 @@ public sealed class SheetSyncBackgroundService : BackgroundService
                 await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
                     .AppendAuditAsync(job.TargetId, cancellationToken);
                 break;
+            case SheetSyncJobKind.WindowEventPost:
+                await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
+                    .AppendWindowEventAsync(job.TargetId, cancellationToken);
+                break;
         }
     }
 }

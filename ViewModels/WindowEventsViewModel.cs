@@ -25,6 +25,10 @@ public sealed class WindowEventRow
     public int DuplicateSnapshotCount { get; set; }
     public int IgnoredSnapshotCount { get; set; }
     public int CombinedMemberCount { get; set; }
+    public double? DkpAmount { get; set; }
+    public string? EntryType { get; set; }
+    public DateTime? PostedToSheetAt { get; set; }
+    public string? PostedToSheetDisplay { get; set; }
     public List<WindowSnapshotRow> Snapshots { get; set; } = new();
     public List<WindowCombinedMemberRow> CombinedMembers { get; set; } = new();
 }

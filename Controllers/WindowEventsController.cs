@@ -20,15 +20,18 @@ public sealed class WindowEventsController : Controller
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly SheetSyncQueue _sheetSync;
 
     public WindowEventsController(
         ApplicationDbContext db,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        SheetSyncQueue sheetSync)
     {
         _db = db;
         _userManager = userManager;
         _timeZones = timeZones;
+        _sheetSync = sheetSync;
     }
 
     [HttpGet("/linkshells/{linkshellId:int}/window-events")]
@@ -143,6 +146,72 @@ public sealed class WindowEventsController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Persists DKP + Entry Type on the Window Event and enqueues the AttInput
+    // append job. Both values are required because the downstream sheet
+    // formulas pivot on column K (Entry Type) and column J (DKP); pushing
+    // either blank would either skip rows entirely or credit zero.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/{windowEventId:int}/post-to-sheet")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PostToSheet(
+        int linkshellId,
+        int windowEventId,
+        [FromForm] double? dkpAmount,
+        [FromForm] string? entryType,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var windowEvent = await _db.WindowEvents
+            .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
+        if (windowEvent is null) return NotFound();
+
+        if (!dkpAmount.HasValue || dkpAmount.Value < 0)
+        {
+            TempData["WindowEventError"] = "DKP amount is required and must be zero or greater.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!WindowEventEntryTypes.IsValid(entryType))
+        {
+            TempData["WindowEventError"] =
+                $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (windowEvent.PostedToSheetAt.HasValue)
+        {
+            TempData["WindowEventError"] = "This Window Event has already been posted to the DKP sheet.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        windowEvent.DkpAmount = dkpAmount.Value;
+        windowEvent.EntryType = entryType;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        await _sheetSync.EnqueueWindowEventPostAsync(windowEvent.Id, cancellationToken);
+
+        TempData["WindowEventStatus"] = $"Posting \"{windowEvent.Name}\" to the DKP sheet...";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Removes the Window Event row. Linked snapshots are unlinked (the FK uses
+    // OnDelete SetNull) rather than destroyed so officers can re-attach or
+    // ignore them from the Unlinked Snapshots list afterwards. Sheet rows that
+    // were already appended remain in the spreadsheet -- AttInput append is a
+    // one-way push, not a mirror.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/{windowEventId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int linkshellId, int windowEventId, CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var windowEvent = await _db.WindowEvents
+            .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
+        if (windowEvent is null) return NotFound();
+
+        _db.WindowEvents.Remove(windowEvent);
+        await _db.SaveChangesAsync(cancellationToken);
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
     [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/attach")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AttachSnapshot(
@@ -193,6 +262,10 @@ public sealed class WindowEventsController : Controller
 
         await _db.SaveChangesAsync(cancellationToken);
         await MarkLikelyDuplicateAsync(snapshot.Id, cancellationToken);
+
+        // Sheet sync is officer-initiated via the Post to DKP Sheet button on
+        // the Window Event card -- attaching a snapshot no longer auto-pushes
+        // rows so the user has a chance to fill in DKP + Entry Type first.
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
@@ -226,6 +299,10 @@ public sealed class WindowEventsController : Controller
             snapshot.DuplicateOfSnapshotId = null;
         }
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Sheet sync is officer-initiated via Post to DKP Sheet on the parent
+        // Window Event card. Flipping a snapshot's status no longer pushes
+        // rows directly so the officer controls when the AttInput append fires.
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
@@ -342,6 +419,12 @@ public sealed class WindowEventsController : Controller
                 s.SnapshotStatus == AttendanceSnapshotStatuses.Duplicate),
             IgnoredSnapshotCount = snapshots.Count(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Ignored),
             CombinedMemberCount = combined.Count,
+            DkpAmount = item.DkpAmount,
+            EntryType = item.EntryType,
+            PostedToSheetAt = item.PostedToSheetAt,
+            PostedToSheetDisplay = item.PostedToSheetAt.HasValue
+                ? FormatPretty(item.PostedToSheetAt.Value, userZone)
+                : null,
             Snapshots = snapshots,
             CombinedMembers = combined,
         };

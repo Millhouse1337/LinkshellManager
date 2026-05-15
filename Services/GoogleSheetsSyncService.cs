@@ -131,7 +131,7 @@ public sealed class GoogleSheetsSyncService
     // Uses INSERT_ROWS so the formulas / data above the insertion point keep
     // their row indices stable. USER_ENTERED so date strings, formula refs,
     // etc. are parsed the same way a typed cell would be.
-    public async Task AppendAsync(int linkshellId, string spreadsheetId, string range, IList<IList<object>> values, CancellationToken cancellationToken)
+    public async Task<AppendValuesResponse> AppendAsync(int linkshellId, string spreadsheetId, string range, IList<IList<object>> values, CancellationToken cancellationToken)
     {
         var service = await GetServiceAsync(linkshellId, cancellationToken)
             ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
@@ -141,13 +141,97 @@ public sealed class GoogleSheetsSyncService
             var request = service.Spreadsheets.Values.Append(body, spreadsheetId, range);
             request.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
             request.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
-            await request.ExecuteAsync(cancellationToken);
+            return await request.ExecuteAsync(cancellationToken);
         }
         catch (TokenResponseException ex) when (IsInvalidGrant(ex))
         {
             InvalidateCache(linkshellId);
             throw new GoogleOAuthRevokedException(linkshellId, ex);
         }
+    }
+
+    public async Task FormatRowAsync(
+        int linkshellId,
+        string spreadsheetId,
+        string tabName,
+        int rowNumber,
+        float red,
+        float green,
+        float blue,
+        CancellationToken cancellationToken)
+    {
+        if (rowNumber <= 0)
+        {
+            return;
+        }
+
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var sheetId = await GetSheetIdAsync(service, spreadsheetId, tabName, cancellationToken);
+            if (!sheetId.HasValue)
+            {
+                _logger.LogWarning("Could not find sheet tab {TabName} in spreadsheet {SpreadsheetId}.", tabName, spreadsheetId);
+                return;
+            }
+
+            var request = new BatchUpdateSpreadsheetRequest
+            {
+                Requests = new List<Request>
+                {
+                    new()
+                    {
+                        RepeatCell = new RepeatCellRequest
+                        {
+                            Range = new GridRange
+                            {
+                                SheetId = sheetId.Value,
+                                StartRowIndex = rowNumber - 1,
+                                EndRowIndex = rowNumber,
+                                StartColumnIndex = 0,
+                                EndColumnIndex = 11,
+                            },
+                            Cell = new CellData
+                            {
+                                UserEnteredFormat = new CellFormat
+                                {
+                                    BackgroundColor = new Color
+                                    {
+                                        Red = red,
+                                        Green = green,
+                                        Blue = blue,
+                                    },
+                                },
+                            },
+                            Fields = "userEnteredFormat.backgroundColor",
+                        },
+                    },
+                },
+            };
+
+            await service.Spreadsheets.BatchUpdate(request, spreadsheetId).ExecuteAsync(cancellationToken);
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
+    private static async Task<int?> GetSheetIdAsync(
+        SheetsService service,
+        string spreadsheetId,
+        string tabName,
+        CancellationToken cancellationToken)
+    {
+        var request = service.Spreadsheets.Get(spreadsheetId);
+        request.Fields = "sheets.properties(sheetId,title)";
+        var spreadsheet = await request.ExecuteAsync(cancellationToken);
+        return spreadsheet.Sheets?
+            .Select(s => s.Properties)
+            .FirstOrDefault(p => string.Equals(p.Title, tabName, StringComparison.OrdinalIgnoreCase))
+            ?.SheetId;
     }
 
     public async Task ClearAsync(int linkshellId, string spreadsheetId, string range, CancellationToken cancellationToken)
