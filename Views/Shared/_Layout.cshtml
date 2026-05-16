@@ -22,6 +22,7 @@
 
     string? activeLinkshellName = null;
     string? activeLinkshellInitials = null;
+    string activeLinkshellType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Both;
     string? activeRole = null;
     LinkshellManagerDiscordApp.Models.LinkshellRole? activePermissions = null;
     if (currentUser is not null && currentUser.PrimaryLinkshellId.HasValue)
@@ -33,6 +34,7 @@
         if (ls is not null)
         {
             activeLinkshellName = ls.LinkshellName;
+            activeLinkshellType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Normalize(ls.LinkshellType);
             activeLinkshellInitials = string.Concat(
                 (ls.LinkshellName ?? "LS")
                     .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -68,6 +70,7 @@
     }
 
     ViewData["ActiveLinkshellId"] = currentUser?.PrimaryLinkshellId;
+    ViewData["ActiveLinkshellType"] = activeLinkshellType;
     ViewData["ActiveLinkshellName"] = activeLinkshellName;
     ViewData["ActiveLinkshellInitials"] = activeLinkshellInitials;
     ViewData["ActiveRole"] = activeRole;

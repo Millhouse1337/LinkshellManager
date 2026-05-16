@@ -74,7 +74,11 @@ public sealed partial class AddonApiController
             issuedToCharacterName,
             issuedToAppUserId = token.IssuedToAppUserId,
             canModerateLiveEvent = canModerate,
-            label = token.Label
+            label = token.Label,
+            // Drives addon section visibility (Create Event / presets /
+            // Queued / Active / HNM type). Normalized so the addon never
+            // has to handle null. The addon fail-opens to "Both" anyway.
+            linkshellType = LinkshellTypes.Normalize(linkshell?.LinkshellType)
         });
     }
 }

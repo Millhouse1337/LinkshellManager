@@ -143,6 +143,18 @@ public sealed class SheetSyncBackgroundService : BackgroundService
                 await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
                     .AppendWindowEventAsync(job.TargetId, cancellationToken);
                 break;
+            case SheetSyncJobKind.WindowEventEdit:
+                await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
+                    .EditPostedWindowEventAsync(job.TargetId, cancellationToken);
+                break;
+            case SheetSyncJobKind.AuctionDeductions:
+                await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
+                    .AppendAuctionDeductionsAsync(job.TargetId, cancellationToken);
+                break;
+            case SheetSyncJobKind.EventLootDeductions:
+                await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
+                    .AppendEventLootDeductionsAsync(job.TargetId, cancellationToken);
+                break;
         }
     }
 }

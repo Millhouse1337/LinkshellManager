@@ -1,5 +1,6 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -328,9 +329,15 @@ public partial class AuctionController
             return RedirectToAction(nameof(Index));
         }
 
-        if (bidAmount > (membership.LinkshellDkp ?? 0))
+        // Available = total minus DKP locked by bids the user is currently
+        // winning on OTHER live items (this item excluded so a raise compares
+        // against the replacement, not old + new).
+        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
+            _context, user.Id, auctionItem.Auction.LinkshellId,
+            HttpContext.RequestAborted, excludeAuctionItemId: auctionItemId);
+        if (bidAmount > availableDkp)
         {
-            TempData["AuctionError"] = "You cannot bid more DKP than you currently have.";
+            TempData["AuctionError"] = $"Insufficient available DKP. You have {availableDkp:0.##} available (the rest is locked by bids you're currently winning).";
             return RedirectToAction(nameof(Index));
         }
 
@@ -350,6 +357,67 @@ public partial class AuctionController
         auctionItem.Status = "BidPlaced";
 
         await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Undo the caller's OWN currently-winning bid while the auction is live.
+    // Promotes the next highest remaining bid ("2nd place") and blocks the
+    // caller from in-game loot wins for the linkshell's cooldown window.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UndoBid(int auctionItemId)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var auctionItem = await _context.AuctionItems
+            .Include(item => item.Auction)
+            .Include(item => item.Bids)
+            .FirstOrDefaultAsync(item => item.Id == auctionItemId);
+        if (auctionItem is null || auctionItem.Auction is null)
+        {
+            return NotFound();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, auctionItem.Auction.LinkshellId);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        if (!IsAuctionLive(auctionItem.Auction, nowUtc) || HasAuctionEnded(auctionItem.Auction, nowUtc))
+        {
+            TempData["AuctionError"] = "You can only undo a bid while the auction is live.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (auctionItem.CurrentHighestBidderAppUserId != user.Id)
+        {
+            TempData["AuctionError"] = "You can only undo a bid you are currently winning.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var cooldownHours = await _context.Linkshells
+            .Where(l => l.Id == auctionItem.Auction.LinkshellId)
+            .Select(l => l.LootBlockCooldownHours)
+            .FirstOrDefaultAsync();
+
+        var outcome = AuctionDkpService.UndoWinningBid(
+            _context, auctionItem, user.Id, membership, cooldownHours, nowUtc);
+        if (!outcome.Ok)
+        {
+            TempData["AuctionError"] = outcome.Error;
+            return RedirectToAction(nameof(Index));
+        }
+
+        await _context.SaveChangesAsync();
+        TempData["AuctionStatus"] = cooldownHours > 0
+            ? $"Bid undone. You are blocked from in-game loot wins for {cooldownHours}h."
+            : "Bid undone.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -486,7 +554,12 @@ public partial class AuctionController
                 OccurredAt = DateTime.UtcNow,
                 CharacterName = winner.CharacterName,
                 ItemName = item.ItemName,
-                Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}."
+                Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
+                // Navigation property -> EF resolves the FK to the new
+                // AuctionHistory row during SaveChanges; ManualPoints picks
+                // these up by SourceAuctionHistoryId so a single close lands
+                // in one column on the sheet.
+                SourceAuctionHistory = auctionHistory
             });
         }
 
@@ -521,6 +594,15 @@ public partial class AuctionController
         _context.AuctionItems.RemoveRange(auction.AuctionItems);
         _context.Auctions.Remove(auction);
         await _context.SaveChangesAsync();
+
+        // SaveChanges populated AuctionHistory.Id and each ledger entry's
+        // SourceAuctionHistoryId. Hand the AuctionHistory id to the queue so
+        // ManualPointsAppendService can pull every AuctionSpent entry tied to
+        // this close and write them into a single sheet column.
+        if (auctionHistory.Id > 0)
+        {
+            await _sheetSync.EnqueueAuctionDeductionsAsync(auctionHistory.Id);
+        }
 
         return RedirectToAction(nameof(Index), "AuctionHistory");
     }

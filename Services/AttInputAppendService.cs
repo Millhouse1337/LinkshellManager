@@ -21,15 +21,18 @@ public sealed class AttInputAppendService
 
     private readonly ApplicationDbContext _db;
     private readonly GoogleSheetsSyncService _sheets;
+    private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
     private readonly ILogger<AttInputAppendService> _logger;
 
     public AttInputAppendService(
         ApplicationDbContext db,
         GoogleSheetsSyncService sheets,
+        WindowEventDkpLedgerService windowEventDkpLedger,
         ILogger<AttInputAppendService> logger)
     {
         _db = db;
         _sheets = sheets;
+        _windowEventDkpLedger = windowEventDkpLedger;
         _logger = logger;
     }
 
@@ -157,6 +160,7 @@ public sealed class AttInputAppendService
     {
         var windowEvent = await _db.WindowEvents
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .Include(w => w.MemberDkpOverrides)
             .FirstOrDefaultAsync(w => w.Id == windowEventId, cancellationToken);
         if (windowEvent is null)
         {
@@ -222,8 +226,16 @@ public sealed class AttInputAppendService
             string.Empty, string.Empty,
         });
 
+        var overridesByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+
         foreach (var item in combined)
         {
+            var memberDkp = overridesByName.TryGetValue(item.Entry.CharacterName.Trim(), out var amount)
+                ? amount
+                : windowEvent.DkpAmount.Value;
             rows.Add(BuildRow(
                 playerName: item.Entry.CharacterName,
                 jobs: BuildJobsCell(item.Entry.MainJob, item.Entry.MainJobLevel, item.Entry.SubJob, item.Entry.SubJobLevel),
@@ -231,13 +243,15 @@ public sealed class AttInputAppendService
                 utcOffset: item.Snapshot.UtcOffset,
                 location: item.Entry.Zone,
                 campWindow: 1,
-                dkp: windowEvent.DkpAmount.Value,
+                dkp: memberDkp,
                 entryType: windowEvent.EntryType!));
         }
 
         var appendResponse = await AppendRowsAsync(linkshell, rows, cancellationToken);
+        var firstMemberRowNumber = (int?)null;
         if (TryGetFirstAppendedRow(appendResponse?.Updates?.UpdatedRange, out var headerRowNumber))
         {
+            firstMemberRowNumber = headerRowNumber + 1;
             var tab = string.IsNullOrWhiteSpace(linkshell.AttInputTabName) ? DefaultTabName : linkshell.AttInputTabName!;
             await _sheets.FormatRowAsync(
                 linkshell.Id,
@@ -251,6 +265,8 @@ public sealed class AttInputAppendService
         }
 
         windowEvent.PostedToSheetAt = DateTime.UtcNow;
+        windowEvent.FirstAttInputRowNumber = firstMemberRowNumber;
+        windowEvent.AttInputRowCount = firstMemberRowNumber.HasValue ? combined.Count : null;
         // Stamp every contributing snapshot so the legacy per-snapshot append
         // path (still wired for SetSnapshotStatus / AttachSnapshot if ever
         // re-enabled) doesn't double-post these rows.
@@ -263,8 +279,143 @@ public sealed class AttInputAppendService
             }
         }
         await _db.SaveChangesAsync(cancellationToken);
+        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesAsync(
+            windowEvent.Id,
+            cancellationToken,
+            firstMemberRowNumber);
         _logger.LogInformation("AttInput append: window-event {Id} -> 1 header + {Count} rows.",
             windowEventId, combined.Count);
+    }
+
+    // Re-syncs an already-posted Window Event when an officer edits its
+    // DkpAmount or EntryType after the rows are in the sheet. Rewrites
+    // columns J (DKP) and K (Entry Type) for the appended range tracked on
+    // the WindowEvent and reconciles ledger entry amounts + per-member
+    // LinkshellDkp totals by the delta. Header row (FirstAttInputRowNumber - 1)
+    // is untouched -- it carries the event title only, no DKP cells.
+    public async Task EditPostedWindowEventAsync(int windowEventId, CancellationToken cancellationToken)
+    {
+        var windowEvent = await _db.WindowEvents
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .Include(w => w.MemberDkpOverrides)
+            .FirstOrDefaultAsync(w => w.Id == windowEventId, cancellationToken);
+        if (windowEvent is null)
+        {
+            _logger.LogDebug("AttInput edit skip: window-event {Id} not found.", windowEventId);
+            return;
+        }
+        if (!windowEvent.PostedToSheetAt.HasValue)
+        {
+            _logger.LogDebug("AttInput edit skip: window-event {Id} not posted yet.", windowEventId);
+            return;
+        }
+        if (!windowEvent.DkpAmount.HasValue)
+        {
+            _logger.LogDebug("AttInput edit skip: window-event {Id} has no DkpAmount.", windowEventId);
+            return;
+        }
+        if (!WindowEventEntryTypes.IsValid(windowEvent.EntryType))
+        {
+            _logger.LogDebug("AttInput edit skip: window-event {Id} invalid EntryType {Type}.",
+                windowEventId, windowEvent.EntryType);
+            return;
+        }
+
+        var linkshell = await LoadConfiguredLinkshellAsync(windowEvent.LinkshellId, cancellationToken);
+        if (linkshell is null) return;
+
+        var defaultAmount = windowEvent.DkpAmount.Value;
+        var newEntryType = windowEvent.EntryType!;
+        var overridesByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+
+        // Recreate the same alphabetical combined-member ordering used at
+        // post time so the per-row DKP values line up with the sheet rows
+        // we appended originally.
+        var combined = windowEvent.Snapshots
+            .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
+            .SelectMany(s => s.Entries.Select(e => new { Snapshot = s, Entry = e }))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Entry.CharacterName))
+            .GroupBy(x => x.Entry.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(x => x.Snapshot.CapturedAtUtc).First())
+            .ToList();
+
+        double AmountForCharacter(string characterName)
+            => overridesByName.TryGetValue(characterName.Trim(), out var v) ? v : defaultAmount;
+
+        if (windowEvent.FirstAttInputRowNumber.HasValue && windowEvent.AttInputRowCount is > 0)
+        {
+            var tab = string.IsNullOrWhiteSpace(linkshell.AttInputTabName) ? DefaultTabName : linkshell.AttInputTabName!;
+            var firstRow = windowEvent.FirstAttInputRowNumber.Value;
+            var rowCount = windowEvent.AttInputRowCount!.Value;
+            var lastRow = firstRow + rowCount - 1;
+            var values = new List<IList<object>>(rowCount);
+            for (var i = 0; i < rowCount; i++)
+            {
+                // If the combined list shrank since the original post (snapshot
+                // marked Duplicate/Ignored after the fact), fall through to the
+                // event default for those rows so the J cell still gets a sane
+                // value -- the sheet row is still physically present.
+                var rowAmount = i < combined.Count
+                    ? AmountForCharacter(combined[i].Entry.CharacterName)
+                    : defaultAmount;
+                values.Add(new List<object> { rowAmount, newEntryType });
+            }
+            var range = $"{tab}!J{firstRow}:K{lastRow}";
+            await _sheets.WriteAsync(linkshell.Id, linkshell.GoogleSpreadsheetId!, range, values, cancellationToken);
+            _logger.LogInformation(
+                "AttInput edit: window-event {Id} -> rewrote J:K rows {First}-{Last}.",
+                windowEventId, firstRow, lastRow);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "AttInput edit: window-event {Id} missing FirstAttInputRowNumber/AttInputRowCount; sheet cells not rewritten.",
+                windowEventId);
+        }
+
+        var ledgerEntries = await _db.DkpLedgerEntries
+            .Where(entry => entry.SourceWindowEventId == windowEventId && entry.AppUserId != null)
+            .ToListAsync(cancellationToken);
+        if (ledgerEntries.Count > 0)
+        {
+            var appUserIds = ledgerEntries
+                .Select(entry => entry.AppUserId!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var memberships = await _db.AppUserLinkshells
+                .Where(link => link.LinkshellId == windowEvent.LinkshellId && appUserIds.Contains(link.AppUserId!))
+                .ToListAsync(cancellationToken);
+            var membershipByAppUserId = memberships
+                .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
+                .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in ledgerEntries)
+            {
+                var newAmountForEntry = !string.IsNullOrWhiteSpace(entry.CharacterName)
+                    ? AmountForCharacter(entry.CharacterName)
+                    : defaultAmount;
+                var oldAmount = entry.Amount;
+                if (Math.Abs(oldAmount - newAmountForEntry) > 0.0001 &&
+                    !string.IsNullOrWhiteSpace(entry.AppUserId) &&
+                    membershipByAppUserId.TryGetValue(entry.AppUserId, out var membership))
+                {
+                    var delta = newAmountForEntry - oldAmount;
+                    membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + delta;
+                }
+                entry.Amount = newAmountForEntry;
+                entry.EventType = newEntryType;
+            }
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "AttInput edit: window-event {Id} ledger entries reconciled ({Count}).",
+            windowEventId, ledgerEntries.Count);
     }
 
     public async Task AppendEventCloseAsync(int eventId, CancellationToken cancellationToken)

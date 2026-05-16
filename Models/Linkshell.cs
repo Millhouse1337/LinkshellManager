@@ -3,6 +3,26 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
+public static class LinkshellTypes
+{
+    public const string SkySeaDynamis = "SkySeaDynamis";
+    public const string HnmOnly       = "HnmOnly";
+    public const string Both          = "Both";
+
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        SkySeaDynamis, HnmOnly, Both,
+    };
+
+    public static bool IsValid(string? value)
+        => !string.IsNullOrEmpty(value) && All.Contains(value);
+
+    // Anything unknown/null is treated as Both (fail-open) so a missing or
+    // stale value never hides content the linkshell expects to see.
+    public static string Normalize(string? value)
+        => IsValid(value) ? value! : Both;
+}
+
 public class Linkshell
 {
     [Key]
@@ -27,6 +47,15 @@ public class Linkshell
     public string? Status { get; set; }
 
     public string? Details { get; set; }
+
+    // Drives which content the in-game addon and the web sidebar surface:
+    //   SkySeaDynamis = timed-event experience (no HNM presets / no Window
+    //                   Events nav)
+    //   HnmOnly       = HNM snapshot sessions only (no Create Event / timed
+    //                   presets / Queued / Active; no Event System nav)
+    //   Both          = everything (default; matches legacy behavior)
+    [MaxLength(16)]
+    public string LinkshellType { get; set; } = LinkshellTypes.Both;
 
     [MaxLength(32)]
     public string LootStructure { get; set; } = "Dkp";
@@ -53,6 +82,11 @@ public class Linkshell
     public bool EnableItems { get; set; } = true;
 
     public bool EnableRevenue { get; set; } = true;
+
+    // Hours a member is blocked from in-game loot-pool wins after they undo
+    // a winning auction bid (deters bid-then-pull abuse). 0 disables the
+    // block entirely. Applied as UtcNow + this many hours on undo.
+    public int LootBlockCooldownHours { get; set; } = 24;
 
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing

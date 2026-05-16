@@ -494,6 +494,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("LootBiddingBlockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Rank")
                         .HasColumnType("text");
 
@@ -860,6 +863,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("AppUserId")
                         .HasColumnType("text");
 
+                    b.Property<int?>("AttInputRowNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AuditRelatedLedgerEntryId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("CharacterName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -914,21 +923,35 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("SheetAppendedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("SourceAuctionHistoryId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("SourceEventLootDetailId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("SourceTodLootDetailId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SourceWindowEventId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AppUserId");
 
+                    b.HasIndex("AttInputRowNumber");
+
+                    b.HasIndex("AuditRelatedLedgerEntryId");
+
                     b.HasIndex("EventHistoryId");
+
+                    b.HasIndex("SourceAuctionHistoryId");
 
                     b.HasIndex("SourceEventLootDetailId");
 
                     b.HasIndex("SourceTodLootDetailId");
+
+                    b.HasIndex("SourceWindowEventId");
 
                     b.HasIndex("LinkshellId", "AppUserId", "OccurredAt", "Sequence");
 
@@ -1356,6 +1379,14 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("LinkshellName")
                         .HasColumnType("text");
+
+                    b.Property<string>("LinkshellType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("LootBlockCooldownHours")
+                        .HasColumnType("integer");
 
                     b.Property<string>("LootStructure")
                         .IsRequired()
@@ -1947,6 +1978,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AttInputRowCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("ClosedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1963,6 +1997,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("EntryType")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("FirstAttInputRowNumber")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("FirstCapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -2002,6 +2039,33 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("LinkshellId", "Status", "NormalizedName");
 
                     b.ToTable("WindowEvents", (string)null);
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEventMemberDkp", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<double>("DkpAmount")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("WindowEventId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WindowEventId", "CharacterName")
+                        .IsUnique();
+
+                    b.ToTable("WindowEventMemberDkps", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -2424,11 +2488,18 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AuctionHistory", "SourceAuctionHistory")
+                        .WithMany()
+                        .HasForeignKey("SourceAuctionHistoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("AppUser");
 
                     b.Navigation("EventHistory");
 
                     b.Navigation("Linkshell");
+
+                    b.Navigation("SourceAuctionHistory");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Event", b =>
@@ -2710,6 +2781,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("Linkshell");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEventMemberDkp", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.WindowEvent", "WindowEvent")
+                        .WithMany("MemberDkpOverrides")
+                        .HasForeignKey("WindowEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WindowEvent");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -2853,6 +2935,8 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEvent", b =>
                 {
+                    b.Navigation("MemberDkpOverrides");
+
                     b.Navigation("Snapshots");
                 });
 #pragma warning restore 612, 618

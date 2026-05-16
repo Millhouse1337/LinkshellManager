@@ -17,8 +17,10 @@ public sealed partial class AddonApiController
     {
         var linkshellId = AddonApiAuthAttribute.GetLinkshellId(HttpContext);
 
-        var raw = await _dbContext.Events
-            .Where(evt => evt.LinkshellId == linkshellId)
+        var query = _dbContext.Events
+            .Where(evt => evt.LinkshellId == linkshellId);
+
+        var raw = await query
             .OrderByDescending(evt => evt.CommencementStartTime)
             .ThenByDescending(evt => evt.StartTime)
             .Take(50)
@@ -290,6 +292,10 @@ public sealed partial class AddonApiController
         if (windowCount <= 1)
         {
             await _sheetSync.EnqueueEventCloseAsync(eventEntity.Id, cancellationToken);
+        }
+        if (result.HasLootDeductions)
+        {
+            await _sheetSync.EnqueueEventLootDeductionsAsync(result.EventHistoryId, cancellationToken);
         }
 
         // For windowed events DkpPerHour is reused as DkpPerWindow (same column,

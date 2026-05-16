@@ -13,6 +13,16 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
+    public sealed record ActivityDkpAddCandidateDto(
+        int WindowEventId,
+        string Label,
+        DateTime OccurredAt,
+        double Amount,
+        string? EventName,
+        string? EntryType,
+        string? PrimaryZone,
+        int MemberCount);
+
     [HttpGet("dkp-history")]
     public async Task<IActionResult> GetDkpHistoryAsync(int? linkshellId, string? appUserId, CancellationToken cancellationToken)
     {
@@ -54,6 +64,8 @@ public sealed partial class ActivityDataController
         }
 
         var selectedLinkshell = accessibleMemberships.First(link => link.LinkshellId == selectedLinkshellId);
+        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, cancellationToken);
+
         var linkshellMembers = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == selectedLinkshellId && link.AppUserId != null)
             .OrderBy(link => link.CharacterName)
@@ -148,9 +160,10 @@ public sealed partial class ActivityDataController
 
         var mode = request.Mode?.Trim();
         if (!string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(mode, "Add", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(mode, "Misc", StringComparison.OrdinalIgnoreCase))
         {
-            return BadRequest(new { error = "Audit mode must be 'Adjust' or 'Misc'." });
+            return BadRequest(new { error = "Audit mode must be 'Adjust', 'Add', or 'Misc'." });
         }
 
         if (string.IsNullOrWhiteSpace(request.Reason))
@@ -203,6 +216,7 @@ public sealed partial class ActivityDataController
 
         DkpLedgerEntry newEntry;
         double deltaAmount;
+        var appendManualPoints = true;
 
         if (string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase))
         {
@@ -211,7 +225,7 @@ public sealed partial class ActivityDataController
                 return BadRequest(new { error = "A related ledger entry is required when adjusting a previous entry." });
             }
 
-            var original = await _dbContext.DkpLedgerEntries.AsNoTracking().FirstOrDefaultAsync(
+            var original = await _dbContext.DkpLedgerEntries.FirstOrDefaultAsync(
                 entry => entry.Id == request.RelatedLedgerEntryId.Value &&
                          entry.LinkshellId == request.LinkshellId &&
                          entry.AppUserId == request.TargetAppUserId,
@@ -221,11 +235,19 @@ public sealed partial class ActivityDataController
                 return NotFound(new { error = "The selected original ledger entry was not found for this member." });
             }
 
-            deltaAmount = request.Amount - original.Amount;
+            var priorAuditDelta = await _dbContext.DkpLedgerEntries
+                .Where(entry =>
+                    entry.LinkshellId == request.LinkshellId &&
+                    entry.AppUserId == request.TargetAppUserId &&
+                    entry.AuditRelatedLedgerEntryId == original.Id)
+                .SumAsync(entry => (double?)entry.Amount, cancellationToken) ?? 0d;
+            var currentAuditedAmount = original.Amount + priorAuditDelta;
+            deltaAmount = request.Amount - currentAuditedAmount;
             newEntry = new DkpLedgerEntry
             {
                 AppUserId = request.TargetAppUserId,
                 LinkshellId = request.LinkshellId,
+                AuditRelatedLedgerEntryId = original.Id,
                 EntryType = "AuditAdjustment",
                 Amount = deltaAmount,
                 Sequence = sequence,
@@ -237,8 +259,71 @@ public sealed partial class ActivityDataController
                 EventStartTime = original.EventStartTime,
                 EventEndTime = original.EventEndTime,
                 ItemName = original.ItemName,
-                Details = $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {original.Amount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0})."
+                Details = $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {currentAuditedAmount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0}).",
+                SourceWindowEventId = original.SourceWindowEventId,
+                AttInputRowNumber = original.AttInputRowNumber
             };
+
+            if (SnapshotAttInputAuditService.IsSnapshotEarnedEntry(original))
+            {
+                try
+                {
+                    var attInputRowNumber = await _snapshotAttInputAudit.CorrectSnapshotEarnedRowAsync(
+                        original,
+                        request.Amount,
+                        cancellationToken);
+                    newEntry.AttInputRowNumber = attInputRowNumber;
+                    newEntry.SheetAppendedAt = nowUtc;
+                    appendManualPoints = false;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return BadRequest(new { error = ex.Message });
+                }
+            }
+        }
+        else if (string.Equals(mode, "Add", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!request.SourceWindowEventId.HasValue)
+            {
+                return BadRequest(new { error = "A snapshot entry is required when adding a missing member." });
+            }
+
+            SnapshotMissingMemberRowResult addResult;
+            try
+            {
+                addResult = await _snapshotAttInputAudit.AddMissingSnapshotMemberRowAsync(
+                    request.LinkshellId,
+                    request.SourceWindowEventId.Value,
+                    targetMembership,
+                    cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+
+            deltaAmount = addResult.Amount;
+            newEntry = new DkpLedgerEntry
+            {
+                AppUserId = request.TargetAppUserId,
+                LinkshellId = request.LinkshellId,
+                EntryType = "SnapshotEarned",
+                Amount = deltaAmount,
+                Sequence = sequence,
+                OccurredAt = addResult.OccurredAt,
+                CharacterName = targetMembership.CharacterName,
+                EventName = addResult.EventName,
+                EventType = addResult.EventType,
+                EventLocation = addResult.EventLocation,
+                EventStartTime = addResult.EventStartTime,
+                EventEndTime = addResult.EventEndTime,
+                Details = $"Added to snapshot entry by {officerName}: {reason}",
+                SourceWindowEventId = addResult.WindowEventId,
+                AttInputRowNumber = addResult.AttInputRowNumber,
+                SheetAppendedAt = nowUtc
+            };
+            appendManualPoints = false;
         }
         else
         {
@@ -260,7 +345,95 @@ public sealed partial class ActivityDataController
         _dbContext.DkpLedgerEntries.Add(newEntry);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueAsync(targetMembership.LinkshellId, cancellationToken);
+        if (appendManualPoints)
+        {
+            await _sheetSync.EnqueueDkpAuditAsync(newEntry.Id, cancellationToken);
+        }
         return Ok(new { success = true });
+    }
+
+    [HttpGet("dkp-audit/add-candidates")]
+    public async Task<IActionResult> GetDkpAuditAddCandidatesAsync(
+        int linkshellId,
+        string? targetAppUserId,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to load DKP audit entries." });
+        }
+
+        if (linkshellId <= 0)
+        {
+            return BadRequest(new { error = "A linkshell selection is required." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanAuditDkp, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(linkshellId, cancellationToken);
+
+        var creditedWindowEventIds = string.IsNullOrWhiteSpace(targetAppUserId)
+            ? new HashSet<int>()
+            : (await _dbContext.DkpLedgerEntries
+                .Where(entry =>
+                    entry.LinkshellId == linkshellId &&
+                    entry.AppUserId == targetAppUserId &&
+                    entry.SourceWindowEventId.HasValue &&
+                    entry.EntryType == "SnapshotEarned")
+                .Select(entry => entry.SourceWindowEventId!.Value)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var windowEvents = await _dbContext.WindowEvents
+            .AsNoTracking()
+            .Where(w =>
+                w.LinkshellId == linkshellId &&
+                w.PostedToSheetAt.HasValue &&
+                w.DkpAmount.HasValue &&
+                w.EntryType != null)
+            .OrderByDescending(w => w.LastCapturedAtUtc)
+            .Take(100)
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .ToListAsync(cancellationToken);
+
+        var candidates = windowEvents
+            .Where(w => !creditedWindowEventIds.Contains(w.Id))
+            .Select(w =>
+            {
+                var activeEntries = w.Snapshots
+                    .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
+                    .SelectMany(s => s.Entries)
+                    .ToList();
+                var primaryZone = activeEntries
+                    .Where(e => !string.IsNullOrWhiteSpace(e.Zone))
+                    .GroupBy(e => e.Zone!, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(g => g.Count())
+                    .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.Key)
+                    .FirstOrDefault();
+                var name = string.IsNullOrWhiteSpace(w.Name) ? "Window Event" : w.Name!;
+                var label = $"{w.LastCapturedAtUtc:MM/dd/yyyy} - {name} - {w.DkpAmount:0.##} DKP";
+                return new ActivityDkpAddCandidateDto(
+                    w.Id,
+                    label,
+                    w.LastCapturedAtUtc,
+                    w.DkpAmount!.Value,
+                    name,
+                    w.EntryType,
+                    primaryZone,
+                    activeEntries
+                        .Where(e => !string.IsNullOrWhiteSpace(e.CharacterName))
+                        .Select(e => e.CharacterName.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Count());
+            })
+            .ToList();
+
+        return Ok(new { entries = candidates });
     }
 }

@@ -157,7 +157,8 @@ public sealed partial class ActivityDataController
             tod.ImagePath);
     }
 
-    private static ActivityAuctionDto MapAuctionDto(Auction auction, string currentUserId, DateTime nowUtc)
+    private static ActivityAuctionDto MapAuctionDto(
+        Auction auction, string currentUserId, DateTime nowUtc, double? availableDkp = null)
     {
         var isCreator = IsAuctionCreator(currentUserId, auction);
         var status = HasAuctionEnded(auction, nowUtc)
@@ -200,7 +201,8 @@ public sealed partial class ActivityDataController
                     item.Notes,
                     item.Bids.Count,
                     item.SourceItemId))
-                .ToList());
+                .ToList(),
+            availableDkp);
     }
 
     private static ActivityAuctionHistoryDto MapAuctionHistoryDto(AuctionHistory history)

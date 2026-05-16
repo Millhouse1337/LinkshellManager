@@ -371,6 +371,8 @@ export class ActivitySidebarPanelComponent {
         return 'Loot Edit · Spent';
       case 'EventEarned':
         return 'Event Earned';
+      case 'SnapshotEarned':
+        return 'Snapshot Earned';
       case 'AuctionSpent':
         return 'Auction Spent';
       case 'AuditAdjustment':
@@ -395,7 +397,7 @@ export class ActivitySidebarPanelComponent {
     const entries = this.dkpHistory()?.entries ?? [];
     const totals = new Map<string, number>();
     for (const entry of entries) {
-      if (entry.entryType !== 'EventEarned') continue;
+      if (entry.entryType !== 'EventEarned' && entry.entryType !== 'SnapshotEarned') continue;
       const key = (entry.eventType ?? '').trim() || 'Unspecified';
       totals.set(key, (totals.get(key) ?? 0) + entry.amount);
     }
@@ -443,6 +445,7 @@ export class ActivitySidebarPanelComponent {
     const entries = this.dkpHistory()?.entries ?? [];
     return entries.filter(entry =>
       entry.entryType === 'EventEarned' ||
+      entry.entryType === 'SnapshotEarned' ||
       entry.entryType === 'LootSpent' ||
       entry.entryType === 'AuditAdjustment' ||
       entry.entryType === 'AuditMisc'

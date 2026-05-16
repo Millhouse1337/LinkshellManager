@@ -137,6 +137,43 @@ public sealed partial class AddonApiController
         });
     }
 
+    // Closes a Window Event from the addon's HNM session "End Event" button.
+    // Mirrors the cookie-auth WindowEventsController.Close: it only flips the
+    // status + stamps ClosedAtUtc. It deliberately does NOT enqueue any sheet
+    // sync — posting a Window Event to the DKP sheet stays an explicit,
+    // officer-initiated action on the Window Events page.
+    [HttpPost("window-events/{windowEventId:int}/close")]
+    [AddonApiAuth]
+    public async Task<IActionResult> CloseWindowEventAsync(
+        int windowEventId, CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+
+        var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
+        if (role?.CanModerateLiveEvent != true)
+        {
+            return Forbid();
+        }
+
+        var windowEvent = await _dbContext.WindowEvents
+            .FirstOrDefaultAsync(
+                e => e.Id == windowEventId && e.LinkshellId == token.LinkshellId,
+                cancellationToken);
+        if (windowEvent is null)
+        {
+            return NotFound(new { error = "Window Event not found." });
+        }
+
+        if (windowEvent.Status != WindowEventStatuses.Closed)
+        {
+            windowEvent.Status = WindowEventStatuses.Closed;
+            windowEvent.ClosedAtUtc = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return Ok(new { closed = true, windowEventId = windowEvent.Id });
+    }
+
     private async Task<WindowEvent?> FindOrCreateWindowEventAsync(
         int linkshellId,
         string? name,
@@ -151,7 +188,7 @@ public sealed partial class AddonApiController
             return null;
         }
 
-        var staleCutoff = capturedAtUtc.AddHours(-24);
+        var staleCutoff = capturedAtUtc.AddHours(-21);
         var existing = await _dbContext.WindowEvents
             .Where(item =>
                 item.LinkshellId == linkshellId &&
@@ -200,8 +237,8 @@ public sealed partial class AddonApiController
             return null;
         }
 
-        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-15);
-        var toUtc = snapshot.CapturedAtUtc.AddMinutes(15);
+        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-8);
+        var toUtc = snapshot.CapturedAtUtc.AddMinutes(8);
         var candidates = await _dbContext.AttendanceSnapshots
             .Include(item => item.Entries)
             .Where(item =>

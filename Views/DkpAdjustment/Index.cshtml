@@ -101,11 +101,16 @@ else
                     <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
                 </div>
                 <div class="mt-modal__body">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
                         <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
                             <input type="radio" name="auditMode" value="Adjust" checked />
                             <strong style="margin-left:6px">Correct a previous entry</strong>
                             <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Fix DKP awarded/charged on a past event or auction.</div>
+                        </label>
+                        <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+                            <input type="radio" name="auditMode" value="Add" />
+                            <strong style="margin-left:6px">Add to a previous entry</strong>
+                            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Credit a member who was missed by a snapshot.</div>
                         </label>
                         <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
                             <input type="radio" name="auditMode" value="Misc" />
@@ -115,14 +120,21 @@ else
                     </div>
 
                     <div class="field" style="margin-bottom:12px">
-                        <label>Member</label>
-                        <div id="auditMemberName" style="color:var(--fg);font-weight:500"></div>
+                        <label for="auditMemberSelect">Member</label>
+                        <select id="auditMemberSelect" class="form-select">
+                            @foreach (var member in Model.Members.Where(m => !string.IsNullOrWhiteSpace(m.AppUserId)))
+                            {
+                                <option value="@member.AppUserId"
+                                        data-name="@member.CharacterName"
+                                        data-dkp="@member.CurrentBalance.ToString("0.##")">@member.CharacterName</option>
+                            }
+                        </select>
                         <div id="auditMemberBalance" style="color:var(--fg-3);font-size:12px"></div>
                     </div>
 
                     <div id="auditAdjustFields">
                         <div class="field" style="margin-bottom:12px">
-                            <label for="auditEntrySelect">Entry to correct</label>
+                            <label for="auditEntrySelect" id="auditEntryLabel">Entry to correct</label>
                             <select id="auditEntrySelect" class="form-select">
                                 <option value="">Loading entries…</option>
                             </select>
@@ -130,7 +142,7 @@ else
                         </div>
                     </div>
 
-                    <div class="field" style="margin-bottom:12px">
+                    <div class="field" id="auditAmountField" style="margin-bottom:12px">
                         <label for="auditAmount" id="auditAmountLabel">Corrected amount (DKP)</label>
                         <input type="number" step="0.01" id="auditAmount" class="form-control" placeholder="e.g. 45" />
                     </div>

@@ -1631,3 +1631,335 @@ table.themed .num {
 }
 
 .d-none { display: none !important; }
+
+/* ===========================================================
+   Window Events card
+   =========================================================== */
+.we-card {
+  overflow: visible;
+}
+.we-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.we-card__title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.we-card__title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin: 0;
+}
+.we-card__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-2);
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.we-card__meta svg {
+  width: 13px;
+  height: 13px;
+  opacity: 0.85;
+}
+.we-card__counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--fg-2);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.we-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.we-count svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+
+.we-card__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+/* Rename (name input + Rename button) sits hard-left; the Close/Delete
+   action cluster is pushed to the far right of the row. */
+.we-rename-form { margin-right: 4px; }
+.we-card__actions { margin-left: auto; }
+.we-card__form {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.we-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.we-field__label {
+  font-size: 12px;
+  color: var(--fg-2);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.we-field__input {
+  width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.we-field__select {
+  width: 180px;
+}
+.we-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.we-action-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.we-rename-input {
+  width: 200px;
+}
+.we-btn-icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+.we-btn-icon.sm {
+  width: 26px;
+}
+.we-btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ----- combined roster ----- */
+.we-roster {
+  padding: 14px 18px 18px;
+}
+.we-roster__subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-2);
+  margin-bottom: 10px;
+}
+.we-roster__subtitle svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+.we-roster__submit {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.we-roster__submit .we-posted-meta {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+/* ----- shared table styles ----- */
+.we-table__scroll {
+  overflow-x: auto;
+}
+.we-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.we-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--fg-3);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--border);
+}
+.we-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  vertical-align: middle;
+}
+.we-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.we-table tbody tr:hover td {
+  background: var(--surface);
+}
+.we-table .num,
+.we-table th.num,
+.we-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- job pills ----- */
+.we-job-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-right: 4px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: rgba(139, 92, 246, 0.18);
+  color: #c4b5fd;
+}
+.we-job-pill--sub {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+/* ----- zone ----- */
+.we-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+}
+.we-zone svg {
+  width: 13px;
+  height: 13px;
+  color: var(--fg-3);
+}
+.we-muted {
+  color: var(--fg-3);
+}
+
+/* ----- per-row DKP input ----- */
+.we-dkp-input {
+  width: 90px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----- posted snapshots ----- */
+.we-snapshots {
+  border-top: 1px solid var(--border);
+}
+.we-hidden-form {
+  display: none;
+}
+.we-snapshot {
+  border-bottom: 1px solid var(--border);
+}
+.we-snapshot:last-child {
+  border-bottom: none;
+}
+.we-snapshot > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+}
+.we-snapshot > summary::-webkit-details-marker { display: none; }
+.we-snapshot > summary::marker { display: none; content: ""; }
+.we-snapshot:hover > summary {
+  background: var(--surface);
+}
+.we-snapshot__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-3);
+  transition: transform 0.15s ease;
+}
+.we-snapshot__caret svg {
+  width: 14px;
+  height: 14px;
+}
+.we-snapshot[open] > summary .we-snapshot__caret {
+  transform: rotate(90deg);
+}
+.we-snapshot__title {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  min-width: 0;
+}
+.we-snapshot__meta {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+.we-snapshot__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.we-table--snapshot {
+  background: var(--bg);
+}
+.we-table__scroll--snapshot {
+  padding: 0 18px 16px;
+}
+
+/* When a snapshot status flips to anything other than Active, the chip is
+   visually loud enough that we want the buttons to read as the action set
+   for that state — keep the row hover but tighten button density. */
+.we-snapshot__actions .btn.sm {
+  height: 26px;
+}
+
+/* Unlinked Snapshots: management action row below the summary. Indented
+   to line up under the snapshot title, themed controls, wraps on narrow
+   widths. Mirrors the Window Event card's control spacing. */
+.we-unlinked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 18px 12px 42px;
+}
+.we-unlinked-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.we-unlinked-name { width: 200px; }
+.we-unlinked-select { width: 220px; }
+

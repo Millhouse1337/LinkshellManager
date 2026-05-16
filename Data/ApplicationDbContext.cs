@@ -42,6 +42,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<AttendanceSnapshot> AttendanceSnapshots => Set<AttendanceSnapshot>();
         public DbSet<AttendanceSnapshotEntry> AttendanceSnapshotEntries => Set<AttendanceSnapshotEntry>();
         public DbSet<WindowEvent> WindowEvents => Set<WindowEvent>();
+        public DbSet<WindowEventMemberDkp> WindowEventMemberDkps => Set<WindowEventMemberDkp>();
         public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
         public DbSet<PendingTodLootSubmission> PendingTodLootSubmissions => Set<PendingTodLootSubmission>();
         public DbSet<PendingAttendanceWindowSubmission> PendingAttendanceWindowSubmissions => Set<PendingAttendanceWindowSubmission>();
@@ -192,12 +193,20 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(item => item.SourceAuctionHistory)
+                    .WithMany()
+                    .HasForeignKey(item => item.SourceAuctionHistoryId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.AppUserId, item.OccurredAt, item.Sequence });
                 // Index the loot-source FKs so the Loot History view can
                 // quickly find the edit-pair ledger entries for a given
                 // loot row without scanning the full ledger.
                 entity.HasIndex(item => item.SourceTodLootDetailId);
                 entity.HasIndex(item => item.SourceEventLootDetailId);
+                entity.HasIndex(item => item.SourceWindowEventId);
+                entity.HasIndex(item => item.SourceAuctionHistoryId);
+                entity.HasIndex(item => item.AttInputRowNumber);
+                entity.HasIndex(item => item.AuditRelatedLedgerEntryId);
             });
 
             builder.Entity<Tod>(entity =>
@@ -424,6 +433,16 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.Notes).HasMaxLength(1024);
                 entity.HasIndex(item => new { item.LinkshellId, item.Status, item.NormalizedName });
                 entity.HasIndex(item => new { item.LinkshellId, item.LastCapturedAtUtc });
+            });
+            builder.Entity<WindowEventMemberDkp>(entity =>
+            {
+                entity.ToTable("WindowEventMemberDkps");
+                entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                entity.HasOne(item => item.WindowEvent)
+                    .WithMany(item => item.MemberDkpOverrides)
+                    .HasForeignKey(item => item.WindowEventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.WindowEventId, item.CharacterName }).IsUnique();
             });
             builder.Entity<PendingAttendanceSnapshotSubmission>(entity =>
             {

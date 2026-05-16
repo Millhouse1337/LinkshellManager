@@ -36,8 +36,6 @@
     <div style="padding:12px 16px;font-size:13px;color:var(--fg-muted,#aaa)">
         <code>/lsm now &lt;Monster Name&gt;</code> creates new or updates existing Window Events.
         <code>/lsm now</code> will land under Unlinked Snapshots until a leader or officer attaches it.
-        Having a typo will also land under Unlinked Snapshots.
-        Combined attendance counts unique characters from active snapshots only.
     </div>
 </div>
 
@@ -47,30 +45,32 @@
         <div class="card-head">
             <div class="card-title">Unlinked Snapshots <span class="tag">@Model.UnlinkedSnapshots.Count</span></div>
         </div>
-        <div style="padding:0 0 8px">
+        <section class="we-snapshots">
             @foreach (var snapshot in Model.UnlinkedSnapshots)
             {
-                <details style="border-top:1px solid var(--border,#222)">
-                    <summary style="padding:10px 16px;cursor:pointer;list-style:revert">
-                        <strong>@snapshot.CapturedAtDisplay</strong>
-                        <span style="color:var(--fg-muted,#888)"> &middot; </span>
-                        <span>Posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong></span>
-                        <span style="color:var(--fg-muted,#888)"> &middot; </span>
-                        <span>@snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
+                <details class="we-snapshot">
+                    <summary class="we-snapshot__head">
+                        <span class="we-snapshot__caret" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
+                        </span>
+                        <span class="we-snapshot__title">
+                            <strong>@snapshot.CapturedAtDisplay</strong>
+                            <span class="we-snapshot__meta">· posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong> · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
+                        </span>
                     </summary>
                     @if (Model.CanManage)
                     {
-                        <div style="padding:8px 16px 0 32px;display:flex;flex-wrap:wrap;gap:14px;align-items:center">
-                            <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" style="display:flex;gap:6px;align-items:center">
+                        <div class="we-unlinked-actions">
+                            <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
                                 @Html.AntiForgeryToken()
-                                <input type="text" name="name" value="@snapshot.Name" placeholder="Monster name" maxlength="128" required />
+                                <input class="input we-unlinked-name" type="text" name="name" value="@snapshot.Name" placeholder="Monster name" maxlength="128" required />
                                 <button type="submit" class="btn sm">Create / attach</button>
                             </form>
                             @if (Model.OpenEvents.Count > 0)
                             {
-                                <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" style="display:flex;gap:6px;align-items:center">
+                                <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
                                     @Html.AntiForgeryToken()
-                                    <select name="windowEventId">
+                                    <select class="form-select we-unlinked-select" name="windowEventId">
                                         @foreach (var ev in Model.OpenEvents)
                                         {
                                             <option value="@ev.Id">@Dash(ev.Name) (@ev.CombinedMemberCount members)</option>
@@ -84,12 +84,17 @@
                                 <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
                                 <button type="submit" class="btn sm ghost">Ignore</button>
                             </form>
+                            <form asp-action="DeleteSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post"
+                                  onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn sm danger-outline">Delete</button>
+                            </form>
                         </div>
                     }
                     @await Html.PartialAsync("_WindowSnapshotEntries", snapshot)
                 </details>
             }
-        </div>
+        </section>
     </div>
 }
 

@@ -1,31 +1,97 @@
 @model LinkshellManagerDiscordApp.ViewModels.WindowSnapshotRow
 @{
     string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
-    string Jobs(AttendanceSnapshotEntryRow row)
-    {
-        var main = string.IsNullOrWhiteSpace(row.MainJob) ? "-" : row.MainJob + (row.MainJobLevel?.ToString() ?? "");
-        var sub = string.IsNullOrWhiteSpace(row.SubJob) ? "-" : row.SubJob + (row.SubJobLevel?.ToString() ?? "");
-        return $"{main}/{sub}";
-    }
+    string FormatDkp(double? value) => value.HasValue
+        ? value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        : "";
+
+    // When the parent (window event card) passes a form id, render an
+    // editable per-character DKP column wired to that form. Unlinked
+    // snapshots on the index page omit these keys so the column is hidden.
+    var formId = ViewData["MemberDkpFormId"] as string;
+    var effectiveDkpByCharacter = ViewData["MemberDkpEffectiveByCharacter"]
+        as IDictionary<string, double?>;
+    var startIndex = (int)(ViewData["MemberDkpStartIndex"] ?? 0);
+    var fallbackDkp = ViewData["MemberDkpDefault"] as double?;
+    var showDkpInputs = !string.IsNullOrEmpty(formId);
 }
 
-<div style="padding:8px 16px 16px 32px;overflow-x:auto">
-    <table style="width:100%;max-width:780px;border-collapse:collapse;font-size:13px">
+<div class="we-table__scroll we-table__scroll--snapshot">
+    <table class="we-table we-table--snapshot">
         <thead>
             <tr>
-                <th style="text-align:left;padding:6px 10px">Character</th>
-                <th style="text-align:left;padding:6px 10px">Jobs</th>
-                <th style="text-align:left;padding:6px 10px">Zone</th>
+                <th>Character</th>
+                <th>Jobs</th>
+                <th>Zone</th>
+                @if (showDkpInputs)
+                {
+                    <th class="num">DKP</th>
+                }
             </tr>
         </thead>
         <tbody>
+        @{ var rowIndex = 0; }
         @foreach (var entry in Model.Entries)
         {
-            <tr style="border-top:1px solid var(--border,#222)">
-                <td style="padding:6px 10px"><strong>@entry.CharacterName</strong></td>
-                <td style="padding:6px 10px">@Jobs(entry)</td>
-                <td style="padding:6px 10px">@Dash(entry.Zone)</td>
+            <tr>
+                <td><strong>@entry.CharacterName</strong></td>
+                <td>
+                    @if (!string.IsNullOrWhiteSpace(entry.MainJob))
+                    {
+                        <span class="we-job-pill">@(entry.MainJob)@(entry.MainJobLevel?.ToString())</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(entry.SubJob))
+                    {
+                        <span class="we-job-pill we-job-pill--sub">@(entry.SubJob)@(entry.SubJobLevel?.ToString())</span>
+                    }
+                </td>
+                <td>
+                    @if (!string.IsNullOrWhiteSpace(entry.Zone))
+                    {
+                        <span class="we-zone">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            @entry.Zone.Replace('_', ' ')
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="we-muted">-</span>
+                    }
+                </td>
+                @if (showDkpInputs)
+                {
+                    double? overrideDkp = null;
+                    if (effectiveDkpByCharacter is not null &&
+                        !string.IsNullOrWhiteSpace(entry.CharacterName) &&
+                        effectiveDkpByCharacter.TryGetValue(entry.CharacterName.Trim(), out var found))
+                    {
+                        overrideDkp = found;
+                    }
+                    // No saved value yet -> seed with the event default so the
+                    // input mirrors the Default DKP value above. The parent
+                    // card's inline sync script keeps these "follower" rows
+                    // updated until the officer edits an individual row.
+                    var followsDefault = !overrideDkp.HasValue;
+                    var displayDkp = overrideDkp ?? fallbackDkp;
+                    var formIndex = startIndex + rowIndex;
+                    <td class="num">
+                        <input type="hidden"
+                               name="MemberDkp[@formIndex].CharacterName"
+                               value="@entry.CharacterName"
+                               form="@formId" />
+                        <input class="input js-member-dkp we-dkp-input"
+                               type="number"
+                               name="MemberDkp[@formIndex].DkpAmount"
+                               value="@FormatDkp(displayDkp)"
+                               step="0.25" min="0"
+                               title="Defaults to the event's Default DKP. Edit to override for this character."
+                               data-window-event-form="@formId"
+                               data-follows-default="@(followsDefault ? "true" : "false")"
+                               form="@formId" />
+                    </td>
+                }
             </tr>
+            rowIndex++;
         }
         </tbody>
     </table>

@@ -28,14 +28,10 @@ public partial class EventController
 
         int? selectedLinkshellId = user.PrimaryLinkshellId ?? linkshellIds.Cast<int?>().FirstOrDefault();
 
-        // True HNMs (EventType="HNM") live in the dedicated HNM section,
-        // so the generic Events page filters them out. Legacy HNM-named
-        // events without the type discriminator stay visible here.
         var events = await _context.Events
             .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
             .Where(evt => !selectedLinkshellId.HasValue || evt.LinkshellId == selectedLinkshellId.Value)
-            .Where(evt => evt.EventType == null || evt.EventType != "HNM")
             .OrderBy(evt => evt.StartTime)
             .ToListAsync();
 
@@ -355,16 +351,6 @@ public partial class EventController
             return Forbid();
         }
 
-        // HNM events run on the in-game addon's window timing — the post-by
-        // -window roster workflow gets out of sync if start fires from the
-        // web app, so reject and surface a clear message via TempData. The
-        // Index view reads from TempData["StartError"] (added below).
-        if (string.Equals((eventToStart.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
-        {
-            TempData["StartError"] = "HNM events are started with the in-game addon. Use the Att launcher to start this event.";
-            return RedirectToAction(nameof(Index));
-        }
-
         eventToStart.CommencementStartTime ??= DateTime.UtcNow;
         eventToStart.StarterUserId ??= user.Id;
 
@@ -469,13 +455,19 @@ public partial class EventController
             return Forbid();
         }
 
-        await EndEventCoreAsync(_context, eventEntity);
+        var endResult = await EndEventCoreAsync(_context, eventEntity);
         // AttInput append fires only for non-windowed events; HNM-style events
         // (windowCount > 1) already appended per-window via PostAttendanceAsync.
         var windowCount = eventEntity.WindowCountOverride ?? Services.HnmConfig.GetWindowCount(eventEntity.EventName);
         if (windowCount <= 1)
         {
             await _sheetSync.EnqueueEventCloseAsync(eventEntity.Id);
+        }
+        // ManualPoints deductions: one column per event close carrying every
+        // LootSpent row's negative DKP. Skipped when no items were won.
+        if (endResult.HasLootDeductions)
+        {
+            await _sheetSync.EnqueueEventLootDeductionsAsync(endResult.EventHistoryId);
         }
 
         return RedirectToAction(nameof(Index), "EventHistory");
@@ -497,7 +489,9 @@ public partial class EventController
     internal sealed record EndEventResult(
         DateTime EndTimeUtc,
         IReadOnlyList<EndEventParticipantSummary> Participants,
-        int WindowCount);
+        int WindowCount,
+        int EventHistoryId,
+        bool HasLootDeductions);
 
     internal static async Task<EndEventResult> EndEventCoreAsync(ApplicationDbContext dbContext, Event eventEntity)
     {
@@ -666,6 +660,7 @@ public partial class EventController
             nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
         }
 
+        var hasLootDeductions = ledgerEntries.Any(entry => entry.EntryType == "LootSpent");
         dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
 
         // Preserve EventLootDetails post-close so officers can edit them via
@@ -686,6 +681,6 @@ public partial class EventController
         dbContext.Events.Remove(eventEntity);
         await dbContext.SaveChangesAsync();
 
-        return new EndEventResult(endTimeUtc, participantSummaries, windowCount);
+        return new EndEventResult(endTimeUtc, participantSummaries, windowCount, history.Id, hasLootDeductions);
     }
 }

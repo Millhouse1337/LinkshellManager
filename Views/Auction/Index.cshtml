@@ -32,6 +32,23 @@
 {
     <div class="alert alert-danger fade d2">@auctionError</div>
 }
+@if (TempData["AuctionStatus"] is string auctionStatus)
+{
+    <div class="alert alert-success fade d2">@auctionStatus</div>
+}
+@{
+    var availableDkp = ViewBag.AvailableDkp as double?;
+    var totalDkp = ViewBag.TotalDkp as double?;
+}
+@if (availableDkp.HasValue || totalDkp.HasValue)
+{
+    <div class="alert fade d2" style="display:flex;gap:16px;align-items:center">
+        <span><strong>Your DKP</strong></span>
+        <span>Available: <span class="num">@((availableDkp ?? totalDkp ?? 0).ToString("0.##"))</span></span>
+        <span>Total: <span class="num">@((totalDkp ?? 0).ToString("0.##"))</span></span>
+        <span style="font-size:12px;color:var(--fg-3)">DKP locked by bids you're currently winning is unavailable for new bids.</span>
+    </div>
+}
 
 @if (!Model.Any())
 {
@@ -174,6 +191,16 @@ else
                                                     data-item-name="@item.ItemName"
                                                     data-current-highest-bid="@item.CurrentHighestBid"
                                                     data-starting-bid="@item.StartingBidDkp">Bid</button>
+                                            @if (!string.IsNullOrEmpty(currentUserId)
+                                                 && item.CurrentHighestBidderAppUserId == currentUserId)
+                                            {
+                                                <form asp-action="UndoBid" method="post" style="display:inline"
+                                                      onsubmit="return confirm('Undo your winning bid? The 2nd-place bidder becomes the winner and you will be blocked from in-game loot wins for a cooldown period.');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="auctionItemId" value="@item.Id" />
+                                                    <button type="submit" class="btn ghost sm">Undo my bid</button>
+                                                </form>
+                                            }
                                         }
                                         @if (canEdit)
                                         {

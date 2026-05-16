@@ -390,6 +390,7 @@ public class LinkshellController : Controller
             return View(model);
         }
 
+        linkshell.LinkshellType = LinkshellTypes.Normalize(model.LinkshellType);
         linkshell.LootStructure = model.LootStructure!;
         linkshell.DkpRoundingIncrement = model.DkpRoundingIncrement!;
         linkshell.EnableEndgame  = model.EnableEndgame;
@@ -401,6 +402,7 @@ public class LinkshellController : Controller
         linkshell.EnableDkp      = model.EnableDkp;
         linkshell.EnableItems    = model.EnableItems;
         linkshell.EnableRevenue  = model.EnableRevenue;
+        linkshell.LootBlockCooldownHours = Math.Clamp(model.LootBlockCooldownHours, 0, 8760);
 
         await _context.SaveChangesAsync();
         TempData["CustomizeSaved"] = "Customization saved.";
@@ -413,6 +415,7 @@ public class LinkshellController : Controller
         {
             LinkshellId           = target.Id,
             LinkshellName         = target.LinkshellName,
+            LinkshellType         = LinkshellTypes.Normalize(target.LinkshellType),
             LootStructure         = target.LootStructure,
             DkpRoundingIncrement  = target.DkpRoundingIncrement,
             EnableEndgame         = target.EnableEndgame,
@@ -424,6 +427,7 @@ public class LinkshellController : Controller
             EnableDkp             = target.EnableDkp,
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
+            LootBlockCooldownHours = target.LootBlockCooldownHours,
             CanManageRoles        = canManageRoles,
             ManageableLinkshells  = manageableLinkshells.ToList()
         };

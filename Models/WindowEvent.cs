@@ -53,7 +53,23 @@ public class WindowEvent
     // state so officers don't accidentally double-append rows.
     public DateTime? PostedToSheetAt { get; set; }
 
+    // First member row written to the AttInput tab during PostToSheet
+    // (the header separator row sits at FirstAttInputRowNumber - 1). Set on
+    // the initial append so post-post edits can rewrite J/K cells in place.
+    public int? FirstAttInputRowNumber { get; set; }
+
+    // Number of contiguous member rows written starting at
+    // FirstAttInputRowNumber. Combined with the first row this lets the
+    // post-post edit path target every appended data row, including the
+    // non-AppUser-linked ones that have no ledger entry to consult.
+    public int? AttInputRowCount { get; set; }
+
     public ICollection<AttendanceSnapshot> Snapshots { get; set; } = new List<AttendanceSnapshot>();
+
+    // Per-character DKP overrides applied at post-to-sheet time. Empty when
+    // every member uses WindowEvent.DkpAmount. Populated by officers via the
+    // per-row DKP input on the Window Events card.
+    public ICollection<WindowEventMemberDkp> MemberDkpOverrides { get; set; } = new List<WindowEventMemberDkp>();
 }
 
 public static class WindowEventStatuses

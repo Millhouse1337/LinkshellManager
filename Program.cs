@@ -155,6 +155,8 @@ builder.Services.AddSingleton<GoogleSheetsSyncService>();
 builder.Services.AddSingleton<SheetSyncQueue>();
 builder.Services.AddScoped<GoogleOAuthService>();
 builder.Services.AddScoped<SheetMigrationService>();
+builder.Services.AddScoped<WindowEventDkpLedgerService>();
+builder.Services.AddScoped<SnapshotAttInputAuditService>();
 builder.Services.AddScoped<AttInputAppendService>();
 builder.Services.AddScoped<ManualPointsAppendService>();
 builder.Services.AddScoped<HnmAutoEventService>();

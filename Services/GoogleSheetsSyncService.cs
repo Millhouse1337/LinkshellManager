@@ -127,6 +127,29 @@ public sealed class GoogleSheetsSyncService
         }
     }
 
+    public async Task<IReadOnlyList<string>> GetSheetTitlesAsync(int linkshellId, string spreadsheetId, CancellationToken cancellationToken)
+    {
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var request = service.Spreadsheets.Get(spreadsheetId);
+            request.Fields = "sheets.properties.title";
+            var response = await request.ExecuteAsync(cancellationToken);
+            return (IReadOnlyList<string>?)response.Sheets?
+                .Select(s => s.Properties?.Title)
+                .Where(title => !string.IsNullOrWhiteSpace(title))
+                .Select(title => title!)
+                .ToList()
+                ?? Array.Empty<string>();
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
     // Appends rows to the end of a sheet without overwriting existing cells.
     // Uses INSERT_ROWS so the formulas / data above the insertion point keep
     // their row indices stable. USER_ENTERED so date strings, formula refs,

@@ -26,6 +26,12 @@ public class AppUserLinkshell
 
     public double? LinkshellDkp { get; set; }
 
+    // Anti-abuse flag: when set and in the future, this member cannot be
+    // credited an in-game loot-pool win. Set when the member undoes a
+    // winning auction bid (UtcNow + Linkshell.LootBlockCooldownHours).
+    // Null / past = not blocked.
+    public DateTime? LootBiddingBlockedUntil { get; set; }
+
     public DateTime? DateJoined { get; set; }
 
     [Column(TypeName = "jsonb")]

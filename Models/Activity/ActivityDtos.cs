@@ -334,6 +334,7 @@ public sealed record ActivityDkpAuditRequest(
     string TargetAppUserId,
     string Mode,
     int? RelatedLedgerEntryId,
+    int? SourceWindowEventId,
     double Amount,
     string Reason);
 
@@ -373,7 +374,11 @@ public sealed record ActivityAuctionDto(
     // archives to history, and removes any inventory-sourced items that the
     // creator marks as delivered.
     bool CanClose,
-    IReadOnlyList<ActivityAuctionItemDto> Items);
+    IReadOnlyList<ActivityAuctionItemDto> Items,
+    // The viewer's available DKP in this auction's linkshell (total minus
+    // DKP locked by bids they're currently winning). Null when not computed
+    // (single-auction action responses); the list endpoint always sets it.
+    double? AvailableDkp = null);
 
 public sealed record ActivityAuctionItemDto(
     int Id,

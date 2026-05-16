@@ -1,13 +1,13 @@
 @model LinkshellManagerDiscordApp.ViewModels.TodManagerViewModel
 
 @{
-    ViewData["Title"] = "ToD Manager";
+    ViewData["Title"] = "ToD Tracker";
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
 }
 
 <div class="page-head fade d1">
     <div>
-        <h1 class="page-title">ToD Manager</h1>
+        <h1 class="page-title">ToD Tracker</h1>
         <div class="page-sub">
             <span>@selectedLinkshellName</span>
             <span>·</span>

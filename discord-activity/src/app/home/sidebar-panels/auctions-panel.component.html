@@ -44,6 +44,14 @@
         <div class="auction-stat-label">Total bids</div>
         <div class="auction-stat-value num">{{ auctionTotalBids() }}</div>
       </div>
+      @if (viewerAvailableDkp() !== null || viewerTotalDkp() !== null) {
+        <div class="auction-stat" title="DKP not locked by bids you're currently winning">
+          <div class="auction-stat-label">Your DKP (avail / total)</div>
+          <div class="auction-stat-value num">
+            {{ viewerAvailableDkp() ?? viewerTotalDkp() ?? 0 }} / {{ viewerTotalDkp() ?? 0 }}
+          </div>
+        </div>
+      }
     </div>
 
     @if (!selectedLinkshell()) {
@@ -177,7 +185,7 @@
                       </td>
                       <td>
                         @if (auctionState(auction) !== 'ended' && auction.status === 'Live') {
-                          <div style="display:flex;gap:4px;align-items:center">
+                          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                             <input
                               class="bid-input"
                               [ngModel]="getAuctionBidDraft(item.id)"
@@ -193,6 +201,28 @@
                               (click)="submitAuctionBid(item.id)">
                               {{ activity.busyAuctionItemId() === item.id ? '…' : 'Bid' }}
                             </button>
+                            @if (canUndoBid(auction, item)) {
+                              @if (pendingUndoBidItemId() === item.id) {
+                                <button
+                                  type="button"
+                                  class="btn danger-fill sm"
+                                  [disabled]="activity.busyAuctionItemId() === item.id"
+                                  (click)="confirmUndoBid(item.id)"
+                                  title="Promotes 2nd place and blocks you from in-game loot wins for a cooldown">
+                                  Confirm undo
+                                </button>
+                                <button type="button" class="btn ghost sm" (click)="cancelUndoBid()">Cancel</button>
+                              } @else {
+                                <button
+                                  type="button"
+                                  class="btn ghost sm"
+                                  [disabled]="activity.busyAuctionItemId() === item.id"
+                                  (click)="requestUndoBid(item.id)"
+                                  title="Undo your winning bid (promotes 2nd place; blocks you from in-game loot wins for a cooldown)">
+                                  Undo bid
+                                </button>
+                              }
+                            }
                           </div>
                         } @else {
                           <span class="muted">—</span>

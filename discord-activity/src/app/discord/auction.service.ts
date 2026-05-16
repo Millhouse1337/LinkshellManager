@@ -177,6 +177,30 @@ export class AuctionService {
     }
   }
 
+  // Undo the viewer's OWN currently-winning bid while the auction is live.
+  // The next-highest remaining bid becomes the winner; the viewer is then
+  // blocked from in-game loot wins for the linkshell's cooldown window.
+  async undoAuctionBid(itemId: number, linkshellId: number): Promise<void> {
+    this.busyAuctionItemId.set(itemId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/auction-items/${itemId}/undo-bid`);
+      await this.loadAuctions(linkshellId);
+      await this.loadAuctionItemBids(itemId);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage(
+        'Bid undone. You are temporarily blocked from in-game loot wins.'
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Undoing the bid failed.'));
+      throw error;
+    } finally {
+      this.busyAuctionItemId.set(null);
+    }
+  }
+
   // Stops bidding now without archiving the auction. The auction stays on the
   // active board with status Ended until the creator runs closeAuction(),
   // which is where the delivery confirmation + inventory drawdown live.

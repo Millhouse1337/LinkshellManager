@@ -51,7 +51,12 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        return Ok(auctions.Select(auction => MapAuctionDto(auction, appUser.Id, nowUtc)).ToList());
+        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
+            _dbContext, appUser.Id, selectedLinkshellId, cancellationToken);
+
+        return Ok(auctions
+            .Select(auction => MapAuctionDto(auction, appUser.Id, nowUtc, availableDkp))
+            .ToList());
     }
 
     [HttpGet("auction-history")]
@@ -381,9 +386,15 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = $"Bid amount must be greater than {minimumBid}." });
         }
 
-        if (bidAmount > (membership.LinkshellDkp ?? 0))
+        // Available = total minus DKP locked by bids the user is currently
+        // winning on OTHER live items. Exclude this item so raising a bid you
+        // already hold compares against the replacement, not old + new.
+        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
+            _dbContext, appUser.Id, auctionItem.Auction.LinkshellId,
+            cancellationToken, excludeAuctionItemId: itemId);
+        if (bidAmount > availableDkp)
         {
-            return BadRequest(new { error = "You cannot bid more DKP than you currently have." });
+            return BadRequest(new { error = $"Insufficient available DKP. You have {availableDkp:0.##} available (the rest is locked by bids you're currently winning)." });
         }
 
         var bid = new Bid
@@ -403,6 +414,74 @@ public sealed partial class ActivityDataController
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new ActivityAuctionBidDto(bid.Id, bid.CharacterName, bid.BidAmount, bid.CreatedAt));
+    }
+
+    // Undo the caller's OWN currently-winning bid while the auction is live.
+    // The next highest remaining bid becomes the winner ("2nd place"), and the
+    // caller is blocked from in-game loot wins for the linkshell's cooldown
+    // window (anti bid-then-pull abuse). Re-bidding the same item is allowed.
+    [HttpPost("auction-items/{itemId:int}/undo-bid")]
+    public async Task<IActionResult> UndoAuctionBidAsync(
+        int itemId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to undo a bid." });
+        }
+
+        var auctionItem = await _dbContext.AuctionItems
+            .Include(item => item.Auction)
+            .Include(item => item.Bids)
+            .FirstOrDefaultAsync(item => item.Id == itemId, cancellationToken);
+
+        if (auctionItem is null || auctionItem.Auction is null)
+        {
+            return NotFound(new { error = "Auction item not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, auctionItem.Auction.LinkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        if (!IsAuctionLive(auctionItem.Auction, nowUtc) || HasAuctionEnded(auctionItem.Auction, nowUtc))
+        {
+            return BadRequest(new { error = "You can only undo a bid while the auction is live." });
+        }
+
+        if (auctionItem.CurrentHighestBidderAppUserId != appUser.Id)
+        {
+            return BadRequest(new { error = "You can only undo a bid you are currently winning." });
+        }
+
+        var cooldownHours = await _dbContext.Linkshells
+            .Where(l => l.Id == auctionItem.Auction.LinkshellId)
+            .Select(l => l.LootBlockCooldownHours)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var outcome = AuctionDkpService.UndoWinningBid(
+            _dbContext, auctionItem, appUser.Id, membership, cooldownHours, nowUtc);
+        if (!outcome.Ok)
+        {
+            return BadRequest(new { error = outcome.Error });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
+            _dbContext, appUser.Id, auctionItem.Auction.LinkshellId, cancellationToken);
+
+        return Ok(new
+        {
+            success = true,
+            newWinner = outcome.NewWinnerCharacterName,
+            newWinningBid = outcome.NewWinningBid,
+            availableDkp,
+            lootBlockedUntil = membership.LootBiddingBlockedUntil
+        });
     }
 
     // Stops bidding without archiving the run. Pulls the EndTime forward to

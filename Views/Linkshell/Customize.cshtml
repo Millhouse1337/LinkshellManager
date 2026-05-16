@@ -71,6 +71,39 @@
 
     <div class="card" style="margin-bottom:16px">
         <div class="card-head">
+            <div class="card-title">Linkshell Type</div>
+        </div>
+        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:12px;color:var(--fg-3)">Tells the addon and website which content this linkshell runs.</div>
+            <label style="display:flex;gap:10px;align-items:flex-start">
+                <input type="radio" asp-for="LinkshellType" value="SkySeaDynamis" />
+                <span>
+                    <strong>Sky / Sea / Dynamis</strong>
+                    <div style="color:var(--fg-3);font-size:12px">Timed-event experience only. Addon shows Create Event, timed presets, Queued &amp; Active events. No HNM presets; website hides the Attendance / Window Events nav.</div>
+                </span>
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start">
+                <input type="radio" asp-for="LinkshellType" value="HnmOnly" />
+                <span>
+                    <strong>HNM Only</strong>
+                    <div style="color:var(--fg-3);font-size:12px">HNM snapshot sessions only. Addon hides Create Event, Queued &amp; Active, and shows only HNM presets. Website hides the Event System nav.</div>
+                </span>
+            </label>
+            <label style="display:flex;gap:10px;align-items:flex-start">
+                <input type="radio" asp-for="LinkshellType" value="Both" />
+                <span>
+                    <strong>Both</strong>
+                    <div style="color:var(--fg-3);font-size:12px">Everything — timed events and HNM. Default.</div>
+                </span>
+            </label>
+            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                <button class="btn primary" type="submit">Save changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
             <div class="card-title">Loot Structure</div>
         </div>
         <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
@@ -104,6 +137,13 @@
                     <option value="Half">Nearest Half (0.5)</option>
                 </select>
             </div>
+
+            <div style="display:flex;flex-direction:column;gap:4px;max-width:320px;margin-top:8px">
+                <label asp-for="LootBlockCooldownHours">In-game loot block after a bid undo (hours)</label>
+                <input class="input" type="number" min="0" max="8760" asp-for="LootBlockCooldownHours" />
+                <span style="color:var(--fg-3);font-size:12px">When a member undoes a winning auction bid they can't be credited an in-game loot win for this many hours. 0 = disabled.</span>
+            </div>
+
             <div style="display:flex;justify-content:flex-end;margin-top:8px">
                 <button class="btn primary" type="submit">Save changes</button>
             </div>
@@ -132,6 +172,7 @@
             </div>
         </div>
     </div>
+
 </form>
 
 <div class="card fade d2 permissions-config-card" id="permissionsConfigCard" style="margin-top:16px"
@@ -255,9 +296,20 @@
                 <div id="addonPairCodeWrapper" style="display:none">
                     <div style="text-align:center;margin:12px 0">
                         <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
-                        <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
-                            Expires in <span id="addonPairCountdown">10:00</span>. In FFXI: <code>/lsm link &lt;code&gt;</code>
+                        <div style="margin-top:10px">
+                            <span class="tag warning" id="addonPairStatusTag">Status: <span id="addonPairStatusText">Unpaired</span></span>
                         </div>
+                        <div style="color:var(--fg-3);font-size:12px;margin-top:6px">
+                            Expires in <span id="addonPairCountdown">10:00</span>
+                        </div>
+                    </div>
+                    <div style="color:var(--fg-2);font-size:13px;line-height:1.5;margin-top:10px">
+                        Enter this code in your FFXI client as
+                        <code id="addonPairCmd1">/lsm link &lt;code&gt; 1</code> or
+                        <code id="addonPairCmd2">/lsm link &lt;code&gt; 2</code>
+                        to set <strong id="addonPairLsName">this linkshell</strong> as your first or
+                        second option in the LSM addon in-game. This window closes automatically
+                        once the code is linked.
                     </div>
                 </div>
                 <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
@@ -594,9 +646,31 @@
             var addonPairCode = document.getElementById('addonPairCode');
             var addonPairCountdown = document.getElementById('addonPairCountdown');
             var addonPairError = document.getElementById('addonPairError');
+            var addonPairStatusTag = document.getElementById('addonPairStatusTag');
+            var addonPairStatusText = document.getElementById('addonPairStatusText');
+            var addonPairCmd1 = document.getElementById('addonPairCmd1');
+            var addonPairCmd2 = document.getElementById('addonPairCmd2');
+            var addonPairLsName = document.getElementById('addonPairLsName');
             var addonTokensTable = document.getElementById('addonTokensTable');
             var addonTokensEmpty = document.getElementById('addonTokensEmpty');
             var countdownTimer = null;
+            var pairStatusTimer = null;
+
+            // Restores the modal to its pre-generate state: Generate button
+            // visible, code/instructions hidden, both timers stopped. Called
+            // on open (fresh start) and on close (so the next open is clean).
+            function resetPairModalUi() {
+                if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                if (pairStatusTimer) { clearInterval(pairStatusTimer); pairStatusTimer = null; }
+                addonPairCodeWrapper.style.display = 'none';
+                addonPairCode.textContent = '';
+                addonPairCreateBtn.style.display = '';
+                addonPairCreateBtn.disabled = false;
+                if (addonPairStatusTag) {
+                    addonPairStatusTag.className = 'tag warning';
+                }
+                if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
+            }
 
             var escapeHtml = window.escapeHtml;
 
@@ -662,7 +736,12 @@
                 function tick() {
                     if (remaining <= 0) {
                         addonPairCountdown.textContent = 'expired';
-                        clearInterval(countdownTimer);
+                        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                        // An expired code can't be redeemed; stop polling and
+                        // flag the chip so the state is unambiguous.
+                        if (pairStatusTimer) { clearInterval(pairStatusTimer); pairStatusTimer = null; }
+                        if (addonPairStatusTag) addonPairStatusTag.className = 'tag danger';
+                        if (addonPairStatusText) addonPairStatusText.textContent = 'Expired';
                         return;
                     }
                     var m = Math.floor(remaining / 60);
@@ -676,8 +755,9 @@
 
             addonGenerateBtn.addEventListener('click', function () {
                 setAddonPairError('');
-                addonPairCodeWrapper.style.display = 'none';
-                addonPairCode.textContent = '';
+                // Fresh state every open: Generate button back, code +
+                // instructions hidden, any prior poll/countdown stopped.
+                resetPairModalUi();
                 // Default to Slot 1 on every open. Re-enable inputs the
                 // previous generation may have locked.
                 var slotRadios = document.querySelectorAll('input[name="addonPairSlot"]');
@@ -732,7 +812,24 @@
                 }).then(function (data) {
                     if (!data) return;
                     addonPairCode.textContent = data.code;
+
+                    // Resolve the chosen linkshell's display name from the
+                    // (now-locked) dropdown for the instruction text.
+                    var lsName = 'this linkshell';
+                    if (lsSelect && lsSelect.options && lsSelect.selectedIndex >= 0) {
+                        lsName = lsSelect.options[lsSelect.selectedIndex].text || lsName;
+                    }
+                    if (addonPairLsName) addonPairLsName.textContent = lsName;
+                    if (addonPairCmd1) addonPairCmd1.textContent = '/lsm link ' + data.code + ' 1';
+                    if (addonPairCmd2) addonPairCmd2.textContent = '/lsm link ' + data.code + ' 2';
+                    if (addonPairStatusTag) addonPairStatusTag.className = 'tag warning';
+                    if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
+
                     addonPairCodeWrapper.style.display = 'block';
+                    // The code is issued — replace the Generate button with
+                    // the live "waiting to be linked" state. It comes back
+                    // via resetPairModalUi() on next open / close.
+                    addonPairCreateBtn.style.display = 'none';
                     // Lock the slot + linkshell selection once a code is
                     // issued so the displayed code can't drift from the
                     // label/LS saved on the token.
@@ -742,16 +839,49 @@
                     var lockedLs = document.getElementById('addonPairLinkshell');
                     if (lockedLs) lockedLs.disabled = true;
                     startCountdown((data.expiresInMinutes || 10) * 60);
+                    startStatusPoll(lsId, data.code);
                 }).catch(function () {
                     setAddonPairError('Network error generating pairing code.');
                 }).finally(function () {
-                    addonPairCreateBtn.disabled = false;
+                    // Only re-enable when still showing Generate; once a code
+                    // is issued the button is hidden and shouldn't flip back.
+                    if (addonPairCreateBtn.style.display !== 'none') {
+                        addonPairCreateBtn.disabled = false;
+                    }
                 });
             });
 
+            // Polls the status endpoint while a code is displayed. When the
+            // addon redeems it in-game (consumed) we flip the chip to "Paired",
+            // refresh the token list, and auto-close the modal. On expiry we
+            // stop polling (the countdown already shows "expired").
+            function startStatusPoll(lsId, code) {
+                if (pairStatusTimer) clearInterval(pairStatusTimer);
+                pairStatusTimer = setInterval(function () {
+                    fetch('/api/addon/management/pairing-code/status?linkshellId=' + lsId
+                            + '&code=' + encodeURIComponent(code), {
+                        credentials: 'same-origin'
+                    }).then(function (res) {
+                        return res.ok ? res.json() : null;
+                    }).then(function (s) {
+                        if (!s) return;
+                        if (s.consumed) {
+                            clearInterval(pairStatusTimer); pairStatusTimer = null;
+                            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                            if (addonPairStatusTag) addonPairStatusTag.className = 'tag success';
+                            if (addonPairStatusText) addonPairStatusText.textContent = 'Paired';
+                            loadTokens();
+                            setTimeout(function () { closeModal('addonPairModal'); }, 1000);
+                        } else if (s.expired || s.found === false) {
+                            clearInterval(pairStatusTimer); pairStatusTimer = null;
+                        }
+                    }).catch(function () { /* transient; keep polling */ });
+                }, 2000);
+            }
+
             document.getElementById('addonPairModal').addEventListener('click', function (e) {
                 if (e.target.dataset && e.target.dataset.mtClose === '1') {
-                    if (countdownTimer) clearInterval(countdownTimer);
+                    resetPairModalUi();
                     loadTokens();
                 }
             });

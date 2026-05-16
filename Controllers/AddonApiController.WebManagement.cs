@@ -72,6 +72,55 @@ public sealed partial class AddonApiController
         });
     }
 
+    // Poll target for the pairing modal. Returns whether the code has been
+    // redeemed in-game yet (consumed), expired, or is still waiting. The web
+    // modal polls this every couple seconds so it can auto-close the moment
+    // the addon runs /lsm link <code>. Consumed codes are cleaned up lazily
+    // on the next CreatePairingCode call, so "not found" after a known-issued
+    // code is treated the same as expired (the modal stops polling).
+    [HttpGet("management/pairing-code/status")]
+    public async Task<IActionResult> PairingCodeStatusAsync(
+        [FromQuery] int linkshellId,
+        [FromQuery] string? code,
+        CancellationToken cancellationToken)
+    {
+        if (linkshellId <= 0)
+        {
+            return BadRequest(new { error = "Linkshell is required." });
+        }
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return BadRequest(new { error = "Code is required." });
+        }
+
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
+
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(
+                m => m.AppUserId == appUser.Id && m.LinkshellId == linkshellId,
+                cancellationToken);
+        if (!CanManageLinkshell(membership)) return Forbid();
+
+        var normalized = code.Trim().ToUpperInvariant();
+        var pairing = await _dbContext.AddonPairingCodes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                c => c.Code == normalized && c.LinkshellId == linkshellId,
+                cancellationToken);
+
+        if (pairing is null)
+        {
+            // Either never existed or already consumed + cleaned. From the
+            // modal's perspective there's nothing left to wait on.
+            return Ok(new { found = false, consumed = false, expired = true });
+        }
+
+        var consumed = pairing.ConsumedAt is not null;
+        var expired = !consumed && pairing.ExpiresAt < DateTime.UtcNow;
+        return Ok(new { found = true, consumed, expired });
+    }
+
     [HttpGet("management/tokens")]
     public async Task<IActionResult> ListTokensAsync(
         [FromQuery] int linkshellId,

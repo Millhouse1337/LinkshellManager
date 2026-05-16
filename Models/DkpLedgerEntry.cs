@@ -70,6 +70,30 @@ public class DkpLedgerEntry
 
     public int? SourceEventLootDetailId { get; set; }
 
+    // Populated on the deduction rows created at AuctionController.CloseAuction
+    // time so a single auction close produces one batched column on the
+    // ManualPoints sheet instead of N separate columns. Null on non-auction
+    // ledger entries.
+    public int? SourceAuctionHistoryId { get; set; }
+
+    [ForeignKey(nameof(SourceAuctionHistoryId))]
+    public AuctionHistory? SourceAuctionHistory { get; set; }
+
+    // Populated when a Window Event built from attendance snapshots is posted
+    // to AttInput. This lets DKP history/audits show the snapshot-derived DKP
+    // rows and prevents backfills from creating duplicates.
+    public int? SourceWindowEventId { get; set; }
+
+    // For audit adjustments, points at the ledger entry being corrected. This
+    // lets subsequent corrections calculate the delta from the current audited
+    // value instead of repeatedly comparing against the original amount.
+    public int? AuditRelatedLedgerEntryId { get; set; }
+
+    // 1-based row number in the linkshell's AttInput tab for entries that
+    // originated from an append-only sheet row. Used when auditing snapshot
+    // DKP so the original source row can be corrected in place.
+    public int? AttInputRowNumber { get; set; }
+
     // Idempotency stamp for the ManualPoints sheet append. Set once after the
     // audit's column + cell are successfully written so a retry / replay
     // doesn't double-add. Null = not yet appended (Audit-type entries only;

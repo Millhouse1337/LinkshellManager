@@ -60,6 +60,7 @@ public sealed class WindowEventsController : Controller
             .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Open)
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
+            .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
         var closedEvents = await _db.WindowEvents
@@ -68,6 +69,7 @@ public sealed class WindowEventsController : Controller
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Take(MaxClosedEvents)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
+            .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
         var unlinked = await _db.AttendanceSnapshots
@@ -146,6 +148,123 @@ public sealed class WindowEventsController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Saves DKP + Entry Type on a Window Event that hasn't been posted yet
+    // so an officer can stage values without immediately pushing rows. The
+    // Post to DKP Sheet button still does both write-and-enqueue in one
+    // step; this endpoint covers the "draft" case where the officer wants
+    // to set things up before another officer hits Post.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/{windowEventId:int}/save-details")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveDetails(
+        int linkshellId,
+        int windowEventId,
+        [FromForm] double? dkpAmount,
+        [FromForm] string? entryType,
+        [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var windowEvent = await _db.WindowEvents
+            .Include(e => e.MemberDkpOverrides)
+            .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
+        if (windowEvent is null) return NotFound();
+
+        if (windowEvent.PostedToSheetAt.HasValue)
+        {
+            TempData["WindowEventError"] = "This Window Event is already posted. Use Edit to change DKP or Entry Type.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!dkpAmount.HasValue || dkpAmount.Value < 0)
+        {
+            TempData["WindowEventError"] = "DKP amount is required and must be zero or greater.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!WindowEventEntryTypes.IsValid(entryType))
+        {
+            TempData["WindowEventError"] =
+                $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!TryValidateMemberDkp(memberDkp, out var memberDkpError))
+        {
+            TempData["WindowEventError"] = memberDkpError;
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        windowEvent.DkpAmount = dkpAmount.Value;
+        windowEvent.EntryType = entryType;
+        ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = $"Saved DKP details for \"{windowEvent.Name}\".";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Edits a posted Window Event's DKP + Entry Type and queues a background
+    // job to rewrite columns J/K on the appended rows and reconcile matching
+    // ledger entries + per-member LinkshellDkp totals by the delta. The
+    // sheet's other columns (date, character, jobs) stay untouched -- only
+    // values that originate from the Window Event itself are mutable here.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/{windowEventId:int}/edit-posted")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditPostedDetails(
+        int linkshellId,
+        int windowEventId,
+        [FromForm] double? dkpAmount,
+        [FromForm] string? entryType,
+        [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var windowEvent = await _db.WindowEvents
+            .Include(e => e.MemberDkpOverrides)
+            .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
+        if (windowEvent is null) return NotFound();
+
+        if (!windowEvent.PostedToSheetAt.HasValue)
+        {
+            TempData["WindowEventError"] = "This Window Event hasn't been posted yet. Use Save to set draft values.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!dkpAmount.HasValue || dkpAmount.Value < 0)
+        {
+            TempData["WindowEventError"] = "DKP amount is required and must be zero or greater.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!WindowEventEntryTypes.IsValid(entryType))
+        {
+            TempData["WindowEventError"] =
+                $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (!TryValidateMemberDkp(memberDkp, out var memberDkpError))
+        {
+            TempData["WindowEventError"] = memberDkpError;
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        var amountChanged = !windowEvent.DkpAmount.HasValue || Math.Abs(windowEvent.DkpAmount.Value - dkpAmount.Value) > 0.0001;
+        var typeChanged = !string.Equals(windowEvent.EntryType, entryType, StringComparison.Ordinal);
+        var overrideChanged = HasMemberDkpChange(windowEvent, dkpAmount.Value, memberDkp);
+        if (!amountChanged && !typeChanged && !overrideChanged)
+        {
+            TempData["WindowEventStatus"] = "No changes to apply.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        windowEvent.DkpAmount = dkpAmount.Value;
+        windowEvent.EntryType = entryType;
+        ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        await _sheetSync.EnqueueWindowEventEditAsync(windowEvent.Id, cancellationToken);
+
+        TempData["WindowEventStatus"] = $"Updating \"{windowEvent.Name}\" on the DKP sheet...";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
     // Persists DKP + Entry Type on the Window Event and enqueues the AttInput
     // append job. Both values are required because the downstream sheet
     // formulas pivot on column K (Entry Type) and column J (DKP); pushing
@@ -157,11 +276,13 @@ public sealed class WindowEventsController : Controller
         int windowEventId,
         [FromForm] double? dkpAmount,
         [FromForm] string? entryType,
+        [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
         CancellationToken cancellationToken)
     {
         if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
 
         var windowEvent = await _db.WindowEvents
+            .Include(e => e.MemberDkpOverrides)
             .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
         if (windowEvent is null) return NotFound();
 
@@ -181,9 +302,15 @@ public sealed class WindowEventsController : Controller
             TempData["WindowEventError"] = "This Window Event has already been posted to the DKP sheet.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
+        if (!TryValidateMemberDkp(memberDkp, out var memberDkpError))
+        {
+            TempData["WindowEventError"] = memberDkpError;
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
 
         windowEvent.DkpAmount = dkpAmount.Value;
         windowEvent.EntryType = entryType;
+        ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
         await _db.SaveChangesAsync(cancellationToken);
 
         await _sheetSync.EnqueueWindowEventPostAsync(windowEvent.Id, cancellationToken);
@@ -306,6 +433,37 @@ public sealed class WindowEventsController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Hard-deletes a snapshot (and its entries). Used from the Unlinked
+    // Snapshots list for junk/typo captures the officer doesn't want kept
+    // even as "Ignored". Entries cascade via the required SnapshotId FK;
+    // any sibling snapshot pointing here via DuplicateOfSnapshotId is
+    // SetNull'd by the configured delete behavior. Rows already appended to
+    // the sheet are not touched -- AttInput is append-only.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteSnapshot(
+        int linkshellId,
+        int snapshotId,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        if (snapshot.Entries.Count > 0)
+        {
+            _db.AttendanceSnapshotEntries.RemoveRange(snapshot.Entries);
+        }
+        _db.AttendanceSnapshots.Remove(snapshot);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = "Snapshot deleted.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
     private async Task<WindowEvent> FindOrCreateOpenEventAsync(
         int linkshellId,
         string name,
@@ -315,7 +473,7 @@ public sealed class WindowEventsController : Controller
         CancellationToken cancellationToken)
     {
         var normalized = NormalizeName(name)!;
-        var staleCutoff = capturedAtUtc.AddHours(-24);
+        var staleCutoff = capturedAtUtc.AddHours(-21);
         var existing = await _db.WindowEvents
             .Where(e =>
                 e.LinkshellId == linkshellId &&
@@ -355,8 +513,8 @@ public sealed class WindowEventsController : Controller
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (names.Count == 0) return;
 
-        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-15);
-        var toUtc = snapshot.CapturedAtUtc.AddMinutes(15);
+        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-8);
+        var toUtc = snapshot.CapturedAtUtc.AddMinutes(8);
         var candidates = await _db.AttendanceSnapshots
             .Include(s => s.Entries)
             .Where(s =>
@@ -400,7 +558,11 @@ public sealed class WindowEventsController : Controller
             .OrderByDescending(s => s.CapturedAtUtc)
             .Select(s => MapSnapshot(s, userZone))
             .ToList();
-        var combined = BuildCombinedMembers(item.Snapshots);
+        var overrides = item.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+        var combined = BuildCombinedMembers(item.Snapshots, overrides, item.DkpAmount);
 
         return new WindowEventRow
         {
@@ -467,7 +629,10 @@ public sealed class WindowEventsController : Controller
         };
     }
 
-    private static List<WindowCombinedMemberRow> BuildCombinedMembers(IEnumerable<AttendanceSnapshot> snapshots)
+    private static List<WindowCombinedMemberRow> BuildCombinedMembers(
+        IEnumerable<AttendanceSnapshot> snapshots,
+        IDictionary<string, double>? memberDkpOverrides = null,
+        double? defaultDkpAmount = null)
     {
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
@@ -477,6 +642,11 @@ public sealed class WindowEventsController : Controller
             .Select(g =>
             {
                 var latest = g.OrderByDescending(x => x.Snapshot.CapturedAtUtc).First().Entry;
+                double? overrideAmount = null;
+                if (memberDkpOverrides is not null && memberDkpOverrides.TryGetValue(g.Key, out var found))
+                {
+                    overrideAmount = found;
+                }
                 return new WindowCombinedMemberRow
                 {
                     CharacterName = g.Key,
@@ -486,6 +656,8 @@ public sealed class WindowEventsController : Controller
                     SubJobLevel = latest.SubJobLevel,
                     Zone = latest.Zone,
                     SnapshotCount = g.Select(x => x.Snapshot.Id).Distinct().Count(),
+                    DkpAmountOverride = overrideAmount,
+                    EffectiveDkpAmount = overrideAmount ?? defaultDkpAmount,
                 };
             })
             .ToList();
@@ -505,6 +677,105 @@ public sealed class WindowEventsController : Controller
     private static bool IsLeaderOrOfficer(AppUserLinkshell membership)
         => membership.Rank?.Equals("Leader", StringComparison.OrdinalIgnoreCase) == true
            || membership.Rank?.Equals("Officer", StringComparison.OrdinalIgnoreCase) == true;
+
+    // Rejects negative or non-numeric per-character DKP inputs before they
+    // hit the database. Blank values are allowed -- they mean "fall back to
+    // the event default" and result in the override row being removed below.
+    private static bool TryValidateMemberDkp(
+        IEnumerable<WindowEventMemberDkpInput>? inputs,
+        out string error)
+    {
+        if (inputs is not null)
+        {
+            foreach (var input in inputs)
+            {
+                if (input.DkpAmount.HasValue && input.DkpAmount.Value < 0)
+                {
+                    error = $"Per-character DKP for \"{input.CharacterName}\" must be zero or greater.";
+                    return false;
+                }
+            }
+        }
+        error = string.Empty;
+        return true;
+    }
+
+    // Reconciles MemberDkpOverrides with the form payload:
+    //   * Any character with a value equal to the event default has its
+    //     override row removed (no point keeping a noisy duplicate).
+    //   * Any character with a different non-null value gets its row
+    //     upserted.
+    // Characters absent from the form are left alone -- the view always
+    // submits every row so the only way a row vanishes is for the user to
+    // clear the value, which sends a null and triggers the remove branch.
+    private static void ApplyMemberDkpOverrides(
+        WindowEvent windowEvent,
+        double defaultDkpAmount,
+        IEnumerable<WindowEventMemberDkpInput>? inputs)
+    {
+        if (inputs is null) return;
+
+        var existingByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var input in inputs)
+        {
+            var name = input.CharacterName?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+
+            existingByName.TryGetValue(name, out var existing);
+
+            if (!input.DkpAmount.HasValue ||
+                Math.Abs(input.DkpAmount.Value - defaultDkpAmount) < 0.0001)
+            {
+                if (existing is not null)
+                {
+                    windowEvent.MemberDkpOverrides.Remove(existing);
+                }
+                continue;
+            }
+
+            if (existing is null)
+            {
+                windowEvent.MemberDkpOverrides.Add(new WindowEventMemberDkp
+                {
+                    WindowEventId = windowEvent.Id,
+                    CharacterName = name,
+                    DkpAmount = input.DkpAmount.Value,
+                });
+            }
+            else if (Math.Abs(existing.DkpAmount - input.DkpAmount.Value) > 0.0001)
+            {
+                existing.DkpAmount = input.DkpAmount.Value;
+            }
+        }
+    }
+
+    private static bool HasMemberDkpChange(
+        WindowEvent windowEvent,
+        double defaultDkpAmount,
+        IEnumerable<WindowEventMemberDkpInput>? inputs)
+    {
+        if (inputs is null) return false;
+        var existingByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var input in inputs)
+        {
+            var name = input.CharacterName?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var hadOverride = existingByName.TryGetValue(name, out var existingAmount);
+            var willHaveOverride = input.DkpAmount.HasValue &&
+                                   Math.Abs(input.DkpAmount.Value - defaultDkpAmount) >= 0.0001;
+            if (hadOverride != willHaveOverride) return true;
+            if (willHaveOverride && Math.Abs(existingAmount - input.DkpAmount!.Value) > 0.0001) return true;
+        }
+        return false;
+    }
 
     private static string? TrimToNull(string? value, int maxLength)
     {

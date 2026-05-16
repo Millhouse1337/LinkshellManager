@@ -45,16 +45,28 @@
     var currentLinkshellId = null;
     var currentAppUserId = null;
     var loadedEntries = [];
+    var loadedAddEntries = [];
 
     function setMode(mode) {
         var adjust = document.getElementById('auditAdjustFields');
+        var entryLabel = document.getElementById('auditEntryLabel');
+        var amountField = document.getElementById('auditAmountField');
         var label = document.getElementById('auditAmountLabel');
         if (mode === 'Misc') {
             adjust.style.display = 'none';
+            amountField.style.display = '';
             label.textContent = 'Amount (DKP, positive or negative)';
+        } else if (mode === 'Add') {
+            adjust.style.display = '';
+            amountField.style.display = 'none';
+            entryLabel.textContent = 'Entry to add member to';
+            loadAddCandidates(currentLinkshellId, currentAppUserId);
         } else {
             adjust.style.display = '';
+            amountField.style.display = '';
+            entryLabel.textContent = 'Entry to correct';
             label.textContent = 'Corrected amount (DKP)';
+            loadEntries(currentLinkshellId, currentAppUserId);
         }
     }
 
@@ -67,10 +79,17 @@
         var id = parseInt(sel.value, 10);
         var hint = document.getElementById('auditEntryHint');
         var amount = document.getElementById('auditAmount');
+        var modeEl = document.querySelector('input[name="auditMode"]:checked');
+        var mode = modeEl ? modeEl.value : 'Adjust';
         var entry = loadedEntries.find(function (e) { return e.id === id; });
+        if (mode === 'Add') {
+            entry = loadedAddEntries.find(function (e) { return e.windowEventId === id; });
+        }
         if (entry) {
-            hint.textContent = 'Original amount: ' + entry.amount + ' DKP';
-            amount.value = entry.amount;
+            hint.textContent = mode === 'Add'
+                ? 'Will add this member for ' + entry.amount + ' DKP' + (entry.primaryZone ? ' · ' + entry.primaryZone : '')
+                : 'Original amount: ' + entry.amount + ' DKP';
+            if (mode !== 'Add') amount.value = entry.amount;
         } else {
             hint.textContent = '';
         }
@@ -82,8 +101,24 @@
         err.style.display = msg ? 'block' : 'none';
     }
 
+    function entryTypeLabel(entryType) {
+        switch (entryType) {
+            case 'EventEarned': return 'Event Earned';
+            case 'SnapshotEarned': return 'Snapshot Earned';
+            case 'LootSpent': return 'Loot Spent';
+            case 'LootRefund': return 'Loot Refund';
+            case 'LootEditRefund': return 'Loot Edit Refund';
+            case 'LootEditSpent': return 'Loot Edit Spent';
+            case 'AuctionSpent': return 'Auction Spent';
+            case 'AuditAdjustment': return 'Audit Adjustment';
+            case 'AuditMisc': return 'Audit Misc';
+            default: return entryType || 'Entry';
+        }
+    }
+
     function loadEntries(linkshellId, appUserId) {
         var sel = document.getElementById('auditEntrySelect');
+        if (!linkshellId || !appUserId) return;
         sel.innerHTML = '<option value="">Loading entries…</option>';
         loadedEntries = [];
         fetch('/api/activity/dkp-history?linkshellId=' + encodeURIComponent(linkshellId) + '&appUserId=' + encodeURIComponent(appUserId), {
@@ -103,7 +138,7 @@
             var opts = ['<option value="">Select a previous entry</option>'];
             loadedEntries.forEach(function (entry) {
                 var when = new Date(entry.occurredAt).toLocaleDateString();
-                var label = when + ' · ' + (entry.entryType || 'Entry') + ' · ' + entry.amount + ' DKP' +
+                var label = when + ' · ' + entryTypeLabel(entry.entryType) + ' · ' + entry.amount + ' DKP' +
                     (entry.eventName ? ' · ' + entry.eventName : '') +
                     (entry.itemName ? ' (' + entry.itemName + ')' : '');
                 opts.push('<option value="' + entry.id + '">' + label.replace(/</g, '&lt;') + '</option>');
@@ -114,22 +149,65 @@
         });
     }
 
+    function loadAddCandidates(linkshellId, appUserId) {
+        var sel = document.getElementById('auditEntrySelect');
+        if (!linkshellId || !appUserId) return;
+        sel.innerHTML = '<option value="">Loading entries…</option>';
+        loadedAddEntries = [];
+        fetch('/api/activity/dkp-audit/add-candidates?linkshellId=' + encodeURIComponent(linkshellId) + '&targetAppUserId=' + encodeURIComponent(appUserId), {
+            credentials: 'same-origin'
+        }).then(function (res) {
+            if (handleAuthFailure(res)) { return null; }
+            if (res.status === 403) { sel.innerHTML = '<option value="">Not authorized to view entries</option>'; return null; }
+            if (!res.ok) { sel.innerHTML = '<option value="">Could not load entries</option>'; return null; }
+            return res.json();
+        }).then(function (data) {
+            if (!data) return;
+            loadedAddEntries = data.entries || [];
+            if (loadedAddEntries.length === 0) {
+                sel.innerHTML = '<option value="">No posted snapshot entries available</option>';
+                return;
+            }
+            var opts = ['<option value="">Select a previous entry</option>'];
+            loadedAddEntries.forEach(function (entry) {
+                var when = new Date(entry.occurredAt).toLocaleDateString();
+                var label = when + ' · ' + (entry.eventName || 'Window Event') + ' · ' + entry.amount + ' DKP' +
+                    (entry.entryType ? ' · ' + entry.entryType : '') +
+                    (entry.primaryZone ? ' · ' + entry.primaryZone : '');
+                opts.push('<option value="' + entry.windowEventId + '">' + label.replace(/</g, '&lt;') + '</option>');
+            });
+            sel.innerHTML = opts.join('');
+        }).catch(function () {
+            sel.innerHTML = '<option value="">Could not load entries</option>';
+        });
+    }
+
+    function updateSelectedMember(appUserId) {
+        var memberSelect = document.getElementById('auditMemberSelect');
+        if (appUserId) memberSelect.value = appUserId;
+        var selected = memberSelect.options[memberSelect.selectedIndex];
+        currentAppUserId = memberSelect.value || '';
+        document.getElementById('auditMemberBalance').textContent = 'Current balance: ' + ((selected && selected.dataset.dkp) || '0') + ' DKP';
+        document.getElementById('auditEntryHint').textContent = '';
+        document.getElementById('auditAmount').value = '';
+        var modeEl = document.querySelector('input[name="auditMode"]:checked');
+        setMode(modeEl ? modeEl.value : 'Adjust');
+    }
+
+    document.getElementById('auditMemberSelect').addEventListener('change', function () {
+        updateSelectedMember();
+    });
+
     document.querySelectorAll('.js-dkp-audit').forEach(function (btn) {
         btn.addEventListener('click', function () {
             currentLinkshellId = parseInt(btn.dataset.linkshellid, 10);
-            currentAppUserId = btn.dataset.appuserid || '';
-            document.getElementById('auditMemberName').textContent = btn.dataset.name || '';
-            document.getElementById('auditMemberBalance').textContent = 'Current balance: ' + (btn.dataset.dkp || '0') + ' DKP';
             document.getElementById('auditAmount').value = '';
             document.getElementById('auditReason').value = '';
             document.getElementById('auditEntryHint').textContent = '';
             showError('');
             var adjustRadio = document.querySelector('input[name="auditMode"][value="Adjust"]');
             if (adjustRadio) adjustRadio.checked = true;
-            setMode('Adjust');
-            if (currentLinkshellId && currentAppUserId) {
-                loadEntries(currentLinkshellId, currentAppUserId);
-            }
+            updateSelectedMember(btn.dataset.appuserid || '');
             openModal('dkpAuditModal');
         });
     });
@@ -139,18 +217,24 @@
         var modeEl = document.querySelector('input[name="auditMode"]:checked');
         var mode = modeEl ? modeEl.value : 'Adjust';
         var amountStr = document.getElementById('auditAmount').value;
-        var amount = parseFloat(amountStr);
+        var amount = mode === 'Add' ? 0 : parseFloat(amountStr);
         var reason = document.getElementById('auditReason').value.trim();
         var relatedId = null;
+        var sourceWindowEventId = null;
 
         if (!currentLinkshellId || !currentAppUserId) { showError('Missing member context.'); return; }
-        if (isNaN(amount)) { showError('Enter a numeric amount.'); return; }
+        if (mode !== 'Add' && isNaN(amount)) { showError('Enter a numeric amount.'); return; }
         if (!reason) { showError('A reason is required.'); return; }
         if (mode === 'Adjust') {
             var sel = document.getElementById('auditEntrySelect');
             var pid = parseInt(sel.value, 10);
             if (!pid) { showError('Select the previous entry you want to correct.'); return; }
             relatedId = pid;
+        } else if (mode === 'Add') {
+            var addSel = document.getElementById('auditEntrySelect');
+            var wid = parseInt(addSel.value, 10);
+            if (!wid) { showError('Select the previous entry to add this member to.'); return; }
+            sourceWindowEventId = wid;
         }
 
         var btn = document.getElementById('auditSaveBtn');
@@ -168,6 +252,7 @@
                 targetAppUserId: currentAppUserId,
                 mode: mode,
                 relatedLedgerEntryId: relatedId,
+                sourceWindowEventId: sourceWindowEventId,
                 amount: amount,
                 reason: reason
             })

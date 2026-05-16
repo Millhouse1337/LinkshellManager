@@ -20,6 +20,9 @@ public class LinkshellCustomizeViewModel
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
 
+    [Required, MaxLength(16)]
+    public string? LinkshellType { get; set; } = LinkshellTypes.Both;
+
     [Required, MaxLength(32)]
     public string? LootStructure { get; set; } = "Dkp";
 
@@ -35,6 +38,11 @@ public class LinkshellCustomizeViewModel
     public bool EnableDkp        { get; set; } = true;
     public bool EnableItems      { get; set; } = true;
     public bool EnableRevenue    { get; set; } = true;
+
+    // Hours a member is blocked from in-game loot wins after undoing a
+    // winning auction bid. 0 disables the block.
+    [Range(0, 8760)]
+    public int LootBlockCooldownHours { get; set; } = 24;
 
     public bool CanManageRoles { get; set; }
 

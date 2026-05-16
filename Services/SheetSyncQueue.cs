@@ -38,6 +38,21 @@ public sealed class SheetSyncQueue
         return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.DkpAudit, dkpLedgerEntryId), cancellationToken);
     }
 
+    // Writes every AuctionSpent ledger entry tied to an AuctionHistory into a
+    // single ManualPoints column on the linkshell's Google Sheet. Fired by
+    // AuctionController.CloseAuction immediately after the close commits.
+    public ValueTask EnqueueAuctionDeductionsAsync(int auctionHistoryId, CancellationToken cancellationToken = default)
+    {
+        return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.AuctionDeductions, auctionHistoryId), cancellationToken);
+    }
+
+    // Same as AuctionDeductions but for LootSpent ledger entries on an
+    // EventHistory. Fired by EventController.Lifecycle after EndEventCoreAsync.
+    public ValueTask EnqueueEventLootDeductionsAsync(int eventHistoryId, CancellationToken cancellationToken = default)
+    {
+        return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.EventLootDeductions, eventHistoryId), cancellationToken);
+    }
+
     // Posts the entire Window Event roster (header row + one row per unique
     // active character) to the linkshell's Google Sheet AttInput tab. Fired
     // by the officer's Post to DKP Sheet button -- snapshot capture itself
@@ -45,6 +60,15 @@ public sealed class SheetSyncQueue
     public ValueTask EnqueueWindowEventPostAsync(int windowEventId, CancellationToken cancellationToken = default)
     {
         return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.WindowEventPost, windowEventId), cancellationToken);
+    }
+
+    // Re-syncs a Window Event whose officer-facing fields (DKP, Entry Type)
+    // were edited after the initial post. Rewrites the J:K cells across the
+    // tracked row range and adjusts the matching ledger entries + member
+    // totals so the local store stays consistent with the sheet.
+    public ValueTask EnqueueWindowEventEditAsync(int windowEventId, CancellationToken cancellationToken = default)
+    {
+        return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.WindowEventEdit, windowEventId), cancellationToken);
     }
 
     // Legacy entry point. Kept temporarily to avoid breaking older call sites
@@ -70,4 +94,7 @@ public enum SheetSyncJobKind
     EventClose,
     DkpAudit,
     WindowEventPost,
+    WindowEventEdit,
+    AuctionDeductions,
+    EventLootDeductions,
 }

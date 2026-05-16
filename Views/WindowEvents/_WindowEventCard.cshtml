@@ -5,89 +5,80 @@
     var canManage = (bool)(ViewData["CanManage"] ?? false);
     var isClosed = (bool)(ViewData["IsClosed"] ?? false);
     var alreadyPosted = Model.PostedToSheetAt.HasValue;
+    var dkpFormId = $"window-event-form-{Model.Id}";
+
     string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
-    string Jobs(WindowCombinedMemberRow row)
-    {
-        var main = string.IsNullOrWhiteSpace(row.MainJob) ? "-" : row.MainJob + (row.MainJobLevel?.ToString() ?? "");
-        var sub = string.IsNullOrWhiteSpace(row.SubJob) ? "-" : row.SubJob + (row.SubJobLevel?.ToString() ?? "");
-        return $"{main}/{sub}";
-    }
+    string FormatDkp(double? value) => value.HasValue
+        ? value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        : "";
+
+    var effectiveDkpByCharacter = Model.CombinedMembers
+        .GroupBy(m => m.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First().EffectiveDkpAmount, StringComparer.OrdinalIgnoreCase);
+    var memberDkpStartIndex = 0;
+    var memberDkpDefault = Model.DkpAmount ?? 1.5;
 }
 
-<details class="card fade d4" open style="margin-top:14px">
-    <summary style="padding:12px 16px;cursor:pointer;list-style:revert">
-        <strong style="font-size:16px">@Dash(Model.Name)</strong>
-        <span style="color:var(--fg-muted,#888)"> &middot; </span>
-        <strong>@Model.FirstCapturedDisplay</strong>
-        <span style="color:var(--fg-muted,#888)"> &middot; </span>
-        <span>@Model.CombinedMemberCount unique member@(Model.CombinedMemberCount == 1 ? "" : "s")</span>
-        <span style="color:var(--fg-muted,#888)"> &middot; </span>
-        <span>@Model.SnapshotCount snapshot@(Model.SnapshotCount == 1 ? "" : "s")</span>
-        @if (Model.DuplicateSnapshotCount > 0)
-        {
-            <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:10px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:12px">
-                @Model.DuplicateSnapshotCount duplicate review
+<article class="card fade d4 we-card" style="margin-top:14px">
+    <header class="we-card__head">
+        <div class="we-card__title-group">
+            <h3 class="we-card__title">@Dash(Model.Name)</h3>
+            <span class="we-card__meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                @Model.FirstCapturedDisplay
             </span>
-        }
-        @if (isClosed)
-        {
-            <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:10px;background:rgba(148,163,184,0.15);color:#cbd5e1;font-size:12px">Closed</span>
-        }
-    </summary>
+            @if (Model.DuplicateSnapshotCount > 0)
+            {
+                <span class="tag warning">@Model.DuplicateSnapshotCount duplicate review</span>
+            }
+            @if (isClosed)
+            {
+                <span class="tag">Closed</span>
+            }
+        </div>
+        <div class="we-card__counts">
+            <span class="we-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+                @Model.CombinedMemberCount member@(Model.CombinedMemberCount == 1 ? "" : "s")
+            </span>
+            <span class="we-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+                @Model.SnapshotCount snapshot@(Model.SnapshotCount == 1 ? "" : "s")
+            </span>
+        </div>
+    </header>
 
     @if (canManage)
     {
-        <div style="padding:0 16px 8px 32px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-            <form asp-action="Rename" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post" style="display:flex;gap:6px;align-items:center">
+        <div class="we-card__controls">
+            <form asp-action="Rename" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id"
+                  method="post" class="we-action-form we-rename-form">
                 @Html.AntiForgeryToken()
-                <input type="text" name="name" value="@Model.Name" maxlength="128" required />
-                <button type="submit" class="btn sm">Rename</button>
+                <input class="input we-rename-input" type="text" name="name" value="@Model.Name" maxlength="128" required />
+                <button type="submit" class="btn sm">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    Rename
+                </button>
             </form>
-            @if (isClosed)
-            {
-                <form asp-action="Reopen" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="btn sm">Reopen</button>
-                </form>
-            }
-            else
-            {
-                <form asp-action="Close" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
-                    @Html.AntiForgeryToken()
-                    <button type="submit" class="btn sm ghost">Close</button>
-                </form>
-            }
-            <form asp-action="Delete" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post"
-                  onsubmit="return confirm('Delete Window Event &quot;@(Model.Name ?? "(unnamed)")&quot;? Snapshots attached to it will move back to Unlinked Snapshots. Rows already pushed to Google Sheets remain.');">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn sm danger-outline">Delete</button>
-            </form>
-        </div>
-
-        <div style="padding:0 16px 12px 32px">
             @if (alreadyPosted)
             {
-                <div style="font-size:13px;color:var(--fg-muted,#aaa)">
-                    Posted to DKP sheet on <strong>@Model.PostedToSheetDisplay</strong>
-                    @if (Model.DkpAmount.HasValue)
-                    {
-                        <text> &middot; @Model.DkpAmount DKP &middot; @Dash(Model.EntryType)</text>
-                    }
-                </div>
-            }
-            else
-            {
-                <form asp-action="PostToSheet" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id"
-                      method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"
-                      onsubmit="return confirm('Post @(Model.CombinedMemberCount) row(s) to the DKP sheet AttInput tab? This cannot be undone.');">
+                <form id="@dkpFormId"
+                      class="we-card__form"
+                      asp-action="EditPostedDetails"
+                      asp-route-linkshellId="@linkshellId"
+                      asp-route-windowEventId="@Model.Id"
+                      method="post"
+                      onsubmit="return confirm('Update DKP / Entry Type on the @(Model.CombinedMemberCount) already-posted row(s)? This rewrites cells J and K in the sheet and adjusts DKP totals.');">
                     @Html.AntiForgeryToken()
-                    <label style="font-size:13px">DKP:
-                        <input type="number" name="dkpAmount" step="0.25" min="0"
+                    <label class="we-field">
+                        <span class="we-field__label">Default DKP</span>
+                        <input class="input we-field__input" type="number" name="dkpAmount" step="0.25" min="0"
                                value="@(Model.DkpAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "1.5")"
-                               style="width:80px;margin-left:4px" required />
+                               required />
                     </label>
-                    <label style="font-size:13px">Entry Type:
-                        <select name="entryType" required style="margin-left:4px">
+                    <label class="we-field">
+                        <span class="we-field__label">Entry type</span>
+                        <select class="form-select we-field__select" name="entryType" required>
                             <option value="">(select)</option>
                             @foreach (var type in WindowEventEntryTypes.All)
                             {
@@ -95,81 +86,222 @@
                             }
                         </select>
                     </label>
-                    <button type="submit" class="btn sm">Post to DKP Sheet</button>
                 </form>
             }
+            else
+            {
+                <form id="@dkpFormId" class="we-card__form" method="post">
+                    @Html.AntiForgeryToken()
+                    <label class="we-field">
+                        <span class="we-field__label">Default DKP</span>
+                        <input class="input we-field__input" type="number" name="dkpAmount" step="0.25" min="0"
+                               value="@(Model.DkpAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "1.5")"
+                               required />
+                    </label>
+                    <label class="we-field">
+                        <span class="we-field__label">Entry type</span>
+                        <select class="form-select we-field__select" name="entryType" required>
+                            <option value="">(select)</option>
+                            @foreach (var type in WindowEventEntryTypes.All)
+                            {
+                                <option value="@type" selected="@(Model.EntryType == type)">@type</option>
+                            }
+                        </select>
+                    </label>
+                </form>
+            }
+
+            <div class="we-card__actions">
+                @if (isClosed)
+                {
+                    <form asp-action="Reopen" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn sm">Reopen</button>
+                    </form>
+                }
+                else
+                {
+                    <form asp-action="Close" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn sm ghost">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
+                            Close Event
+                        </button>
+                    </form>
+                }
+                <form asp-action="Delete" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post"
+                      onsubmit="return confirm('Are you sure you want to delete this event @(Model.Name ?? "(unnamed)") ?');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn sm danger-outline" title="Delete Event" aria-label="Delete Event">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        Delete Event
+                    </button>
+                </form>
+            </div>
         </div>
     }
 
-    <div style="padding:8px 16px 16px 32px">
-        <div style="font-size:13px;color:var(--fg-muted,#888);margin-bottom:6px">
-            Combined roster excludes snapshots marked duplicate or ignored.
+    <section class="we-roster">
+        <div class="we-roster__subtitle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+            Combined roster — excludes duplicates and ignored snapshots
         </div>
-        <div style="overflow-x:auto">
-            <table style="width:100%;max-width:840px;border-collapse:collapse;font-size:13px">
+        <div class="we-table__scroll">
+            <table class="we-table">
                 <thead>
                     <tr>
-                        <th style="text-align:left;padding:6px 10px">Character</th>
-                        <th style="text-align:left;padding:6px 10px">Jobs</th>
-                        <th style="text-align:left;padding:6px 10px">Zone</th>
-                        <th style="text-align:right;padding:6px 10px">Snapshots</th>
+                        <th>Character</th>
+                        <th>Jobs</th>
+                        <th>Zone</th>
+                        <th class="num">Snapshots</th>
+                        <th class="num">Combined DKP</th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var member in Model.CombinedMembers)
                 {
-                    <tr style="border-top:1px solid var(--border,#222)">
-                        <td style="padding:6px 10px"><strong>@member.CharacterName</strong></td>
-                        <td style="padding:6px 10px">@Jobs(member)</td>
-                        <td style="padding:6px 10px">@Dash(member.Zone)</td>
-                        <td style="padding:6px 10px;text-align:right">@member.SnapshotCount</td>
+                    <tr>
+                        <td><strong>@member.CharacterName</strong></td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(member.MainJob))
+                            {
+                                <span class="we-job-pill">@(member.MainJob)@(member.MainJobLevel?.ToString())</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(member.SubJob))
+                            {
+                                <span class="we-job-pill we-job-pill--sub">@(member.SubJob)@(member.SubJobLevel?.ToString())</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(member.Zone))
+                            {
+                                <span class="we-zone">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                    @member.Zone.Replace('_', ' ')
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="we-muted">-</span>
+                            }
+                        </td>
+                        <td class="num">@member.SnapshotCount</td>
+                        <td class="num">
+                            @* Always show a value: fall back to the event's
+                               default DKP (or the 1.5 baseline) when neither a
+                               per-character override nor a saved WindowEvent
+                               DkpAmount exists yet — matches the per-snapshot
+                               input's seeded value so the column is never "-". *@
+                            @FormatDkp(member.EffectiveDkpAmount ?? memberDkpDefault)
+                        </td>
                     </tr>
                 }
                 </tbody>
             </table>
         </div>
-    </div>
 
-    <div style="padding:0 16px 16px 32px">
-        <div class="card-title" style="font-size:14px;margin-bottom:6px">Posted snapshots</div>
-        @foreach (var snapshot in Model.Snapshots)
+        @if (canManage)
         {
-            <details style="border-top:1px solid var(--border,#222)">
-                <summary style="padding:8px 0;cursor:pointer;list-style:revert">
-                    <strong>@snapshot.CapturedAtDisplay</strong>
-                    <span style="color:var(--fg-muted,#888)"> &middot; </span>
-                    <span>Posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong></span>
-                    <span style="color:var(--fg-muted,#888)"> &middot; </span>
-                    <span>@snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
-                    @if (snapshot.SnapshotStatus != AttendanceSnapshotStatuses.Active)
-                    {
-                        <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:10px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:12px">
-                            @snapshot.SnapshotStatus
-                        </span>
-                    }
-                </summary>
-                @if (canManage)
+            <div class="we-roster__submit">
+                @if (alreadyPosted)
                 {
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px 24px">
-                        <form asp-action="SetSnapshotStatus" asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Active" />
-                            <button type="submit" class="btn sm" @(snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Active ? "disabled" : "")>Use</button>
-                        </form>
-                        <form asp-action="SetSnapshotStatus" asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Duplicate" />
-                            <button type="submit" class="btn sm ghost">Mark duplicate</button>
-                        </form>
-                        <form asp-action="SetSnapshotStatus" asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
-                            <button type="submit" class="btn sm ghost">Ignore</button>
-                        </form>
-                    </div>
+                    <span class="we-posted-meta">Posted to DKP sheet on <strong>@Model.PostedToSheetDisplay</strong></span>
+                    <button type="submit" form="@dkpFormId" class="btn sm primary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 19V5"/><polyline points="5 12 12 5 19 12"/></svg>
+                        Update on DKP sheet
+                    </button>
                 }
-                @await Html.PartialAsync("_WindowSnapshotEntries", snapshot)
-            </details>
+                else
+                {
+                    <button type="submit" form="@dkpFormId" class="btn sm primary"
+                            formaction="@Url.Action("PostToSheet", new { linkshellId, windowEventId = Model.Id })"
+                            onclick="return confirm('Post @(Model.CombinedMemberCount) row(s) to the DKP sheet AttInput tab? This cannot be undone.');">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 19V5"/><polyline points="5 12 12 5 19 12"/></svg>
+                        Post to DKP sheet
+                    </button>
+                }
+            </div>
         }
-    </div>
-</details>
+    </section>
+
+    @if (Model.Snapshots.Any())
+    {
+        <section class="we-snapshots">
+            @foreach (var snapshot in Model.Snapshots)
+            {
+                var snapshotDeleteForm = $"snapshot-delete-{snapshot.Id}";
+                if (canManage)
+                {
+                    <form id="@snapshotDeleteForm" asp-action="DeleteSnapshot"
+                          asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                          method="post" class="we-hidden-form"
+                          onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
+                        @Html.AntiForgeryToken()
+                    </form>
+                }
+                <details class="we-snapshot">
+                    <summary class="we-snapshot__head">
+                        <span class="we-snapshot__caret" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
+                        </span>
+                        <span class="we-snapshot__title">
+                            <strong>@snapshot.CapturedAtDisplay</strong>
+                            <span class="we-snapshot__meta">· posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong> · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
+                            @if (snapshot.SnapshotStatus != AttendanceSnapshotStatuses.Active)
+                            {
+                                <span class="tag warning">@snapshot.SnapshotStatus</span>
+                            }
+                        </span>
+                        @if (canManage)
+                        {
+                            <span class="we-snapshot__actions" onclick="event.stopPropagation()">
+                                <button form="@snapshotDeleteForm" type="submit"
+                                        class="btn sm danger-outline">Delete snapshot</button>
+                            </span>
+                        }
+                    </summary>
+                    @{
+                        var snapshotEntriesViewData = new ViewDataDictionary(ViewData)
+                        {
+                            ["MemberDkpFormId"] = canManage ? dkpFormId : null,
+                            ["MemberDkpEffectiveByCharacter"] = effectiveDkpByCharacter,
+                            ["MemberDkpStartIndex"] = memberDkpStartIndex,
+                            ["MemberDkpDefault"] = memberDkpDefault,
+                        };
+                        memberDkpStartIndex += snapshot.Entries.Count;
+                    }
+                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot, snapshotEntriesViewData)
+                </details>
+            }
+        </section>
+    }
+
+    @if (canManage)
+    {
+        // Keeps per-row DKP inputs in sync with the Default DKP value above
+        // for any row the officer hasn't manually touched. Once an officer
+        // edits an individual row, that row stops following the default.
+        <script>
+            (function () {
+                var form = document.getElementById('@dkpFormId');
+                if (!form) return;
+                var defaultInput = form.querySelector('input[name="dkpAmount"]');
+                if (!defaultInput) return;
+                var followers = document.querySelectorAll(
+                    'input.js-member-dkp[data-window-event-form="@dkpFormId"]');
+                followers.forEach(function (f) {
+                    f.addEventListener('input', function () {
+                        f.dataset.followsDefault = 'false';
+                    });
+                });
+                defaultInput.addEventListener('input', function () {
+                    followers.forEach(function (f) {
+                        if (f.dataset.followsDefault === 'true') {
+                            f.value = defaultInput.value;
+                        }
+                    });
+                });
+            })();
+        </script>
+    }
+</article>

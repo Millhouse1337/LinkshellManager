@@ -5,6 +5,24 @@
     var preview = Model.Preview;
 }
 
+@functions {
+    // "2026-05-15 18:59" -> "May 15th 2026 06:59 pm". ConnectedAt is stored
+    // UTC; we keep the UTC tag so the timestamp stays unambiguous without
+    // pulling the user's timezone into this view.
+    static string PrettyUtc(DateTime utc)
+    {
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        var day = utc.Day;
+        var suffix = (day % 100) is >= 11 and <= 13
+            ? "th"
+            : (day % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" };
+        var month = utc.ToString("MMMM", ci);
+        var time = utc.ToString("hh:mm", ci);
+        var meridiem = utc.ToString("tt", ci).ToLowerInvariant();
+        return $"{month} {day}{suffix} {utc.Year} {time} {meridiem}";
+    }
+}
+
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Google Sheet Integration</h1>
@@ -18,6 +36,23 @@
         </div>
     </div>
 </div>
+
+<style nonce="@Html.CspNonce()">
+    /* Space the stacked step cards apart so each reads as its own block. */
+    .sheet-cards > .card { margin-bottom: 16px; }
+    .sheet-cards > .card:last-child { margin-bottom: 0; }
+
+    /* Modern form rows: label above, input below, muted helper text. */
+    .sheet-cards .form-row { display: flex; flex-direction: column; gap: 6px; }
+    .sheet-cards .form-row + .form-row { margin-top: 14px; }
+    .sheet-cards .form-row > label {
+        font-size: 13px; font-weight: 500; color: var(--fg-2);
+    }
+    .sheet-cards .form-row > small { font-size: 12px; color: var(--fg-3); }
+    .sheet-cards .form-row .input { width: 100%; max-width: 520px; }
+</style>
+
+<div class="sheet-cards">
 
 @if (TempData["SheetImportError"] is string err)
 {
@@ -60,7 +95,7 @@ else
                     Connected as <strong>@Model.ConnectedGoogleEmail</strong>
                     @if (Model.ConnectedAt.HasValue)
                     {
-                        <text> · since @Model.ConnectedAt.Value.ToString("yyyy-MM-dd HH:mm") UTC</text>
+                        <text> · since @PrettyUtc(Model.ConnectedAt.Value) UTC</text>
                     }
                 </p>
                 <form asp-action="Disconnect" asp-route-linkshellId="@Model.LinkshellId" method="post" style="display:inline">
@@ -123,27 +158,27 @@ else
             <form asp-action="SaveConfig" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
                 <div class="form-row">
                     <label>Spreadsheet ID</label>
-                    <input type="text" name="spreadsheetId" value="@Model.SpreadsheetId" placeholder="e.g. 1YNfaF5AXbZoJdKrs21p29pfAl6Q9wJsQWafPztG3Nxk" style="width:100%" />
+                    <input class="input" type="text" name="spreadsheetId" value="@Model.SpreadsheetId" placeholder="e.g. 1YNfaF5AXbZoJdKrs21p29pfAl6Q9wJsQWafPztG3Nxk" />
                     <small>The long string between <code>/d/</code> and <code>/edit</code> in the sheet URL.</small>
                 </div>
-                <div class="form-row" style="margin-top:8px">
+                <div class="form-row">
                     <label>Main tab name (optional)</label>
-                    <input type="text" name="tabName" value="@Model.TabName" placeholder="Main" />
+                    <input class="input" type="text" name="tabName" value="@Model.TabName" placeholder="Main" />
                     <small>Defaults to <code>Main</code>. Used for the reconciliation page's read of B7:L200.</small>
                 </div>
-                <div class="form-row" style="margin-top:8px">
+                <div class="form-row">
                     <label>AttInput tab name (optional)</label>
-                    <input type="text" name="attInputTabName" value="@Model.AttInputTabName" placeholder="AttInput" />
+                    <input class="input" type="text" name="attInputTabName" value="@Model.AttInputTabName" placeholder="AttInput" />
                     <small>Defaults to <code>AttInput</code>. The app appends one row per attendee/snapshot here. Your column-C formula is never overwritten.</small>
                 </div>
-                <div class="form-row" style="margin-top:8px">
+                <div class="form-row">
                     <label>Default Entry Type for snapshots without a linked event (optional)</label>
-                    <input type="text" name="attInputDefaultEntryType" value="@Model.AttInputDefaultEntryType" placeholder="e.g. Misc Camp" />
+                    <input class="input" type="text" name="attInputDefaultEntryType" value="@Model.AttInputDefaultEntryType" placeholder="e.g. Misc Camp" />
                     <small>Used for <code>/lsm now</code> snapshots when no event is linked. Examples: <code>Misc Camp</code>, <code>Kill</code>, <code>Kings Camp</code>, <code>Wyrms Camp</code>.</small>
                 </div>
-                <div class="form-row" style="margin-top:8px">
+                <div class="form-row">
                     <label>ManualPoints tab name (optional)</label>
-                    <input type="text" name="manualPointsTabName" value="@Model.ManualPointsTabName" placeholder="ManualPoints" />
+                    <input class="input" type="text" name="manualPointsTabName" value="@Model.ManualPointsTabName" placeholder="ManualPoints" />
                     <small>Defaults to <code>ManualPoints</code>. Each DKP audit adds a new column to this tab (header = <code>M/D Audit: reason</code>, value in the affected member's row).</small>
                 </div>
                 <div style="margin-top:12px">
@@ -163,12 +198,8 @@ else
                     <div class="card-title">Step 3 — Import existing balances (optional)</div>
                 </div>
                 <form asp-action="ImportPreview" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
-                    <div class="form-row">
-                        <label>Read range</label>
-                        <input type="text" name="readRange" value="@readRange" />
-                        <small>Range to read (e.g. <code>Main!B7:C200</code>). Column 1 = character name, column 2 = DKP. TOTAL rows are skipped.</small>
-                    </div>
-                    <div style="margin-top:12px">
+                    <input type="hidden" name="readRange" value="@readRange" />
+                    <div>
                         <button type="submit" class="btn">Preview import</button>
                     </div>
                 </form>
@@ -329,3 +360,5 @@ else
         }
     }
 }
+
+</div>@* /.sheet-cards *@

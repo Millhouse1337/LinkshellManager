@@ -1,5 +1,6 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -86,6 +87,16 @@ public partial class AuctionController
         ViewBag.CharacterName = user.CharacterName ?? user.UserName ?? "User";
         ViewBag.CurrentUserId = user.Id;
         ViewBag.CurrentTime = ConvertUtcToUserTimeZone(DateTime.UtcNow, user.TimeZone) ?? DateTime.UtcNow;
+
+        if (selectedLinkshellId != 0)
+        {
+            ViewBag.TotalDkp = await _context.AppUserLinkshells
+                .Where(m => m.AppUserId == user.Id && m.LinkshellId == selectedLinkshellId)
+                .Select(m => m.LinkshellDkp ?? 0d)
+                .FirstOrDefaultAsync();
+            ViewBag.AvailableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
+                _context, user.Id, selectedLinkshellId, HttpContext.RequestAborted);
+        }
 
         return View(viewModels);
     }

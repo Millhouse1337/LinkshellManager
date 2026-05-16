@@ -15,12 +15,18 @@ public class DkpAdjustmentController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly SheetSyncQueue _sheetSync;
+    private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
 
-    public DkpAdjustmentController(ApplicationDbContext context, UserManager<AppUser> userManager, SheetSyncQueue sheetSync)
+    public DkpAdjustmentController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        SheetSyncQueue sheetSync,
+        WindowEventDkpLedgerService windowEventDkpLedger)
     {
         _context = context;
         _userManager = userManager;
         _sheetSync = sheetSync;
+        _windowEventDkpLedger = windowEventDkpLedger;
     }
 
     public async Task<IActionResult> Index(int? linkshellId)
@@ -54,6 +60,8 @@ public class DkpAdjustmentController : Controller
 
         viewModel.SelectedLinkshellId = selectedLinkshellId;
         viewModel.SelectedLinkshellName = viewModel.Linkshells.First(l => l.Id == selectedLinkshellId).Name;
+
+        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, HttpContext.RequestAborted);
 
         var members = await _context.AppUserLinkshells
             .Where(link => link.LinkshellId == selectedLinkshellId && link.AppUserId != null)

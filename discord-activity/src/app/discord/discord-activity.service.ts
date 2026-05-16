@@ -713,6 +713,7 @@ export class DiscordActivityService {
   updateAuction(auctionId: number, input: ActivityCreateAuctionInput): Promise<void> { return this.auctionService.updateAuction(auctionId, input); }
   startAuction(auctionId: number, linkshellId: number): Promise<void> { return this.auctionService.startAuction(auctionId, linkshellId); }
   placeAuctionBid(itemId: number, bidAmount: number, linkshellId: number): Promise<void> { return this.auctionService.placeAuctionBid(itemId, bidAmount, linkshellId); }
+  undoAuctionBid(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.undoAuctionBid(itemId, linkshellId); }
   endAuction(auctionId: number, linkshellId: number): Promise<void> { return this.auctionService.endAuction(auctionId, linkshellId); }
   closeAuction(auctionId: number, linkshellId: number, deliveredItemIds: number[] = []): Promise<void> { return this.auctionService.closeAuction(auctionId, linkshellId, deliveredItemIds); }
   markAuctionHistoryItemReceived(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.markAuctionHistoryItemReceived(itemId, linkshellId); }

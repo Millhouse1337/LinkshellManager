@@ -601,6 +601,9 @@ export interface ActivityAuction {
   canEnd: boolean;
   canClose: boolean;
   items: ActivityAuctionItem[];
+  // Viewer's available DKP in this auction's linkshell (total minus DKP
+  // locked by bids they're currently winning). Set by the list endpoint.
+  availableDkp?: number | null;
 }
 
 export interface ActivityAuctionBid {
