@@ -180,7 +180,7 @@ public sealed partial class ActivityDataController
             await AdjustTodLootDkpAsync(_dbContext, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
-            await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
+            await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
         }
 
         return Ok(MapTodDto(tod));
@@ -218,7 +218,12 @@ public sealed partial class ActivityDataController
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
+        // Known limitation: the Tod row is gone, so the background recompute
+        // (keyed by TodId) can't rebuild that day's ManualPoints column. The
+        // DB ledger is refunded (AdjustTodLootDkpAsync isRefund:true above);
+        // the sheet's original day column is left as-is for manual cleanup,
+        // mirroring how auction/event closes also don't unwind the sheet.
+        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
 
         return Ok(new { success = true });
     }
@@ -421,7 +426,7 @@ public sealed partial class ActivityDataController
             tod.TodLootDetails = new List<TodLootDetail>();
         }
 
-        await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
+        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImage, StringComparison.Ordinal))
         {

@@ -19,6 +19,20 @@ public sealed class WindowEventsViewModel
     public List<WindowSnapshotRow> UnlinkedSnapshots { get; set; } = new();
 }
 
+// Backs the searchable "Attendance History" page (closed Window Events only).
+public sealed class WindowEventsHistoryViewModel
+{
+    public int LinkshellId { get; set; }
+    public string? LinkshellName { get; set; }
+    public bool CanManage { get; set; }
+    public string? Query { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+    public int TotalCount { get; set; }
+    public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
+    public List<WindowEventRow> Events { get; set; } = new();
+}
+
 public sealed class WindowEventRow
 {
     public int Id { get; set; }

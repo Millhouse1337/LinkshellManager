@@ -66,6 +66,12 @@ public class TodManagerViewModel
     // only CanSubmitTodForApproval (not CanManageTods) so the button reads
     // "Submit for Approval" and a hint is shown explaining the review step.
     public bool CanCreateImmediately { get; set; } = true;
+
+    // Monster name -> assigned Party Setup, so the ToD Tracker can surface a
+    // link to the planned composition on each monster's row. Case-insensitive
+    // keys; most-recently-updated setup wins when several target one monster.
+    public Dictionary<string, (int Id, string Name)> AssignedPartySetups { get; set; }
+        = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public class TodTableRowViewModel

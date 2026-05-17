@@ -1,0 +1,85 @@
+@model LinkshellManagerDiscordApp.ViewModels.LootAddViewModel
+@{
+    ViewData["Title"] = "Add Loot";
+    var lootStructure = (Model.LinkshellLootStructure ?? "Dkp").ToLowerInvariant();
+    var isHybrid = lootStructure == "hybrid";
+    var isLootCouncil = lootStructure == "lootcouncil";
+    var dkpLabel = isHybrid ? "Deduction %" : "DKP spent";
+    var dkpHint = isHybrid
+        ? "Hybrid linkshell — value is the percent of the winner's current balance to deduct (0–100)."
+        : isLootCouncil
+            ? "Loot Council linkshell — recorded for history only; no DKP is deducted."
+            : "Flat DKP deducted from the winner's balance and posted to the ManualPoints sheet.";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Add loot</h1>
+        <div class="page-sub">
+            <span>Manual loot entry</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> &middot; </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Back to history</a>
+    </div>
+</div>
+
+<div class="card fade d2" style="padding:20px;max-width:640px">
+    <form asp-action="Add" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="LinkshellId" />
+        <input type="hidden" asp-for="LinkshellLootStructure" />
+
+        <div asp-validation-summary="ModelOnly" class="text-danger" style="margin-bottom:12px"></div>
+
+        <div class="form-grid">
+            <div class="field">
+                <label asp-for="Context">Source / monster <span class="muted">(optional)</span></label>
+                <input asp-for="Context" class="form-control" maxlength="256" placeholder="e.g. Fafnir, Sky, Manual" />
+                <span class="muted" style="font-size:11px">Shown as the loot's Context in history.</span>
+            </div>
+
+            <div class="field">
+                <label asp-for="ItemName">Item name</label>
+                <input asp-for="ItemName" class="form-control" maxlength="256" />
+                <span asp-validation-for="ItemName" class="text-danger"></span>
+            </div>
+
+            <div class="field">
+                <label asp-for="ItemWinner">Winner</label>
+                @if (Model.RosterCharacterNames.Any())
+                {
+                    <select asp-for="ItemWinner" class="form-select">
+                        <option value="">— select winner —</option>
+                        @foreach (var name in Model.RosterCharacterNames)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input asp-for="ItemWinner" class="form-control" maxlength="256" />
+                }
+                <span asp-validation-for="ItemWinner" class="text-danger"></span>
+            </div>
+
+            <div class="field">
+                <label asp-for="WinningDkpSpent">@dkpLabel</label>
+                <input asp-for="WinningDkpSpent" class="form-control" type="number" min="0" />
+                <span asp-validation-for="WinningDkpSpent" class="text-danger"></span>
+                <span class="muted" style="font-size:11px">@dkpHint</span>
+            </div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:8px">
+            <button type="submit" class="btn primary">Add loot</button>
+            <a class="btn ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

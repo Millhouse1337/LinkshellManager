@@ -1,0 +1,126 @@
+@model LinkshellManagerDiscordApp.ViewModels.PartySetupIndexViewModel
+
+@{
+    ViewData["Title"] = "Party Setups";
+    var linkshellName = Model.LinkshellName ?? "Selected Linkshell";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Party Setups</h1>
+        <div class="page-sub">
+            <span>@linkshellName</span>
+            <span>·</span>
+            <span><span class="num">@Model.Items.Count</span> setups</span>
+        </div>
+    </div>
+
+    <div class="page-actions">
+        @if (Model.CanManage)
+        {
+            <a class="btn primary" asp-action="Create">+ New Party Setup</a>
+        }
+    </div>
+</div>
+
+@if (TempData["PartySetupMessage"] is string flash && !string.IsNullOrWhiteSpace(flash))
+{
+    <div class="card fade d1" style="border:1px solid var(--accent);padding:12px 14px;margin-bottom:12px">
+        <div style="color:var(--fg);font-size:14px">@flash</div>
+    </div>
+}
+
+@if (Model.LinkshellId <= 0)
+{
+    <div class="card fade d2">
+        <div class="empty">Join a linkshell before designing party setups.</div>
+    </div>
+}
+else
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Party Setups</div>
+            <span class="card-link">@linkshellName</span>
+        </div>
+        @if (Model.Items.Any())
+        {
+            <div style="overflow-x:auto">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Assigned monster</th>
+                            <th>Alliances</th>
+                            <th>Parties</th>
+                            <th>Slots</th>
+                            <th>Updated</th>
+                            <th style="text-align:right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <a asp-action="Details" asp-route-id="@row.Id"
+                                       style="color:var(--fg);font-weight:500">@row.Name</a>
+                                </td>
+                                <td>
+                                    @if (Model.CanManage)
+                                    {
+                                        <form asp-action="Assign" asp-route-id="@row.Id" method="post"
+                                              style="display:inline-flex;gap:6px;align-items:center">
+                                            @Html.AntiForgeryToken()
+                                            <select name="monsterName" class="form-select" style="height:28px;max-width:160px">
+                                                <option value="">— Unassigned —</option>
+                                                @foreach (var monster in Model.MonsterOptions)
+                                                {
+                                                    <option value="@monster"
+                                                            selected="@(string.Equals(monster, row.AssignedMonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                                                        @monster
+                                                    </option>
+                                                }
+                                            </select>
+                                            <button type="submit" class="btn sm ghost">Assign</button>
+                                        </form>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(row.AssignedMonsterName))
+                                    {
+                                        <span class="tag accent">@row.AssignedMonsterName</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--fg-4)">—</span>
+                                    }
+                                </td>
+                                <td class="num">@row.AllianceCount</td>
+                                <td class="num">@row.PartyCount</td>
+                                <td class="num">@row.SlotCount</td>
+                                <td class="num">@row.UpdatedAt.ToString("M/d/yyyy")</td>
+                                <td style="text-align:right">
+                                    <div style="display:inline-flex;gap:6px">
+                                        <a class="btn sm" asp-action="Details" asp-route-id="@row.Id">View</a>
+                                        @if (Model.CanManage)
+                                        {
+                                            <a class="btn sm" asp-action="Edit" asp-route-id="@row.Id">Edit</a>
+                                            <form asp-action="Delete" asp-route-id="@row.Id" method="post"
+                                                  style="display:inline" onsubmit="return confirm('Delete this party setup?');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn sm ghost" style="color:var(--danger)">Delete</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="empty">No party setups yet. @(Model.CanManage ? "Create one to plan the next event." : "An officer hasn't designed one yet.")</div>
+        }
+    </div>
+}

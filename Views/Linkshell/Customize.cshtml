@@ -138,10 +138,20 @@
                 </select>
             </div>
 
-            <div style="display:flex;flex-direction:column;gap:4px;max-width:320px;margin-top:8px">
-                <label asp-for="LootBlockCooldownHours">In-game loot block after a bid undo (hours)</label>
-                <input class="input" type="number" min="0" max="8760" asp-for="LootBlockCooldownHours" />
-                <span style="color:var(--fg-3);font-size:12px">When a member undoes a winning auction bid they can't be credited an in-game loot win for this many hours. 0 = disabled.</span>
+            <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;display:flex;flex-direction:column;gap:8px">
+                <div class="card-title" style="font-size:14px">Feature Toggles</div>
+                <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEndgame" /> Endgame tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableHnmSection" /> HNM tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableMissions" /> Missions tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableAuctions" /> Auctions tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableToDs" /> ToDs tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEvents" /> Events tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableDkp" /> DKP tab</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableItems" /> Items tile on dashboard</label>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableRevenue" /> Revenue tile on dashboard</label>
+                </div>
             </div>
 
             <div style="display:flex;justify-content:flex-end;margin-top:8px">
@@ -152,20 +162,20 @@
 
     <div class="card" style="margin-bottom:16px">
         <div class="card-head">
-            <div class="card-title">Feature Toggles</div>
+            <div class="card-title">Discord Integration</div>
         </div>
-        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:8px">
-            <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEndgame" /> Endgame tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableHnmSection" /> HNM tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableMissions" /> Missions tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableAuctions" /> Auctions tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableToDs" /> ToDs tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEvents" /> Events tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableDkp" /> DKP tab</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableItems" /> Items tile on dashboard</label>
-                <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableRevenue" /> Revenue tile on dashboard</label>
+        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
+            <div style="font-size:12px;color:var(--fg-3)">
+                When set, every <code>/lsm now</code> attendance snapshot is also posted to this
+                Discord channel as an embed grouped into parties (3&times;6 alliance layout).
+                In Discord: Channel Settings &rarr; Integrations &rarr; Webhooks &rarr; New Webhook &rarr; Copy URL.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;max-width:520px">
+                <label asp-for="DiscordWebhookUrl">Channel webhook URL</label>
+                <input class="input" type="url" asp-for="DiscordWebhookUrl"
+                       placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
+                <span asp-validation-for="DiscordWebhookUrl" class="text-danger" style="font-size:12px"></span>
+                <span style="color:var(--fg-3);font-size:12px">Leave blank to disable Discord posting.</span>
             </div>
             <div style="display:flex;justify-content:flex-end;margin-top:8px">
                 <button class="btn primary" type="submit">Save changes</button>

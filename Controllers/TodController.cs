@@ -26,17 +26,20 @@ public class TodController : Controller
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
     private readonly SubmissionApprovalService _submissionApproval;
+    private readonly SheetSyncQueue _sheetSync;
 
     public TodController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        SubmissionApprovalService submissionApproval)
+        SubmissionApprovalService submissionApproval,
+        SheetSyncQueue sheetSync)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
         _submissionApproval = submissionApproval;
+        _sheetSync = sheetSync;
     }
 
     [HttpGet]
@@ -377,6 +380,10 @@ public class TodController : Controller
             await _context.SaveChangesAsync(cancellationToken);
         }
 
+        // Recompute this ToD's day column on the ManualPoints tab so web ToD
+        // loot edits land on the DKP sheet too (idempotent whole-day rebuild).
+        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
+
         if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImagePath, StringComparison.Ordinal))
         {
             // Best-effort cleanup of the orphaned old file.
@@ -519,6 +526,20 @@ public class TodController : Controller
             .Where(t => !HnmConfig.IsTrueHnm(t.MonsterName))
             .ToList();
 
+        // Party Setups assigned to a monster, keyed by monster name so the
+        // ToD list can link the planned composition on that monster's row.
+        // Ordered by UpdatedAt desc so the freshest setup wins per monster.
+        var assignedPartySetups = selectedLinkshellId > 0
+            ? (await _context.PartySetups
+                .AsNoTracking()
+                .Where(ps => ps.LinkshellId == selectedLinkshellId && ps.AssignedMonsterName != null)
+                .OrderByDescending(ps => ps.UpdatedAt)
+                .Select(ps => new { ps.Id, ps.Name, Monster = ps.AssignedMonsterName! })
+                .ToListAsync())
+                .GroupBy(ps => ps.Monster.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => (g.First().Id, g.First().Name), StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, (int Id, string Name)>(StringComparer.OrdinalIgnoreCase);
+
         var todDraft = source?.Tod ?? new Tod();
         todDraft.LinkshellId = selectedLinkshellId;
 
@@ -574,6 +595,7 @@ public class TodController : Controller
             IntervalOptions = TodManagerViewModel.SupportedIntervals.ToList(),
             CharacterNames = characterNames,
             CanCreateImmediately = canCreateImmediately,
+            AssignedPartySetups = assignedPartySetups,
         };
     }
 

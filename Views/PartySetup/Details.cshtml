@@ -1,0 +1,121 @@
+@model LinkshellManagerDiscordApp.ViewModels.PartySetupDetailsViewModel
+
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@Model.Name</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.AssignedMonsterName))
+            {
+                <span class="tag accent">@Model.AssignedMonsterName</span>
+            }
+            else
+            {
+                <span style="color:var(--fg-4)">Unassigned</span>
+            }
+        </div>
+    </div>
+
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Back</a>
+        @if (Model.CanManage)
+        {
+            <a class="btn primary" asp-action="Edit" asp-route-id="@Model.Id">Edit</a>
+            <form asp-action="Delete" asp-route-id="@Model.Id" method="post"
+                  style="display:inline" onsubmit="return confirm('Delete this party setup?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn ghost" style="color:var(--danger)">Delete</button>
+            </form>
+        }
+    </div>
+</div>
+
+@if (TempData["PartySetupMessage"] is string flash && !string.IsNullOrWhiteSpace(flash))
+{
+    <div class="card fade d1" style="border:1px solid var(--accent);padding:12px 14px;margin-bottom:12px">
+        <div style="color:var(--fg);font-size:14px">@flash</div>
+    </div>
+}
+
+@if (Model.CanManage)
+{
+    <div class="card fade d2" style="margin-bottom:12px">
+        <div class="card-head">
+            <div class="card-title">Assigned monster</div>
+        </div>
+        <form asp-action="Assign" asp-route-id="@Model.Id" method="post"
+              style="display:flex;gap:8px;align-items:center;padding:4px 0">
+            @Html.AntiForgeryToken()
+            <select name="monsterName" class="form-select" style="max-width:220px">
+                <option value="">— Unassigned —</option>
+                @foreach (var monster in Model.MonsterOptions)
+                {
+                    <option value="@monster"
+                            selected="@(string.Equals(monster, Model.AssignedMonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                        @monster
+                    </option>
+                }
+            </select>
+            <button type="submit" class="btn sm primary">Save assignment</button>
+        </form>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.Notes))
+{
+    <div class="card fade d2" style="margin-bottom:12px">
+        <div class="card-head">
+            <div class="card-title">Notes</div>
+        </div>
+        <div style="color:var(--fg-1);font-size:14px;white-space:pre-wrap">@Model.Notes</div>
+    </div>
+}
+
+@if (!Model.Alliances.Any())
+{
+    <div class="card fade d2">
+        <div class="empty">This party setup has no alliances yet.</div>
+    </div>
+}
+else
+{
+    @foreach (var alliance in Model.Alliances)
+    {
+        <div class="card fade d2" style="margin-bottom:12px">
+            <div class="card-head">
+                <div class="card-title">@alliance.Name</div>
+                <span class="card-link">@alliance.Parties.Count parties</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px">
+                @foreach (var party in alliance.Parties)
+                {
+                    <div style="flex:1 1 220px;min-width:220px;border:1px solid var(--border);border-radius:var(--r-md);padding:10px">
+                        <div style="font-weight:600;color:var(--fg);margin-bottom:8px">
+                            @party.Name <span class="tag" style="margin-left:4px">@party.Slots.Count</span>
+                        </div>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width:32px">#</th>
+                                    <th>Requirement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var slot in party.Slots)
+                                {
+                                    <tr>
+                                        <td class="num">@slot.Position</td>
+                                        <td>@slot.Display</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}

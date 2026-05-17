@@ -161,6 +161,9 @@ builder.Services.AddScoped<AttInputAppendService>();
 builder.Services.AddScoped<ManualPointsAppendService>();
 builder.Services.AddScoped<HnmAutoEventService>();
 builder.Services.AddHostedService<SheetSyncBackgroundService>();
+builder.Services.AddSingleton<DiscordWebhookQueue>();
+builder.Services.AddScoped<DiscordSnapshotPublisher>();
+builder.Services.AddHostedService<DiscordWebhookBackgroundService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {

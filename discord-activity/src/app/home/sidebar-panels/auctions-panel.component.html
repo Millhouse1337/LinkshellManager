@@ -201,28 +201,6 @@
                               (click)="submitAuctionBid(item.id)">
                               {{ activity.busyAuctionItemId() === item.id ? '…' : 'Bid' }}
                             </button>
-                            @if (canUndoBid(auction, item)) {
-                              @if (pendingUndoBidItemId() === item.id) {
-                                <button
-                                  type="button"
-                                  class="btn danger-fill sm"
-                                  [disabled]="activity.busyAuctionItemId() === item.id"
-                                  (click)="confirmUndoBid(item.id)"
-                                  title="Promotes 2nd place and blocks you from in-game loot wins for a cooldown">
-                                  Confirm undo
-                                </button>
-                                <button type="button" class="btn ghost sm" (click)="cancelUndoBid()">Cancel</button>
-                              } @else {
-                                <button
-                                  type="button"
-                                  class="btn ghost sm"
-                                  [disabled]="activity.busyAuctionItemId() === item.id"
-                                  (click)="requestUndoBid(item.id)"
-                                  title="Undo your winning bid (promotes 2nd place; blocks you from in-game loot wins for a cooldown)">
-                                  Undo bid
-                                </button>
-                              }
-                            }
                           </div>
                         } @else {
                           <span class="muted">—</span>

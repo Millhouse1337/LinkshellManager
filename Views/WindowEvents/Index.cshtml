@@ -1,14 +1,14 @@
 @model LinkshellManagerDiscordApp.ViewModels.WindowEventsViewModel
 @using LinkshellManagerDiscordApp.Models
 @{
-    ViewData["Title"] = "Window Events";
+    ViewData["Title"] = "Attendance Events";
 
     string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
 }
 
 <div class="page-head fade d1">
     <div>
-        <h1 class="page-title">Window Events</h1>
+        <h1 class="page-title">Attendance Events</h1>
         <div class="page-sub">
             <span>Alliance-wide snapshots posted from the LSM addon</span>
             @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
@@ -17,6 +17,9 @@
                 <span>@Model.LinkshellName</span>
             }
         </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost sm" asp-controller="WindowEvents" asp-action="History" asp-route-linkshellId="@Model.LinkshellId">Attendance History →</a>
     </div>
 </div>
 
@@ -34,8 +37,9 @@
         <div class="card-title">Instructions</div>
     </div>
     <div style="padding:12px 16px;font-size:13px;color:var(--fg-muted,#aaa)">
-        <code>/lsm now &lt;Monster Name&gt;</code> creates new or updates existing Window Events.
+        <code>/lsm now &lt;Monster Name&gt;</code> creates new or updates existing Attendance Events.
         <code>/lsm now</code> will land under Unlinked Snapshots until a leader or officer attaches it.
+        Closed events move to <strong>Attendance History</strong>.
     </div>
 </div>
 
@@ -91,7 +95,11 @@
                             </form>
                         </div>
                     }
-                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot)
+                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot, new ViewDataDictionary(ViewData)
+                    {
+                        ["LinkshellId"] = Model.LinkshellId,
+                        ["CanManage"] = Model.CanManage,
+                    })
                 </details>
             }
         </section>
@@ -101,9 +109,9 @@
 @if (Model.OpenEvents.Count == 0 && Model.UnlinkedSnapshots.Count == 0)
 {
     <div class="card fade d3">
-        <div class="card-head"><div class="card-title">No Window Events yet</div></div>
+        <div class="card-head"><div class="card-title">No Attendance Events yet</div></div>
         <div class="empty" style="padding:16px">
-            Run <code>/lsm now &lt;Monster Name&gt;</code> in-game while in an alliance to create the first Window Event.
+            Run <code>/lsm now &lt;Monster Name&gt;</code> in-game while in an alliance to create the first Attendance Event.
         </div>
     </div>
 }
@@ -118,22 +126,3 @@
     })
 }
 
-@if (Model.ClosedEvents.Count > 0)
-{
-    <div class="card fade d5">
-        <div class="card-head">
-            <div class="card-title">Recent Closed Window Events <span class="tag">@Model.ClosedEvents.Count</span></div>
-        </div>
-        <div style="padding:0 0 8px">
-            @foreach (var ev in Model.ClosedEvents)
-            {
-                @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
-                {
-                    ["LinkshellId"] = Model.LinkshellId,
-                    ["CanManage"] = Model.CanManage,
-                    ["IsClosed"] = true,
-                })
-            }
-        </div>
-    </div>
-}

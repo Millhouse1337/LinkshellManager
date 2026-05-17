@@ -477,6 +477,85 @@ public sealed class AttInputAppendService
         _logger.LogInformation("AttInput append: event {EventId} close -> {Count} rows.", eventId, rows.Count);
     }
 
+    // Writes a single AttInput row for a POSITIVE DKP ledger entry (manual
+    // adjustment / miscellaneous audit). ManualPoints is deductions-only, so
+    // anything that credits DKP lands here instead. Idempotent via the
+    // entry's SheetAppendedAt stamp (shared with the ManualPoints audit path;
+    // the two are sign-disjoint so only one ever claims the stamp).
+    //
+    // Column choices for a miscellaneous credit (no event/zone/job context):
+    //   A/H Player   = entry.CharacterName
+    //   B   Jobs     = blank (no job on an adjustment)
+    //   C   Date     = entry.OccurredAt (date) -- required by the formula chain
+    //   D   Time     = entry.OccurredAt (time)
+    //   E   UTC off  = UTC+0000 (OccurredAt is stored UTC)
+    //   F   Location = the adjustment reason, so the row is self-describing
+    //                  (Location is free text, not formula-sensitive)
+    //   I   Camp Win = 1 (same constant every other AttInput writer uses)
+    //   J   DKP      = entry.Amount (the positive credit)
+    //   K   Entry Tp = linkshell.AttInputDefaultEntryType, else "Misc Camp"
+    //                  -- a value the sheet's Tally/Main formulas recognize
+    public async Task AppendMiscDkpAsync(int dkpLedgerEntryId, CancellationToken cancellationToken)
+    {
+        var entry = await _db.DkpLedgerEntries
+            .FirstOrDefaultAsync(e => e.Id == dkpLedgerEntryId, cancellationToken);
+        if (entry is null)
+        {
+            _logger.LogDebug("AttInput misc skip: ledger entry {Id} not found.", dkpLedgerEntryId);
+            return;
+        }
+        // Sign guard FIRST (before the idempotency stamp) so a deduction
+        // never gets claimed here -- it belongs to the ManualPoints path.
+        if (entry.Amount <= 0)
+        {
+            return;
+        }
+        if (entry.SheetAppendedAt.HasValue)
+        {
+            _logger.LogDebug("AttInput misc skip: ledger entry {Id} already appended.", dkpLedgerEntryId);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(entry.CharacterName))
+        {
+            _logger.LogDebug("AttInput misc skip: ledger entry {Id} has no character name.", dkpLedgerEntryId);
+            return;
+        }
+
+        var linkshell = await LoadConfiguredLinkshellAsync(entry.LinkshellId, cancellationToken);
+        if (linkshell is null) return;
+
+        var entryType = !string.IsNullOrWhiteSpace(linkshell.AttInputDefaultEntryType)
+            ? linkshell.AttInputDefaultEntryType!
+            : WindowEventEntryTypes.MiscCamp;
+
+        var reason = new[] { entry.EditReason, entry.Details }
+            .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))
+            ?? "Manual DKP adjustment";
+
+        var row = BuildRow(
+            playerName: entry.CharacterName,
+            jobs: null,
+            whenUtc: entry.OccurredAt,
+            utcOffset: null,
+            location: reason,
+            campWindow: 1,
+            dkp: entry.Amount,
+            entryType: entryType);
+
+        var appendResponse = await AppendRowsAsync(
+            linkshell, new List<IList<object>> { row }, cancellationToken);
+        if (TryGetFirstAppendedRow(appendResponse?.Updates?.UpdatedRange, out var appendedRow))
+        {
+            entry.AttInputRowNumber = appendedRow;
+        }
+
+        entry.SheetAppendedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "AttInput misc append: ledger entry {Id} ({Amount} DKP, {Type}) -> 1 row.",
+            dkpLedgerEntryId, entry.Amount, entryType);
+    }
+
     // ---- internals ----
 
     private async Task<Linkshell?> LoadConfiguredLinkshellAsync(int linkshellId, CancellationToken cancellationToken)

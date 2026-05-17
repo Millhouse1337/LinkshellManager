@@ -14,7 +14,14 @@
                 <span>@selectedLinkshell.LinkshellName</span>
                 <span class="dot"> · </span>
             }
-            <span><span class="num">@Model.Members.Count</span> member@(Model.Members.Count == 1 ? "" : "s")</span>
+            @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+            {
+                <span><span class="num">@Model.TotalCount</span> of <span class="num">@Model.TotalMembers</span> members</span>
+            }
+            else
+            {
+                <span><span class="num">@Model.TotalMembers</span> member@(Model.TotalMembers == 1 ? "" : "s")</span>
+            }
         </div>
     </div>
     @if (Model.CanManage)
@@ -66,10 +73,26 @@ else
     <div class="card fade d3">
         <div class="card-head">
             <div class="card-title">Members</div>
+            <form asp-action="Index" method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input type="hidden" name="selectedLinkshellId" value="@Model.SelectedLinkshellId" />
+                <input type="text" name="search" value="@Model.SearchTerm"
+                       placeholder="Search character…" class="form-control"
+                       style="height:32px;min-width:200px" />
+                <button type="submit" class="btn sm">Search</button>
+                @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+                {
+                    <a class="btn sm ghost" asp-action="Index"
+                       asp-route-selectedLinkshellId="@Model.SelectedLinkshellId">Clear</a>
+                }
+            </form>
         </div>
         @if (Model.Members.Count == 0)
         {
-            <div class="empty">No members found for this linkshell.</div>
+            <div class="empty">
+                @(string.IsNullOrWhiteSpace(Model.SearchTerm)
+                    ? "No members found for this linkshell."
+                    : "No members match your search.")
+            </div>
         }
         else
         {
@@ -116,6 +139,27 @@ else
                     }
                 </tbody>
             </table>
+
+            @if (Model.TotalPages > 1)
+            {
+                <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border)">
+                    @if (Model.PageNumber > 1)
+                    {
+                        <a class="btn sm" asp-action="Index"
+                           asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
+                           asp-route-search="@Model.SearchTerm"
+                           asp-route-page="@(Model.PageNumber - 1)">Prev</a>
+                    }
+                    <span class="muted" style="font-size:12px">Page @Model.PageNumber of @Model.TotalPages</span>
+                    @if (Model.PageNumber < Model.TotalPages)
+                    {
+                        <a class="btn sm" asp-action="Index"
+                           asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
+                           asp-route-search="@Model.SearchTerm"
+                           asp-route-page="@(Model.PageNumber + 1)">Next</a>
+                    }
+                </div>
+            }
         }
     </div>
 }

@@ -16,17 +16,114 @@ public class LootHistoryController : Controller
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
     private readonly LootEditService _lootEditService;
+    private readonly SheetSyncQueue _sheetSync;
 
     public LootHistoryController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        LootEditService lootEditService)
+        LootEditService lootEditService,
+        SheetSyncQueue sheetSync)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
         _lootEditService = lootEditService;
+        _sheetSync = sheetSync;
+    }
+
+    [HttpGet("/LootHistory/Add")]
+    public async Task<IActionResult> Add()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var (linkshellId, linkshellName) = await ResolvePrimaryLinkshellAsync(user);
+        if (linkshellId is null || linkshellId == 0)
+        {
+            TempData["LootHistoryMessage"] = "Join or select a linkshell before adding loot.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var membership = await _context.AppUserLinkshells
+            .Include(link => link.Linkshell)
+            .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId);
+        if (membership is null) return Forbid();
+        if (!await ResolveCanAddLootAsync(membership)) return Forbid();
+
+        return View(new LootAddViewModel
+        {
+            LinkshellId = linkshellId.Value,
+            LinkshellName = linkshellName,
+            LinkshellLootStructure = membership.Linkshell?.LootStructure,
+            RosterCharacterNames = await LoadRosterCharacterNamesAsync(linkshellId.Value)
+        });
+    }
+
+    [HttpPost("/LootHistory/Add")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Add(LootAddViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var (linkshellId, linkshellName) = await ResolvePrimaryLinkshellAsync(user);
+        if (linkshellId is null || linkshellId == 0) return NotFound();
+
+        var membership = await _context.AppUserLinkshells
+            .Include(link => link.Linkshell)
+            .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId);
+        if (membership is null) return Forbid();
+        if (!await ResolveCanAddLootAsync(membership)) return Forbid();
+
+        var roster = await LoadRosterCharacterNamesAsync(linkshellId.Value);
+
+        if (ModelState.IsValid
+            && !roster.Any(n => string.Equals(n, model.ItemWinner, StringComparison.OrdinalIgnoreCase)))
+        {
+            ModelState.AddModelError(nameof(model.ItemWinner), "Winner must be a current linkshell member.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            model.LinkshellId = linkshellId.Value;
+            model.LinkshellName = linkshellName;
+            model.LinkshellLootStructure = membership.Linkshell?.LootStructure;
+            model.RosterCharacterNames = roster;
+            return View(model);
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        // One lightweight backing ToD per submission so the loot flows through
+        // the existing ToD-loot DKP deduction + ManualPoints per-day pipeline
+        // and shows in history (Source = ToD) with full edit support.
+        var tod = new Tod
+        {
+            LinkshellId = linkshellId.Value,
+            MonsterName = string.IsNullOrWhiteSpace(model.Context) ? "Manual Loot" : model.Context!.Trim(),
+            Claim = true,
+            Time = nowUtc,
+            TimeStamp = nowUtc,
+            TotalClaims = 1
+        };
+        var detail = new TodLootDetail
+        {
+            Tod = tod,
+            ItemName = model.ItemName!.Trim(),
+            ItemWinner = model.ItemWinner!.Trim(),
+            WinningDkpSpent = model.WinningDkpSpent
+        };
+        _context.Tods.Add(tod);
+        _context.TodLootDetails.Add(detail);
+        await ActivityDataController.AdjustTodLootDkpAsync(
+            _context, tod, new[] { detail }, nowUtc, isRefund: false, HttpContext.RequestAborted);
+        await _context.SaveChangesAsync();
+        // Recompute this day's ManualPoints column (idempotent; edits/deletes
+        // self-correct via Loot History Edit).
+        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, HttpContext.RequestAborted);
+
+        TempData["LootHistoryMessage"] = $"Loot added: {detail.ItemName} → {detail.ItemWinner} ({detail.WinningDkpSpent} DKP).";
+        return RedirectToAction(nameof(Index));
     }
 
     // GET /LootHistory — paginated combined ToD + Event loot for the user's

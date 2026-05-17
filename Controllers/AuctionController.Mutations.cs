@@ -360,67 +360,6 @@ public partial class AuctionController
         return RedirectToAction(nameof(Index));
     }
 
-    // Undo the caller's OWN currently-winning bid while the auction is live.
-    // Promotes the next highest remaining bid ("2nd place") and blocks the
-    // caller from in-game loot wins for the linkshell's cooldown window.
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UndoBid(int auctionItemId)
-    {
-        var user = await RequireCurrentUserAsync();
-        if (user is null)
-        {
-            return Challenge();
-        }
-
-        var auctionItem = await _context.AuctionItems
-            .Include(item => item.Auction)
-            .Include(item => item.Bids)
-            .FirstOrDefaultAsync(item => item.Id == auctionItemId);
-        if (auctionItem is null || auctionItem.Auction is null)
-        {
-            return NotFound();
-        }
-
-        var membership = await GetMembershipAsync(user.Id, auctionItem.Auction.LinkshellId);
-        if (membership is null)
-        {
-            return Forbid();
-        }
-
-        var nowUtc = DateTime.UtcNow;
-        if (!IsAuctionLive(auctionItem.Auction, nowUtc) || HasAuctionEnded(auctionItem.Auction, nowUtc))
-        {
-            TempData["AuctionError"] = "You can only undo a bid while the auction is live.";
-            return RedirectToAction(nameof(Index));
-        }
-
-        if (auctionItem.CurrentHighestBidderAppUserId != user.Id)
-        {
-            TempData["AuctionError"] = "You can only undo a bid you are currently winning.";
-            return RedirectToAction(nameof(Index));
-        }
-
-        var cooldownHours = await _context.Linkshells
-            .Where(l => l.Id == auctionItem.Auction.LinkshellId)
-            .Select(l => l.LootBlockCooldownHours)
-            .FirstOrDefaultAsync();
-
-        var outcome = AuctionDkpService.UndoWinningBid(
-            _context, auctionItem, user.Id, membership, cooldownHours, nowUtc);
-        if (!outcome.Ok)
-        {
-            TempData["AuctionError"] = outcome.Error;
-            return RedirectToAction(nameof(Index));
-        }
-
-        await _context.SaveChangesAsync();
-        TempData["AuctionStatus"] = cooldownHours > 0
-            ? $"Bid undone. You are blocked from in-game loot wins for {cooldownHours}h."
-            : "Bid undone.";
-        return RedirectToAction(nameof(Index));
-    }
-
     // Stops bidding now without archiving the run. Mirrors the activity's
     // /api/activity/auctions/{id}/end endpoint — the auction transitions to
     // status Ended and lingers on the active board until the creator closes

@@ -29,6 +29,10 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<EventLootDetail> EventLootDetails => Set<EventLootDetail>();
         public DbSet<Tod> Tods => Set<Tod>();
         public DbSet<TodLootDetail> TodLootDetails => Set<TodLootDetail>();
+        public DbSet<PartySetup> PartySetups => Set<PartySetup>();
+        public DbSet<PartySetupAlliance> PartySetupAlliances => Set<PartySetupAlliance>();
+        public DbSet<PartySetupParty> PartySetupParties => Set<PartySetupParty>();
+        public DbSet<PartySetupSlot> PartySetupSlots => Set<PartySetupSlot>();
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<Rule> Rules => Set<Rule>();
         public DbSet<Announcement> Announcements => Set<Announcement>();
@@ -235,6 +239,59 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.EditedByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.EditedByCharacterName).HasMaxLength(256);
                 entity.Property(item => item.LastEditReason).HasMaxLength(512);
+            });
+
+            builder.Entity<PartySetup>(entity =>
+            {
+                entity.ToTable("PartySetups");
+                entity.Property(item => item.Name).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.AssignedMonsterName).HasMaxLength(256);
+                entity.Property(item => item.Notes).HasMaxLength(1024);
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasMany(item => item.Alliances)
+                    .WithOne(item => item.PartySetup)
+                    .HasForeignKey(item => item.PartySetupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.AssignedMonsterName });
+                entity.HasIndex(item => new { item.LinkshellId, item.Name });
+            });
+
+            builder.Entity<PartySetupAlliance>(entity =>
+            {
+                entity.ToTable("PartySetupAlliances");
+                entity.Property(item => item.Name).HasMaxLength(64);
+                entity.HasMany(item => item.Parties)
+                    .WithOne(item => item.Alliance)
+                    .HasForeignKey(item => item.PartySetupAllianceId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.PartySetupId, item.SortOrder });
+            });
+
+            builder.Entity<PartySetupParty>(entity =>
+            {
+                entity.ToTable("PartySetupParties");
+                entity.Property(item => item.Name).HasMaxLength(64);
+                entity.HasMany(item => item.Slots)
+                    .WithOne(item => item.Party)
+                    .HasForeignKey(item => item.PartySetupPartyId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.PartySetupAllianceId, item.SortOrder });
+            });
+
+            builder.Entity<PartySetupSlot>(entity =>
+            {
+                entity.ToTable("PartySetupSlots");
+                entity.Property(item => item.RequirementType).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Role).HasMaxLength(16);
+                entity.Property(item => item.MainJob).HasMaxLength(8);
+                entity.Property(item => item.SubJob).HasMaxLength(8);
+                entity.Property(item => item.Label).HasMaxLength(64);
+                entity.HasIndex(item => new { item.PartySetupPartyId, item.SortOrder });
             });
 
             builder.Entity<EventLootDetail>(entity =>

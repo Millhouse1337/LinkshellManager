@@ -494,9 +494,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("LootBiddingBlockedUntil")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Rank")
                         .HasColumnType("text");
 
@@ -1323,6 +1320,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("Details")
                         .HasColumnType("text");
 
+                    b.Property<string>("DiscordWebhookUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<string>("DkpRoundingIncrement")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -1385,9 +1386,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<int>("LootBlockCooldownHours")
-                        .HasColumnType("integer");
-
                     b.Property<string>("LootStructure")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1440,6 +1438,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMembers")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageParties")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageRoles")
@@ -1513,6 +1514,146 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("AppUserId");
 
                     b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AssignedMonsterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("CreatedByCharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId", "AssignedMonsterName");
+
+                    b.HasIndex("LinkshellId", "Name");
+
+                    b.ToTable("PartySetups", (string)null);
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupAlliance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PartySetupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartySetupId", "SortOrder");
+
+                    b.ToTable("PartySetupAlliances", (string)null);
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupParty", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("PartySetupAllianceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartySetupAllianceId", "SortOrder");
+
+                    b.ToTable("PartySetupParties", (string)null);
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupSlot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("MainJob")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("PartySetupPartyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequirementType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubJob")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartySetupPartyId", "SortOrder");
+
+                    b.ToTable("PartySetupSlots", (string)null);
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotEntry", b =>
@@ -2628,6 +2769,50 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("AppUser");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetup", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Linkshell");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupAlliance", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PartySetup", "PartySetup")
+                        .WithMany("Alliances")
+                        .HasForeignKey("PartySetupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PartySetup");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupParty", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PartySetupAlliance", "Alliance")
+                        .WithMany("Parties")
+                        .HasForeignKey("PartySetupAllianceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Alliance");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupSlot", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PartySetupParty", "Party")
+                        .WithMany("Slots")
+                        .HasForeignKey("PartySetupPartyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Party");
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotEntry", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", "PendingAttendanceSnapshotSubmission")
@@ -2911,6 +3096,21 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("EventHistories");
 
                     b.Navigation("Events");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetup", b =>
+                {
+                    b.Navigation("Alliances");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupAlliance", b =>
+                {
+                    b.Navigation("Parties");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupParty", b =>
+                {
+                    b.Navigation("Slots");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingAttendanceSnapshotSubmission", b =>

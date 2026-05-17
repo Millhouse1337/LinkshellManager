@@ -1,0 +1,228 @@
+@using System.Text.Json
+@model LinkshellManagerDiscordApp.ViewModels.PartySetupEditorViewModel
+
+@{
+    var isEditMode = Model.Id > 0;
+    var pageHeading = isEditMode ? "Edit Party Setup" : "New Party Setup";
+    var formAction = isEditMode ? "Edit" : "Create";
+    ViewData["Title"] = pageHeading;
+    var linkshellName = Model.LinkshellName ?? "Selected Linkshell";
+
+    // Group the flat slot list back into alliance -> party -> slot so the
+    // initial DOM matches what party-setup.js expects (and so a validation
+    // round-trip re-renders correctly even before the JS reindex runs).
+    var allianceGroups = Model.Slots
+        .GroupBy(s => s.AllianceIndex)
+        .OrderBy(g => g.Key)
+        .ToList();
+    var flat = 0;
+
+    var optionsJson = JsonSerializer.Serialize(new
+    {
+        requirementTypes = Model.RequirementTypeOptions,
+        roles = Model.RoleOptions,
+        mainJobs = Model.MainJobOptions,
+        subJobs = Model.SubJobOptions
+    });
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@pageHeading</h1>
+        <div class="page-sub">
+            <span>@linkshellName</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index">Cancel</a>
+    </div>
+</div>
+
+<form asp-action="@formAction"
+      asp-route-id="@(isEditMode ? (int?)Model.Id : null)"
+      method="post" id="party-setup-form" novalidate
+      data-options="@optionsJson"
+      class="create-form fade d2">
+    @Html.AntiForgeryToken()
+    @if (isEditMode)
+    {
+        <input asp-for="Id" type="hidden" />
+    }
+
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger"
+         style="display:@(ViewData.ModelState.IsValid ? "none" : "block"); margin-bottom:14px;"></div>
+
+    <div class="create-form__header">
+        <div>
+            <strong>@(isEditMode ? "Update party setup" : "Design party setup")</strong>
+            <p>Plan the alliances, parties and slots you want for the next event. Each alliance can hold up to 3 parties.</p>
+        </div>
+        <span class="tag accent">@linkshellName</span>
+    </div>
+
+    <div class="create-form__grid">
+        <label>
+            <span>Name</span>
+            <input asp-for="Name" placeholder="e.g. Nidhogg Standard" required />
+            <span asp-validation-for="Name" class="create-form__error"></span>
+        </label>
+
+        <label>
+            <span>Assigned monster</span>
+            <select asp-for="AssignedMonsterName">
+                <option value="">— Unassigned —</option>
+                @foreach (var monster in Model.MonsterOptions)
+                {
+                    <option value="@monster"
+                            selected="@(string.Equals(monster, Model.AssignedMonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                        @monster
+                    </option>
+                }
+            </select>
+            <span asp-validation-for="AssignedMonsterName" class="create-form__error"></span>
+        </label>
+
+        <label>
+            <span>Notes (optional)</span>
+            <input asp-for="Notes" placeholder="Anything the raid should know" />
+            <span asp-validation-for="Notes" class="create-form__error"></span>
+        </label>
+    </div>
+
+    <div id="alliances-container" class="ps-alliances">
+        @{ var aIdx = 0; }
+        @foreach (var allianceGroup in allianceGroups)
+        {
+            var allianceName = allianceGroup.Select(x => x.AllianceName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))
+                               ?? $"Alliance {aIdx + 1}";
+            <section class="ps-alliance create-form__section" data-alliance="@aIdx">
+                <div class="create-form__section-head ps-alliance-head">
+                    <label class="ps-name-field">
+                        <span>Alliance</span>
+                        <input type="text" class="input ps-alliance-name" value="@allianceName"
+                               placeholder="Alliance name" maxlength="64" />
+                    </label>
+                    <div class="ps-head-actions">
+                        <button type="button" class="btn sm ghost ps-add-party">+ Add party</button>
+                        <button type="button" class="btn sm danger-outline ps-remove-alliance">Remove alliance</button>
+                    </div>
+                </div>
+                <div class="ps-parties">
+                    @{ var pIdx = 0; }
+                    @foreach (var partyGroup in allianceGroup.GroupBy(x => x.PartyIndex).OrderBy(g => g.Key))
+                    {
+                        var partyName = partyGroup.Select(x => x.PartyName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))
+                                        ?? $"Party {pIdx + 1}";
+                        <div class="ps-party create-form__item" data-party="@pIdx">
+                            <div class="ps-party-head">
+                                <input type="text" class="input ps-party-name" value="@partyName"
+                                       placeholder="Party name" maxlength="64" />
+                                <div class="ps-party-head-actions">
+                                    <button type="button" class="btn sm ghost ps-add-slot">+ Slot</button>
+                                    <button type="button" class="btn sm danger-outline ps-remove-party">Remove</button>
+                                </div>
+                            </div>
+                            <div class="ps-slots">
+                                @{ var sIdx = 0; }
+                                @foreach (var entry in partyGroup.OrderBy(x => x.SlotIndex))
+                                {
+                                    var slot = entry;
+                                    var reqType = string.IsNullOrWhiteSpace(slot.RequirementType) ? "Any" : slot.RequirementType;
+                                    var showRole = string.Equals(reqType, "Role", StringComparison.OrdinalIgnoreCase);
+                                    var showJob = string.Equals(reqType, "Job", StringComparison.OrdinalIgnoreCase);
+                                    <div class="ps-slot" data-slot="@sIdx">
+                                        <input type="hidden" data-field="AllianceIndex" name="Slots[@flat].AllianceIndex" value="@aIdx" />
+                                        <input type="hidden" data-field="PartyIndex" name="Slots[@flat].PartyIndex" value="@pIdx" />
+                                        <input type="hidden" data-field="SlotIndex" name="Slots[@flat].SlotIndex" value="@sIdx" />
+                                        <input type="hidden" data-field="AllianceName" name="Slots[@flat].AllianceName" value="@allianceName" />
+                                        <input type="hidden" data-field="PartyName" name="Slots[@flat].PartyName" value="@partyName" />
+
+                                        <select data-field="RequirementType" name="Slots[@flat].RequirementType"
+                                                class="form-select ps-req ps-slot__req">
+                                            @foreach (var rt in Model.RequirementTypeOptions)
+                                            {
+                                                <option value="@rt" selected="@(string.Equals(rt, reqType, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@rt</option>
+                                            }
+                                        </select>
+
+                                        <select data-field="Role" name="Slots[@flat].Role"
+                                                class="form-select ps-role-field ps-slot__grow @(showRole ? "" : "d-none")">
+                                            <option value="">Select role</option>
+                                            @foreach (var r in Model.RoleOptions)
+                                            {
+                                                <option value="@r" selected="@(string.Equals(r, slot.Role, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@r</option>
+                                            }
+                                        </select>
+
+                                        <select data-field="MainJob" name="Slots[@flat].MainJob"
+                                                class="form-select ps-job-field ps-slot__job @(showJob ? "" : "d-none")">
+                                            <option value="">Job</option>
+                                            @foreach (var j in Model.MainJobOptions)
+                                            {
+                                                <option value="@j" selected="@(string.Equals(j, slot.MainJob, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@j</option>
+                                            }
+                                        </select>
+                                        <select data-field="SubJob" name="Slots[@flat].SubJob"
+                                                class="form-select ps-job-field ps-slot__job @(showJob ? "" : "d-none")">
+                                            <option value="">/ sub</option>
+                                            @foreach (var j in Model.SubJobOptions)
+                                            {
+                                                <option value="@j" selected="@(string.Equals(j, slot.SubJob, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@j</option>
+                                            }
+                                        </select>
+
+                                        <input type="text" data-field="Label" name="Slots[@flat].Label"
+                                               class="input ps-slot__label" value="@slot.Label" placeholder="Label (optional)" maxlength="64" />
+                                        <button type="button" class="btn sm ghost ps-remove-slot ps-slot__remove"
+                                                title="Remove slot" aria-label="Remove slot">&times;</button>
+                                    </div>
+                                    flat++;
+                                    sIdx++;
+                                }
+                            </div>
+                        </div>
+                        pIdx++;
+                    }
+                </div>
+            </section>
+            aIdx++;
+        }
+    </div>
+
+    <div class="create-form__actions create-form__actions--split" style="margin-top:14px">
+        <button type="button" class="btn sm ghost" id="ps-add-alliance">+ Add alliance</button>
+        <button type="submit" class="btn primary">@(isEditMode ? "Save Party Setup" : "Create Party Setup")</button>
+    </div>
+</form>
+
+@section Scripts {
+    <style>
+        .ps-alliances { display: grid; gap: 16px; }
+        .ps-alliance .create-form__section-head { flex-wrap: wrap; }
+        .ps-name-field { display: grid; gap: 4px; }
+        .ps-name-field > span {
+            font-size: 11px; color: var(--fg-3);
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .ps-name-field .ps-alliance-name { max-width: 240px; font-weight: 600; }
+        .ps-head-actions, .ps-party-head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .ps-parties {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .ps-party-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+        }
+        .ps-party-head .ps-party-name { max-width: 150px; font-weight: 600; }
+        .ps-slots { display: grid; gap: 6px; }
+        .ps-slot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .ps-slot__req { flex: 0 0 88px; }
+        .ps-slot__grow { flex: 1 1 110px; min-width: 90px; }
+        .ps-slot__job { flex: 1 1 84px; min-width: 70px; }
+        .ps-slot__label { flex: 1 1 120px; min-width: 90px; }
+        .ps-slot__remove { flex: 0 0 auto; padding: 0 9px; }
+    </style>
+    <script src="~/js/party-setup.js" asp-append-version="true"></script>
+}

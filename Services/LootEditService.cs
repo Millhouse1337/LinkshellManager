@@ -124,7 +124,10 @@ public sealed class LootEditService
         detail.LastEditReason = request.Reason.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
+        // Recompute this ToD's day column on the ManualPoints tab so the edit
+        // is reflected as a correction (the recompute reads the now-updated
+        // loot rows). detail.Tod is loaded above (linkshellId came from it).
+        await _sheetSync.EnqueueTodLootDeductionsAsync(detail.Tod.Id, cancellationToken);
         _logger.LogInformation(
             "Loot edit applied (ToD #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
             detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);

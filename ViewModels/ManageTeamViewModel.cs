@@ -15,6 +15,24 @@ public class ManageTeamViewModel
 
     public string? SearchTerm { get; set; }
 
+    // Members list pagination (View Team). SearchTerm above doubles as the
+    // member-name filter on the Index page.
+    public const int MembersPageSize = 15;
+
+    public int PageNumber { get; set; } = 1;
+
+    public int PageSize { get; set; } = MembersPageSize;
+
+    // Count after the search filter is applied — drives pagination.
+    public int TotalCount { get; set; }
+
+    // Unfiltered linkshell member count — shown in the page header.
+    public int TotalMembers { get; set; }
+
+    public int TotalPages => TotalCount == 0
+        ? 1
+        : (int)Math.Ceiling(TotalCount / (double)Math.Max(1, PageSize));
+
     public List<AppUser> Players { get; set; } = new();
 
     public List<Invite> PendingInvites { get; set; } = new();

@@ -203,5 +203,6 @@ public sealed partial class ActivityDataController
         role.CanAuditDkp = permissions.CanAuditDkp;
         role.CanManageAuctions = permissions.CanManageAuctions;
         role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
+        role.CanManageParties = permissions.CanManageParties;
     }
 }

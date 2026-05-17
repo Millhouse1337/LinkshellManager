@@ -20,7 +20,7 @@ public class ManageTeamController : Controller
         _userManager = userManager;
     }
 
-    public async Task<IActionResult> Index(int? selectedLinkshellId)
+    public async Task<IActionResult> Index(int? selectedLinkshellId, string? search, int page = 1)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -43,10 +43,35 @@ public class ManageTeamController : Controller
             ?? (userLinkshells.Any(l => l.Id == user.PrimaryLinkshellId) ? user.PrimaryLinkshellId : null)
             ?? userLinkshells[0].Id;
 
-        var members = await _context.AppUserLinkshells
+        var baseQuery = _context.AppUserLinkshells
             .Include(ul => ul.AppUser)
-            .Where(ul => ul.LinkshellId == targetId)
+            .Where(ul => ul.LinkshellId == targetId);
+
+        var totalMembers = await baseQuery.CountAsync();
+
+        var term = search?.Trim();
+        var filteredQuery = baseQuery;
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            // Case-insensitive character-name search. LOWER(..) LIKE LOWER(..)
+            // is provider-agnostic and matches the .Contains() convention used
+            // elsewhere (SearchPlayers) without its case sensitivity.
+            var lowered = term.ToLower();
+            filteredQuery = filteredQuery.Where(ul =>
+                (ul.CharacterName != null && ul.CharacterName.ToLower().Contains(lowered))
+                || (ul.AppUser != null && ul.AppUser.CharacterName != null
+                    && ul.AppUser.CharacterName.ToLower().Contains(lowered)));
+        }
+
+        var totalCount = await filteredQuery.CountAsync();
+        const int pageSize = ManageTeamViewModel.MembersPageSize;
+        var totalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
+        var pageNumber = Math.Clamp(page, 1, totalPages);
+
+        var members = await filteredQuery
             .OrderBy(ul => ul.CharacterName)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
         var canManage = await CanManageAsync(user.Id, targetId);
@@ -56,7 +81,12 @@ public class ManageTeamController : Controller
             Linkshells = userLinkshells,
             Members = members,
             SelectedLinkshellId = targetId,
-            CanManage = canManage
+            CanManage = canManage,
+            SearchTerm = term,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalMembers = totalMembers
         });
     }
 

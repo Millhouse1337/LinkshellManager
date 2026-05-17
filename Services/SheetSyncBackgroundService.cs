@@ -136,8 +136,14 @@ public sealed class SheetSyncBackgroundService : BackgroundService
                     .AppendEventCloseAsync(job.TargetId, cancellationToken);
                 break;
             case SheetSyncJobKind.DkpAudit:
+                // A DKP audit/adjustment is sign-routed: deductions go to the
+                // ManualPoints tab, credits go to AttInput. Both methods guard
+                // on sign first, so calling both is safe and self-routing
+                // (exactly one does work; the other is a no-op).
                 await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
                     .AppendAuditAsync(job.TargetId, cancellationToken);
+                await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
+                    .AppendMiscDkpAsync(job.TargetId, cancellationToken);
                 break;
             case SheetSyncJobKind.WindowEventPost:
                 await scope.ServiceProvider.GetRequiredService<AttInputAppendService>()
@@ -154,6 +160,10 @@ public sealed class SheetSyncBackgroundService : BackgroundService
             case SheetSyncJobKind.EventLootDeductions:
                 await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
                     .AppendEventLootDeductionsAsync(job.TargetId, cancellationToken);
+                break;
+            case SheetSyncJobKind.TodLootDeductions:
+                await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
+                    .AppendTodLootDayAsync(job.TargetId, cancellationToken);
                 break;
         }
     }

@@ -149,13 +149,18 @@
         {
             <button type="button" class="nav-item nav-group @IsExpanded("WindowEvents")" data-target="#nav-attendance">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                Attendance
+                Attendance System
                 <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
             </button>
             <div id="nav-attendance" class="nav-sub">
                 @if (activeLinkshellId.HasValue)
                 {
-                    <a class="nav-sub-item @IsSubActive("WindowEvents")" asp-controller="WindowEvents" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Window Events</a>
+                    <a class="nav-sub-item @IsSubActive("WindowEvents", "Index")" asp-controller="WindowEvents" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Attendance Events</a>
+                    <a class="nav-sub-item @IsSubActive("WindowEvents", "History")" asp-controller="WindowEvents" asp-action="History" asp-route-linkshellId="@activeLinkshellId.Value">Attendance History</a>
+                    @if (Allow(p => p.CanManageTods) || Allow(p => p.CanModerateLiveEvent))
+                    {
+                        <a class="nav-sub-item @IsSubActive("LinkshellPendingSubmissions")" asp-controller="LinkshellPendingSubmissions" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Pending Submissions</a>
+                    }
                 }
             </div>
         }
@@ -172,18 +177,23 @@
                 <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
             }
         </div>
+
+        <button type="button" class="nav-item nav-group @IsExpanded("PartySetup")" data-target="#nav-party-setups">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
+            Party Setups
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div id="nav-party-setups" class="nav-sub">
+            <a class="nav-sub-item @IsSubActive("PartySetup", "Index")" asp-controller="PartySetup" asp-action="Index">View Party Setups</a>
+            @if (Allow(p => p.CanManageParties))
+            {
+                <a class="nav-sub-item create @IsSubActive("PartySetup", "Create")" asp-controller="PartySetup" asp-action="Create">Create Party Setup</a>
+            }
+        </div>
     </nav>
 
     <nav class="nav-section">
         <div class="nav-label">Management</div>
-
-        @if (activeLinkshellId.HasValue && (Allow(p => p.CanManageTods) || Allow(p => p.CanModerateLiveEvent)))
-        {
-            <a class="nav-item @IsOn("LinkshellPendingSubmissions")" asp-controller="LinkshellPendingSubmissions" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                Pending Submissions
-            </a>
-        }
 
         @if (Allow(p => p.CanManageMembers))
         {
@@ -225,7 +235,7 @@
             </div>
         }
 
-        <button type="button" class="nav-item nav-group @IsExpanded("DkpHistory", "DkpAdjustment", "LootHistory", "LinkshellDkpSheet", "LinkshellAppDkpSheet")" data-target="#nav-dkp">
+        <button type="button" class="nav-item nav-group @IsExpanded("DkpHistory", "DkpAdjustment", "LinkshellAppDkpSheet")" data-target="#nav-dkp">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>
             DKP
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
@@ -236,12 +246,23 @@
             {
                 <a class="nav-sub-item create @IsSubActive("DkpAdjustment", "Index")" asp-controller="DkpAdjustment" asp-action="Index">DKP Adjustments</a>
             }
-            <a class="nav-sub-item @IsSubActive("LootHistory", "Index")" asp-controller="LootHistory" asp-action="Index">Loot History</a>
             @if (activeLinkshellId.HasValue)
             {
-                <a class="nav-sub-item @IsSubActive("LinkshellDkpSheet")" asp-controller="LinkshellDkpSheet" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">DKP Sheet</a>
                 <a class="nav-sub-item @IsSubActive("LinkshellAppDkpSheet")" asp-controller="LinkshellAppDkpSheet" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">App DKP Sheet</a>
             }
+        </div>
+
+        <button type="button" class="nav-item nav-group @IsExpanded("LootHistory")" data-target="#nav-loot">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 8h10l2 12H5z"/><path d="M9 8a3 3 0 0 1 6 0"/><path d="M10 13h4"/></svg>
+            Loot
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div id="nav-loot" class="nav-sub">
+            @if (Allow(p => p.CanAddLoot))
+            {
+                <a class="nav-sub-item create @IsSubActive("LootHistory", "Add")" asp-controller="LootHistory" asp-action="Add">Add Loot</a>
+            }
+            <a class="nav-sub-item @IsSubActive("LootHistory", "Index")" asp-controller="LootHistory" asp-action="Index">Loot History</a>
         </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("Linkshell", "LinkshellSheet", "LinkshellReconciliation")" data-target="#nav-config">

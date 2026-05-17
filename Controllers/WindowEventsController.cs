@@ -15,7 +15,6 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed class WindowEventsController : Controller
 {
     private const int MaxUnlinkedSnapshots = 100;
-    private const int MaxClosedEvents = 25;
 
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
@@ -63,15 +62,8 @@ public sealed class WindowEventsController : Controller
             .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
-        var closedEvents = await _db.WindowEvents
-            .AsNoTracking()
-            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Closed)
-            .OrderByDescending(e => e.LastCapturedAtUtc)
-            .Take(MaxClosedEvents)
-            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
-            .Include(e => e.MemberDkpOverrides)
-            .ToListAsync(cancellationToken);
-
+        // Closed events live on the dedicated, searchable Attendance History
+        // page (History action) so this page stays focused on what's open.
         var unlinked = await _db.AttendanceSnapshots
             .AsNoTracking()
             .Where(s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
@@ -86,8 +78,71 @@ public sealed class WindowEventsController : Controller
             LinkshellName = linkshell.LinkshellName,
             CanManage = canManage,
             OpenEvents = openEvents.Select(e => MapWindowEvent(e, zone)).ToList(),
-            ClosedEvents = closedEvents.Select(e => MapWindowEvent(e, zone)).ToList(),
+            ClosedEvents = new(),
             UnlinkedSnapshots = unlinked.Select(s => MapSnapshot(s, zone)).ToList(),
+        };
+
+        return View(vm);
+    }
+
+    // Searchable archive of CLOSED Window Events ("Attendance History").
+    // Search matches the event name, the character who created it, any
+    // snapshot poster, or any combined-roster member name.
+    [HttpGet("/linkshells/{linkshellId:int}/window-events/history")]
+    public async Task<IActionResult> History(
+        int linkshellId, string? q, int page, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var membership = await _db.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
+        if (membership is null) return Forbid();
+
+        var linkshell = await _db.Linkshells
+            .AsNoTracking()
+            .Where(l => l.Id == linkshellId)
+            .Select(l => new { l.LinkshellName })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (linkshell is null) return NotFound();
+
+        var zone = _timeZones.Resolve(user.TimeZone);
+        var query = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+
+        var closed = await _db.WindowEvents
+            .AsNoTracking()
+            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Closed)
+            .OrderByDescending(e => e.LastCapturedAtUtc)
+            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
+            .Include(e => e.MemberDkpOverrides)
+            .ToListAsync(cancellationToken);
+
+        var rows = closed.Select(e => MapWindowEvent(e, zone)).ToList();
+        if (query is not null)
+        {
+            rows = rows.Where(r =>
+                (r.Name?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (r.CreatedByCharacterName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || r.Snapshots.Any(s => s.CapturedByCharacterName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || r.CombinedMembers.Any(m => m.CharacterName.Contains(query, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
+        const int pageSize = 20;
+        var totalCount = rows.Count;
+        var pageNumber = Math.Clamp(page <= 0 ? 1 : page, 1, Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize)));
+
+        var vm = new WindowEventsHistoryViewModel
+        {
+            LinkshellId = linkshellId,
+            LinkshellName = linkshell.LinkshellName,
+            CanManage = IsLeaderOrOfficer(membership),
+            Query = query,
+            Page = pageNumber,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            Events = rows.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
         };
 
         return View(vm);
@@ -464,6 +519,101 @@ public sealed class WindowEventsController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Removes a single person from a snapshot (officer correction of a bad
+    // capture). The denormalized EntryCount is kept in sync; the combined
+    // roster + counts are always recomputed on the next Index load. Rows
+    // already appended to the DKP sheet are not touched -- AttInput is
+    // append-only, so the officer re-runs Update on DKP sheet if needed.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/entries/{entryId:int}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteSnapshotEntry(
+        int linkshellId,
+        int snapshotId,
+        int entryId,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        var entry = snapshot.Entries.FirstOrDefault(e => e.Id == entryId);
+        if (entry is null) return NotFound();
+
+        _db.AttendanceSnapshotEntries.Remove(entry);
+        snapshot.Entries.Remove(entry);
+        snapshot.EntryCount = snapshot.Entries.Count;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = $"Removed {entry.CharacterName} from the snapshot.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Adds a person to a snapshot the addon missed. Mirrors the addon
+    // snapshot's 18-member alliance cap and de-dupes by character name.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/entries/add")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddSnapshotEntry(
+        int linkshellId,
+        int snapshotId,
+        [FromForm] string? characterName,
+        [FromForm] string? mainJob,
+        [FromForm] int? mainJobLevel,
+        [FromForm] string? subJob,
+        [FromForm] int? subJobLevel,
+        [FromForm] string? zone,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        var name = characterName?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            TempData["WindowEventStatus"] = "Character name is required to add a person.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        // FFXI alliance caps at 18; match the addon snapshot invariant.
+        if (snapshot.Entries.Count >= 18)
+        {
+            TempData["WindowEventStatus"] = "Snapshot already has the 18-member alliance maximum.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        if (snapshot.Entries.Any(e =>
+                string.Equals(e.CharacterName.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        {
+            TempData["WindowEventStatus"] = $"{name} is already in this snapshot.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        snapshot.Entries.Add(new AttendanceSnapshotEntry
+        {
+            SnapshotId = snapshot.Id,
+            CharacterName = Clip(name, 256)!,
+            MainJob = Clip(string.IsNullOrWhiteSpace(mainJob) ? null : mainJob.Trim(), 8),
+            MainJobLevel = mainJobLevel,
+            SubJob = Clip(string.IsNullOrWhiteSpace(subJob) ? null : subJob.Trim(), 8),
+            SubJobLevel = subJobLevel,
+            Zone = Clip(string.IsNullOrWhiteSpace(zone) ? null : zone.Trim(), 128),
+        });
+        snapshot.EntryCount = snapshot.Entries.Count;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = $"Added {name} to the snapshot.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    private static string? Clip(string? value, int max)
+        => string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
+
     private async Task<WindowEvent> FindOrCreateOpenEventAsync(
         int linkshellId,
         string name,
@@ -598,6 +748,7 @@ public sealed class WindowEventsController : Controller
             .OrderBy(e => e.CharacterName, StringComparer.OrdinalIgnoreCase)
             .Select(e => new AttendanceSnapshotEntryRow
             {
+                Id = e.Id,
                 CharacterName = e.CharacterName,
                 MainJob = e.MainJob,
                 MainJobLevel = e.MainJobLevel,

@@ -53,6 +53,16 @@ public sealed class SheetSyncQueue
         return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.EventLootDeductions, eventHistoryId), cancellationToken);
     }
 
+    // Recomputes the ManualPoints "per-day" column for the ToD's linkshell+date
+    // from the current TodLootDetail rows. Keyed by TodId (not a loot-detail or
+    // ledger id) so it survives loot deletes and so post / edit / delete all
+    // converge on the same idempotent recompute. Fired by the addon ToD loot
+    // post, the web/Activity ToD loot create/delete, and the ToD loot edit.
+    public ValueTask EnqueueTodLootDeductionsAsync(int todId, CancellationToken cancellationToken = default)
+    {
+        return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.TodLootDeductions, todId), cancellationToken);
+    }
+
     // Posts the entire Window Event roster (header row + one row per unique
     // active character) to the linkshell's Google Sheet AttInput tab. Fired
     // by the officer's Post to DKP Sheet button -- snapshot capture itself
@@ -97,4 +107,5 @@ public enum SheetSyncJobKind
     WindowEventEdit,
     AuctionDeductions,
     EventLootDeductions,
+    TodLootDeductions,
 }

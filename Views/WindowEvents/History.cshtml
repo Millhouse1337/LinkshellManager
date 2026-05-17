@@ -1,0 +1,98 @@
+@model LinkshellManagerDiscordApp.ViewModels.WindowEventsHistoryViewModel
+@using LinkshellManagerDiscordApp.Models
+@{
+    ViewData["Title"] = "Attendance History";
+    var from = Model.TotalCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
+    var to = Math.Min(Model.Page * Model.PageSize, Model.TotalCount);
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Attendance History</h1>
+        <div class="page-sub">
+            <span>Closed attendance events</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> &middot; </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost sm" asp-controller="WindowEvents" asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">← Attendance Events</a>
+    </div>
+</div>
+
+@if (TempData["WindowEventError"] is string err)
+{
+    <div class="alert alert-danger fade d2">@err</div>
+}
+@if (TempData["WindowEventStatus"] is string statusMsg)
+{
+    <div class="alert alert-success fade d2">@statusMsg</div>
+}
+
+<div class="card fade d2" style="margin-bottom:14px">
+    <div style="padding:12px 16px">
+        <form method="get" asp-action="History" asp-route-linkshellId="@Model.LinkshellId"
+              style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input class="input" type="text" name="q" value="@Model.Query"
+                   placeholder="Search by event name, poster, or member…" style="min-width:280px;flex:1" />
+            <button type="submit" class="btn primary sm">Search</button>
+            @if (!string.IsNullOrWhiteSpace(Model.Query))
+            {
+                <a class="btn ghost sm" asp-action="History" asp-route-linkshellId="@Model.LinkshellId">Clear</a>
+            }
+            <span style="margin-left:auto;font-size:12px;color:var(--fg-3)">
+                @if (Model.TotalCount == 0) { <text>No results</text> }
+                else { <text>Showing @from–@to of @Model.TotalCount</text> }
+            </span>
+        </form>
+    </div>
+</div>
+
+@if (Model.Events.Count == 0)
+{
+    <div class="card fade d3">
+        <div class="card-head"><div class="card-title">No closed attendance events</div></div>
+        <div class="empty" style="padding:16px">
+            @if (string.IsNullOrWhiteSpace(Model.Query))
+            {
+                <text>Closed events will appear here once an Attendance Event is closed.</text>
+            }
+            else
+            {
+                <text>No closed events match "<strong>@Model.Query</strong>".</text>
+            }
+        </div>
+    </div>
+}
+else
+{
+    @foreach (var ev in Model.Events)
+    {
+        @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+        {
+            ["LinkshellId"] = Model.LinkshellId,
+            ["CanManage"] = Model.CanManage,
+            ["IsClosed"] = true,
+        })
+    }
+
+    @if (Model.TotalPages > 1)
+    {
+        <div class="fade d5" style="display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px">
+            @if (Model.Page > 1)
+            {
+                <a class="btn ghost sm" asp-action="History" asp-route-linkshellId="@Model.LinkshellId"
+                   asp-route-q="@Model.Query" asp-route-page="@(Model.Page - 1)">← Prev</a>
+            }
+            <span style="font-size:13px;color:var(--fg-3)">Page @Model.Page of @Model.TotalPages</span>
+            @if (Model.Page < Model.TotalPages)
+            {
+                <a class="btn ghost sm" asp-action="History" asp-route-linkshellId="@Model.LinkshellId"
+                   asp-route-q="@Model.Query" asp-route-page="@(Model.Page + 1)">Next →</a>
+            }
+        </div>
+    }
+}

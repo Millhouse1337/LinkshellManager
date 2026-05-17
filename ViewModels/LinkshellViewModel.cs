@@ -29,9 +29,11 @@ public class LinkshellCustomizeViewModel
     [Required, MaxLength(16)]
     public string? DkpRoundingIncrement { get; set; } = "Quarter";
 
-    public bool EnableEndgame    { get; set; } = true;
+    // Endgame + Missions start OFF by default (match the Linkshell entity
+    // defaults); linkshells opt in from the Customize page.
+    public bool EnableEndgame    { get; set; } = false;
     public bool EnableHnmSection { get; set; } = true;
-    public bool EnableMissions   { get; set; } = true;
+    public bool EnableMissions   { get; set; } = false;
     public bool EnableAuctions   { get; set; } = true;
     public bool EnableToDs       { get; set; } = true;
     public bool EnableEvents     { get; set; } = true;
@@ -39,10 +41,10 @@ public class LinkshellCustomizeViewModel
     public bool EnableItems      { get; set; } = true;
     public bool EnableRevenue    { get; set; } = true;
 
-    // Hours a member is blocked from in-game loot wins after undoing a
-    // winning auction bid. 0 disables the block.
-    [Range(0, 8760)]
-    public int LootBlockCooldownHours { get; set; } = 24;
+    // Discord channel webhook URL. When set, `/lsm now` snapshots are posted
+    // there as a party-grouped embed. Blank disables Discord posting.
+    [MaxLength(512)]
+    public string? DiscordWebhookUrl { get; set; }
 
     public bool CanManageRoles { get; set; }
 

@@ -83,11 +83,6 @@ public class Linkshell
 
     public bool EnableRevenue { get; set; } = true;
 
-    // Hours a member is blocked from in-game loot-pool wins after they undo
-    // a winning auction bid (deters bid-then-pull abuse). 0 disables the
-    // block entirely. Applied as UtcNow + this many hours on undo.
-    public int LootBlockCooldownHours { get; set; } = 24;
-
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing
     // hidden. Pipe separator avoids the comma collision risk if FFXI ever
@@ -126,6 +121,12 @@ public class Linkshell
     // member's row gets the audit amount.
     [MaxLength(64)]
     public string? ManualPointsTabName { get; set; }
+
+    // Discord channel webhook URL (Channel Settings -> Integrations ->
+    // Webhooks). When set, a `/lsm now` attendance snapshot is also posted to
+    // this channel as a party-grouped embed. Null = Discord posting disabled.
+    [MaxLength(512)]
+    public string? DiscordWebhookUrl { get; set; }
 
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 

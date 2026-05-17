@@ -26,7 +26,8 @@ public static class LinkshellRoleDefaults
             CanManageAuctions = true,
             CanCustomizeLinkshell = true,
             CanSubmitTodForApproval = true,
-            CanSubmitAttendanceForApproval = true
+            CanSubmitAttendanceForApproval = true,
+            CanManageParties = true
         };
 
         yield return new LinkshellRole
@@ -49,7 +50,8 @@ public static class LinkshellRoleDefaults
             CanManageAuctions = true,
             CanCustomizeLinkshell = false,
             CanSubmitTodForApproval = true,
-            CanSubmitAttendanceForApproval = true
+            CanSubmitAttendanceForApproval = true,
+            CanManageParties = true
         };
 
         yield return new LinkshellRole

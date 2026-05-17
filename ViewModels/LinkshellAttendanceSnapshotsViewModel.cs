@@ -51,6 +51,11 @@ public sealed class AttendanceSnapshotRow
 
 public sealed class AttendanceSnapshotEntryRow
 {
+    // AttendanceSnapshotEntry.Id — lets the Attendance Events UI target a
+    // specific person for removal. 0 when the row isn't backed by a saved
+    // entry (read-only contexts that don't set it).
+    public int Id { get; set; }
+
     public string CharacterName { get; set; } = string.Empty;
     public string? MainJob { get; set; }
     public int? MainJobLevel { get; set; }

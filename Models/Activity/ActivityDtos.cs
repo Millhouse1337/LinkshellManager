@@ -71,7 +71,8 @@ public sealed record ActivityPermissionsDto(
     bool CanManageTods,
     bool CanAuditDkp,
     bool CanManageAuctions,
-    bool CanCustomizeLinkshell);
+    bool CanCustomizeLinkshell,
+    bool CanManageParties);
 
 public sealed record ActivityPrimaryLinkshellDto(
     int Id,
@@ -290,7 +291,8 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanManageTods,
     bool CanAuditDkp,
     bool CanManageAuctions,
-    bool CanCustomizeLinkshell);
+    bool CanCustomizeLinkshell,
+    bool CanManageParties);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -309,7 +311,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanManageTods,
     bool CanAuditDkp,
     bool CanManageAuctions,
-    bool CanCustomizeLinkshell);
+    bool CanCustomizeLinkshell,
+    bool CanManageParties);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,

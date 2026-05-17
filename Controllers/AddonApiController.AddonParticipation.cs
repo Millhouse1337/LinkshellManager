@@ -773,8 +773,7 @@ public sealed partial class AddonApiController
                 CharacterName = link.CharacterName!,
                 Alt1 = link.AppUser != null ? link.AppUser.AltCharacterName1 : null,
                 Alt2 = link.AppUser != null ? link.AppUser.AltCharacterName2 : null,
-                JobLevels = link.JobLevels,
-                link.LootBiddingBlockedUntil
+                JobLevels = link.JobLevels
             })
             .OrderBy(row => row.CharacterName)
             .ToListAsync(cancellationToken);
@@ -791,16 +790,7 @@ public sealed partial class AddonApiController
                 {
                     characterName = row.CharacterName,
                     alts,
-                    jobLevels = row.JobLevels,
-                    // ISO-8601 UTC string when this member is currently blocked
-                    // from in-game loot wins (undid an auction bid); null
-                    // otherwise. The loot panel greys/flags blocked winners.
-                    lootBiddingBlockedUntil =
-                        (row.LootBiddingBlockedUntil.HasValue
-                         && row.LootBiddingBlockedUntil.Value > DateTime.UtcNow)
-                            ? row.LootBiddingBlockedUntil.Value
-                                .ToString("yyyy-MM-ddTHH:mm:ssZ")
-                            : null
+                    jobLevels = row.JobLevels
                 };
             })
             .ToList();
@@ -919,13 +909,6 @@ public sealed partial class AddonApiController
         }
         var rosterMatch = winnerMembership.CharacterName;
 
-        // Anti-abuse: a member who recently undid a winning auction bid is
-        // temporarily barred from being credited an in-game loot win.
-        if (winnerMembership.LootBiddingBlockedUntil is { } blockedUntil && blockedUntil > nowUtc)
-        {
-            return BadRequest(new { error = $"{rosterMatch} is temporarily blocked from loot wins until {blockedUntil:u} (undid an auction bid)." });
-        }
-
         // DKP-structure linkshells: a loot win cannot exceed the winner's
         // AVAILABLE DKP (total minus DKP locked by active auction bids).
         // Hybrid spends a % of current balance so it can't overrun; LootCouncil
@@ -953,7 +936,10 @@ public sealed partial class AddonApiController
             _dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueAsync(tod.LinkshellId, cancellationToken);
+        // Push this ToD's loot deductions to the ManualPoints tab (one
+        // recomputed column per linkshell+day). Idempotent, so post / edit /
+        // delete all converge on the same column.
+        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
 
         return Ok(new
         {

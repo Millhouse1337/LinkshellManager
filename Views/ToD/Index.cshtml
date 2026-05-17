@@ -77,6 +77,13 @@ else
                                     {
                                         <span class="tag" style="margin-left:6px">@ordered.Count</span>
                                     }
+                                    @if (Model.AssignedPartySetups.TryGetValue(group.Key, out var assignedSetup))
+                                    {
+                                        <a class="tag accent" style="margin-left:6px"
+                                           asp-controller="PartySetup" asp-action="Details" asp-route-id="@assignedSetup.Id">
+                                            Setup: @assignedSetup.Name
+                                        </a>
+                                    }
                                 </td>
                                 <td class="num">@(latest.DayNumber?.ToString() ?? "—")</td>
                                 <td class="num">@latest.TodDisplay</td>

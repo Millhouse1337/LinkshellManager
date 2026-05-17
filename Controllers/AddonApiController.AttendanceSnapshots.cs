@@ -123,6 +123,12 @@ public sealed partial class AddonApiController
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        // Fire-and-forget post to the linkshell's Discord channel (no-op if
+        // no webhook URL is configured). Enqueued after the snapshot is
+        // committed so the background worker can reload it; never blocks or
+        // fails this addon request if Discord is slow/unreachable.
+        await _discordWebhook.EnqueueSnapshotAsync(snapshot.Id, cancellationToken);
+
         // Sheet sync is officer-initiated on the Window Events page (Post
         // to DKP Sheet button) so the officer can review the combined roster
         // and set DKP + Entry Type before any rows land in the spreadsheet.

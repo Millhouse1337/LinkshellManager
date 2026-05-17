@@ -231,7 +231,8 @@ export class ConfigurationsTabComponent {
     { key: 'canManageTods', label: 'Manage ToDs' },
     { key: 'canAuditDkp', label: 'Audit DKP' },
     { key: 'canManageAuctions', label: 'Manage auctions' },
-    { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' }
+    { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' },
+    { key: 'canManageParties', label: 'Manage party setups' }
   ] as const;
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
@@ -311,7 +312,8 @@ export class ConfigurationsTabComponent {
       canManageTods: !!this.roleDraft.permissions['canManageTods'],
       canAuditDkp: !!this.roleDraft.permissions['canAuditDkp'],
       canManageAuctions: !!this.roleDraft.permissions['canManageAuctions'],
-      canCustomizeLinkshell: !!this.roleDraft.permissions['canCustomizeLinkshell']
+      canCustomizeLinkshell: !!this.roleDraft.permissions['canCustomizeLinkshell'],
+      canManageParties: !!this.roleDraft.permissions['canManageParties']
     };
 
     const ok = this.editingRoleId !== null

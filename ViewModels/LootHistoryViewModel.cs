@@ -39,6 +39,35 @@ public class LootHistoryEntryViewModel
     public string? EditedByCharacterName { get; set; }
 }
 
+// Backs the standalone "Add Loot" form. A submission creates a lightweight
+// backing ToD (one per submission) + a TodLootDetail so it flows through the
+// existing ToD-loot DKP deduction + ManualPoints per-day pipeline and shows
+// in Loot History (Source = ToD) with full edit support.
+public class LootAddViewModel
+{
+    public int LinkshellId { get; set; }
+    public string? LinkshellName { get; set; }
+
+    // Free-text source/monster shown as the loot's "Context" in history.
+    [MaxLength(256)]
+    public string? Context { get; set; }
+
+    [Required(ErrorMessage = "Item name is required.")]
+    [MaxLength(256)]
+    public string? ItemName { get; set; }
+
+    [Required(ErrorMessage = "Winner is required.")]
+    [MaxLength(256)]
+    public string? ItemWinner { get; set; }
+
+    [Required(ErrorMessage = "DKP amount is required.")]
+    [Range(0, int.MaxValue, ErrorMessage = "DKP amount must be 0 or greater.")]
+    public int? WinningDkpSpent { get; set; }
+
+    public string? LinkshellLootStructure { get; set; }
+    public List<string> RosterCharacterNames { get; set; } = new();
+}
+
 public class LootHistoryEditViewModel
 {
     public int LootDetailId { get; set; }

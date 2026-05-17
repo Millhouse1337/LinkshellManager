@@ -191,16 +191,6 @@ else
                                                     data-item-name="@item.ItemName"
                                                     data-current-highest-bid="@item.CurrentHighestBid"
                                                     data-starting-bid="@item.StartingBidDkp">Bid</button>
-                                            @if (!string.IsNullOrEmpty(currentUserId)
-                                                 && item.CurrentHighestBidderAppUserId == currentUserId)
-                                            {
-                                                <form asp-action="UndoBid" method="post" style="display:inline"
-                                                      onsubmit="return confirm('Undo your winning bid? The 2nd-place bidder becomes the winner and you will be blocked from in-game loot wins for a cooldown period.');">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="auctionItemId" value="@item.Id" />
-                                                    <button type="submit" class="btn ghost sm">Undo my bid</button>
-                                                </form>
-                                            }
                                         }
                                         @if (canEdit)
                                         {

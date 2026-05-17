@@ -469,43 +469,6 @@ export class AuctionsPanelComponent {
     return link?.linkshellDkp ?? null;
   }
 
-  // Undo is allowed only on a bid the viewer is currently winning while the
-  // auction is still live (not ended/scheduled). Mirrors the server guard.
-  protected canUndoBid(
-    auction: { status: string; startedAt?: string | null; startTime?: string | null; endTime?: string | null },
-    item: { currentHighestBidderAppUserId?: string | null; currentHighestBid?: number | null }
-  ): boolean {
-    if (!this.isCurrentUserWinning(item)) {
-      return false;
-    }
-    const state = this.auctionState(auction);
-    return state === 'live' || state === 'ending';
-  }
-
-  // Two-stage inline confirm (Discord iframe blocks window.confirm): first
-  // click flags the item, the template swaps in Confirm/Cancel.
-  protected readonly pendingUndoBidItemId = signal<number | null>(null);
-
-  protected requestUndoBid(itemId: number): void {
-    this.pendingUndoBidItemId.set(itemId);
-  }
-
-  protected cancelUndoBid(): void {
-    this.pendingUndoBidItemId.set(null);
-  }
-
-  protected async confirmUndoBid(itemId: number): Promise<void> {
-    this.pendingUndoBidItemId.set(null);
-    if (!this.selectedLinkshellId) {
-      return;
-    }
-    try {
-      await this.activity.undoAuctionBid(itemId, this.selectedLinkshellId);
-    } catch {
-      // message set by service
-    }
-  }
-
   protected auctionLiveCount(): number {
     return this.auctions().filter(auction => {
       const state = this.auctionState(auction);

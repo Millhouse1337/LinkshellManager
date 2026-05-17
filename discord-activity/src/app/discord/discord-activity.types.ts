@@ -126,6 +126,7 @@ export interface ActivityLinkshellPermissions {
   canAuditDkp: boolean;
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
+  canManageParties: boolean;
 }
 
 export interface ActivityLinkshellRole {
@@ -146,6 +147,7 @@ export interface ActivityLinkshellRole {
   canAuditDkp: boolean;
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
+  canManageParties: boolean;
 }
 
 export interface ActivityLinkshellRolesResponse {
@@ -168,6 +170,7 @@ export interface ActivityLinkshellRolePermissionsInput {
   canAuditDkp: boolean;
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
+  canManageParties: boolean;
 }
 
 export interface ActivityPrimaryLinkshell {

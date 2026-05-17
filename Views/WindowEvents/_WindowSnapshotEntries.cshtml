@@ -14,6 +14,27 @@
     var startIndex = (int)(ViewData["MemberDkpStartIndex"] ?? 0);
     var fallbackDkp = ViewData["MemberDkpDefault"] as double?;
     var showDkpInputs = !string.IsNullOrEmpty(formId);
+
+    // Officer roster editing (add/remove people). Gated to non-closed
+    // contexts: unlinked snapshots and open events. Closed/historical
+    // events stay read-only so already-posted sheet rows aren't desynced.
+    var linkshellId = (int)(ViewData["LinkshellId"] ?? 0);
+    var canManage = (bool)(ViewData["CanManage"] ?? false);
+    var isClosed = (bool)(ViewData["IsClosed"] ?? false);
+    var canEditRoster = canManage && !isClosed && linkshellId > 0;
+}
+
+@if (canEditRoster)
+{
+    @foreach (var entry in Model.Entries)
+    {
+        <form id="snap-@Model.Id-del-@entry.Id" asp-action="DeleteSnapshotEntry"
+              asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@Model.Id"
+              asp-route-entryId="@entry.Id" method="post" class="we-hidden-form"
+              onsubmit="return confirm('Remove @entry.CharacterName from this snapshot?');">
+            @Html.AntiForgeryToken()
+        </form>
+    }
 }
 
 <div class="we-table__scroll we-table__scroll--snapshot">
@@ -26,6 +47,10 @@
                 @if (showDkpInputs)
                 {
                     <th class="num">DKP</th>
+                }
+                @if (canEditRoster)
+                {
+                    <th></th>
                 }
             </tr>
         </thead>
@@ -90,9 +115,34 @@
                                form="@formId" />
                     </td>
                 }
+                @if (canEditRoster)
+                {
+                    <td class="num">
+                        <button form="snap-@Model.Id-del-@entry.Id" type="submit"
+                                class="btn sm danger-outline" title="Remove @entry.CharacterName from this snapshot">
+                            Remove
+                        </button>
+                    </td>
+                }
             </tr>
             rowIndex++;
         }
         </tbody>
     </table>
 </div>
+
+@if (canEditRoster)
+{
+    <form asp-action="AddSnapshotEntry" asp-route-linkshellId="@linkshellId"
+          asp-route-snapshotId="@Model.Id" method="post" class="we-add-entry-form"
+          style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 0 4px">
+        @Html.AntiForgeryToken()
+        <input class="input" type="text" name="characterName" placeholder="Character" maxlength="256" required style="max-width:150px" />
+        <input class="input" type="text" name="mainJob" placeholder="Job" maxlength="8" style="max-width:64px" />
+        <input class="input" type="number" name="mainJobLevel" placeholder="Lv" min="1" max="99" style="max-width:56px" />
+        <input class="input" type="text" name="subJob" placeholder="Sub" maxlength="8" style="max-width:64px" />
+        <input class="input" type="number" name="subJobLevel" placeholder="Lv" min="1" max="99" style="max-width:56px" />
+        <input class="input" type="text" name="zone" placeholder="Zone (optional)" maxlength="128" style="max-width:160px" />
+        <button type="submit" class="btn sm">+ Add person</button>
+    </form>
+}

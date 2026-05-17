@@ -23,6 +23,7 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly IHostEnvironment _environment;
     private readonly SheetSyncQueue _sheetSync;
     private readonly HnmAutoEventService _hnmAutoEvent;
+    private readonly DiscordWebhookQueue _discordWebhook;
     private readonly ILogger<AddonApiController> _logger;
 
     public AddonApiController(
@@ -33,6 +34,7 @@ public sealed partial class AddonApiController : ControllerBase
         IHostEnvironment environment,
         SheetSyncQueue sheetSync,
         HnmAutoEventService hnmAutoEvent,
+        DiscordWebhookQueue discordWebhook,
         ILogger<AddonApiController> logger)
     {
         _dbContext = dbContext;
@@ -42,6 +44,7 @@ public sealed partial class AddonApiController : ControllerBase
         _environment = environment;
         _sheetSync = sheetSync;
         _hnmAutoEvent = hnmAutoEvent;
+        _discordWebhook = discordWebhook;
         _logger = logger;
     }
 

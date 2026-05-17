@@ -374,6 +374,19 @@ public class LinkshellController : Controller
             ModelState.AddModelError(nameof(model.DkpRoundingIncrement), "Invalid DKP rounding increment.");
         }
 
+        // Discord webhook URL is optional; when present it must be a real
+        // Discord webhook endpoint so a typo can't silently swallow posts.
+        var trimmedWebhook = model.DiscordWebhookUrl?.Trim();
+        if (!string.IsNullOrEmpty(trimmedWebhook)
+            && (!Uri.TryCreate(trimmedWebhook, UriKind.Absolute, out var webhookUri)
+                || webhookUri.Scheme != Uri.UriSchemeHttps
+                || !webhookUri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase)
+                || !webhookUri.AbsolutePath.Contains("/api/webhooks/", StringComparison.OrdinalIgnoreCase)))
+        {
+            ModelState.AddModelError(nameof(model.DiscordWebhookUrl),
+                "Enter a valid Discord channel webhook URL (https://discord.com/api/webhooks/...), or leave it blank.");
+        }
+
         if (!ModelState.IsValid)
         {
             var manageable = await _context.AppUserLinkshells
@@ -402,7 +415,9 @@ public class LinkshellController : Controller
         linkshell.EnableDkp      = model.EnableDkp;
         linkshell.EnableItems    = model.EnableItems;
         linkshell.EnableRevenue  = model.EnableRevenue;
-        linkshell.LootBlockCooldownHours = Math.Clamp(model.LootBlockCooldownHours, 0, 8760);
+        linkshell.DiscordWebhookUrl = string.IsNullOrWhiteSpace(model.DiscordWebhookUrl)
+            ? null
+            : model.DiscordWebhookUrl.Trim();
 
         await _context.SaveChangesAsync();
         TempData["CustomizeSaved"] = "Customization saved.";
@@ -427,7 +442,7 @@ public class LinkshellController : Controller
             EnableDkp             = target.EnableDkp,
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
-            LootBlockCooldownHours = target.LootBlockCooldownHours,
+            DiscordWebhookUrl     = target.DiscordWebhookUrl,
             CanManageRoles        = canManageRoles,
             ManageableLinkshells  = manageableLinkshells.ToList()
         };

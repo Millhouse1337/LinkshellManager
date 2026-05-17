@@ -108,7 +108,8 @@ public sealed partial class ActivityDataController
             role.CanManageTods,
             role.CanAuditDkp,
             role.CanManageAuctions,
-            role.CanCustomizeLinkshell);
+            role.CanCustomizeLinkshell,
+            role.CanManageParties);
     }
 
     private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
@@ -130,7 +131,8 @@ public sealed partial class ActivityDataController
             role.CanManageTods,
             role.CanAuditDkp,
             role.CanManageAuctions,
-            role.CanCustomizeLinkshell);
+            role.CanCustomizeLinkshell,
+            role.CanManageParties);
     }
 
     private static ActivityTodDto MapTodDto(Tod tod)
