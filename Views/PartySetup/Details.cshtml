@@ -4,6 +4,17 @@
     ViewData["Title"] = Model.Name;
 }
 
+<style>
+    .ps-leader-row td { background: rgba(245, 197, 24, .08); }
+    .ps-leader-tag {
+        display: inline-flex; align-items: center; gap: 5px; margin-left: 8px;
+        padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+        color: #1a1300; background: linear-gradient(180deg, #ffe27a, #f5b800);
+        box-shadow: 0 0 8px rgba(245, 197, 24, .45); vertical-align: middle;
+    }
+    .ps-leader-tag svg { width: 12px; height: 12px; fill: currentColor; }
+</style>
+
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">@Model.Name</h1>
@@ -106,9 +117,18 @@ else
                             <tbody>
                                 @foreach (var slot in party.Slots)
                                 {
-                                    <tr>
+                                    <tr class="@(slot.IsPartyLeader ? "ps-leader-row" : null)">
                                         <td class="num">@slot.Position</td>
-                                        <td>@slot.Display</td>
+                                        <td>
+                                            @slot.Display
+                                            @if (slot.IsPartyLeader)
+                                            {
+                                                <span class="ps-leader-tag" title="Party leader">
+                                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5l4.6 3.2L12 3.5l4.9 7.2 4.6-3.2-1.9 11.5H4.4L2.5 7.5z"/></svg>
+                                                    Leader
+                                                </span>
+                                            }
+                                        </td>
                                     </tr>
                                 }
                             </tbody>

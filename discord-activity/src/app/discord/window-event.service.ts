@@ -27,22 +27,22 @@ export class WindowEventService {
       );
       this.data.set(result);
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading Window Events failed.'));
+      this.auth.setActionError(formatActionError(error, 'Loading attendance events failed.'));
     } finally {
       this.busy.set(false);
     }
   }
 
   async rename(windowEventId: number, name: string, linkshellId: number): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/rename`, { name }, 'Window Event renamed.');
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/rename`, { name }, 'Attendance event renamed.');
   }
 
   async close(windowEventId: number, linkshellId: number): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/close`, undefined, 'Window Event closed.');
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/close`, undefined, 'Attendance event closed.');
   }
 
   async reopen(windowEventId: number, linkshellId: number): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/reopen`, undefined, 'Window Event reopened.');
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/reopen`, undefined, 'Attendance event reopened.');
   }
 
   async attachSnapshot(snapshotId: number, linkshellId: number, input: { windowEventId?: number | null; name?: string | null }): Promise<void> {
@@ -62,7 +62,7 @@ export class WindowEventService {
       await this.load(linkshellId);
       this.auth.setActionMessage(message);
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating Window Events failed.'));
+      this.auth.setActionError(formatActionError(error, 'Updating attendance events failed.'));
       throw error;
     } finally {
       this.busy.set(false);

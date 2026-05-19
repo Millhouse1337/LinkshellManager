@@ -9,8 +9,11 @@ public class LootHistoryIndexViewModel
     public int? SelectedLinkshellId { get; set; }
     public string? SelectedLinkshellName { get; set; }
     public string SourceFilter { get; set; } = "all";
-    public string? WinnerFilter { get; set; }
-    public string? ItemFilter { get; set; }
+
+    // Single free-text filter matched (case-insensitive, substring) against
+    // BOTH the winner character name and the item name. Replaces the former
+    // separate WinnerFilter / ItemFilter pair.
+    public string? QueryFilter { get; set; }
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = DefaultPageSize;
     public int TotalCount { get; set; }
@@ -48,9 +51,16 @@ public class LootAddViewModel
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
 
-    // Free-text source/monster shown as the loot's "Context" in history.
+    // Source/monster shown as the loot's "Context" in history. Normally one
+    // of the curated monster names; "Other" in the picker means the real
+    // label is typed into CustomContext and folded in server-side.
     [MaxLength(256)]
     public string? Context { get; set; }
+
+    // Free-text source used when "Other" is picked in the Source/monster
+    // dropdown. Resolved into Context before the loot is saved.
+    [MaxLength(256)]
+    public string? CustomContext { get; set; }
 
     [Required(ErrorMessage = "Item name is required.")]
     [MaxLength(256)]

@@ -281,6 +281,9 @@ public sealed partial class ActivityDataController
             FirstCapturedAtUtc = capturedAtUtc,
             LastCapturedAtUtc = capturedAtUtc,
             CreatedByCharacterName = capturedByCharacterName,
+            // Pre-select the camp from the monster name so officers don't
+            // have to set it manually on every newly created event.
+            EntryType = WindowEventEntryTypes.FromMonsterName(name),
         };
         _dbContext.WindowEvents.Add(windowEvent);
         await _dbContext.SaveChangesAsync(cancellationToken);

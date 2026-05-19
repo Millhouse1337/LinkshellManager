@@ -12,7 +12,6 @@ namespace LinkshellManagerDiscordApp.Controllers;
 [Authorize]
 public class TodController : Controller
 {
-    private static readonly HashSet<string> SupportedMonsters = new(TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedCooldowns = new(TodManagerViewModel.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedIntervals = new(TodManagerViewModel.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> LongWindowMonsters = new(StringComparer.OrdinalIgnoreCase)
@@ -122,6 +121,7 @@ public class TodController : Controller
         }
 
         model.Tod ??= new Tod { Claim = true };
+        ResolveCustomMonsterName(model);
         model.Tod.LinkshellId = await ResolveActiveLinkshellIdAsync(user);
         model.Tod.Cooldown = string.IsNullOrWhiteSpace(model.Tod.Cooldown)
             ? GetDefaultCooldown(model.Tod.MonsterName)
@@ -319,6 +319,7 @@ public class TodController : Controller
         }
 
         model.Tod ??= new Tod { Claim = true };
+        ResolveCustomMonsterName(model);
         model.Tod.Id = id;
         model.Tod.LinkshellId = tod.LinkshellId;
         model.Tod.Cooldown = string.IsNullOrWhiteSpace(model.Tod.Cooldown)
@@ -520,25 +521,74 @@ public class TodController : Controller
                 .Where(t => !hiddenSet.Contains((t.MonsterName ?? string.Empty).Trim()))
                 .ToList();
         }
-        // True HNMs live in the dedicated HNM section -- filter them out
-        // here so the generic ToD list isn't duplicating those rows.
-        todEntities = todEntities
-            .Where(t => !HnmConfig.IsTrueHnm(t.MonsterName))
-            .ToList();
+        // NOTE: true HNMs are intentionally NOT filtered here. The Add ToD
+        // form's monster picker is the curated HNM list, so excluding HNMs
+        // made every web-submitted ToD vanish from this page (it saved but
+        // never appeared in "Submitted ToDs"). There is no separate HNM
+        // section on this view, so the single table shows them all; the
+        // per-linkshell hidden-monsters list above is still honored.
 
-        // Party Setups assigned to a monster, keyed by monster name so the
-        // ToD list can link the planned composition on that monster's row.
-        // Ordered by UpdatedAt desc so the freshest setup wins per monster.
-        var assignedPartySetups = selectedLinkshellId > 0
-            ? (await _context.PartySetups
+        // Party Setups assigned to a monster, loaded as full trees so the ToD
+        // Tracker can show the planned composition inline (expand in place, no
+        // page nav) and let members sign up for a slot. Freshest setup per
+        // monster (UpdatedAt desc) wins. The simple Id/Name dictionary is
+        // derived from the same boards so the two can't disagree.
+        var assignedSetupEntities = selectedLinkshellId > 0
+            ? await _context.PartySetups
                 .AsNoTracking()
+                .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
                 .Where(ps => ps.LinkshellId == selectedLinkshellId && ps.AssignedMonsterName != null)
                 .OrderByDescending(ps => ps.UpdatedAt)
-                .Select(ps => new { ps.Id, ps.Name, Monster = ps.AssignedMonsterName! })
-                .ToListAsync())
-                .GroupBy(ps => ps.Monster.Trim(), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => (g.First().Id, g.First().Name), StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, (int Id, string Name)>(StringComparer.OrdinalIgnoreCase);
+                .ToListAsync()
+            : new List<Models.PartySetup>();
+
+        var assignedPartySetupBoards = assignedSetupEntities
+            .GroupBy(ps => ps.AssignedMonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g =>
+            {
+                var ps = g.First(); // list is UpdatedAt desc, so this is freshest
+                return new PartySetupBoardViewModel
+                {
+                    Id = ps.Id,
+                    Name = ps.Name,
+                    Alliances = ps.Alliances.OrderBy(a => a.SortOrder).Select(a => new PartySetupAllianceView
+                    {
+                        Name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
+                        Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
+                        {
+                            Name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
+                            Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s => new PartySetupSlotView
+                            {
+                                SlotId = s.Id,
+                                Position = s.SortOrder + 1,
+                                RequirementType = s.RequirementType,
+                                Role = s.Role,
+                                MainJob = s.MainJob,
+                                SubJob = s.SubJob,
+                                Label = s.Label,
+                                IsPartyLeader = s.IsPartyLeader,
+                                SignedUpAppUserId = s.SignedUpAppUserId,
+                                SignedUpCharacterName = s.SignedUpCharacterName
+                            }).ToList()
+                        }).ToList()
+                    }).ToList()
+                };
+            }, StringComparer.OrdinalIgnoreCase);
+
+        var assignedPartySetups = assignedPartySetupBoards
+            .ToDictionary(kv => kv.Key, kv => (kv.Value.Id, kv.Value.Name), StringComparer.OrdinalIgnoreCase);
+
+        // Recent claim-shield lottery windows posted from the lsm addon.
+        var recentClaimShields = selectedLinkshellId > 0
+            ? await _context.ClaimShieldCaptures
+                .AsNoTracking()
+                .Include(c => c.Members)
+                .Where(c => c.LinkshellId == selectedLinkshellId)
+                .OrderByDescending(c => c.CapturedAtUtc)
+                .ThenByDescending(c => c.Id)
+                .Take(10)
+                .ToListAsync()
+            : new List<ClaimShieldCapture>();
 
         var todDraft = source?.Tod ?? new Tod();
         todDraft.LinkshellId = selectedLinkshellId;
@@ -585,18 +635,52 @@ public class TodController : Controller
             TodLootDetails = lootDetails,
             NoLoot = source?.NoLoot ?? false,
             Notifications = source?.Notifications ?? new List<string>(),
-            // True HNMs are managed in the dedicated HNM section, so they're
-            // dropped from the legacy picker. Officers who want a manual
-            // HNM ToD on the web do so via the HNM dashboard.
-            MonsterOptions = TodManagerViewModel.SupportedMonsters
-                .Where(m => !HnmConfig.IsTrueHnm(m))
-                .ToList(),
+            // Full curated monster list (HNMs included). "Other" is appended
+            // in the view to reveal a free-text field for anything not listed.
+            MonsterOptions = TodManagerViewModel.SupportedMonsters.ToList(),
             CooldownOptions = TodManagerViewModel.SupportedCooldowns.ToList(),
             IntervalOptions = TodManagerViewModel.SupportedIntervals.ToList(),
             CharacterNames = characterNames,
             CanCreateImmediately = canCreateImmediately,
             AssignedPartySetups = assignedPartySetups,
+            AssignedPartySetupBoards = assignedPartySetupBoards,
+            CurrentAppUserId = user.Id,
+            CanManagePartiesForSelected = role?.CanManageParties == true,
+            RecentClaimShieldCaptures = recentClaimShields.Select(c => new ClaimShieldCaptureRowViewModel
+            {
+                Id = c.Id,
+                MonsterName = c.MonsterName,
+                Won = c.Won,
+                TotalPlayers = c.TotalPlayers,
+                CapturedAtDisplay = ConvertUtcToUserTimeZone(c.CapturedAtUtc, user.TimeZone)?.ToString("M/d/yyyy h:mm:ss tt") ?? "-",
+                Members = c.Members
+                    .OrderByDescending(m => m.Matched)
+                    .ThenBy(m => m.CharacterName)
+                    .Select(m => m.CharacterName)
+                    .ToList(),
+                MatchedCount = c.MatchedCount,
+            }).ToList(),
         };
+    }
+
+    // "Other" in the picker means the real name is typed into the free-text
+    // field; fold it back into Tod.MonsterName (and trim normal picks) so the
+    // rest of the pipeline only ever sees the actual monster name.
+    private static void ResolveCustomMonsterName(TodManagerViewModel model)
+    {
+        if (model.Tod is null)
+        {
+            return;
+        }
+        var picked = model.Tod.MonsterName?.Trim();
+        if (string.Equals(picked, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        {
+            model.Tod.MonsterName = model.CustomMonsterName?.Trim();
+        }
+        else
+        {
+            model.Tod.MonsterName = picked;
+        }
     }
 
     private void ValidateTodSubmission(TodManagerViewModel model, bool hasLinkshellAccess, IReadOnlyCollection<string> validCharacterNames)
@@ -606,9 +690,19 @@ public class TodController : Controller
             ModelState.AddModelError("Tod.LinkshellId", "Select a linkshell you can access.");
         }
 
-        if (string.IsNullOrWhiteSpace(model.Tod.MonsterName) || !SupportedMonsters.Contains(model.Tod.MonsterName.Trim()))
+        // The picker now allows the full curated list plus a free-text
+        // "Other" name (resolved into MonsterName before this runs), so we
+        // only require a non-blank, reasonably bounded value.
+        var monsterName = model.Tod.MonsterName?.Trim();
+        if (string.IsNullOrWhiteSpace(monsterName))
         {
-            ModelState.AddModelError("Tod.MonsterName", "Select a valid monster.");
+            ModelState.AddModelError("Tod.MonsterName",
+                "Select a monster, or choose Other and enter a name.");
+        }
+        else if (monsterName.Length > 64)
+        {
+            ModelState.AddModelError("Tod.MonsterName",
+                "Monster name is too long (64 characters max).");
         }
 
         if (!model.Tod.Time.HasValue)

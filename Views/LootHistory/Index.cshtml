@@ -34,38 +34,31 @@
                 <div class="card-title">Filters</div>
             </div>
             <div style="padding:4px 16px 16px">
-                <form method="get" class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));column-gap:16px;align-items:end">
-                    <div class="field">
-                        <label for="source">Source</label>
-                        <select class="form-select" id="source" name="source">
-                            @if (Model.SourceFilter == "all") { <option value="all" selected>All</option> } else { <option value="all">All</option> }
-                            @if (Model.SourceFilter == "tod") { <option value="tod" selected>ToDs</option> } else { <option value="tod">ToDs</option> }
-                            @if (Model.SourceFilter == "event") { <option value="event" selected>Events</option> } else { <option value="event">Events</option> }
-                        </select>
+                <div class="field" style="margin:0">
+                    <label for="q">Search loot</label>
+                    <input class="form-control" id="q" name="q" value="@Model.QueryFilter"
+                           maxlength="64" autocomplete="off"
+                           placeholder="Filter by winner or item name…" />
+                    <div class="muted" style="font-size:11px;margin-top:6px">
+                        Matches a winner's name or an item name as you type — no button needed.
+                        Use the Source dropdown by the list to limit to ToDs or Events.
                     </div>
-                    <div class="field">
-                        <label for="winner">Winner contains</label>
-                        <input class="form-control" id="winner" name="winner" value="@Model.WinnerFilter" maxlength="64" />
-                    </div>
-                    <div class="field">
-                        <label for="item">Item contains</label>
-                        <input class="form-control" id="item" name="item" value="@Model.ItemFilter" maxlength="64" />
-                    </div>
-                    <div class="field" style="grid-column:1/-1">
-                        <div style="display:flex;gap:8px">
-                            <button type="submit" class="btn primary">Apply filters</button>
-                            <a class="btn ghost" asp-action="Index">Reset</a>
-                        </div>
-                    </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
 
     <div>
         <div class="card">
-            <div class="card-head">
+            <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
                 <div class="card-title">Loot entries <span class="tag">@Model.TotalCount</span></div>
+                <div class="field" style="margin:0;min-width:150px">
+                    <select class="form-select" id="source" aria-label="Filter by source">
+                        @if (Model.SourceFilter == "all") { <option value="all" selected>All sources</option> } else { <option value="all">All sources</option> }
+                        @if (Model.SourceFilter == "tod") { <option value="tod" selected>ToDs</option> } else { <option value="tod">ToDs</option> }
+                        @if (Model.SourceFilter == "event") { <option value="event" selected>Events</option> } else { <option value="event">Events</option> }
+                    </select>
+                </div>
             </div>
             @if (Model.SelectedLinkshellId is null || Model.SelectedLinkshellId == 0)
             {
@@ -128,14 +121,19 @@
                                 <td>
                                     @if (Model.CanEdit)
                                     {
-                                        @if (entry.Source == "Tod")
-                                        {
-                                            <a class="btn sm" asp-action="EditTod" asp-route-lootDetailId="@entry.LootDetailId">Edit</a>
-                                        }
-                                        else
-                                        {
-                                            <a class="btn sm" asp-action="EditEvent" asp-route-lootDetailId="@entry.LootDetailId">Edit</a>
-                                        }
+                                        var editAction = entry.Source == "Tod" ? "EditTod" : "EditEvent";
+                                        var deleteAction = entry.Source == "Tod" ? "DeleteTod" : "DeleteEvent";
+                                        // Plain text in data-confirm (Razor HTML-encodes it). The
+                                        // confirm() guard is wired in the nonce'd script below because
+                                        // CSP is nonce-only — inline onsubmit handlers are blocked.
+                                        var confirmText = $"Delete this loot record?\n\n{entry.ItemName ?? "(item)"} -> {entry.ItemWinner ?? "(winner)"} ({(entry.WinningDkpSpent?.ToString() ?? "0")} DKP)\n\nThe winner will be refunded the DKP this loot spent. This cannot be undone.";
+                                        <div style="display:flex;gap:6px;justify-content:flex-end">
+                                            <a class="btn sm" asp-action="@editAction" asp-route-lootDetailId="@entry.LootDetailId">Edit</a>
+                                            <form method="post" asp-action="@deleteAction" asp-route-lootDetailId="@entry.LootDetailId"
+                                                  style="display:inline" data-confirm="@confirmText">
+                                                <button type="submit" class="btn sm danger-outline">Delete</button>
+                                            </form>
+                                        </div>
                                     }
                                 </td>
                             </tr>
@@ -158,8 +156,7 @@
                         {
                             <a class="btn sm" asp-action="Index"
                                asp-route-source="@Model.SourceFilter"
-                               asp-route-winner="@Model.WinnerFilter"
-                               asp-route-item="@Model.ItemFilter"
+                               asp-route-q="@Model.QueryFilter"
                                asp-route-page="@(Model.PageNumber - 1)">Prev</a>
                         }
                         <span class="muted" style="font-size:12px">Page @Model.PageNumber of @Model.TotalPages</span>
@@ -167,8 +164,7 @@
                         {
                             <a class="btn sm" asp-action="Index"
                                asp-route-source="@Model.SourceFilter"
-                               asp-route-winner="@Model.WinnerFilter"
-                               asp-route-item="@Model.ItemFilter"
+                               asp-route-q="@Model.QueryFilter"
                                asp-route-page="@(Model.PageNumber + 1)">Next</a>
                         }
                     </div>
@@ -177,3 +173,60 @@
         </div>
     </div>
 </div>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var q = document.getElementById('q');
+        var source = document.getElementById('source');
+
+        // Live filtering without an "Apply" button: rebuild the query string
+        // and navigate. A normal GET keeps server-side paging correct, and
+        // omitting `page` resets to page 1 whenever the filter changes.
+        // (No <form> wrapper — the per-row delete forms can't be nested.)
+        function applyFilters() {
+            var params = new URLSearchParams();
+            var sv = source ? source.value : 'all';
+            if (sv && sv !== 'all') { params.set('source', sv); }
+            var qv = q ? q.value.trim() : '';
+            if (qv) { params.set('q', qv); }
+            var qs = params.toString();
+            window.location.href = window.location.pathname + (qs ? ('?' + qs) : '');
+        }
+
+        var timer = null;
+        if (q) {
+            q.addEventListener('input', function () {
+                if (timer) { clearTimeout(timer); }
+                timer = setTimeout(applyFilters, 400);
+            });
+            q.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (timer) { clearTimeout(timer); timer = null; }
+                    applyFilters();
+                }
+            });
+            // Keep typing smooth across the reload: re-focus the box and put
+            // the caret at the end when it came back with a value.
+            if (q.value) {
+                q.focus();
+                var v = q.value; q.value = ''; q.value = v;
+            }
+        }
+        if (source) {
+            source.addEventListener('change', applyFilters);
+        }
+
+        // CSP is nonce-only (no inline handlers), so the delete confirmation
+        // is wired here rather than via an onsubmit attribute. Capture phase
+        // so it runs before the form's default submit.
+        document.addEventListener('submit', function (e) {
+            var f = e.target;
+            if (f && f.matches && f.matches('form[data-confirm]')) {
+                if (!window.confirm(f.getAttribute('data-confirm'))) {
+                    e.preventDefault();
+                }
+            }
+        }, true);
+    })();
+</script>

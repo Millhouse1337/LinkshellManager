@@ -122,11 +122,10 @@ public class Linkshell
     [MaxLength(64)]
     public string? ManualPointsTabName { get; set; }
 
-    // Discord channel webhook URL (Channel Settings -> Integrations ->
-    // Webhooks). When set, a `/lsm now` attendance snapshot is also posted to
-    // this channel as a party-grouped embed. Null = Discord posting disabled.
-    [MaxLength(512)]
-    public string? DiscordWebhookUrl { get; set; }
+    // Named Discord channel webhooks. Every `/lsm now` attendance snapshot is
+    // posted to each of these as a party-grouped embed. Empty = Discord
+    // posting disabled. (Replaces the former single DiscordWebhookUrl column.)
+    public ICollection<LinkshellDiscordWebhook> DiscordWebhooks { get; set; } = new List<LinkshellDiscordWebhook>();
 
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 

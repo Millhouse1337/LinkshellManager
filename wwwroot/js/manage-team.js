@@ -109,6 +109,7 @@
             case 'LootRefund': return 'Loot Refund';
             case 'LootEditRefund': return 'Loot Edit Refund';
             case 'LootEditSpent': return 'Loot Edit Spent';
+            case 'LootDeleteRefund': return 'Loot Delete Refund';
             case 'AuctionSpent': return 'Auction Spent';
             case 'AuditAdjustment': return 'Audit Adjustment';
             case 'AuditMisc': return 'Audit Misc';

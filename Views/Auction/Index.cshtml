@@ -125,7 +125,7 @@ else
                                   onsubmit="return confirm('End this auction now? Bidding will stop immediately. You will then be able to close it and deliver the won items.');">
                                 <input type="hidden" name="auctionId" value="@auction.Auction.Id" />
                                 @Html.AntiForgeryToken()
-                                <button type="submit" class="btn primary sm">End</button>
+                                <button type="submit" class="btn primary sm">End Auction</button>
                             </form>
                         }
                         @if (canClose)

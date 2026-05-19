@@ -164,6 +164,15 @@ builder.Services.AddHostedService<SheetSyncBackgroundService>();
 builder.Services.AddSingleton<DiscordWebhookQueue>();
 builder.Services.AddScoped<DiscordSnapshotPublisher>();
 builder.Services.AddHostedService<DiscordWebhookBackgroundService>();
+builder.Services.AddSingleton<DiscordTodBoardQueue>();
+builder.Services.AddScoped<DiscordTodBoardPublisher>();
+builder.Services.AddHostedService<DiscordTodBoardBackgroundService>();
+builder.Services.AddSingleton<DiscordDkpSpendQueue>();
+builder.Services.AddScoped<DiscordDkpSpendPublisher>();
+builder.Services.AddHostedService<DiscordDkpSpendBackgroundService>();
+builder.Services.AddSingleton<DiscordAuctionChannelQueue>();
+builder.Services.AddScoped<DiscordAuctionChannelPublisher>();
+builder.Services.AddHostedService<DiscordAuctionChannelBackgroundService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {

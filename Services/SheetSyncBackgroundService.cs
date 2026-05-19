@@ -165,6 +165,10 @@ public sealed class SheetSyncBackgroundService : BackgroundService
                 await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
                     .AppendTodLootDayAsync(job.TargetId, cancellationToken);
                 break;
+            case SheetSyncJobKind.EventLootRecompute:
+                await scope.ServiceProvider.GetRequiredService<ManualPointsAppendService>()
+                    .RecomputeEventLootColumnAsync(job.TargetId, cancellationToken);
+                break;
         }
     }
 }

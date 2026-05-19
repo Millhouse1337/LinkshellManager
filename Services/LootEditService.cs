@@ -247,14 +247,276 @@ public sealed class LootEditService
         detail.LastEditReason = request.Reason.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
+        // Closed-event loot lives in one ManualPoints column written at event
+        // close; recompute it from the surviving rows so this edit lands on
+        // the sheet. Active-event loot has no column yet (written at close),
+        // so there's nothing to sync here.
+        if (detail.EventHistoryId.HasValue)
+        {
+            await _sheetSync.EnqueueEventLootRecomputeAsync(detail.EventHistoryId.Value, cancellationToken);
+        }
         _logger.LogInformation(
             "Loot edit applied (Event #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
             detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);
         return new LootEditResult(true, null, detail.Id, "Event");
     }
 
+    // Removes a ToD loot row entirely and refunds the winner the DKP that was
+    // debited for it (mirrors the "refund the OLD debit" half of an edit, with
+    // no replacement debit). LootCouncil rows carry no DKP, so they're just
+    // removed. The backing ToD is left intact — it may hold other loot or be a
+    // real ToD; the ManualPoints day column self-corrects on recompute.
+    public async Task<LootEditResult> DeleteTodLootAsync(
+        int lootDetailId,
+        AppUser actor,
+        string reason,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var detail = await _db.TodLootDetails
+            .Include(item => item.Tod)
+                .ThenInclude(tod => tod!.Linkshell)
+            .FirstOrDefaultAsync(item => item.Id == lootDetailId, cancellationToken);
+
+        if (detail is null || detail.Tod is null)
+        {
+            return new LootEditResult(false, "Loot record not found.");
+        }
+
+        var linkshellId = detail.Tod.LinkshellId;
+        var todId = detail.Tod.Id;
+        var structure = ActivityDataController.NormalizeLootStructure(detail.Tod.Linkshell?.LootStructure ?? "Dkp");
+        var monsterName = detail.Tod.MonsterName ?? "Unknown monster";
+        var winnerName = (detail.ItemWinner ?? string.Empty).Trim();
+        var itemName = (detail.ItemName ?? string.Empty).Trim();
+        var dkpRaw = detail.WinningDkpSpent.GetValueOrDefault();
+
+        if (structure != "LootCouncil")
+        {
+            await RefundDeletedLootAsync(
+                linkshellId: linkshellId,
+                winnerName: winnerName,
+                dkpRaw: dkpRaw,
+                actualDeducted: detail.ActualDeductedDkp,
+                isHybrid: structure == "Hybrid",
+                sourceTodLootDetailId: detail.Id,
+                sourceEventLootDetailId: null,
+                eventName: monsterName,
+                eventType: null,
+                eventLocation: null,
+                eventStartTime: null,
+                eventEndTime: null,
+                itemName: itemName,
+                reason: reason,
+                occurredAtUtc: occurredAtUtc,
+                cancellationToken: cancellationToken);
+        }
+
+        _db.TodLootDetails.Remove(detail);
+        await _db.SaveChangesAsync(cancellationToken);
+        await _sheetSync.EnqueueTodLootDeductionsAsync(todId, cancellationToken);
+        _logger.LogInformation(
+            "Loot deleted (ToD #{LootDetailId}) by {Actor}: '{Winner}' ({Dkp} DKP). Reason: {Reason}",
+            lootDetailId, actor.Id, winnerName, dkpRaw, reason);
+        return new LootEditResult(true, null, lootDetailId, "Tod");
+    }
+
+    // Event counterpart of DeleteTodLootAsync. Resolves the parent context
+    // (active Event vs. closed EventHistory) the same way EditEventLootAsync
+    // does. Event loot is always flat DKP (Hybrid is ToD-only).
+    public async Task<LootEditResult> DeleteEventLootAsync(
+        int lootDetailId,
+        AppUser actor,
+        string reason,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var detail = await _db.EventLootDetails
+            .Include(item => item.Event)
+                .ThenInclude(evt => evt!.Linkshell)
+            .Include(item => item.EventHistory)
+                .ThenInclude(history => history!.Linkshell)
+            .FirstOrDefaultAsync(item => item.Id == lootDetailId, cancellationToken);
+
+        if (detail is null)
+        {
+            return new LootEditResult(false, "Loot record not found.");
+        }
+
+        int linkshellId;
+        string? lootStructure;
+        string? eventName;
+        string? eventType;
+        string? eventLocation;
+        DateTime? eventStartTime;
+        DateTime? eventEndTime;
+
+        if (detail.EventHistory is not null)
+        {
+            linkshellId = detail.EventHistory.LinkshellId;
+            lootStructure = detail.EventHistory.Linkshell?.LootStructure;
+            eventName = detail.EventHistory.EventName;
+            eventType = detail.EventHistory.EventType;
+            eventLocation = detail.EventHistory.EventLocation;
+            eventStartTime = detail.EventHistory.StartTime;
+            eventEndTime = detail.EventHistory.EndTime;
+        }
+        else if (detail.Event is not null)
+        {
+            linkshellId = detail.Event.LinkshellId;
+            lootStructure = detail.Event.Linkshell?.LootStructure;
+            eventName = detail.Event.EventName;
+            eventType = detail.Event.EventType;
+            eventLocation = detail.Event.EventLocation;
+            eventStartTime = detail.Event.StartTime;
+            eventEndTime = detail.Event.EndTime;
+        }
+        else
+        {
+            return new LootEditResult(false, "Loot record is orphaned (no parent event).");
+        }
+
+        var structure = ActivityDataController.NormalizeLootStructure(lootStructure ?? "Dkp");
+        var winnerName = (detail.ItemWinner ?? string.Empty).Trim();
+        var itemName = (detail.ItemName ?? string.Empty).Trim();
+        var dkpRaw = detail.WinningDkpSpent.GetValueOrDefault();
+
+        if (structure != "LootCouncil")
+        {
+            await RefundDeletedLootAsync(
+                linkshellId: linkshellId,
+                winnerName: winnerName,
+                dkpRaw: dkpRaw,
+                actualDeducted: detail.ActualDeductedDkp,
+                isHybrid: false,
+                sourceTodLootDetailId: null,
+                sourceEventLootDetailId: detail.Id,
+                eventName: eventName,
+                eventType: eventType,
+                eventLocation: eventLocation,
+                eventStartTime: eventStartTime,
+                eventEndTime: eventEndTime,
+                itemName: itemName,
+                reason: reason,
+                occurredAtUtc: occurredAtUtc,
+                cancellationToken: cancellationToken);
+        }
+
+        var eventHistoryId = detail.EventHistoryId;
+        _db.EventLootDetails.Remove(detail);
+        await _db.SaveChangesAsync(cancellationToken);
+        // Recompute the closed event's ManualPoints column from the surviving
+        // loot rows (mirrors the ToD path — blanks the deleted winner if they
+        // no longer owe). Active-event loot has no sheet column yet, so skip.
+        if (eventHistoryId.HasValue)
+        {
+            await _sheetSync.EnqueueEventLootRecomputeAsync(eventHistoryId.Value, cancellationToken);
+        }
+        _logger.LogInformation(
+            "Loot deleted (Event #{LootDetailId}) by {Actor}: '{Winner}' ({Dkp} DKP). Reason: {Reason}",
+            lootDetailId, actor.Id, winnerName, dkpRaw, reason);
+        return new LootEditResult(true, null, lootDetailId, "Event");
+    }
+
     // --- internals ---
+
+    // Credits the winner back the DKP a now-deleted loot row debited and writes
+    // a single "LootDeleteRefund" ledger entry (positive amount, so it never
+    // triggers the DKP-spend Discord post). Refund amount mirrors the refund
+    // branch of ReconcileLootDkpAsync. If the winner has since left the
+    // linkshell there's no balance to credit — the row is still deleted; the
+    // skipped refund is logged.
+    private async Task RefundDeletedLootAsync(
+        int linkshellId,
+        string winnerName,
+        int dkpRaw,
+        double? actualDeducted,
+        bool isHybrid,
+        int? sourceTodLootDetailId,
+        int? sourceEventLootDetailId,
+        string? eventName,
+        string? eventType,
+        string? eventLocation,
+        DateTime? eventStartTime,
+        DateTime? eventEndTime,
+        string itemName,
+        string reason,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(winnerName) || dkpRaw <= 0)
+        {
+            return;
+        }
+
+        var membership = await _db.AppUserLinkshells
+            .FirstOrDefaultAsync(link => link.LinkshellId == linkshellId
+                                      && link.AppUserId != null
+                                      && link.CharacterName == winnerName, cancellationToken);
+        if (membership is null || string.IsNullOrWhiteSpace(membership.AppUserId))
+        {
+            _logger.LogWarning(
+                "Loot delete refund skipped: winner '{Winner}' is no longer a member of linkshell {LinkshellId}.",
+                winnerName, linkshellId);
+            return;
+        }
+
+        double refundAmount;
+        if (actualDeducted.HasValue)
+        {
+            refundAmount = Math.Abs(actualDeducted.Value);
+        }
+        else if (isHybrid)
+        {
+            var pct = Math.Clamp((double)dkpRaw, 0, 100);
+            if (pct >= 100d)
+            {
+                refundAmount = 0;
+            }
+            else
+            {
+                var currentBalance = Math.Max(0, membership.LinkshellDkp ?? 0);
+                refundAmount = Math.Round(currentBalance * pct / (100d - pct), 2);
+            }
+        }
+        else
+        {
+            refundAmount = dkpRaw;
+        }
+
+        if (refundAmount <= 0)
+        {
+            return;
+        }
+
+        membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + refundAmount;
+
+        var maxSequence = await _db.DkpLedgerEntries
+            .Where(entry => entry.LinkshellId == linkshellId && entry.AppUserId == membership.AppUserId)
+            .Select(entry => (int?)entry.Sequence)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        await _db.DkpLedgerEntries.AddAsync(new DkpLedgerEntry
+        {
+            AppUserId = membership.AppUserId,
+            LinkshellId = linkshellId,
+            EntryType = "LootDeleteRefund",
+            Amount = refundAmount,
+            Sequence = maxSequence + 1,
+            OccurredAt = occurredAtUtc,
+            CharacterName = membership.CharacterName,
+            EventName = eventName,
+            EventType = eventType,
+            EventLocation = eventLocation,
+            EventStartTime = eventStartTime,
+            EventEndTime = eventEndTime,
+            ItemName = itemName,
+            Details = $"Loot deleted: record removed and DKP refunded. Reason: {Truncate(reason, 800)}",
+            EditReason = Truncate(reason, 512),
+            SourceTodLootDetailId = sourceTodLootDetailId,
+            SourceEventLootDetailId = sourceEventLootDetailId
+        }, cancellationToken);
+    }
 
     private static string? ValidateRequest(LootEditRequest request)
     {

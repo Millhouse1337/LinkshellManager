@@ -369,6 +369,8 @@ export class ActivitySidebarPanelComponent {
         return 'Loot Edit · Refund';
       case 'LootEditSpent':
         return 'Loot Edit · Spent';
+      case 'LootDeleteRefund':
+        return 'Loot Delete · Refund';
       case 'EventEarned':
         return 'Event Earned';
       case 'SnapshotEarned':

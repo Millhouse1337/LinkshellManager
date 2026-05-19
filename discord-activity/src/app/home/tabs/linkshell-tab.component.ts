@@ -29,7 +29,7 @@ export class LinkshellTabComponent {
   @Input({ required: true }) rosterSearchChange!: (value: string) => void;
 
   protected get rosterSearch(): string { return this.rosterSearchValue; }
-  protected set rosterSearch(value: string) { this.rosterSearchChange(value); }
+  protected set rosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
 
   // ----- Re-implemented small reads via this.activity -----
 
@@ -101,6 +101,35 @@ export class LinkshellTabComponent {
       (member.characterName ?? '').toLowerCase().includes(term) ||
       (member.rank ?? '').toLowerCase().includes(term)
     );
+  }
+
+  // Roster pagination: 10 per page. rosterPage is 1-based; every read clamps
+  // to the valid range so removing members or narrowing the search can't
+  // strand the view on an empty out-of-range page (the search setter also
+  // resets to page 1). No signal writes happen during render — clamping is
+  // pure; only the Prev/Next handlers mutate the signal.
+  protected readonly rosterPageSize = 10;
+  protected readonly rosterPage = signal(1);
+
+  protected rosterTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredDashboardMembers().length / this.rosterPageSize));
+  }
+
+  protected rosterCurrentPage(): number {
+    return Math.min(Math.max(1, this.rosterPage()), this.rosterTotalPages());
+  }
+
+  protected pagedDashboardMembers() {
+    const start = (this.rosterCurrentPage() - 1) * this.rosterPageSize;
+    return this.filteredDashboardMembers().slice(start, start + this.rosterPageSize);
+  }
+
+  protected rosterPrev(): void {
+    this.rosterPage.set(Math.max(1, this.rosterCurrentPage() - 1));
+  }
+
+  protected rosterNext(): void {
+    this.rosterPage.set(Math.min(this.rosterTotalPages(), this.rosterCurrentPage() + 1));
   }
 
   protected canManageSelectedDashboard(): boolean {

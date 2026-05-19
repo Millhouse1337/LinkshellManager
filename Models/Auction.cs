@@ -31,5 +31,11 @@ public class Auction
     [DataType(DataType.DateTime)]
     public DateTime? StartedAt { get; set; }
 
+    // Discord channel id of the per-auction channel created (when the
+    // linkshell has bot config). Null if not created. Carried into
+    // AuctionHistory on close so the channel can be cleaned up.
+    [MaxLength(32)]
+    public string? DiscordChannelId { get; set; }
+
     public ICollection<AuctionItem> AuctionItems { get; set; } = new List<AuctionItem>();
 }

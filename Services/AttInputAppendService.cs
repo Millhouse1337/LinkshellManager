@@ -477,11 +477,14 @@ public sealed class AttInputAppendService
         _logger.LogInformation("AttInput append: event {EventId} close -> {Count} rows.", eventId, rows.Count);
     }
 
-    // Writes a single AttInput row for a POSITIVE DKP ledger entry (manual
-    // adjustment / miscellaneous audit). ManualPoints is deductions-only, so
-    // anything that credits DKP lands here instead. Idempotent via the
-    // entry's SheetAppendedAt stamp (shared with the ManualPoints audit path;
-    // the two are sign-disjoint so only one ever claims the stamp).
+    // Writes a colored label/separator row followed by a single AttInput data
+    // row for a POSITIVE DKP ledger entry (manual adjustment / miscellaneous
+    // audit). The separator gets the same treatment as the Window Event post
+    // so manual additions are visibly delimited from the attendance rows
+    // around them. ManualPoints is deductions-only, so anything that credits
+    // DKP lands here instead. Idempotent via the entry's SheetAppendedAt
+    // stamp (shared with the ManualPoints audit path; the two are
+    // sign-disjoint so only one ever claims the stamp).
     //
     // Column choices for a miscellaneous credit (no event/zone/job context):
     //   A/H Player   = entry.CharacterName
@@ -493,8 +496,11 @@ public sealed class AttInputAppendService
     //                  (Location is free text, not formula-sensitive)
     //   I   Camp Win = 1 (same constant every other AttInput writer uses)
     //   J   DKP      = entry.Amount (the positive credit)
-    //   K   Entry Tp = linkshell.AttInputDefaultEntryType, else "Misc Camp"
-    //                  -- a value the sheet's Tally/Main formulas recognize
+    //   K   Entry Tp = always "Misc Camp" -- a miscellaneous credit isn't a
+    //                  camp/kill, so it's tagged with the catch-all value the
+    //                  sheet's Tally/Main formulas recognize (NOT the
+    //                  linkshell's attendance default, which may be blank or
+    //                  another camp)
     public async Task AppendMiscDkpAsync(int dkpLedgerEntryId, CancellationToken cancellationToken)
     {
         var entry = await _db.DkpLedgerEntries
@@ -524,15 +530,36 @@ public sealed class AttInputAppendService
         var linkshell = await LoadConfiguredLinkshellAsync(entry.LinkshellId, cancellationToken);
         if (linkshell is null) return;
 
-        var entryType = !string.IsNullOrWhiteSpace(linkshell.AttInputDefaultEntryType)
-            ? linkshell.AttInputDefaultEntryType!
-            : WindowEventEntryTypes.MiscCamp;
+        // Always "Misc Camp" for a miscellaneous credit -- never the
+        // linkshell's AttInputDefaultEntryType (that default is for
+        // attendance snapshots / events and may be blank or another camp,
+        // which left column K empty for these adjustment rows).
+        var entryType = WindowEventEntryTypes.MiscCamp;
 
         var reason = new[] { entry.EditReason, entry.Details }
             .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))
             ?? "Manual DKP adjustment";
 
-        var row = BuildRow(
+        // Colored label / separator row first -- same shape as the Window
+        // Event header: only column C carries the label, every
+        // formula-sensitive column stays blank, and the row is tinted after
+        // append so the manual addition is visually separated.
+        var separatorRow = new List<object>
+        {
+            string.Empty,            // A Player
+            string.Empty,            // B Jobs
+            reason,                  // C Label
+            string.Empty,            // D Time
+            string.Empty,            // E UTC offset
+            string.Empty,            // F Location
+            string.Empty,            // G (blank)
+            string.Empty,            // H Player Name
+            string.Empty,            // I Camp Window
+            string.Empty,            // J DKP
+            string.Empty,            // K Entry Type
+        };
+
+        var dataRow = BuildRow(
             playerName: entry.CharacterName,
             jobs: null,
             whenUtc: entry.OccurredAt,
@@ -543,16 +570,33 @@ public sealed class AttInputAppendService
             entryType: entryType);
 
         var appendResponse = await AppendRowsAsync(
-            linkshell, new List<IList<object>> { row }, cancellationToken);
-        if (TryGetFirstAppendedRow(appendResponse?.Updates?.UpdatedRange, out var appendedRow))
+            linkshell,
+            new List<IList<object>> { separatorRow, dataRow },
+            cancellationToken);
+        if (TryGetFirstAppendedRow(appendResponse?.Updates?.UpdatedRange, out var labelRowNumber))
         {
-            entry.AttInputRowNumber = appendedRow;
+            // The credit lives on the row directly under the label; that's
+            // the row any later audit/locate path must target, so track it
+            // (not the label row) as the entry's AttInput row.
+            entry.AttInputRowNumber = labelRowNumber + 1;
+            var tab = string.IsNullOrWhiteSpace(linkshell.AttInputTabName)
+                ? DefaultTabName
+                : linkshell.AttInputTabName!;
+            await _sheets.FormatRowAsync(
+                linkshell.Id,
+                linkshell.GoogleSpreadsheetId!,
+                tab,
+                labelRowNumber,
+                red: 1.0f,
+                green: 0.93f,
+                blue: 0.72f,
+                cancellationToken);
         }
 
         entry.SheetAppendedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
         _logger.LogInformation(
-            "AttInput misc append: ledger entry {Id} ({Amount} DKP, {Type}) -> 1 row.",
+            "AttInput misc append: ledger entry {Id} ({Amount} DKP, {Type}) -> 1 label + 1 row.",
             dkpLedgerEntryId, entry.Amount, entryType);
     }
 

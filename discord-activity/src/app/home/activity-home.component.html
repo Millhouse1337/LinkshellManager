@@ -99,17 +99,6 @@
           }
         </button>
       }
-      @if (isFeatureEnabled('enableHnmSection')) {
-        <button type="button" class="tab" role="tab"
-                [id]="tabId('hnm')"
-                [attr.aria-controls]="panelId('hnm')"
-                [attr.aria-selected]="activeTab() === 'hnm'"
-                [attr.tabindex]="activeTab() === 'hnm' ? 0 : -1"
-                [class.active]="activeTab() === 'hnm'"
-                (click)="setActiveTab('hnm')">
-          HNM
-        </button>
-      }
       @if (isFeatureEnabled('enableEvents')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('timed-events')"
@@ -118,7 +107,7 @@
                 [attr.tabindex]="activeTab() === 'timed-events' ? 0 : -1"
                 [class.active]="activeTab() === 'timed-events'"
                 (click)="setActiveTab('timed-events')">
-          Timed Events
+          Event System
           @if (openEventsCount() > 0) {
             <span class="tab-badge default">{{ openEventsCount() }}</span>
           }
@@ -130,7 +119,7 @@
                 [attr.tabindex]="activeTab() === 'window-events' ? 0 : -1"
                 [class.active]="activeTab() === 'window-events'"
                 (click)="setActiveTab('window-events')">
-          Window Events
+          Attendance System
         </button>
       }
       @if (isFeatureEnabled('enableToDs')) {
@@ -237,13 +226,6 @@
       <app-linkshell-tab
         [rosterSearchValue]="dashboardRosterSearch"
         [rosterSearchChange]="setDashboardRosterSearch" />
-    </div>
-  }
-
-  <!-- ===== HNM TAB ===== -->
-  @if (activeTab() === 'hnm') {
-    <div role="tabpanel" [id]="panelId('hnm')" [attr.aria-labelledby]="tabId('hnm')">
-      <app-hnm-tab />
     </div>
   }
 

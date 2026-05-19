@@ -91,6 +91,7 @@
                             // so officers can see at a glance which entries came from a correction.
                             var isLootEditRefund = entry.EntryType == "LootEditRefund";
                             var isLootEditSpent = entry.EntryType == "LootEditSpent";
+                            var isLootDeleteRefund = entry.EntryType == "LootDeleteRefund";
                             var isLootEdit = isLootEditRefund || isLootEditSpent;
                             var isSpent = entry.Amount < 0;
                             var amountColor = entry.Amount >= 0 ? "var(--success)" : "var(--danger)";
@@ -104,6 +105,10 @@
                                     else if (isLootEditSpent)
                                     {
                                         <span class="tag warn" title="New debit applied during a loot edit">Edit spend</span>
+                                    }
+                                    else if (isLootDeleteRefund)
+                                    {
+                                        <span class="tag" title="Refund applied when a loot record was deleted">Delete refund</span>
                                     }
                                     else if (isSpent)
                                     {

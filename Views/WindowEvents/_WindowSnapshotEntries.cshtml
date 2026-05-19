@@ -35,6 +35,15 @@
             @Html.AntiForgeryToken()
         </form>
     }
+
+    // Add-person form lives outside the table (a <form> can't be a tbody
+    // child); the input and button sit in the last table row and bind to
+    // it via the HTML form= attribute, same as the Remove buttons above.
+    <form id="snap-@Model.Id-add" asp-action="AddSnapshotEntry"
+          asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@Model.Id"
+          method="post" class="we-hidden-form">
+        @Html.AntiForgeryToken()
+    </form>
 }
 
 <div class="we-table__scroll we-table__scroll--snapshot">
@@ -127,22 +136,26 @@
             </tr>
             rowIndex++;
         }
+        @if (canEditRoster)
+        {
+            // Span every column except the trailing actions column so the
+            // name field gets the full width and the button lines up under
+            // the Remove buttons.
+            var addInputColspan = 3 + (showDkpInputs ? 1 : 0);
+            <tr class="we-add-row">
+                <td colspan="@addInputColspan">
+                    <input class="input" type="text" name="characterName"
+                           placeholder="Add a character by name…" maxlength="256" required
+                           autocomplete="off" form="snap-@Model.Id-add"
+                           style="width:100%;max-width:280px" />
+                </td>
+                <td class="num">
+                    <button type="submit" class="btn sm primary" form="snap-@Model.Id-add"
+                            style="white-space:nowrap">+ Add person</button>
+                </td>
+            </tr>
+        }
         </tbody>
     </table>
 </div>
 
-@if (canEditRoster)
-{
-    <form asp-action="AddSnapshotEntry" asp-route-linkshellId="@linkshellId"
-          asp-route-snapshotId="@Model.Id" method="post" class="we-add-entry-form"
-          style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 0 4px">
-        @Html.AntiForgeryToken()
-        <input class="input" type="text" name="characterName" placeholder="Character" maxlength="256" required style="max-width:150px" />
-        <input class="input" type="text" name="mainJob" placeholder="Job" maxlength="8" style="max-width:64px" />
-        <input class="input" type="number" name="mainJobLevel" placeholder="Lv" min="1" max="99" style="max-width:56px" />
-        <input class="input" type="text" name="subJob" placeholder="Sub" maxlength="8" style="max-width:64px" />
-        <input class="input" type="number" name="subJobLevel" placeholder="Lv" min="1" max="99" style="max-width:56px" />
-        <input class="input" type="text" name="zone" placeholder="Zone (optional)" maxlength="128" style="max-width:160px" />
-        <button type="submit" class="btn sm">+ Add person</button>
-    </form>
-}

@@ -644,6 +644,9 @@ public sealed class WindowEventsController : Controller
             FirstCapturedAtUtc = capturedAtUtc,
             LastCapturedAtUtc = capturedAtUtc,
             CreatedByCharacterName = capturedByCharacterName,
+            // Pre-select the camp from the monster name so officers don't
+            // have to set it manually on every newly created event.
+            EntryType = WindowEventEntryTypes.FromMonsterName(name),
         };
         _db.WindowEvents.Add(windowEvent);
         await _db.SaveChangesAsync(cancellationToken);

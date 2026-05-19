@@ -94,8 +94,40 @@ public static class WindowEventEntryTypes
         KingsCamp, WyrmsCamp, MiscCamp, Kill,
     };
 
+    // Monster -> camp lookup for auto-tagging events created by name (e.g.
+    // the addon's "/lsm now <monster>"). Keys are normalized the same way
+    // as the lookup in FromMonsterName (whitespace-collapsed, upper case).
+    // Jormungand is intentionally only in the Wyrms set: it appears on both
+    // lists in FFXI lore, and Wyrms wins per the linkshell's convention.
+    private static readonly HashSet<string> WyrmsMonsters = new(StringComparer.Ordinal)
+    {
+        "TIAMAT", "JORMUNGAND", "VRTRA",
+    };
+
+    private static readonly HashSet<string> KingsMonsters = new(StringComparer.Ordinal)
+    {
+        "ADAMANTOISE", "ASPIDOCHELONE", "BEHEMOTH", "FAFNIR",
+        "KING BEHEMOTH", "NIDHOGG",
+    };
+
     public static bool IsValid(string? value)
         => !string.IsNullOrEmpty(value) && All.Contains(value);
+
+    // Picks the entry type for a freshly created window event from its
+    // monster name. Wyrms is checked first so a monster that could be read
+    // as either (Jormungand) lands in Wyrms Camp. Anything unrecognized —
+    // including null/blank — falls back to Misc Camp.
+    public static string FromMonsterName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return MiscCamp;
+        var key = string.Join(
+            ' ',
+            name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToUpperInvariant();
+        if (WyrmsMonsters.Contains(key)) return WyrmsCamp;
+        if (KingsMonsters.Contains(key)) return KingsCamp;
+        return MiscCamp;
+    }
 }
 
 public static class AttendanceSnapshotStatuses

@@ -11,19 +11,28 @@ public class TodManagerViewModel
     public const string OneHourInterval = "1 Hour";
     public const string TenMinuteInterval = "10 Min";
 
+    // Sentinel option that reveals a free-text field so officers can log a
+    // monster that isn't in the curated list.
+    public const string OtherMonster = "Other";
+
     public static IReadOnlyList<string> SupportedMonsters { get; } = new[]
     {
-        "Fafnir",
-        "Nidhogg",
-        "Behemoth",
-        "King Behemoth",
         "Adamantoise",
         "Aspidochelone",
-        "Tiamat",
+        "Behemoth",
+        "Fafnir",
         "Jormungand",
+        "King Behemoth",
+        "Nidhogg",
+        "Tiamat",
         "Vrtra",
+        "Bloodsucker",
         "King Arthro",
-        "Simurgh"
+        "King Vinegarroon",
+        "Serket",
+        "Shikigami Weapon",
+        "Simurgh",
+        "Xolotl"
     };
 
     public static IReadOnlyList<string> SupportedCooldowns { get; } = new[]
@@ -45,6 +54,10 @@ public class TodManagerViewModel
     public List<Linkshell> Linkshells { get; set; } = new();
 
     public Tod Tod { get; set; } = new();
+
+    // Free-text monster name used when "Other" is picked in the dropdown.
+    // Resolved into Tod.MonsterName server-side before validation/save.
+    public string? CustomMonsterName { get; set; }
 
     public List<TodTableRowViewModel> TodItems { get; set; } = new();
 
@@ -72,6 +85,48 @@ public class TodManagerViewModel
     // keys; most-recently-updated setup wins when several target one monster.
     public Dictionary<string, (int Id, string Name)> AssignedPartySetups { get; set; }
         = new(StringComparer.OrdinalIgnoreCase);
+
+    // Monster name -> the full assigned Party Setup tree, rendered inline
+    // (expand in place, no page nav) under the monster's ToD row so members
+    // can sign up for a slot. Same keying/precedence as AssignedPartySetups.
+    public Dictionary<string, PartySetupBoardViewModel> AssignedPartySetupBoards { get; set; }
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    // Current viewer, so the inline panel can show "you" + a Withdraw button
+    // on the slot they hold. CanManagePartiesForSelected lets officers clear
+    // anyone's sign-up.
+    public string? CurrentAppUserId { get; set; }
+    public bool CanManagePartiesForSelected { get; set; }
+
+    // Recent claim-shield lottery windows posted from the lsm addon, newest
+    // first. Shown in a card below the Submitted ToDs table.
+    public List<ClaimShieldCaptureRowViewModel> RecentClaimShieldCaptures { get; set; } = new();
+}
+
+// The assigned Party Setup for one monster, with its full alliance/party/slot
+// tree, surfaced inline on the ToD Tracker page.
+public class PartySetupBoardViewModel
+{
+    public int Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public List<PartySetupAllianceView> Alliances { get; init; } = new();
+}
+
+public class ClaimShieldCaptureRowViewModel
+{
+    public int Id { get; init; }
+
+    public string MonsterName { get; init; } = string.Empty;
+
+    public bool Won { get; init; }
+
+    public int TotalPlayers { get; init; }
+
+    public string CapturedAtDisplay { get; init; } = string.Empty;
+
+    public IReadOnlyList<string> Members { get; init; } = Array.Empty<string>();
+
+    public int MatchedCount { get; init; }
 }
 
 public class TodTableRowViewModel

@@ -446,6 +446,9 @@ public partial class AuctionController
             EndTime = auction.EndTime,
             StartedAt = auction.StartedAt,
             ClosedAt = DateTime.UtcNow,
+            // Carry the per-auction Discord channel id forward so the channel
+            // can have its results posted and then be deleted on close.
+            DiscordChannelId = auction.DiscordChannelId,
             AuctionItems = auction.AuctionItems
                 .OrderBy(item => item.Id)
                 .Select(item =>

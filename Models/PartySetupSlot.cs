@@ -38,4 +38,21 @@ public class PartySetupSlot
 
     [MaxLength(64)]
     public string? Label { get; set; }
+
+    // At most one slot per party is the designated party leader. Surfaced
+    // with a crown in the editor + details views.
+    public bool IsPartyLeader { get; set; }
+
+    // Member sign-up. A linkshell member can claim an open slot from the ToD
+    // Tracker's inline setup panel. Stored as a plain id + a snapshot of the
+    // member's linkshell character name (mirrors the EditedByAppUserId /
+    // EditedByCharacterName pattern on TodLootDetail -- no navigation, so
+    // there's no FK cascade to reason about). Null = open.
+    [MaxLength(450)]
+    public string? SignedUpAppUserId { get; set; }
+
+    [MaxLength(256)]
+    public string? SignedUpCharacterName { get; set; }
+
+    public DateTime? SignedUpAtUtc { get; set; }
 }

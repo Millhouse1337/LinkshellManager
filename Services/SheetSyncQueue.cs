@@ -63,6 +63,17 @@ public sealed class SheetSyncQueue
         return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.TodLootDeductions, todId), cancellationToken);
     }
 
+    // Recomputes a CLOSED event's single ManualPoints column from the current
+    // EventLootDetail rows — the event analogue of EnqueueTodLootDeductionsAsync.
+    // Fired by the Loot History edit/delete of event-sourced loot so the sheet
+    // column tracks post-close corrections instead of staying frozen at close.
+    // Keyed by EventHistoryId so edit/delete converge on the same idempotent
+    // recompute and it survives loot deletes.
+    public ValueTask EnqueueEventLootRecomputeAsync(int eventHistoryId, CancellationToken cancellationToken = default)
+    {
+        return _channel.Writer.WriteAsync(new SheetSyncJob(SheetSyncJobKind.EventLootRecompute, eventHistoryId), cancellationToken);
+    }
+
     // Posts the entire Window Event roster (header row + one row per unique
     // active character) to the linkshell's Google Sheet AttInput tab. Fired
     // by the officer's Post to DKP Sheet button -- snapshot capture itself
@@ -108,4 +119,5 @@ public enum SheetSyncJobKind
     AuctionDeductions,
     EventLootDeductions,
     TodLootDeductions,
+    EventLootRecompute,
 }

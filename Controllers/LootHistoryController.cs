@@ -78,6 +78,24 @@ public class LootHistoryController : Controller
 
         var roster = await LoadRosterCharacterNamesAsync(linkshellId.Value);
 
+        // "Other" in the Source/monster picker means the real label was
+        // typed into the free-text field; fold it into Context so the rest
+        // of the pipeline (and history) only ever sees the actual value.
+        // Context is optional, so a blank pick / blank custom stays null.
+        if (string.Equals(model.Context?.Trim(), TodManagerViewModel.OtherMonster,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            model.Context = string.IsNullOrWhiteSpace(model.CustomContext)
+                ? null
+                : model.CustomContext.Trim();
+        }
+        else
+        {
+            model.Context = string.IsNullOrWhiteSpace(model.Context)
+                ? null
+                : model.Context.Trim();
+        }
+
         if (ModelState.IsValid
             && !roster.Any(n => string.Equals(n, model.ItemWinner, StringComparison.OrdinalIgnoreCase)))
         {
@@ -131,8 +149,7 @@ public class LootHistoryController : Controller
     // CanAddLoot role flag on their membership.
     public async Task<IActionResult> Index(
         string? source = "all",
-        string? winner = null,
-        string? item = null,
+        string? q = null,
         int page = 1)
     {
         var user = await _userManager.GetUserAsync(User);
@@ -147,8 +164,7 @@ public class LootHistoryController : Controller
             SelectedLinkshellId = linkshellId,
             SelectedLinkshellName = linkshellName,
             SourceFilter = (source ?? "all").Trim().ToLowerInvariant(),
-            WinnerFilter = string.IsNullOrWhiteSpace(winner) ? null : winner.Trim(),
-            ItemFilter = string.IsNullOrWhiteSpace(item) ? null : item.Trim()
+            QueryFilter = string.IsNullOrWhiteSpace(q) ? null : q.Trim()
         };
 
         if (linkshellId is null || linkshellId == 0)
@@ -167,16 +183,13 @@ public class LootHistoryController : Controller
         viewModel.CanEdit = await ResolveCanAddLootAsync(membership);
 
         var entries = await LoadEntriesAsync(linkshellId.Value, viewModel.SourceFilter, user.TimeZone);
-        if (!string.IsNullOrWhiteSpace(viewModel.WinnerFilter))
+        if (!string.IsNullOrWhiteSpace(viewModel.QueryFilter))
         {
+            var needle = viewModel.QueryFilter;
             entries = entries
-                .Where(e => e.ItemWinner?.Contains(viewModel.WinnerFilter, StringComparison.OrdinalIgnoreCase) == true)
-                .ToList();
-        }
-        if (!string.IsNullOrWhiteSpace(viewModel.ItemFilter))
-        {
-            entries = entries
-                .Where(e => e.ItemName?.Contains(viewModel.ItemFilter, StringComparison.OrdinalIgnoreCase) == true)
+                .Where(e =>
+                    e.ItemWinner?.Contains(needle, StringComparison.OrdinalIgnoreCase) == true ||
+                    e.ItemName?.Contains(needle, StringComparison.OrdinalIgnoreCase) == true)
                 .ToList();
         }
 
@@ -292,7 +305,75 @@ public class LootHistoryController : Controller
         return await HandleEditPostAsync(lootDetailId, model, isTod: false);
     }
 
+    [HttpPost("/LootHistory/Tod/{lootDetailId:int}/Delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteTod(int lootDetailId, string? reason)
+    {
+        return await HandleDeletePostAsync(lootDetailId, reason, isTod: true);
+    }
+
+    [HttpPost("/LootHistory/Event/{lootDetailId:int}/Delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteEvent(int lootDetailId, string? reason)
+    {
+        return await HandleDeletePostAsync(lootDetailId, reason, isTod: false);
+    }
+
     // --- internals ---
+
+    // Deleting a loot row removes it and refunds the winner's DKP. The same
+    // CanAddLoot flag that gates Edit gates Delete (it's the "manage recorded
+    // loot" permission). A reason is optional from the list view; it defaults
+    // so the refund ledger entry is still auditable.
+    private async Task<IActionResult> HandleDeletePostAsync(int lootDetailId, string? reason, bool isTod)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        int? linkshellId;
+        if (isTod)
+        {
+            linkshellId = await _context.TodLootDetails
+                .Where(detail => detail.Id == lootDetailId)
+                .Select(detail => (int?)(detail.Tod != null ? detail.Tod.LinkshellId : 0))
+                .FirstOrDefaultAsync();
+        }
+        else
+        {
+            linkshellId = await _context.EventLootDetails
+                .Where(detail => detail.Id == lootDetailId)
+                .Select(detail => detail.EventHistory != null
+                    ? (int?)detail.EventHistory.LinkshellId
+                    : (detail.Event != null ? (int?)detail.Event.LinkshellId : null))
+                .FirstOrDefaultAsync();
+        }
+
+        if (!linkshellId.HasValue || linkshellId.Value == 0)
+        {
+            return NotFound();
+        }
+
+        if (!await CallerCanEditAsync(user.Id, linkshellId.Value))
+        {
+            return Forbid();
+        }
+
+        var deleteReason = string.IsNullOrWhiteSpace(reason)
+            ? "Loot record deleted via Loot History."
+            : reason.Trim();
+
+        var result = isTod
+            ? await _lootEditService.DeleteTodLootAsync(lootDetailId, user, deleteReason, DateTime.UtcNow, HttpContext.RequestAborted)
+            : await _lootEditService.DeleteEventLootAsync(lootDetailId, user, deleteReason, DateTime.UtcNow, HttpContext.RequestAborted);
+
+        TempData["LootHistoryMessage"] = result.Success
+            ? "Loot record deleted and DKP refunded."
+            : (result.ErrorMessage ?? "Loot delete failed.");
+        return RedirectToAction(nameof(Index));
+    }
 
     private async Task<IActionResult> HandleEditPostAsync(int lootDetailId, LootHistoryEditViewModel model, bool isTod)
     {

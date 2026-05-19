@@ -11,7 +11,8 @@ namespace LinkshellManagerDiscordApp.Services;
 //   Col C   = Per-row total (formula across all event columns)
 //   Col D+  = One column per event/audit:
 //             Row 1 = header  ("5/14 Audit: test")
-//             Row 2 = subheader ("Bids" in the existing pattern)
+//             Row 2 = subheader (ColumnSubheader, "Bids" -- the Main-tab
+//                     rollup keys off this; must be set, never blank)
 //             Row 3 = month/year ("May 2026")
 //             Row 4 = column total =SUM(<col>5:<col>200)
 //             Row 5+ = per-member value in that event's column
@@ -21,6 +22,11 @@ namespace LinkshellManagerDiscordApp.Services;
 public sealed class ManualPointsAppendService
 {
     private const string DefaultTabName = "ManualPoints";
+    // Row-2 category tag every ManualPoints column carries. The user's
+    // template Main-tab rollup keys off this subheader (it's the
+    // data-validation value shared by all columns), so app-created columns
+    // MUST set it -- an empty row 2 silently excludes the column from Main.
+    private const string ColumnSubheader = "Bids";
     private const int MemberStartRow = 5;          // first member row in column A
     private const int FirstEventColumn = 4;        // column D — earlier columns are A/B/C metadata
     private const int TotalFormulaEndRow = 200;    // safe upper bound for the SUM formula
@@ -265,10 +271,22 @@ public sealed class ManualPointsAppendService
                 new List<IList<object>>
                 {
                     new List<object> { header },
-                    new List<object> { string.Empty },
+                    new List<object> { ColumnSubheader },
                     new List<object> { monthYear },
                     new List<object> { totalFormula },
                 },
+                cancellationToken);
+        }
+        else
+        {
+            // Self-heal columns created before the subheader fix: a recompute
+            // (loot add/edit/delete on this day) rewrites row 2 so older
+            // ToD-loot columns start counting toward the Main-tab rollup.
+            await _sheets.WriteAsync(
+                linkshell.Id,
+                spreadsheetId,
+                $"{tab}!{colLetter}2",
+                new List<IList<object>> { new List<object> { ColumnSubheader } },
                 cancellationToken);
         }
 
@@ -334,6 +352,203 @@ public sealed class ManualPointsAppendService
             header, tab, colLetter, totalsByCharacter.Count, isNewColumn);
     }
 
+    // Event analogue of AppendTodLootDayAsync. AppendEventLootDeductionsAsync
+    // writes a CLOSED event's loot as a single ManualPoints column once at
+    // close (append-once, SheetAppendedAt-gated) — so a later Loot History
+    // edit/refund/delete of event loot would otherwise leave that column
+    // frozen. This RECOMPUTES the event's column from the current
+    // EventLootDetail rows (the post-close source of truth: they're preserved
+    // and re-parented to EventHistoryId at close), making it idempotent and
+    // self-correcting exactly like the ToD path — including blanking
+    // characters who no longer owe.
+    //
+    // The column is matched by the SAME row-1 header the close-time append
+    // wrote. Close used referenceDate = min(LootSpent.OccurredAt); every
+    // LootSpent entry's OccurredAt is set to the event end time, which is
+    // EventHistory.EndTime — so the header is reproduced deterministically
+    // from the EventHistory alone. Only event/loot columns built by this
+    // header are ever touched; ToD/auction/audit columns use different
+    // headers and are never clobbered.
+    public async Task RecomputeEventLootColumnAsync(int eventHistoryId, CancellationToken cancellationToken)
+    {
+        var history = await _db.EventHistories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(h => h.Id == eventHistoryId, cancellationToken);
+        if (history is null)
+        {
+            _logger.LogDebug("ManualPoints skip: event history {Id} not found.", eventHistoryId);
+            return;
+        }
+        if (history.EndTime is null)
+        {
+            _logger.LogDebug("ManualPoints skip: event history {Id} has no end time.", eventHistoryId);
+            return;
+        }
+
+        var linkshell = await _db.Linkshells.FirstOrDefaultAsync(l => l.Id == history.LinkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            _logger.LogDebug("ManualPoints skip: linkshell {Id} not found.", history.LinkshellId);
+            return;
+        }
+        if (!linkshell.SheetSyncEnabled
+            || string.IsNullOrWhiteSpace(linkshell.GoogleSpreadsheetId)
+            || string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
+        {
+            _logger.LogDebug("ManualPoints skip: linkshell {Id} not configured for sync.", history.LinkshellId);
+            return;
+        }
+
+        var tab = string.IsNullOrWhiteSpace(linkshell.ManualPointsTabName) ? DefaultTabName : linkshell.ManualPointsTabName!;
+        var spreadsheetId = linkshell.GoogleSpreadsheetId!;
+
+        // Header derived exactly as AppendEventLootDeductionsAsync did at
+        // close (referenceDate == event end == EventHistory.EndTime).
+        var referenceDate = history.EndTime.Value;
+        var datePart = referenceDate.ToString("M/d", CultureInfo.InvariantCulture);
+        var titlePart = (history.EventName ?? "Loot").Trim();
+        if (titlePart.Length > 30) titlePart = titlePart.Substring(0, 30);
+        var header = string.IsNullOrEmpty(titlePart) ? $"{datePart} Loot" : $"{datePart} {titlePart}";
+        var monthYear = referenceDate.ToString("MMM yyyy", CultureInfo.InvariantCulture);
+
+        // Recompute the per-character net deduction from the surviving loot
+        // rows. ActualDeductedDkp is the real amount removed; fall back to
+        // WinningDkpSpent. LootCouncil rows carry no DKP so they net to zero
+        // and drop out below.
+        var details = await _db.EventLootDetails
+            .AsNoTracking()
+            .Where(d => d.EventHistoryId == eventHistoryId && d.ItemWinner != null)
+            .Select(d => new { d.ItemWinner, d.ActualDeductedDkp, d.WinningDkpSpent })
+            .ToListAsync(cancellationToken);
+
+        var totalsByCharacter = details
+            .Select(d => new
+            {
+                Name = (d.ItemWinner ?? string.Empty).Trim(),
+                Amount = d.ActualDeductedDkp ?? (double?)d.WinningDkpSpent ?? 0d
+            })
+            .Where(x => x.Name.Length > 0 && x.Amount > 0)
+            .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => -g.Sum(x => x.Amount), StringComparer.OrdinalIgnoreCase);
+
+        var headerRows = await _sheets.ReadAsync(linkshell.Id, spreadsheetId, $"{tab}!1:1", cancellationToken);
+        var headerRow = headerRows is { Count: > 0 } ? headerRows[0] : new List<object>();
+        var columnIndex = -1;
+        for (var i = FirstEventColumn; i <= headerRow.Count; i++)
+        {
+            var cell = headerRow[i - 1]?.ToString();
+            if (!string.IsNullOrWhiteSpace(cell)
+                && string.Equals(cell.Trim(), header, StringComparison.OrdinalIgnoreCase))
+            {
+                columnIndex = i;
+                break;
+            }
+        }
+        var isNewColumn = columnIndex < 0;
+        if (isNewColumn && totalsByCharacter.Count == 0)
+        {
+            // Nothing to write and no column to clear (e.g. every loot row was
+            // deleted, or sync was off at close). Don't create an empty column.
+            _logger.LogDebug(
+                "ManualPoints skip: event history {Id} has no loot and no existing column.", eventHistoryId);
+            return;
+        }
+        if (isNewColumn)
+        {
+            columnIndex = FindFirstEmptyColumn(headerRow, FirstEventColumn);
+        }
+        var colLetter = ColumnIndexToLetter(columnIndex);
+
+        if (isNewColumn)
+        {
+            var totalFormula = $"=SUM({colLetter}{MemberStartRow}:{colLetter}{TotalFormulaEndRow})";
+            await _sheets.WriteAsync(
+                linkshell.Id,
+                spreadsheetId,
+                $"{tab}!{colLetter}1:{colLetter}4",
+                new List<IList<object>>
+                {
+                    new List<object> { header },
+                    new List<object> { ColumnSubheader },
+                    new List<object> { monthYear },
+                    new List<object> { totalFormula },
+                },
+                cancellationToken);
+        }
+        else
+        {
+            // Self-heal the row-2 subheader the Main-tab rollup keys off
+            // (matches the ToD recompute).
+            await _sheets.WriteAsync(
+                linkshell.Id,
+                spreadsheetId,
+                $"{tab}!{colLetter}2",
+                new List<IList<object>> { new List<object> { ColumnSubheader } },
+                cancellationToken);
+        }
+
+        var memberRows = await _sheets.ReadAsync(linkshell.Id, spreadsheetId, $"{tab}!A{MemberStartRow}:A", cancellationToken)
+            ?? new List<IList<object>>();
+        var nameToRow = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < memberRows.Count; i++)
+        {
+            var name = memberRows[i].Count > 0 ? memberRows[i][0]?.ToString() : null;
+            if (!string.IsNullOrWhiteSpace(name)) nameToRow.TryAdd(name!, MemberStartRow + i);
+        }
+        var nextAppendRow = MemberStartRow + memberRows.Count;
+
+        // Existing values in this column so a recompute can BLANK characters
+        // who no longer owe (refunded / deleted / edited to someone else).
+        IList<IList<object>> existingCol = new List<IList<object>>();
+        if (!isNewColumn && memberRows.Count > 0)
+        {
+            existingCol = await _sheets.ReadAsync(
+                linkshell.Id,
+                spreadsheetId,
+                $"{tab}!{colLetter}{MemberStartRow}:{colLetter}{MemberStartRow + memberRows.Count - 1}",
+                cancellationToken) ?? new List<IList<object>>();
+        }
+
+        foreach (var pair in totalsByCharacter)
+        {
+            if (!nameToRow.TryGetValue(pair.Key, out var row))
+            {
+                row = nextAppendRow++;
+                await _sheets.WriteAsync(
+                    linkshell.Id, spreadsheetId, $"{tab}!A{row}",
+                    new List<IList<object>> { new List<object> { pair.Key } },
+                    cancellationToken);
+                nameToRow[pair.Key] = row;
+            }
+            await _sheets.WriteAsync(
+                linkshell.Id, spreadsheetId, $"{tab}!{colLetter}{row}",
+                new List<IList<object>> { new List<object> { pair.Value } },
+                cancellationToken);
+        }
+
+        for (var i = 0; i < existingCol.Count; i++)
+        {
+            var name = memberRows.Count > i && memberRows[i].Count > 0
+                ? memberRows[i][0]?.ToString()
+                : null;
+            var hadValue = existingCol[i].Count > 0
+                && !string.IsNullOrWhiteSpace(existingCol[i][0]?.ToString());
+            if (!string.IsNullOrWhiteSpace(name)
+                && hadValue
+                && !totalsByCharacter.ContainsKey(name!.Trim()))
+            {
+                await _sheets.WriteAsync(
+                    linkshell.Id, spreadsheetId, $"{tab}!{colLetter}{MemberStartRow + i}",
+                    new List<IList<object>> { new List<object> { string.Empty } },
+                    cancellationToken);
+            }
+        }
+
+        _logger.LogInformation(
+            "ManualPoints event-loot recompute: {Header} -> {Tab}!{Col} ({Members} member rows, newColumn={New}).",
+            header, tab, colLetter, totalsByCharacter.Count, isNewColumn);
+    }
+
     // Shared write path: claims a brand-new column on the ManualPoints tab,
     // writes the header block (rows 1-4), looks up or appends each member's
     // row in column A, and writes their amount. Stamps SheetAppendedAt on
@@ -381,7 +596,7 @@ public sealed class ManualPointsAppendService
             new List<IList<object>>
             {
                 new List<object> { header },
-                new List<object> { string.Empty },
+                new List<object> { ColumnSubheader },
                 new List<object> { monthYear },
                 new List<object> { totalFormula },
             },

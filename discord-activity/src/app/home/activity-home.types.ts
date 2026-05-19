@@ -8,7 +8,6 @@ export const TAB_NAMES = [
   'dashboard',
   'profile',
   'linkshell',
-  'hnm',
   'timed-events',
   'window-events',
   'tods',

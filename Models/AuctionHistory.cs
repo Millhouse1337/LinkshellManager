@@ -33,5 +33,11 @@ public class AuctionHistory
 
     public DateTime ClosedAt { get; set; } = DateTime.UtcNow;
 
+    // Copied from Auction.DiscordChannelId at close time so the auction's
+    // Discord channel can have its results posted and then be deleted. Null
+    // when no per-auction channel was created.
+    [MaxLength(32)]
+    public string? DiscordChannelId { get; set; }
+
     public ICollection<AuctionItem> AuctionItems { get; set; } = new List<AuctionItem>();
 }

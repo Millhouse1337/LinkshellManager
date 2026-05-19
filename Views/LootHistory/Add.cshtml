@@ -38,10 +38,36 @@
         <div asp-validation-summary="ModelOnly" class="text-danger" style="margin-bottom:12px"></div>
 
         <div class="form-grid">
+            @{
+                var isCustomContext = !string.IsNullOrWhiteSpace(Model.Context)
+                    && !TodManagerViewModel.SupportedMonsters.Any(m =>
+                        string.Equals(m, Model.Context, StringComparison.OrdinalIgnoreCase));
+                var customContextValue = isCustomContext ? Model.Context : Model.CustomContext;
+            }
             <div class="field">
                 <label asp-for="Context">Source / monster <span class="muted">(optional)</span></label>
-                <input asp-for="Context" class="form-control" maxlength="256" placeholder="e.g. Fafnir, Sky, Manual" />
+                <select asp-for="Context" id="loot-source-select" class="form-select">
+                    <option value="">— select source —</option>
+                    @foreach (var monster in TodManagerViewModel.SupportedMonsters)
+                    {
+                        <option value="@monster"
+                                selected="@(!isCustomContext && string.Equals(monster, Model.Context, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                            @monster
+                        </option>
+                    }
+                    <option value="@TodManagerViewModel.OtherMonster" selected="@(isCustomContext ? "selected" : null)">
+                        Other (enter a source)
+                    </option>
+                </select>
                 <span class="muted" style="font-size:11px">Shown as the loot's Context in history.</span>
+            </div>
+
+            <div class="field@(isCustomContext ? "" : " d-none")" id="loot-custom-source-wrap">
+                <label asp-for="CustomContext">Custom source</label>
+                <input asp-for="CustomContext" id="loot-custom-source" class="form-control"
+                       maxlength="256" autocomplete="off" placeholder="e.g. Sky, Sea, Limbus"
+                       value="@customContextValue" />
+                <span asp-validation-for="CustomContext" class="text-danger"></span>
             </div>
 
             <div class="field">
@@ -54,13 +80,16 @@
                 <label asp-for="ItemWinner">Winner</label>
                 @if (Model.RosterCharacterNames.Any())
                 {
-                    <select asp-for="ItemWinner" class="form-select">
-                        <option value="">— select winner —</option>
+                    <input asp-for="ItemWinner" class="form-control" maxlength="256"
+                           list="loot-winner-options" autocomplete="off"
+                           placeholder="Type to filter, then pick a name…" />
+                    <datalist id="loot-winner-options">
                         @foreach (var name in Model.RosterCharacterNames)
                         {
-                            <option value="@name">@name</option>
+                            <option value="@name"></option>
                         }
-                    </select>
+                    </datalist>
+                    <span class="muted" style="font-size:11px">Start typing to filter the roster.</span>
                 }
                 else
                 {
@@ -83,3 +112,17 @@
         </div>
     </form>
 </div>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var sel = document.getElementById('loot-source-select');
+        var wrap = document.getElementById('loot-custom-source-wrap');
+        var box = document.getElementById('loot-custom-source');
+        if (!sel || !wrap || !box) { return; }
+        sel.addEventListener('change', function () {
+            var isOther = sel.value === '@TodManagerViewModel.OtherMonster';
+            wrap.classList.toggle('d-none', !isOther);
+            if (isOther) { box.focus(); } else { box.value = ''; }
+        });
+    })();
+</script>

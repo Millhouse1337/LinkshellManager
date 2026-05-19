@@ -39,6 +39,11 @@
         activeLinkshellType != LinkshellManagerDiscordApp.Models.LinkshellTypes.HnmOnly;
     var showAttendanceNav =
         activeLinkshellType != LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis;
+
+    // Feature Toggles (Customize page): unchecked hides the group. Fail-open
+    // to shown when there's no active linkshell, matching Allow(...) above.
+    var showMissionsNav = ViewData["ActiveEnableMissions"] as bool? ?? true;
+    var showEndgameNav = ViewData["ActiveEnableEndgame"] as bool? ?? true;
 }
 <aside class="sidebar">
     <a class="brand" asp-controller="Dashboard" asp-action="Index">
@@ -89,30 +94,36 @@
             }
         </div>
 
-        <button type="button" class="nav-item nav-group" data-target="#nav-missions">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 22V3l7 4 7-4v19"/></svg>
-            Missions
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-missions" class="nav-sub">
-            <a class="nav-sub-item" href="#">Rise of the Zilart</a>
-            <a class="nav-sub-item" href="#">Chains of Promathia</a>
-            <a class="nav-sub-item" href="#">Treasures of Aht Urhgan</a>
-        </div>
+        @if (showMissionsNav)
+        {
+            <button type="button" class="nav-item nav-group" data-target="#nav-missions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 22V3l7 4 7-4v19"/></svg>
+                Missions
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div id="nav-missions" class="nav-sub">
+                <a class="nav-sub-item" href="#">Rise of the Zilart</a>
+                <a class="nav-sub-item" href="#">Chains of Promathia</a>
+                <a class="nav-sub-item" href="#">Treasures of Aht Urhgan</a>
+            </div>
+        }
     </nav>
 
     <nav class="nav-section">
-        <button type="button" class="nav-item nav-group" data-target="#nav-endgame">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
-            End Game
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-endgame" class="nav-sub">
-            <a class="nav-sub-item" href="#">Sky</a>
-            <a class="nav-sub-item" href="#">Sea</a>
-            <a class="nav-sub-item" href="#">Dynamis</a>
-            <a class="nav-sub-item" href="#">Limbus</a>
-        </div>
+        @if (showEndgameNav)
+        {
+            <button type="button" class="nav-item nav-group" data-target="#nav-endgame">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+                End Game
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div id="nav-endgame" class="nav-sub">
+                <a class="nav-sub-item" href="#">Sky</a>
+                <a class="nav-sub-item" href="#">Sea</a>
+                <a class="nav-sub-item" href="#">Dynamis</a>
+                <a class="nav-sub-item" href="#">Limbus</a>
+            </div>
+        }
 
         <button type="button" class="nav-item nav-group @IsExpanded("Auction", "AuctionHistory")" data-target="#nav-auctions">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 4h14l-2 7H7z"/><path d="M6 11v9h12v-9"/></svg>

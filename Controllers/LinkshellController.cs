@@ -14,11 +14,16 @@ public class LinkshellController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly Services.DiscordTodBoardQueue _todBoardQueue;
 
-    public LinkshellController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public LinkshellController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        Services.DiscordTodBoardQueue todBoardQueue)
     {
         _context = context;
         _userManager = userManager;
+        _todBoardQueue = todBoardQueue;
     }
     public async Task<IActionResult> Index()
     {
@@ -331,10 +336,25 @@ public class LinkshellController : Controller
 
         var roles = await EnsureDefaultRolesAsync(target.Id, HttpContext.RequestAborted);
         var membership = await GetMembershipAsync(user.Id, target.Id);
-        return View(BuildCustomizeViewModel(
+        var vm = BuildCustomizeViewModel(
             target,
             manageableLinkshells,
-            CanRole(roles, membership?.Rank, role => role.CanManageRoles)));
+            CanRole(roles, membership?.Rank, role => role.CanManageRoles));
+        vm.DiscordWebhooks = await _context.LinkshellDiscordWebhooks
+            .Where(w => w.LinkshellId == target.Id)
+            .OrderBy(w => w.Id)
+            .Select(w => new DiscordWebhookInput
+            {
+                Name = w.Name,
+                Url = w.Url,
+                PostTodBoard = w.PostTodBoard,
+                PostDkpSpendLog = w.PostDkpSpendLog,
+                PostAttendanceSnapshot = w.PostAttendanceSnapshot,
+                PostAuctions = w.PostAuctions,
+            })
+            .ToListAsync();
+        EnsureWebhookRow(vm);
+        return View(vm);
     }
 
     [HttpPost]
@@ -374,17 +394,22 @@ public class LinkshellController : Controller
             ModelState.AddModelError(nameof(model.DkpRoundingIncrement), "Invalid DKP rounding increment.");
         }
 
-        // Discord webhook URL is optional; when present it must be a real
-        // Discord webhook endpoint so a typo can't silently swallow posts.
-        var trimmedWebhook = model.DiscordWebhookUrl?.Trim();
-        if (!string.IsNullOrEmpty(trimmedWebhook)
-            && (!Uri.TryCreate(trimmedWebhook, UriKind.Absolute, out var webhookUri)
-                || webhookUri.Scheme != Uri.UriSchemeHttps
-                || !webhookUri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase)
-                || !webhookUri.AbsolutePath.Contains("/api/webhooks/", StringComparison.OrdinalIgnoreCase)))
+        // Discord webhooks are optional; each row with a URL must point at a
+        // real Discord webhook endpoint so a typo can't silently swallow
+        // posts. Rows with a blank URL are ignored (treated as "remove").
+        model.DiscordWebhooks ??= new List<DiscordWebhookInput>();
+        for (var i = 0; i < model.DiscordWebhooks.Count; i++)
         {
-            ModelState.AddModelError(nameof(model.DiscordWebhookUrl),
-                "Enter a valid Discord channel webhook URL (https://discord.com/api/webhooks/...), or leave it blank.");
+            var url = model.DiscordWebhooks[i].Url?.Trim();
+            if (string.IsNullOrEmpty(url))
+            {
+                continue;
+            }
+            if (!IsValidDiscordWebhookUrl(url))
+            {
+                ModelState.AddModelError($"DiscordWebhooks[{i}].Url",
+                    "Enter a valid Discord channel webhook URL (https://discord.com/api/webhooks/...), or clear the row.");
+            }
         }
 
         if (!ModelState.IsValid)
@@ -400,6 +425,7 @@ public class LinkshellController : Controller
             model.LinkshellName = linkshell.LinkshellName;
             var roles = await EnsureDefaultRolesAsync(linkshell.Id, HttpContext.RequestAborted);
             model.CanManageRoles = CanRole(roles, membership?.Rank, role => role.CanManageRoles);
+            EnsureWebhookRow(model);
             return View(model);
         }
 
@@ -415,11 +441,72 @@ public class LinkshellController : Controller
         linkshell.EnableDkp      = model.EnableDkp;
         linkshell.EnableItems    = model.EnableItems;
         linkshell.EnableRevenue  = model.EnableRevenue;
-        linkshell.DiscordWebhookUrl = string.IsNullOrWhiteSpace(model.DiscordWebhookUrl)
-            ? null
-            : model.DiscordWebhookUrl.Trim();
+        // Upsert by URL so an existing webhook's TodBoardMessageId survives an
+        // edit (otherwise a blunt delete+recreate would orphan the live board
+        // message and post a duplicate). Rows whose URL is gone are deleted;
+        // unchanged URLs keep their Id + board message id and just refresh
+        // Name / PostTodBoard; new URLs are added.
+        var existingWebhooks = await _context.LinkshellDiscordWebhooks
+            .Where(w => w.LinkshellId == linkshell.Id)
+            .ToListAsync();
+        var keptUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in model.DiscordWebhooks)
+        {
+            var url = row.Url?.Trim();
+            if (string.IsNullOrEmpty(url))
+            {
+                continue;
+            }
+            keptUrls.Add(url);
+            var name = row.Name?.Trim();
+            // The UI is a single-purpose dropdown now; fan it back out to the
+            // Post* booleans the DB model / publishers still use. One purpose
+            // per channel (or none).
+            var purpose = row.Purpose?.Trim();
+            var postAttendanceSnapshot = string.Equals(
+                purpose, DiscordWebhookInput.PurposeDkpTracking, StringComparison.OrdinalIgnoreCase);
+            var postTodBoard = string.Equals(
+                purpose, DiscordWebhookInput.PurposePopTracker, StringComparison.OrdinalIgnoreCase);
+            var postDkpSpendLog = string.Equals(
+                purpose, DiscordWebhookInput.PurposeSpentPoints, StringComparison.OrdinalIgnoreCase);
+            var postAuctions = string.Equals(
+                purpose, DiscordWebhookInput.PurposeAuctions, StringComparison.OrdinalIgnoreCase);
+            var existing = existingWebhooks
+                .FirstOrDefault(w => string.Equals(w.Url, url, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                existing.Name = string.IsNullOrEmpty(name) ? null : name;
+                existing.PostTodBoard = postTodBoard;
+                existing.PostDkpSpendLog = postDkpSpendLog;
+                existing.PostAttendanceSnapshot = postAttendanceSnapshot;
+                existing.PostAuctions = postAuctions;
+            }
+            else
+            {
+                _context.LinkshellDiscordWebhooks.Add(new LinkshellDiscordWebhook
+                {
+                    LinkshellId = linkshell.Id,
+                    Name = string.IsNullOrEmpty(name) ? null : name,
+                    Url = url,
+                    PostTodBoard = postTodBoard,
+                    PostDkpSpendLog = postDkpSpendLog,
+                    PostAttendanceSnapshot = postAttendanceSnapshot,
+                    PostAuctions = postAuctions,
+                    CreatedAtUtc = DateTime.UtcNow,
+                });
+            }
+        }
+        var removed = existingWebhooks
+            .Where(w => !keptUrls.Contains(w.Url))
+            .ToList();
+        _context.LinkshellDiscordWebhooks.RemoveRange(removed);
 
         await _context.SaveChangesAsync();
+
+        // Refresh the live ToD board now so toggling a channel on (or editing
+        // its name) reflects immediately rather than waiting for the next ToD
+        // change. No-op when no board webhook is configured.
+        _todBoardQueue.Enqueue(linkshell.Id);
         TempData["CustomizeSaved"] = "Customization saved.";
         return RedirectToAction(nameof(Customize), new { id = linkshell.Id });
     }
@@ -442,10 +529,28 @@ public class LinkshellController : Controller
             EnableDkp             = target.EnableDkp,
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
-            DiscordWebhookUrl     = target.DiscordWebhookUrl,
             CanManageRoles        = canManageRoles,
             ManageableLinkshells  = manageableLinkshells.ToList()
         };
+
+    // Discord webhook URL must point at a real Discord webhook endpoint so a
+    // typo can't silently swallow snapshot posts.
+    private static bool IsValidDiscordWebhookUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase)
+        && uri.AbsolutePath.Contains("/api/webhooks/", StringComparison.OrdinalIgnoreCase);
+
+    // The editor always shows at least one (blank) webhook row so there's
+    // somewhere to type the first URL.
+    private static void EnsureWebhookRow(LinkshellCustomizeViewModel model)
+    {
+        model.DiscordWebhooks ??= new List<DiscordWebhookInput>();
+        if (model.DiscordWebhooks.Count == 0)
+        {
+            model.DiscordWebhooks.Add(new DiscordWebhookInput());
+        }
+    }
 
     private async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(
         int linkshellId,

@@ -78,7 +78,7 @@
             <label style="display:flex;gap:10px;align-items:flex-start">
                 <input type="radio" asp-for="LinkshellType" value="SkySeaDynamis" />
                 <span>
-                    <strong>Sky / Sea / Dynamis</strong>
+                    <strong>Sky/Sea/Dynamis etc..</strong>
                     <div style="color:var(--fg-3);font-size:12px">Timed-event experience only. Addon shows Create Event, timed presets, Queued &amp; Active events. No HNM presets; website hides the Attendance / Window Events nav.</div>
                 </span>
             </label>
@@ -106,55 +106,59 @@
         <div class="card-head">
             <div class="card-title">Loot Structure</div>
         </div>
-        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:12px;color:var(--fg-3)">Choose how loot is awarded for this linkshell.</div>
-            <label style="display:flex;gap:10px;align-items:flex-start">
-                <input type="radio" asp-for="LootStructure" value="Dkp" id="loot-dkp" />
-                <span>
-                    <strong>DKP</strong>
-                    <div style="color:var(--fg-3);font-size:12px">Time-based DKP earned per event, spent on loot.</div>
-                </span>
-            </label>
-            <label style="display:flex;gap:10px;align-items:flex-start">
-                <input type="radio" asp-for="LootStructure" value="LootCouncil" id="loot-council" />
-                <span>
-                    <strong>Loot Council</strong>
-                    <div style="color:var(--fg-3);font-size:12px">Leader decides; DKP is not tracked.</div>
-                </span>
-            </label>
-            <label style="display:flex;gap:10px;align-items:flex-start">
-                <input type="radio" asp-for="LootStructure" value="Hybrid" id="loot-hybrid" />
-                <span>
-                    <strong>Percentage Based</strong>
-                    <div style="color:var(--fg-3);font-size:12px">DKP earned as usual; loot deducts a percentage of the winner's balance.</div>
-                </span>
-            </label>
+        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
+                <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:10px">
+                    <div style="font-size:12px;color:var(--fg-3)">Choose how loot is awarded for this linkshell.</div>
+                    <label style="display:flex;gap:10px;align-items:flex-start">
+                        <input type="radio" asp-for="LootStructure" value="Dkp" id="loot-dkp" />
+                        <span>
+                            <strong>DKP</strong>
+                            <div style="color:var(--fg-3);font-size:12px">Time-based DKP earned per event, spent on loot.</div>
+                        </span>
+                    </label>
+                    <label style="display:flex;gap:10px;align-items:flex-start">
+                        <input type="radio" asp-for="LootStructure" value="LootCouncil" id="loot-council" />
+                        <span>
+                            <strong>Loot Council</strong>
+                            <div style="color:var(--fg-3);font-size:12px">Leader decides; DKP is not tracked.</div>
+                        </span>
+                    </label>
+                    <label style="display:flex;gap:10px;align-items:flex-start">
+                        <input type="radio" asp-for="LootStructure" value="Hybrid" id="loot-hybrid" />
+                        <span>
+                            <strong>Percentage Based</strong>
+                            <div style="color:var(--fg-3);font-size:12px">DKP earned as usual; loot deducts a percentage of the winner's balance.</div>
+                        </span>
+                    </label>
 
-            <div id="dkp-rounding-row" style="display:flex;flex-direction:column;gap:4px;max-width:320px;margin-top:8px">
-                <label asp-for="DkpRoundingIncrement">DKP rounding increment</label>
-                <select class="form-select" asp-for="DkpRoundingIncrement">
-                    <option value="Quarter">Nearest Quarter (0.25)</option>
-                    <option value="Half">Nearest Half (0.5)</option>
-                </select>
-            </div>
+                    <div id="dkp-rounding-row" style="display:flex;flex-direction:column;gap:4px;max-width:320px;margin-top:8px">
+                        <label asp-for="DkpRoundingIncrement">DKP rounding increment</label>
+                        <select class="form-select" asp-for="DkpRoundingIncrement">
+                            <option value="Quarter">Nearest Quarter (0.25)</option>
+                            <option value="Half">Nearest Half (0.5)</option>
+                        </select>
+                    </div>
+                </div>
 
-            <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;display:flex;flex-direction:column;gap:8px">
-                <div class="card-title" style="font-size:14px">Feature Toggles</div>
-                <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 16px">
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEndgame" /> Endgame tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableHnmSection" /> HNM tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableMissions" /> Missions tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableAuctions" /> Auctions tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableToDs" /> ToDs tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableEvents" /> Events tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableDkp" /> DKP tab</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableItems" /> Items tile on dashboard</label>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" asp-for="EnableRevenue" /> Revenue tile on dashboard</label>
+                <div style="flex:1 1 360px;display:flex;flex-direction:column;gap:8px;border-left:1px solid var(--border);padding-left:32px">
+                    <div class="card-title" style="font-size:14px">Feature Toggles</div>
+                    <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px">
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableEndgame" /> Endgame tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableHnmSection" /> HNM tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableMissions" /> Missions tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableAuctions" /> Auctions tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableToDs" /> ToDs tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableEvents" /> Events tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableDkp" /> DKP tab</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableItems" /> Items tile on dashboard</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableRevenue" /> Revenue tile on dashboard</label>
+                    </div>
                 </div>
             </div>
 
-            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+            <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
                 <button class="btn primary" type="submit">Save changes</button>
             </div>
         </div>
@@ -166,17 +170,66 @@
         </div>
         <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
             <div style="font-size:12px;color:var(--fg-3)">
-                When set, every <code>/lsm now</code> attendance snapshot is also posted to this
-                Discord channel as an embed grouped into parties (3&times;6 alliance layout).
-                In Discord: Channel Settings &rarr; Integrations &rarr; Webhooks &rarr; New Webhook &rarr; Copy URL.
+                Add as many channels as you like and give each one a name, then tick what each
+                channel should receive. In Discord: Channel Settings &rarr; Integrations &rarr;
+                Webhooks &rarr; New Webhook &rarr; Copy URL.
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px;max-width:520px">
-                <label asp-for="DiscordWebhookUrl">Channel webhook URL</label>
-                <input class="input" type="url" asp-for="DiscordWebhookUrl"
-                       placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
-                <span asp-validation-for="DiscordWebhookUrl" class="text-danger" style="font-size:12px"></span>
-                <span style="color:var(--fg-3);font-size:12px">Leave blank to disable Discord posting.</span>
+            <div id="discordWebhookRows" style="display:flex;flex-direction:column;gap:10px;max-width:680px">
+                @for (var i = 0; i < Model.DiscordWebhooks.Count; i++)
+                {
+                    <div class="discord-webhook-row" style="display:flex;gap:8px;align-items:flex-start">
+                        <div style="display:flex;flex-direction:column;gap:4px;width:170px">
+                            <input class="input" type="text" data-field="Name" name="DiscordWebhooks[@i].Name"
+                                   value="@Model.DiscordWebhooks[i].Name" placeholder="Name (e.g. Main LS)"
+                                   maxlength="64" autocomplete="off" />
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:4px;flex:1">
+                            <input class="input" type="url" data-field="Url" name="DiscordWebhooks[@i].Url"
+                                   value="@Model.DiscordWebhooks[i].Url"
+                                   placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
+                            @Html.ValidationMessage($"DiscordWebhooks[{i}].Url", new { @class = "text-danger", style = "font-size:12px" })
+                        </div>
+                        @{
+                            var wh = Model.DiscordWebhooks[i];
+                            var selectedPurpose = !string.IsNullOrEmpty(wh.Purpose)
+                                ? wh.Purpose!
+                                : DiscordWebhookInput.PurposeFor(
+                                    wh.PostAttendanceSnapshot, wh.PostTodBoard, wh.PostDkpSpendLog, wh.PostAuctions);
+                        }
+                        <select class="input" data-field="Purpose" name="DiscordWebhooks[@i].Purpose"
+                                style="width:170px;margin-top:0"
+                                title="What this channel receives">
+                            <option value="@DiscordWebhookInput.PurposeNone"
+                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeNone)">— No posts —</option>
+                            <option value="@DiscordWebhookInput.PurposeDkpTracking"
+                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeDkpTracking)">DKP Tracking</option>
+                            <option value="@DiscordWebhookInput.PurposePopTracker"
+                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposePopTracker)">Pop Tracker</option>
+                            <option value="@DiscordWebhookInput.PurposeSpentPoints"
+                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeSpentPoints)">Spent Points</option>
+                            <option value="@DiscordWebhookInput.PurposeAuctions"
+                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeAuctions)">Auctions</option>
+                        </select>
+                        <button type="button" class="btn ghost sm discord-webhook-remove"
+                                style="margin-top:5px" title="Remove this webhook">Remove</button>
+                    </div>
+                }
             </div>
+            <div>
+                <button type="button" class="btn ghost sm" id="discordWebhookAdd">+ Add webhook</button>
+            </div>
+            <span style="color:var(--fg-3);font-size:12px">
+                Clear a row's URL (or Remove it) and save to delete that webhook. No webhooks = Discord posting disabled.
+                Each channel receives one thing — pick it from the dropdown.
+                <strong>DKP Tracking</strong> posts each <code>/lsm now</code> attendance snapshot
+                (party-grouped embed) to that channel.
+                <strong>Pop Tracker</strong> keeps a single, always-current ToD list in that channel
+                (one message that's edited in place whenever a ToD changes — never re-posted).
+                <strong>Spent Points</strong> posts every DKP spend (auction win, loot-edit, adjustment)
+                to that channel as it happens — one embed per batch of spends.
+                <strong>Auctions</strong> posts an embed when an auction opens and another with the
+                final results when it closes.
+            </span>
             <div style="display:flex;justify-content:flex-end;margin-top:8px">
                 <button class="btn primary" type="submit">Save changes</button>
             </div>
@@ -184,6 +237,61 @@
     </div>
 
 </form>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var rows = document.getElementById('discordWebhookRows');
+        var addBtn = document.getElementById('discordWebhookAdd');
+        if (!rows || !addBtn) { return; }
+
+        // Renumber every row's bound fields (by data-field) so the model
+        // binder sees a contiguous DiscordWebhooks[0..n] collection after
+        // add/remove. Covers Name, Url and the Purpose <select>.
+        function reindex() {
+            var list = rows.querySelectorAll('.discord-webhook-row');
+            for (var i = 0; i < list.length; i++) {
+                list[i].querySelectorAll('[data-field]').forEach(function (el) {
+                    var f = el.getAttribute('data-field');
+                    var prop = /Hidden$/.test(f) ? f.replace(/Hidden$/, '') : f;
+                    el.setAttribute('name', 'DiscordWebhooks[' + i + '].' + prop);
+                });
+            }
+        }
+
+        // Reset a cloned row to empty so an added webhook starts blank.
+        function resetRow(row) {
+            row.querySelectorAll('input').forEach(function (input) {
+                if (input.type === 'checkbox') { input.checked = false; }
+                else { input.value = ''; }
+            });
+            // The Purpose dropdown back to its first option ("— No posts —").
+            row.querySelectorAll('select').forEach(function (sel) { sel.selectedIndex = 0; });
+            row.querySelectorAll('.text-danger').forEach(function (el) { el.textContent = ''; });
+        }
+
+        addBtn.addEventListener('click', function () {
+            var first = rows.querySelector('.discord-webhook-row');
+            if (!first) { return; }
+            var clone = first.cloneNode(true);
+            resetRow(clone);
+            rows.appendChild(clone);
+            reindex();
+        });
+
+        rows.addEventListener('click', function (evt) {
+            var btn = evt.target.closest('.discord-webhook-remove');
+            if (!btn) { return; }
+            var list = rows.querySelectorAll('.discord-webhook-row');
+            if (list.length > 1) {
+                btn.closest('.discord-webhook-row').remove();
+            } else {
+                // Keep one row; clearing its URL + saving deletes the webhook.
+                resetRow(list[0]);
+            }
+            reindex();
+        });
+    })();
+</script>
 
 <div class="card fade d2 permissions-config-card" id="permissionsConfigCard" style="margin-top:16px"
      data-linkshellid="@Model.LinkshellId"
@@ -881,7 +989,7 @@
                             if (addonPairStatusTag) addonPairStatusTag.className = 'tag success';
                             if (addonPairStatusText) addonPairStatusText.textContent = 'Paired';
                             loadTokens();
-                            setTimeout(function () { closeModal('addonPairModal'); }, 1000);
+                            setTimeout(function () { closeModal('addonPairModal'); }, 3000);
                         } else if (s.expired || s.found === false) {
                             clearInterval(pairStatusTimer); pairStatusTimer = null;
                         }

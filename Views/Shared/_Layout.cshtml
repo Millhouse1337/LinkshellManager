@@ -25,6 +25,10 @@
     string activeLinkshellType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Both;
     string? activeRole = null;
     LinkshellManagerDiscordApp.Models.LinkshellRole? activePermissions = null;
+    // Feature toggles that gate sidebar groups. Default true so a user with no
+    // active linkshell still sees the nav (matches the sidebar's fail-open).
+    bool activeEnableMissions = true;
+    bool activeEnableEndgame = true;
     if (currentUser is not null && currentUser.PrimaryLinkshellId.HasValue)
     {
         var activeLinkshellId = currentUser.PrimaryLinkshellId.Value;
@@ -35,6 +39,8 @@
         {
             activeLinkshellName = ls.LinkshellName;
             activeLinkshellType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Normalize(ls.LinkshellType);
+            activeEnableMissions = ls.EnableMissions;
+            activeEnableEndgame = ls.EnableEndgame;
             activeLinkshellInitials = string.Concat(
                 (ls.LinkshellName ?? "LS")
                     .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -71,6 +77,8 @@
 
     ViewData["ActiveLinkshellId"] = currentUser?.PrimaryLinkshellId;
     ViewData["ActiveLinkshellType"] = activeLinkshellType;
+    ViewData["ActiveEnableMissions"] = activeEnableMissions;
+    ViewData["ActiveEnableEndgame"] = activeEnableEndgame;
     ViewData["ActiveLinkshellName"] = activeLinkshellName;
     ViewData["ActiveLinkshellInitials"] = activeLinkshellInitials;
     ViewData["ActiveRole"] = activeRole;

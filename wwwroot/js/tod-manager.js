@@ -62,6 +62,31 @@
             });
         });
 
+        // Inline Party Setup panel: expand/collapse in place (no page nav).
+        // data-target is the panel row's element id (tod-setup-<id>).
+        function toggleSetupRow(id, forceOpen) {
+            const row = document.getElementById(id);
+            if (!row) return false;
+            if (forceOpen) { row.classList.remove('d-none'); }
+            else { row.classList.toggle('d-none'); }
+            return !row.classList.contains('d-none');
+        }
+        document.querySelectorAll('.tod-setup-toggle').forEach((button) => {
+            button.addEventListener('click', () => {
+                const target = button.getAttribute('data-target');
+                if (target) toggleSetupRow(target, false);
+            });
+        });
+        // After a sign-up / withdraw round-trip the controller redirects back
+        // with #tod-setup-<id> so the panel the member acted on re-opens.
+        if (window.location.hash && window.location.hash.indexOf('#tod-setup-') === 0) {
+            const id = window.location.hash.slice(1);
+            if (toggleSetupRow(id, true)) {
+                const el = document.getElementById(id);
+                if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+            }
+        }
+
         const lootDetailsTableBody = document.getElementById('loot-details-table-body');
         document.querySelectorAll('.view-loot-btn').forEach((button) => {
             button.addEventListener('click', async () => {
@@ -108,34 +133,12 @@
         const todForm = document.getElementById('tod-form');
         if (!todForm) { return; }
 
-        let characterNames = [];
-        try { characterNames = JSON.parse(todForm.dataset.characterNames || '[]'); } catch (e) { characterNames = []; }
-
         const qs = (sel) => todForm.querySelector(sel);
         const todTimeInput = qs('[name="Tod.Time"]');
         const monsterSelect = qs('[name="Tod.MonsterName"]');
         const cooldownSelect = qs('[name="Tod.Cooldown"]');
         const repopTimeInput = qs('[name="Tod.RepopTime"]');
         const intervalSelect = qs('[name="Tod.Interval"]');
-        const claimSelect = qs('[name="Tod.Claim"]');
-        const lootSection = document.getElementById('loot-section');
-        const lootRows = document.getElementById('loot-rows');
-        const lootControls = document.getElementById('loot-controls');
-        const submitOnlyRow = document.getElementById('submit-only-row');
-        const noLootInput = document.getElementById('no-loot');
-        const addLootRowButton = document.getElementById('add-loot-row');
-        const removeLootRowButton = document.getElementById('remove-loot-row');
-        const noLootButton = document.getElementById('no-loot-button');
-        const lootDetailsTableBody = document.getElementById('loot-details-table-body');
-
-        function escapeHtml(value) {
-            return String(value == null ? '' : value)
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;')
-                .replaceAll('"', '&quot;')
-                .replaceAll("'", '&#39;');
-        }
 
         function toDateTimeLocalValue(date) {
             const pad = (v) => String(v).padStart(2, '0');
@@ -147,6 +150,8 @@
             return cooldownSelect && cooldownSelect.value === '72 Hour' ? 72 : 22;
         }
 
+        // Picking a long-window HNM auto-fills its 72h / 1h defaults; anything
+        // else falls back to the common 22h / 10m. The user can still override.
         function applyMonsterDefaults() {
             if (!monsterSelect || !monsterSelect.value) return;
             if (longWindowMonsters.has(monsterSelect.value)) {
@@ -169,77 +174,6 @@
             repopTimeInput.value = toDateTimeLocalValue(repopTime);
         }
 
-        function buildWinnerOptions(selectedValue) {
-            selectedValue = selectedValue || '';
-            const options = ['<option value="">Select winner</option>'];
-            characterNames.forEach((name) => {
-                const selected = name === selectedValue ? ' selected' : '';
-                options.push('<option value="' + escapeHtml(name) + '"' + selected + '>' + escapeHtml(name) + '</option>');
-            });
-            return options.join('');
-        }
-
-        function createLootRow(itemName, itemWinner, winningDkpSpent) {
-            itemName = itemName || '';
-            itemWinner = itemWinner || '';
-            winningDkpSpent = winningDkpSpent || '';
-            const wrapper = document.createElement('div');
-            wrapper.className = 'loot-detail-row';
-            wrapper.style.cssText = 'padding:12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface)';
-            wrapper.innerHTML =
-                '<div class="field-row" style="margin-bottom:0">'
-                + '<div class="field"><label class="field-label">Item name</label>'
-                + '<input type="text" class="form-control" data-field="ItemName" value="' + escapeHtml(itemName) + '" /></div>'
-                + '<div class="field"><label class="field-label">Item winner</label>'
-                + '<select class="form-select" data-field="ItemWinner">' + buildWinnerOptions(itemWinner) + '</select></div>'
-                + '<div class="field"><label class="field-label">DKP spent</label>'
-                + '<input type="number" class="form-control" data-field="WinningDkpSpent" min="1" value="' + escapeHtml(winningDkpSpent) + '" /></div>'
-                + '</div>';
-            return wrapper;
-        }
-
-        function reindexLootRows() {
-            if (!lootRows) return;
-            lootRows.querySelectorAll('.loot-detail-row').forEach((row, index) => {
-                row.querySelector('[data-field="ItemName"]').setAttribute('name', 'TodLootDetails[' + index + '].ItemName');
-                row.querySelector('[data-field="ItemWinner"]').setAttribute('name', 'TodLootDetails[' + index + '].ItemWinner');
-                row.querySelector('[data-field="WinningDkpSpent"]').setAttribute('name', 'TodLootDetails[' + index + '].WinningDkpSpent');
-            });
-        }
-
-        function ensureLootRow() {
-            if (!lootRows) return;
-            if (!lootRows.querySelector('.loot-detail-row')) {
-                lootRows.appendChild(createLootRow());
-            }
-            reindexLootRows();
-        }
-
-        function resetLootRows() {
-            if (!lootRows) return;
-            lootRows.innerHTML = '';
-            ensureLootRow();
-        }
-
-        function toggleLootUi() {
-            if (!claimSelect) return;
-            const claimIsYes = claimSelect.value === 'true';
-            if (lootControls) lootControls.classList.toggle('d-none', !claimIsYes);
-            if (submitOnlyRow) submitOnlyRow.classList.toggle('d-none', claimIsYes);
-            if (!claimIsYes) {
-                if (noLootInput) noLootInput.value = 'false';
-                if (lootSection) lootSection.classList.add('d-none');
-                resetLootRows();
-                return;
-            }
-            if (noLootInput && noLootInput.value === 'true') {
-                if (lootSection) lootSection.classList.add('d-none');
-                return;
-            }
-            ensureLootRow();
-            if (lootSection) lootSection.classList.remove('d-none');
-        }
-
         if (monsterSelect) monsterSelect.addEventListener('change', () => { applyMonsterDefaults(); updateRepopTime(); });
         if (todTimeInput) {
             todTimeInput.addEventListener('change', updateRepopTime);
@@ -247,35 +181,11 @@
             todTimeInput.addEventListener('blur', updateRepopTime);
         }
         if (cooldownSelect) cooldownSelect.addEventListener('change', updateRepopTime);
-        if (claimSelect) claimSelect.addEventListener('change', toggleLootUi);
 
-        if (addLootRowButton) addLootRowButton.addEventListener('click', () => {
-            if (noLootInput) noLootInput.value = 'false';
-            if (lootSection) lootSection.classList.remove('d-none');
-            if (lootRows) lootRows.appendChild(createLootRow());
-            reindexLootRows();
-        });
-
-        if (removeLootRowButton) removeLootRowButton.addEventListener('click', () => {
-            if (!lootRows) return;
-            const rows = lootRows.querySelectorAll('.loot-detail-row');
-            if (rows.length > 1) rows[rows.length - 1].remove();
-            else if (rows.length === 1) {
-                rows[0].querySelectorAll('input, select').forEach((input) => { input.value = ''; });
-            }
-            reindexLootRows();
-        });
-
-        if (noLootButton) noLootButton.addEventListener('click', () => {
-            if (noLootInput) noLootInput.value = 'true';
-            if (lootSection) lootSection.classList.add('d-none');
-            resetLootRows();
-        });
-
-        ensureLootRow();
         applyMonsterDefaults();
         updateRepopTime();
-        toggleLootUi();
+        // Loot is recorded in the dedicated Loot section now, so the loot-row
+        // / claim-toggle wiring that used to live here was removed.
         // Countdown ticker is started by startCountdownTicker() above,
         // outside this form-only init block, so the Index page also gets
         // live countdowns when there's no `#tod-form` on the page.

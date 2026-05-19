@@ -93,6 +93,8 @@ public class PartySetupSlotInput
 
     [MaxLength(64)]
     public string? Label { get; set; }
+
+    public bool IsPartyLeader { get; set; }
 }
 
 public class PartySetupDetailsViewModel
@@ -121,12 +123,22 @@ public class PartySetupPartyView
 
 public class PartySetupSlotView
 {
+    // Underlying PartySetupSlot.Id, needed for sign-up / withdraw POSTs from
+    // the ToD Tracker's inline panel. 0 on the read-only Details page (not used
+    // there).
+    public int SlotId { get; set; }
     public int Position { get; set; }
     public string RequirementType { get; set; } = PartySetupSlotRequirementTypes.Any;
     public string? Role { get; set; }
     public string? MainJob { get; set; }
     public string? SubJob { get; set; }
     public string? Label { get; set; }
+    public bool IsPartyLeader { get; set; }
+
+    // Member sign-up state (null when the slot is open).
+    public string? SignedUpAppUserId { get; set; }
+    public string? SignedUpCharacterName { get; set; }
+    public bool IsOpen => string.IsNullOrEmpty(SignedUpAppUserId);
 
     // Human-readable requirement, e.g. "Any", "Tank", "RDM/NIN", "PLD (GHORN)".
     public string Display

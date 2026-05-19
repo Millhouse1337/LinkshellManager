@@ -51,7 +51,7 @@
                 <div>Status</div>
                 <div></div>
               </div>
-              @for (member of filteredDashboardMembers(); track member.id) {
+              @for (member of pagedDashboardMembers(); track member.id) {
                 <div class="ac-roster-row">
                   <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
                   <div class="ac-roster-name-cell">
@@ -134,6 +134,16 @@
                 <div class="ac-roster-row"><div style="grid-column: 1 / -1; color: var(--fg-3); font-size: 12px;">No members matched your search.</div></div>
               }
             </div>
+            @if (rosterTotalPages() > 1) {
+              <div class="table-paginator">
+                <button type="button" class="btn sm" [disabled]="rosterCurrentPage() <= 1" (click)="rosterPrev()">Prev</button>
+                <span class="muted" style="font-size:12px">
+                  Page {{ rosterCurrentPage() }} of {{ rosterTotalPages() }}
+                  &middot; {{ filteredDashboardMembers().length }} member{{ filteredDashboardMembers().length === 1 ? '' : 's' }}
+                </span>
+                <button type="button" class="btn sm" [disabled]="rosterCurrentPage() >= rosterTotalPages()" (click)="rosterNext()">Next</button>
+              </div>
+            }
           } @else {
             <div class="empty-state empty-state--compact">
               <div class="empty-state-desc">No members in this linkshell yet.</div>

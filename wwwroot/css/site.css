@@ -961,6 +961,53 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* On/off slider — a checkbox restyled as a pill toggle. Keeps the native
+   <input type="checkbox"> (so model binding / asp-for is unchanged); only
+   its appearance changes. Add class="switch" to opt in. */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.switch::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fg-3);
+  transform: translateY(-50%);
+  transition: transform .15s ease, background .15s ease;
+}
+.switch:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch:checked::before {
+  background: #fff;
+  transform: translate(16px, -50%);
+}
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.switch:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 .form-control:focus,
 .form-select:focus,
 textarea.form-control:focus {

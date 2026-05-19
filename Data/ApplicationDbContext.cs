@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,9 +7,176 @@ namespace LinkshellManagerDiscordApp.Data
 {
     public class ApplicationDbContext : IdentityDbContext<AppUser>
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        // Singleton queues; nullable + defaulted so design-time / reflection
+        // construction of the context never fails when they aren't supplied.
+        private readonly DiscordTodBoardQueue? _todBoardQueue;
+        private readonly DiscordDkpSpendQueue? _dkpSpendQueue;
+        private readonly DiscordAuctionChannelQueue? _auctionChannelQueue;
+
+        public ApplicationDbContext(
+            DbContextOptions<ApplicationDbContext> options,
+            DiscordTodBoardQueue? todBoardQueue = null,
+            DiscordDkpSpendQueue? dkpSpendQueue = null,
+            DiscordAuctionChannelQueue? auctionChannelQueue = null)
             : base(options)
         {
+            _todBoardQueue = todBoardQueue;
+            _dkpSpendQueue = dkpSpendQueue;
+            _auctionChannelQueue = auctionChannelQueue;
+        }
+
+        // Distinct linkshell ids of Tod rows changed in the current
+        // SaveChanges, captured pre-save (entry states reset afterwards) and
+        // enqueued only on a successful commit so the live Discord ToD board
+        // rebuilds on every mutation path without per-controller wiring.
+        private List<int> CollectChangedTodLinkshellIds()
+        {
+            if (_todBoardQueue is null)
+            {
+                return new List<int>();
+            }
+            var ids = new HashSet<int>();
+            foreach (var entry in ChangeTracker.Entries<Tod>())
+            {
+                var changed = entry.State is EntityState.Added
+                    or EntityState.Modified
+                    or EntityState.Deleted;
+                if (changed && entry.Entity.LinkshellId > 0)
+                {
+                    ids.Add(entry.Entity.LinkshellId);
+                }
+            }
+            return ids.ToList();
+        }
+
+        private void EnqueueTodBoardRefreshes(IReadOnlyList<int> linkshellIds)
+        {
+            if (_todBoardQueue is null)
+            {
+                return;
+            }
+            foreach (var id in linkshellIds)
+            {
+                _todBoardQueue.Enqueue(id);
+            }
+        }
+
+        // New DKP-spend ledger rows (any negative Amount — auction win,
+        // loot-edit, negative adjustment/audit). Captured pre-save as entity
+        // references because the db-generated Id isn't known until after the
+        // commit; the id is read and enqueued only on success so the DKP
+        // spend log fires from every spend path without per-controller wiring.
+        private List<DkpLedgerEntry> CollectAddedDkpSpends()
+        {
+            if (_dkpSpendQueue is null)
+            {
+                return new List<DkpLedgerEntry>();
+            }
+            var spends = new List<DkpLedgerEntry>();
+            foreach (var entry in ChangeTracker.Entries<DkpLedgerEntry>())
+            {
+                if (entry.State == EntityState.Added
+                    && entry.Entity.Amount < 0
+                    && entry.Entity.LinkshellId > 0)
+                {
+                    spends.Add(entry.Entity);
+                }
+            }
+            return spends;
+        }
+
+        private void EnqueueDkpSpends(IReadOnlyList<DkpLedgerEntry> spends)
+        {
+            if (_dkpSpendQueue is null)
+            {
+                return;
+            }
+            foreach (var spend in spends)
+            {
+                if (spend.Id > 0)
+                {
+                    _dkpSpendQueue.Enqueue(spend.Id);
+                }
+            }
+        }
+
+        // Newly-created auctions (→ post an "auction opened" embed) and
+        // newly-created auction histories (→ post the "closed" results embed)
+        // to the linkshell's Auctions webhook. Only *Added* rows are collected.
+        // The publisher no-ops when no Auctions webhook is configured.
+        private (List<Auction> created, List<AuctionHistory> closed) CollectAuctionChannelWork()
+        {
+            if (_auctionChannelQueue is null)
+            {
+                return (new List<Auction>(), new List<AuctionHistory>());
+            }
+            var created = new List<Auction>();
+            foreach (var entry in ChangeTracker.Entries<Auction>())
+            {
+                if (entry.State == EntityState.Added && entry.Entity.LinkshellId > 0)
+                {
+                    created.Add(entry.Entity);
+                }
+            }
+            var closed = new List<AuctionHistory>();
+            foreach (var entry in ChangeTracker.Entries<AuctionHistory>())
+            {
+                if (entry.State == EntityState.Added && entry.Entity.LinkshellId > 0)
+                {
+                    closed.Add(entry.Entity);
+                }
+            }
+            return (created, closed);
+        }
+
+        private void EnqueueAuctionChannelWork(
+            IReadOnlyList<Auction> created, IReadOnlyList<AuctionHistory> closed)
+        {
+            if (_auctionChannelQueue is null)
+            {
+                return;
+            }
+            foreach (var auction in created)
+            {
+                if (auction.Id > 0)
+                {
+                    _auctionChannelQueue.Enqueue(
+                        new AuctionChannelJob(AuctionChannelJobKind.Create, auction.Id));
+                }
+            }
+            foreach (var history in closed)
+            {
+                if (history.Id > 0)
+                {
+                    _auctionChannelQueue.Enqueue(
+                        new AuctionChannelJob(AuctionChannelJobKind.Close, history.Id));
+                }
+            }
+        }
+
+        public override async Task<int> SaveChangesAsync(
+            bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            var affected = CollectChangedTodLinkshellIds();
+            var dkpSpends = CollectAddedDkpSpends();
+            var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
+            var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            EnqueueTodBoardRefreshes(affected);
+            EnqueueDkpSpends(dkpSpends);
+            EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
+            return result;
+        }
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            var affected = CollectChangedTodLinkshellIds();
+            var dkpSpends = CollectAddedDkpSpends();
+            var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
+            var result = base.SaveChanges(acceptAllChangesOnSuccess);
+            EnqueueTodBoardRefreshes(affected);
+            EnqueueDkpSpends(dkpSpends);
+            EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
+            return result;
         }
 
         public DbSet<DiscordActivityUser> DiscordActivityUsers => Set<DiscordActivityUser>();
@@ -53,6 +221,9 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<PendingAttendanceWindowMemberSubmission> PendingAttendanceWindowMemberSubmissions => Set<PendingAttendanceWindowMemberSubmission>();
         public DbSet<PendingAttendanceSnapshotSubmission> PendingAttendanceSnapshotSubmissions => Set<PendingAttendanceSnapshotSubmission>();
         public DbSet<PendingAttendanceSnapshotEntry> PendingAttendanceSnapshotEntries => Set<PendingAttendanceSnapshotEntry>();
+        public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
+        public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
+        public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -508,6 +679,50 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.LinkedEventId)
                     .OnDelete(DeleteBehavior.SetNull);
             });
+
+            builder.Entity<ClaimShieldCapture>(entity =>
+            {
+                entity.ToTable("ClaimShieldCaptures");
+                entity.Property(item => item.MonsterName).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.CapturedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.CapturedMessage).HasMaxLength(512);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasMany(item => item.Members)
+                    .WithOne(member => member.Capture)
+                    .HasForeignKey(member => member.CaptureId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
+            });
+
+            builder.Entity<ClaimShieldCaptureMember>(entity =>
+            {
+                entity.ToTable("ClaimShieldCaptureMembers");
+                entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.HasIndex(item => item.CaptureId);
+            });
+
+            builder.Entity<LinkshellDiscordWebhook>(entity =>
+            {
+                entity.ToTable("LinkshellDiscordWebhooks");
+                entity.Property(item => item.Name).HasMaxLength(64);
+                entity.Property(item => item.Url).HasMaxLength(512).IsRequired();
+                entity.Property(item => item.TodBoardMessageId).HasMaxLength(32);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany(linkshell => linkshell.DiscordWebhooks)
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => item.LinkshellId);
+            });
+
+
+            builder.Entity<Auction>()
+                .Property(item => item.DiscordChannelId).HasMaxLength(32);
+            builder.Entity<AuctionHistory>()
+                .Property(item => item.DiscordChannelId).HasMaxLength(32);
         }
     }
 }

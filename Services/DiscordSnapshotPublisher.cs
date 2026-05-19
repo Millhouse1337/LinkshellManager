@@ -48,24 +48,19 @@ public sealed class DiscordSnapshotPublisher
             return;
         }
 
-        var webhookUrl = await _db.Linkshells
+        // Snapshots are opt-in per channel via the "DKP Tracking" toggle
+        // (PostAttendanceSnapshot) — they no longer fan out to every webhook.
+        var webhooks = await _db.LinkshellDiscordWebhooks
             .AsNoTracking()
-            .Where(l => l.Id == snapshot.LinkshellId)
-            .Select(l => l.DiscordWebhookUrl)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (string.IsNullOrWhiteSpace(webhookUrl))
+            .Where(w => w.LinkshellId == snapshot.LinkshellId
+                        && w.PostAttendanceSnapshot
+                        && w.Url != null && w.Url != "")
+            .OrderBy(w => w.Id)
+            .Select(w => new { w.Name, w.Url })
+            .ToListAsync(cancellationToken);
+        if (webhooks.Count == 0)
         {
-            // Discord posting not configured for this linkshell -- nothing to do.
-            return;
-        }
-
-        if (!Uri.TryCreate(webhookUrl.Trim(), UriKind.Absolute, out var uri)
-            || uri.Scheme != Uri.UriSchemeHttps
-            || !uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogWarning(
-                "Linkshell {LinkshellId} has a non-Discord webhook URL; skipping snapshot {SnapshotId}.",
-                snapshot.LinkshellId, snapshotId);
+            // No channel opted into snapshot posting -- nothing to do.
             return;
         }
 
@@ -80,14 +75,48 @@ public sealed class DiscordSnapshotPublisher
 
         var client = _httpClientFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(15);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var response = await client.PostAsync(uri, content, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
+        // Fan out to every configured webhook. Each post is independent and
+        // best-effort: a failure is logged but NOT rethrown, because the
+        // background service retries the whole PublishAsync — rethrowing
+        // after some webhooks already succeeded would double-post to them
+        // (Discord webhooks are not idempotent).
+        foreach (var webhook in webhooks)
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException(
-                $"Discord webhook returned {(int)response.StatusCode} for snapshot {snapshotId}: {Truncate(body, 300)}");
+            var rawUrl = webhook.Url?.Trim();
+            if (string.IsNullOrEmpty(rawUrl)
+                || !Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri)
+                || uri.Scheme != Uri.UriSchemeHttps
+                || !uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Linkshell {LinkshellId} webhook \"{WebhookName}\" has a non-Discord URL; skipping snapshot {SnapshotId} for it.",
+                    snapshot.LinkshellId, webhook.Name ?? "(unnamed)", snapshotId);
+                continue;
+            }
+
+            try
+            {
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync(uri, content, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogWarning(
+                        "Discord webhook \"{WebhookName}\" returned {Status} for snapshot {SnapshotId}: {Body}",
+                        webhook.Name ?? "(unnamed)", (int)response.StatusCode, snapshotId, Truncate(body, 300));
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed posting snapshot {SnapshotId} to Discord webhook \"{WebhookName}\".",
+                    snapshotId, webhook.Name ?? "(unnamed)");
+            }
         }
     }
 

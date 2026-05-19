@@ -112,11 +112,110 @@ public class PartySetupController : Controller
                                     Role = s.Role,
                                     MainJob = s.MainJob,
                                     SubJob = s.SubJob,
-                                    Label = s.Label
+                                    Label = s.Label,
+                                    IsPartyLeader = s.IsPartyLeader
                                 }).ToList()
                         }).ToList()
                 }).ToList()
         });
+    }
+
+    // Member self-service: claim an open slot in an assigned setup from the
+    // ToD Tracker's inline panel. Any linkshell member may sign up; you hold
+    // at most one slot per setup (signing up moves you off any other slot in
+    // the same setup so you can switch roles cleanly). `id` = PartySetup id,
+    // `slotId` = PartySetupSlot id.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SignUp(int id, int slotId)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null) return Challenge();
+
+        var slot = await _context.PartySetupSlots
+            .Include(s => s.Party!).ThenInclude(p => p.Alliance!).ThenInclude(a => a.PartySetup!)
+            .FirstOrDefaultAsync(s => s.Id == slotId);
+        var setup = slot?.Party?.Alliance?.PartySetup;
+        if (slot is null || setup is null || setup.Id != id) return NotFound();
+        if (!await HasLinkshellAccessAsync(user.Id, setup.LinkshellId)) return Forbid();
+
+        if (!string.IsNullOrEmpty(slot.SignedUpAppUserId) && slot.SignedUpAppUserId != user.Id)
+        {
+            TempData["PartySetupMessage"] =
+                $"That slot was just taken by {slot.SignedUpCharacterName ?? "another member"}.";
+            return RedirectBack(setup.Id);
+        }
+
+        // Snapshot the member's character name in this linkshell (fall back to
+        // their profile name) so the panel renders without extra joins.
+        var characterName = await _context.AppUserLinkshells
+            .Where(l => l.AppUserId == user.Id && l.LinkshellId == setup.LinkshellId)
+            .Select(l => l.CharacterName)
+            .FirstOrDefaultAsync();
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            characterName = user.CharacterName ?? user.UserName ?? "Member";
+        }
+
+        // One slot per setup: release any other slot in this setup the member
+        // currently holds before claiming the new one.
+        var heldElsewhere = await _context.PartySetupSlots
+            .Where(s => s.SignedUpAppUserId == user.Id
+                        && s.Party!.Alliance!.PartySetupId == setup.Id
+                        && s.Id != slot.Id)
+            .ToListAsync();
+        foreach (var held in heldElsewhere)
+        {
+            held.SignedUpAppUserId = null;
+            held.SignedUpCharacterName = null;
+            held.SignedUpAtUtc = null;
+        }
+
+        slot.SignedUpAppUserId = user.Id;
+        slot.SignedUpCharacterName = characterName;
+        slot.SignedUpAtUtc = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        TempData["PartySetupMessage"] = $"Signed up as {characterName} for {setup.Name}.";
+        return RedirectBack(setup.Id);
+    }
+
+    // Release a slot. The member who holds it can withdraw themselves; an
+    // officer with CanManageParties can clear anyone's sign-up.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Withdraw(int id, int slotId)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null) return Challenge();
+
+        var slot = await _context.PartySetupSlots
+            .Include(s => s.Party!).ThenInclude(p => p.Alliance!).ThenInclude(a => a.PartySetup!)
+            .FirstOrDefaultAsync(s => s.Id == slotId);
+        var setup = slot?.Party?.Alliance?.PartySetup;
+        if (slot is null || setup is null || setup.Id != id) return NotFound();
+        if (!await HasLinkshellAccessAsync(user.Id, setup.LinkshellId)) return Forbid();
+
+        var isHolder = slot.SignedUpAppUserId == user.Id;
+        if (!isHolder && !await ResolveCanManagePartiesAsync(user.Id, setup.LinkshellId))
+        {
+            return Forbid();
+        }
+
+        slot.SignedUpAppUserId = null;
+        slot.SignedUpCharacterName = null;
+        slot.SignedUpAtUtc = null;
+        await _context.SaveChangesAsync();
+
+        TempData["PartySetupMessage"] = "Slot is open again.";
+        return RedirectBack(setup.Id);
+    }
+
+    // Return to the ToD Tracker with a fragment so the JS re-opens that
+    // setup's inline panel (it's collapsed by default after a full reload).
+    private IActionResult RedirectBack(int setupId)
+    {
+        return Redirect($"{Url.Action("Index", "Tod")}#tod-setup-{setupId}");
     }
 
     [HttpGet]
@@ -306,23 +405,10 @@ public class PartySetupController : Controller
             .FirstOrDefaultAsync(ps => ps.Id == id);
     }
 
-    private static List<PartySetupSlotInput> SeedSlots()
-    {
-        var slots = new List<PartySetupSlotInput>();
-        for (var slotIndex = 0; slotIndex < 6; slotIndex++)
-        {
-            slots.Add(new PartySetupSlotInput
-            {
-                AllianceIndex = 0,
-                PartyIndex = 0,
-                SlotIndex = slotIndex,
-                AllianceName = "Alliance 1",
-                PartyName = "Party 1",
-                RequirementType = PartySetupSlotRequirementTypes.Any
-            });
-        }
-        return slots;
-    }
+    // A brand-new setup starts with an empty Alliance 1 / Party 1 (no slots);
+    // the editor scaffolds that shell client-side and the user adds slots on
+    // demand. No seed rows are posted until the user clicks "Add slot".
+    private static List<PartySetupSlotInput> SeedSlots() => new();
 
     private static List<PartySetupSlotInput> FlattenTree(PartySetup partySetup)
     {
@@ -350,7 +436,8 @@ public class PartySetupController : Controller
                         Role = slot.Role,
                         MainJob = slot.MainJob,
                         SubJob = slot.SubJob,
-                        Label = slot.Label
+                        Label = slot.Label,
+                        IsPartyLeader = slot.IsPartyLeader
                     });
                 }
             }
@@ -401,6 +488,16 @@ public class PartySetupController : Controller
                     slotSort++;
                 }
 
+                // At most one leader per party: keep the first flagged slot
+                // (by display order), clear any extras a crafted post slipped in.
+                var leaderSeen = false;
+                foreach (var s in party.Slots.OrderBy(s => s.SortOrder))
+                {
+                    if (!s.IsPartyLeader) continue;
+                    if (leaderSeen) s.IsPartyLeader = false;
+                    else leaderSeen = true;
+                }
+
                 alliance.Parties.Add(party);
                 partySort++;
             }
@@ -412,27 +509,59 @@ public class PartySetupController : Controller
         return alliances;
     }
 
+    // Each slot exposes Role + Main job + Sub job dropdowns. The stored
+    // requirement is derived by precedence: a specific main job => Job
+    // (with optional sub job); else a generic role => Role; else Any.
+    // Invalid/blank picks fall through safely. Label is unused by this UI.
     private static PartySetupSlot MapSlot(PartySetupSlotInput input, int sortOrder)
     {
-        var requirement = ValidRequirementTypes.Contains(input.RequirementType ?? string.Empty)
-            ? input.RequirementType!.Trim()
-            : PartySetupSlotRequirementTypes.Any;
+        var role = input.Role?.Trim();
+        var mainJob = input.MainJob?.Trim();
+        var subJob = input.SubJob?.Trim();
+
+        // "Any Role" is the editor's explicit "anything goes" sentinel. It is
+        // not a real role (not in ValidRoles) — store it as an open Any slot
+        // with no role/job constraints rather than a Role requirement.
+        if (string.Equals(role, "Any Role", StringComparison.OrdinalIgnoreCase))
+        {
+            role = null;
+        }
+
+        var hasMainJob = !string.IsNullOrWhiteSpace(mainJob) && ValidMainJobs.Contains(mainJob!);
+        var hasRole = !string.IsNullOrWhiteSpace(role) && ValidRoles.Contains(role!);
 
         var slot = new PartySetupSlot
         {
             SortOrder = sortOrder,
-            RequirementType = requirement,
-            Label = string.IsNullOrWhiteSpace(input.Label) ? null : input.Label.Trim()
+            Label = null,
+            IsPartyLeader = input.IsPartyLeader
         };
 
-        if (string.Equals(requirement, PartySetupSlotRequirementTypes.Role, StringComparison.OrdinalIgnoreCase))
+        // The three dropdowns (Role / Main job / Sub job) are independent: a
+        // slot can be e.g. "Tank + PLD". Persist the picked Role whenever it's
+        // valid, regardless of whether a job is also chosen, so it round-trips
+        // back into the editor. RequirementType is still derived by precedence
+        // (Job > Role > Any) for the read-only Details requirement string.
+        if (hasRole)
         {
-            slot.Role = input.Role?.Trim();
+            slot.Role = role;
         }
-        else if (string.Equals(requirement, PartySetupSlotRequirementTypes.Job, StringComparison.OrdinalIgnoreCase))
+
+        if (hasMainJob)
         {
-            slot.MainJob = input.MainJob?.Trim();
-            slot.SubJob = string.IsNullOrWhiteSpace(input.SubJob) ? null : input.SubJob.Trim();
+            slot.RequirementType = PartySetupSlotRequirementTypes.Job;
+            slot.MainJob = mainJob;
+            slot.SubJob = (!string.IsNullOrWhiteSpace(subJob) && ValidSubJobs.Contains(subJob!))
+                ? subJob
+                : null;
+        }
+        else if (hasRole)
+        {
+            slot.RequirementType = PartySetupSlotRequirementTypes.Role;
+        }
+        else
+        {
+            slot.RequirementType = PartySetupSlotRequirementTypes.Any;
         }
 
         return slot;
@@ -466,6 +595,17 @@ public class PartySetupController : Controller
         if (overfilledAlliance)
         {
             ModelState.AddModelError(string.Empty, "An alliance can have at most 3 parties.");
+            return;
+        }
+
+        // An FFXI party is at most 6 slots. The editor caps this in the UI;
+        // guard server-side too so a crafted post can't exceed it.
+        var overfilledParty = model.Slots
+            .GroupBy(s => new { s.AllianceIndex, s.PartyIndex })
+            .Any(g => g.Count() > 6);
+        if (overfilledParty)
+        {
+            ModelState.AddModelError(string.Empty, "A party can have at most 6 slots.");
             return;
         }
 
