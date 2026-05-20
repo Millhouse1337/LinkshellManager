@@ -149,8 +149,16 @@ else
                                                         @foreach (var slot in party.Slots)
                                                         {
                                                             var mine = !slot.IsOpen && slot.SignedUpAppUserId == Model.CurrentAppUserId;
-                                                            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border)">
-                                                                <span style="flex:1;color:var(--fg-1);font-size:13px">
+                                                            // The slot's hard requirements drive which sign-up inputs to
+                                                            // show. A field the slot already pins is hidden (the controller
+                                                            // takes the slot's value over any crafted form post); a field
+                                                            // the slot leaves open is rendered as a dropdown the member
+                                                            // fills in. Sub is optional even when unspecified.
+                                                            var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
+                                                            var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
+                                                            var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
+                                                            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);flex-wrap:wrap">
+                                                                <span style="flex:1;min-width:120px;color:var(--fg-1);font-size:13px">
                                                                     @slot.Display
                                                                     @if (slot.IsPartyLeader)
                                                                     {
@@ -159,14 +167,51 @@ else
                                                                 </span>
                                                                 @if (slot.IsOpen)
                                                                 {
-                                                                    <form asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
+                                                                    <form asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post"
+                                                                          style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                                                                         @Html.AntiForgeryToken()
+                                                                        @if (!slotRequiresRole)
+                                                                        {
+                                                                            <select name="role" required class="form-select" style="height:30px;max-width:120px">
+                                                                                <option value="">Role…</option>
+                                                                                @foreach (var r in Model.SignUpRoleOptions)
+                                                                                {
+                                                                                    <option value="@r">@r</option>
+                                                                                }
+                                                                            </select>
+                                                                        }
+                                                                        @if (!slotRequiresMain)
+                                                                        {
+                                                                            <select name="mainJob" required class="form-select" style="height:30px;max-width:100px">
+                                                                                <option value="">Main…</option>
+                                                                                @foreach (var j in Model.SignUpMainJobOptions)
+                                                                                {
+                                                                                    <option value="@j">@j</option>
+                                                                                }
+                                                                            </select>
+                                                                        }
+                                                                        @if (!slotRequiresSub)
+                                                                        {
+                                                                            <select name="subJob" class="form-select" style="height:30px;max-width:110px">
+                                                                                <option value="">Sub (opt)</option>
+                                                                                @foreach (var j in Model.SignUpSubJobOptions)
+                                                                                {
+                                                                                    <option value="@j">@j</option>
+                                                                                }
+                                                                            </select>
+                                                                        }
                                                                         <button type="submit" class="btn sm primary">Sign up</button>
                                                                     </form>
                                                                 }
                                                                 else if (mine)
                                                                 {
-                                                                    <span class="tag accent">@slot.SignedUpCharacterName (you)</span>
+                                                                    <span class="tag accent">
+                                                                        @slot.SignedUpCharacterName (you)
+                                                                        @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                        {
+                                                                            <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
+                                                                        }
+                                                                    </span>
                                                                     <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
                                                                         @Html.AntiForgeryToken()
                                                                         <button type="submit" class="btn sm danger-outline">Withdraw</button>
@@ -174,7 +219,13 @@ else
                                                                 }
                                                                 else
                                                                 {
-                                                                    <span class="tag">@slot.SignedUpCharacterName</span>
+                                                                    <span class="tag">
+                                                                        @slot.SignedUpCharacterName
+                                                                        @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                        {
+                                                                            <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
+                                                                        }
+                                                                    </span>
                                                                     @if (Model.CanManagePartiesForSelected)
                                                                     {
                                                                         <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline"

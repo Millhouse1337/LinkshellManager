@@ -40,8 +40,8 @@
     </div>
 </div>
 
-<div class="grid fade d2">
-    <div class="col">
+<div class="fade d2" style="display:flex;flex-direction:column;gap:16px">
+    <div>
         <div class="card">
             <div class="card-head">
                 <div class="card-title">Overview</div>
@@ -58,7 +58,7 @@
             </div>
         </div>
     </div>
-    <div class="col">
+    <div>
         <div class="card">
             <div class="card-head">
                 <div class="card-title">Roster</div>
@@ -69,37 +69,121 @@
             }
             else
             {
-                <div class="roster-head">
-                    <div></div>
-                    <div>Character</div>
-                    <div>Rank</div>
-                    <div style="text-align:right">DKP</div>
-                    <div>Status</div>
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+                    <input id="rosterSearch" type="text" class="input"
+                           placeholder="Filter roster (character, rank, status…)…"
+                           style="flex:1;min-width:200px" maxlength="64" autocomplete="off" />
+                    <span id="rosterCount" style="font-size:12px;color:var(--fg-3);white-space:nowrap"></span>
                 </div>
-                @foreach (var member in Model.AppUserLinkshells.OrderBy(m => m.CharacterName))
-                {
-                    var name = member.CharacterName ?? member.AppUser?.UserName ?? "Unknown";
-                    var status = member.Status ?? "Active";
-                    var statusClass = status.Equals("Active", StringComparison.OrdinalIgnoreCase) ? "success"
-                        : status.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "warning" : "";
-                    var alts = new List<string>();
-                    if (!string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName1)) alts.Add(member.AppUser!.AltCharacterName1!);
-                    if (!string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName2)) alts.Add(member.AppUser!.AltCharacterName2!);
-                    <div class="roster-row">
-                        <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
-                        <div>
-                            <div class="roster-name">@name</div>
-                            @if (alts.Count > 0)
-                            {
-                                <div class="roster-name-sub">Alts: @string.Join(", ", alts)</div>
-                            }
-                        </div>
-                        <div class="roster-rank">@(member.Rank ?? "Member")</div>
-                        <div class="roster-dkp">@((member.LinkshellDkp ?? 0).ToString("0.##"))</div>
-                        <div><span class="tag @statusClass">@status</span></div>
+
+                <div id="rosterList">
+                    <div class="roster-head">
+                        <div></div>
+                        <div>Character</div>
+                        <div>Rank</div>
+                        <div style="text-align:right">DKP</div>
+                        <div>Status</div>
                     </div>
-                }
+                    @foreach (var member in Model.AppUserLinkshells.OrderBy(m => m.CharacterName))
+                    {
+                        var name = member.CharacterName ?? member.AppUser?.UserName ?? "Unknown";
+                        var rank = member.Rank ?? "Member";
+                        var status = member.Status ?? "Active";
+                        var statusClass = status.Equals("Active", StringComparison.OrdinalIgnoreCase) ? "success"
+                            : status.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? "warning" : "";
+                        var alts = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName1)) alts.Add(member.AppUser!.AltCharacterName1!);
+                        if (!string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName2)) alts.Add(member.AppUser!.AltCharacterName2!);
+                        // Pre-baked, lowercased haystack the JS filter matches against.
+                        // Includes name, rank, status, and any alts so a member can be
+                        // found by typing any of those.
+                        var searchKey = (name + " " + rank + " " + status + " " + string.Join(" ", alts))
+                            .ToLowerInvariant();
+                        <div class="roster-row" data-search="@searchKey">
+                            <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
+                            <div>
+                                <div class="roster-name">@name</div>
+                                @if (alts.Count > 0)
+                                {
+                                    <div class="roster-name-sub">Alts: @string.Join(", ", alts)</div>
+                                }
+                            </div>
+                            <div class="roster-rank">@rank</div>
+                            <div class="roster-dkp">@((member.LinkshellDkp ?? 0).ToString("0.##"))</div>
+                            <div><span class="tag @statusClass">@status</span></div>
+                        </div>
+                    }
+                </div>
+
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border)">
+                    <button type="button" class="btn sm" id="rosterPrev" disabled>← Prev</button>
+                    <span id="rosterPageLabel" style="font-size:12px;color:var(--fg-3);min-width:90px;text-align:center">Page 1 / 1</span>
+                    <button type="button" class="btn sm" id="rosterNext" disabled>Next →</button>
+                </div>
             }
         </div>
     </div>
 </div>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var PAGE_SIZE = 10;
+        var list      = document.getElementById('rosterList');
+        var search    = document.getElementById('rosterSearch');
+        var prevBtn   = document.getElementById('rosterPrev');
+        var nextBtn   = document.getElementById('rosterNext');
+        var pageLabel = document.getElementById('rosterPageLabel');
+        var countEl   = document.getElementById('rosterCount');
+        if (!list) { return; }
+
+        var rows = Array.prototype.slice.call(list.querySelectorAll('.roster-row'));
+        var state = { page: 1, filtered: rows };
+
+        function render() {
+            var totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+            if (state.page > totalPages) { state.page = totalPages; }
+            var start = (state.page - 1) * PAGE_SIZE;
+            var end   = start + PAGE_SIZE;
+            // Hide every row, then reveal just the current page slice.
+            for (var i = 0; i < rows.length; i++) { rows[i].style.display = 'none'; }
+            var slice = state.filtered.slice(start, end);
+            for (var j = 0; j < slice.length; j++) { slice[j].style.display = ''; }
+            if (pageLabel) { pageLabel.textContent = 'Page ' + state.page + ' / ' + totalPages; }
+            if (countEl) {
+                countEl.textContent = (state.filtered.length === rows.length)
+                    ? (rows.length + ' members')
+                    : (state.filtered.length + ' of ' + rows.length + ' members');
+            }
+            if (prevBtn) { prevBtn.disabled = (state.page <= 1); }
+            if (nextBtn) { nextBtn.disabled = (state.page >= totalPages); }
+        }
+
+        function applyFilter() {
+            var q = (search ? search.value : '').trim().toLowerCase();
+            if (q === '') {
+                state.filtered = rows;
+            } else {
+                state.filtered = rows.filter(function (r) {
+                    return (r.getAttribute('data-search') || '').indexOf(q) >= 0;
+                });
+            }
+            state.page = 1;
+            render();
+        }
+
+        if (search) { search.addEventListener('input', applyFilter); }
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function () {
+                if (state.page > 1) { state.page--; render(); }
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function () {
+                var total = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+                if (state.page < total) { state.page++; render(); }
+            });
+        }
+
+        applyFilter();
+    })();
+</script>

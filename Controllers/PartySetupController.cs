@@ -127,7 +127,7 @@ public class PartySetupController : Controller
     // `slotId` = PartySetupSlot id.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SignUp(int id, int slotId)
+    public async Task<IActionResult> SignUp(int id, int slotId, string? role, string? mainJob, string? subJob)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null) return Challenge();
@@ -157,6 +157,81 @@ public class PartySetupController : Controller
             characterName = user.CharacterName ?? user.UserName ?? "Member";
         }
 
+        // Resolve what the member committed to bring for each of Role / Main /
+        // Sub. A field the slot ALREADY pins (Role on a Role slot; MainJob /
+        // SubJob on a Job slot) is taken from the slot itself -- a crafted
+        // form can't override a hard requirement. Otherwise we use the
+        // member's submitted pick (validated against the catalog).
+        var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
+        var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
+        var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
+
+        string? signedRole;
+        if (slotRequiresRole)
+        {
+            signedRole = slot.Role;
+        }
+        else
+        {
+            var trimmed = role?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                TempData["PartySetupMessage"] = "Pick a role before signing up.";
+                return RedirectBack(setup.Id);
+            }
+            if (!ValidRoles.Contains(trimmed))
+            {
+                TempData["PartySetupMessage"] = "That role isn't a valid pick.";
+                return RedirectBack(setup.Id);
+            }
+            signedRole = trimmed;
+        }
+
+        string? signedMain;
+        if (slotRequiresMain)
+        {
+            signedMain = slot.MainJob;
+        }
+        else
+        {
+            var trimmed = mainJob?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                TempData["PartySetupMessage"] = "Pick a main job before signing up.";
+                return RedirectBack(setup.Id);
+            }
+            if (!ValidMainJobs.Contains(trimmed))
+            {
+                TempData["PartySetupMessage"] = "That main job isn't a valid pick.";
+                return RedirectBack(setup.Id);
+            }
+            signedMain = trimmed;
+        }
+
+        string? signedSub;
+        if (slotRequiresSub)
+        {
+            signedSub = slot.SubJob;
+        }
+        else
+        {
+            var trimmed = subJob?.Trim();
+            // Sub is optional -- blank is fine ("anything works" / no sub).
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                signedSub = null;
+            }
+            else if (!ValidSubJobs.Contains(trimmed))
+            {
+                TempData["PartySetupMessage"] = "That sub job isn't a valid pick.";
+                return RedirectBack(setup.Id);
+            }
+            else
+            {
+                signedSub = trimmed;
+            }
+        }
+
         // One slot per setup: release any other slot in this setup the member
         // currently holds before claiming the new one.
         var heldElsewhere = await _context.PartySetupSlots
@@ -169,11 +244,17 @@ public class PartySetupController : Controller
             held.SignedUpAppUserId = null;
             held.SignedUpCharacterName = null;
             held.SignedUpAtUtc = null;
+            held.SignedUpRole = null;
+            held.SignedUpMainJob = null;
+            held.SignedUpSubJob = null;
         }
 
         slot.SignedUpAppUserId = user.Id;
         slot.SignedUpCharacterName = characterName;
         slot.SignedUpAtUtc = DateTime.UtcNow;
+        slot.SignedUpRole = signedRole;
+        slot.SignedUpMainJob = signedMain;
+        slot.SignedUpSubJob = signedSub;
         await _context.SaveChangesAsync();
 
         TempData["PartySetupMessage"] = $"Signed up as {characterName} for {setup.Name}.";
@@ -205,6 +286,9 @@ public class PartySetupController : Controller
         slot.SignedUpAppUserId = null;
         slot.SignedUpCharacterName = null;
         slot.SignedUpAtUtc = null;
+        slot.SignedUpRole = null;
+        slot.SignedUpMainJob = null;
+        slot.SignedUpSubJob = null;
         await _context.SaveChangesAsync();
 
         TempData["PartySetupMessage"] = "Slot is open again.";

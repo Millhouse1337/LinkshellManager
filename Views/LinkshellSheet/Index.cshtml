@@ -134,7 +134,7 @@ else
             <div style="padding:12px 16px">
                 @if (Model.SheetSyncEnabled)
                 {
-                    <p>The app appends rows to your <code>AttInput</code> tab (attendance + window posts + event close) and new columns to your <code>ManualPoints</code> tab (one column per DKP audit). Your <code>Main</code> tab formulas roll the totals up automatically — column C is never overwritten.</p>
+                    <p>The app appends rows to your <code>AttInput</code> tab (attendance + window posts + event close) and new columns to your <code>ManualPoints</code> tab (deductions). Your <code>Main</code> tab formulas roll the totals up automatically — column C is never overwritten.</p>
                     <form asp-action="ToggleSync" asp-route-linkshellId="@Model.LinkshellId" method="post">
                         <input type="hidden" name="enabled" value="false" />
                         <button type="submit" class="btn" onclick="return confirm('Disable live sync? The sheet will stop receiving DKP updates.');">Disable live sync</button>

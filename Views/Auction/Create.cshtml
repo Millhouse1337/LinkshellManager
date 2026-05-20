@@ -4,6 +4,18 @@
     var sourceItemsJson = System.Text.Json.JsonSerializer.Serialize(Model.SourceItems);
 }
 
+<style>
+    /* Centre each item-row column above its input (Source / Item name /
+       Item type / Starting DKP). Scoped to auction rows so other create
+       forms keep their existing left-aligned labels. */
+    .auction-item-row .create-form__grid > label > span {
+        text-align: center;
+    }
+    .auction-item-row .create-form__grid > label.create-form__field--full > span {
+        text-align: left; /* Notes spans the row -- keep its label flush left */
+    }
+</style>
+
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Create auction</h1>

@@ -51,29 +51,8 @@
     </div>
 }
 
-@if (Model.CanManage)
-{
-    <div class="card fade d2" style="margin-bottom:12px">
-        <div class="card-head">
-            <div class="card-title">Assigned monster</div>
-        </div>
-        <form asp-action="Assign" asp-route-id="@Model.Id" method="post"
-              style="display:flex;gap:8px;align-items:center;padding:4px 0">
-            @Html.AntiForgeryToken()
-            <select name="monsterName" class="form-select" style="max-width:220px">
-                <option value="">— Unassigned —</option>
-                @foreach (var monster in Model.MonsterOptions)
-                {
-                    <option value="@monster"
-                            selected="@(string.Equals(monster, Model.AssignedMonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                        @monster
-                    </option>
-                }
-            </select>
-            <button type="submit" class="btn sm primary">Save assignment</button>
-        </form>
-    </div>
-}
+@* "Assigned monster" inline picker removed -- the monster name shows in
+   the page-sub tag above and is edited from the Edit Party Setup form. *@
 
 @if (!string.IsNullOrWhiteSpace(Model.Notes))
 {

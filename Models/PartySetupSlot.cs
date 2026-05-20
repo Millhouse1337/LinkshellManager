@@ -55,4 +55,21 @@ public class PartySetupSlot
     public string? SignedUpCharacterName { get; set; }
 
     public DateTime? SignedUpAtUtc { get; set; }
+
+    // What the signing-up member committed to BRING. For each of these:
+    //   * If the slot specifies the requirement (Role on a Role slot;
+    //     MainJob/SubJob on a Job slot), the sign-up snapshot mirrors the
+    //     slot's value -- the member can't override a hard requirement.
+    //   * If the slot leaves it open (Any Role, or "Any Tank" with no main
+    //     job picked), the member fills it in at sign-up time so the panel
+    //     reads "Millhouse - Tank - PLD/NIN" instead of just "Millhouse".
+    // Cleared on Withdraw alongside the SignedUp* fields above.
+    [MaxLength(16)]
+    public string? SignedUpRole { get; set; }
+
+    [MaxLength(8)]
+    public string? SignedUpMainJob { get; set; }
+
+    [MaxLength(8)]
+    public string? SignedUpSubJob { get; set; }
 }

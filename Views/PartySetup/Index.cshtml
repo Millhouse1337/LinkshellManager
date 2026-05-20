@@ -67,25 +67,10 @@ else
                                        style="color:var(--fg);font-weight:500">@row.Name</a>
                                 </td>
                                 <td>
-                                    @if (Model.CanManage)
-                                    {
-                                        <form asp-action="Assign" asp-route-id="@row.Id" method="post"
-                                              style="display:inline-flex;gap:6px;align-items:center">
-                                            @Html.AntiForgeryToken()
-                                            <select name="monsterName" class="form-select" style="height:28px;max-width:160px">
-                                                <option value="">— Unassigned —</option>
-                                                @foreach (var monster in Model.MonsterOptions)
-                                                {
-                                                    <option value="@monster"
-                                                            selected="@(string.Equals(monster, row.AssignedMonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                                                        @monster
-                                                    </option>
-                                                }
-                                            </select>
-                                            <button type="submit" class="btn sm ghost">Assign</button>
-                                        </form>
-                                    }
-                                    else if (!string.IsNullOrWhiteSpace(row.AssignedMonsterName))
+                                    @* Read-only display — the assigned monster is edited from the
+                                       Edit Party Setup page's "Assigned monster" dropdown, so the
+                                       inline picker + Assign button is gone from this list. *@
+                                    @if (!string.IsNullOrWhiteSpace(row.AssignedMonsterName))
                                     {
                                         <span class="tag accent">@row.AssignedMonsterName</span>
                                     }

@@ -98,6 +98,14 @@ public class TodManagerViewModel
     public string? CurrentAppUserId { get; set; }
     public bool CanManagePartiesForSelected { get; set; }
 
+    // Role/main/sub option lists for the inline sign-up form. A slot that
+    // leaves any of Role/MainJob/SubJob open lets the member fill it in
+    // at sign-up time; the dropdowns pull from these (shared across every
+    // board on the page, so one copy on the page model is enough).
+    public List<string> SignUpRoleOptions { get; set; } = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
+    public List<string> SignUpMainJobOptions { get; set; } = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
+    public List<string> SignUpSubJobOptions { get; set; } = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
+
     // Recent claim-shield lottery windows posted from the lsm addon, newest
     // first. Shown in a card below the Submitted ToDs table.
     public List<ClaimShieldCaptureRowViewModel> RecentClaimShieldCaptures { get; set; } = new();

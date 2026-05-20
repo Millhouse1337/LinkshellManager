@@ -130,8 +130,11 @@
                 mainSel.classList.remove('d-none');
                 subSel.classList.remove('d-none');
                 anyEl.classList.add('d-none');
+                // Main reflects the picked role ("Any Tank"); Sub stays
+                // a fixed "Any Sub" -- the role names the slot's main job,
+                // not its subjob, so echoing the role into Sub reads wrong.
                 if (mainSel.options.length) { mainSel.options[0].textContent = 'Any ' + role; }
-                if (subSel.options.length) { subSel.options[0].textContent = 'Any ' + role; }
+                if (subSel.options.length) { subSel.options[0].textContent = 'Any Sub'; }
             } else {
                 if (role === 'Any Role') {
                     // Explicit "anything" — drop any stale job picks so the

@@ -140,18 +140,52 @@ public class PartySetupSlotView
     public string? SignedUpCharacterName { get; set; }
     public bool IsOpen => string.IsNullOrEmpty(SignedUpAppUserId);
 
-    // Human-readable requirement, e.g. "Any", "Tank", "RDM/NIN", "PLD (GHORN)".
+    // What the signing-up member committed to BRING. The fields the slot
+    // already pinned (Role on a Role slot; MainJob/SubJob on a Job slot)
+    // mirror the slot's values; the fields the slot left open record the
+    // member's pick at sign-up time. Used to render
+    // "Millhouse - Tank - PLD/NIN" instead of just "Millhouse".
+    public string? SignedUpRole { get; set; }
+    public string? SignedUpMainJob { get; set; }
+    public string? SignedUpSubJob { get; set; }
+
+    // "Tank - PLD/NIN" / "Heal - WHM" / "Tank" (skipping any parts the
+    // member didn't commit to). Empty when the member supplied nothing
+    // beyond their character name (legacy sign-ups pre-dating this).
+    public string SignedUpJobsDisplay
+    {
+        get
+        {
+            var parts = new List<string>(3);
+            if (!string.IsNullOrWhiteSpace(SignedUpRole)) parts.Add(SignedUpRole!);
+            if (!string.IsNullOrWhiteSpace(SignedUpMainJob))
+            {
+                parts.Add(string.IsNullOrWhiteSpace(SignedUpSubJob)
+                    ? SignedUpMainJob!
+                    : $"{SignedUpMainJob}/{SignedUpSubJob}");
+            }
+            return string.Join(" - ", parts);
+        }
+    }
+
+    // Human-readable requirement. Mirrors the editor's wording so a slot
+    // saved as "Any Role" reads "Any Role" on the details/ToD panels, a
+    // role-only slot reads "Any Tank" / "Any Heal" / etc. (the same
+    // placeholder the editor's Main job dropdown shows), and a job slot
+    // reads the picked job ("PLD" or "PLD/NIN").
     public string Display
     {
         get
         {
             string core = RequirementType switch
             {
-                PartySetupSlotRequirementTypes.Role => string.IsNullOrWhiteSpace(Role) ? "Any role" : Role!,
+                PartySetupSlotRequirementTypes.Role => string.IsNullOrWhiteSpace(Role)
+                    ? "Any Role"
+                    : $"Any {Role}",
                 PartySetupSlotRequirementTypes.Job => string.IsNullOrWhiteSpace(MainJob)
                     ? "Any job"
                     : string.IsNullOrWhiteSpace(SubJob) ? MainJob! : $"{MainJob}/{SubJob}",
-                _ => "Any"
+                _ => "Any Role"
             };
             return string.IsNullOrWhiteSpace(Label) ? core : $"{core} ({Label})";
         }

@@ -568,7 +568,10 @@ public class TodController : Controller
                                 Label = s.Label,
                                 IsPartyLeader = s.IsPartyLeader,
                                 SignedUpAppUserId = s.SignedUpAppUserId,
-                                SignedUpCharacterName = s.SignedUpCharacterName
+                                SignedUpCharacterName = s.SignedUpCharacterName,
+                                SignedUpRole = s.SignedUpRole,
+                                SignedUpMainJob = s.SignedUpMainJob,
+                                SignedUpSubJob = s.SignedUpSubJob
                             }).ToList()
                         }).ToList()
                     }).ToList()
