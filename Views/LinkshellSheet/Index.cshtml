@@ -93,8 +93,21 @@ else
             {
                 <p>
                     Connected as <strong>@Model.ConnectedGoogleEmail</strong>
-                    @if (Model.ConnectedAt.HasValue)
+                    @if (Model.ConnectedAtUserLocal.HasValue)
                     {
+                        @* User's profile timezone (Profile -> Time zone). The
+                           controller already converted UTC -> local; the zone
+                           label is the IANA id (e.g. "America/New_York"). *@
+                        <text> · since @PrettyUtc(Model.ConnectedAtUserLocal.Value)</text>
+                        @if (!string.IsNullOrWhiteSpace(Model.ConnectedAtTimeZoneLabel))
+                        {
+                            <text> (@Model.ConnectedAtTimeZoneLabel)</text>
+                        }
+                    }
+                    else if (Model.ConnectedAt.HasValue)
+                    {
+                        @* Fallback: no profile timezone configured -> keep the
+                           original unambiguous UTC rendering. *@
                         <text> · since @PrettyUtc(Model.ConnectedAt.Value) UTC</text>
                     }
                 </p>
@@ -171,15 +184,21 @@ else
                     <input class="input" type="text" name="attInputTabName" value="@Model.AttInputTabName" placeholder="AttInput" />
                     <small>Defaults to <code>AttInput</code>. The app appends one row per attendee/snapshot here. Your column-C formula is never overwritten.</small>
                 </div>
-                <div class="form-row">
-                    <label>Default Entry Type for snapshots without a linked event (optional)</label>
-                    <input class="input" type="text" name="attInputDefaultEntryType" value="@Model.AttInputDefaultEntryType" placeholder="e.g. Misc Camp" />
-                    <small>Used for <code>/lsm now</code> snapshots when no event is linked. Examples: <code>Misc Camp</code>, <code>Kill</code>, <code>Kings Camp</code>, <code>Wyrms Camp</code>.</small>
-                </div>
-                <div class="form-row">
-                    <label>ManualPoints tab name (optional)</label>
-                    <input class="input" type="text" name="manualPointsTabName" value="@Model.ManualPointsTabName" placeholder="ManualPoints" />
-                    <small>Defaults to <code>ManualPoints</code>. Each DKP audit adds a new column to this tab (header = <code>M/D Audit: reason</code>, value in the affected member's row).</small>
+                @* Default Entry Type + ManualPoints tab name laid out as
+                   2 columns -- they're independent text inputs and pair
+                   visually since both are sheet-tab-related secondary
+                   settings. Collapses to a single column on narrow widths. *@
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+                    <div class="form-row" style="margin:0">
+                        <label>Default Entry Type for snapshots without a linked event (optional)</label>
+                        <input class="input" type="text" name="attInputDefaultEntryType" value="@Model.AttInputDefaultEntryType" placeholder="e.g. Misc Camp" />
+                        <small>Used for <code>/lsm now</code> snapshots when no event is linked. Examples: <code>Misc Camp</code>, <code>Kill</code>, <code>Kings Camp</code>, <code>Wyrms Camp</code>.</small>
+                    </div>
+                    <div class="form-row" style="margin:0">
+                        <label>ManualPoints tab name (optional)</label>
+                        <input class="input" type="text" name="manualPointsTabName" value="@Model.ManualPointsTabName" placeholder="ManualPoints" />
+                        <small>Defaults to <code>ManualPoints</code>. Each DKP audit adds a new column to this tab (header = <code>M/D Audit: reason</code>, value in the affected member's row).</small>
+                    </div>
                 </div>
                 <div style="margin-top:12px">
                     <button type="submit" class="btn">Save</button>

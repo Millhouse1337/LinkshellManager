@@ -157,22 +157,27 @@ else
                                                             var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
                                                             var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
                                                             var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
-                                                            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);flex-wrap:wrap">
-                                                                <span style="flex:1;min-width:120px;color:var(--fg-1);font-size:13px">
+                                                            @* Stacked layout: requirement label on top, action area (form
+                                                               or signed-up tag) below it, right-aligned. Keeps the layout
+                                                               predictable inside narrow party cards regardless of how many
+                                                               dropdowns the slot needs, instead of the dropdowns + Sign up
+                                                               button wrapping unpredictably onto multiple rows. *@
+                                                            <div style="display:flex;flex-direction:column;gap:6px;padding:8px 2px;border-top:1px solid var(--border)">
+                                                                <div style="display:flex;align-items:center;gap:6px;color:var(--fg-1);font-size:13px;font-weight:500">
                                                                     @slot.Display
                                                                     @if (slot.IsPartyLeader)
                                                                     {
-                                                                        <span class="tag" style="margin-left:4px;color:#1a1300;background:linear-gradient(180deg,#ffe27a,#f5b800)">Leader</span>
+                                                                        <span class="tag" style="color:#1a1300;background:linear-gradient(180deg,#ffe27a,#f5b800);font-size:10px;padding:1px 6px">Leader</span>
                                                                     }
-                                                                </span>
+                                                                </div>
                                                                 @if (slot.IsOpen)
                                                                 {
                                                                     <form asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post"
-                                                                          style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                                                                          style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
                                                                         @Html.AntiForgeryToken()
                                                                         @if (!slotRequiresRole)
                                                                         {
-                                                                            <select name="role" required class="form-select" style="height:30px;max-width:120px">
+                                                                            <select name="role" required class="form-select" style="height:30px;flex:1 1 90px;min-width:0;max-width:130px">
                                                                                 <option value="">Role…</option>
                                                                                 @foreach (var r in Model.SignUpRoleOptions)
                                                                                 {
@@ -182,7 +187,7 @@ else
                                                                         }
                                                                         @if (!slotRequiresMain)
                                                                         {
-                                                                            <select name="mainJob" required class="form-select" style="height:30px;max-width:100px">
+                                                                            <select name="mainJob" required class="form-select" style="height:30px;flex:1 1 80px;min-width:0;max-width:110px">
                                                                                 <option value="">Main…</option>
                                                                                 @foreach (var j in Model.SignUpMainJobOptions)
                                                                                 {
@@ -192,7 +197,7 @@ else
                                                                         }
                                                                         @if (!slotRequiresSub)
                                                                         {
-                                                                            <select name="subJob" class="form-select" style="height:30px;max-width:110px">
+                                                                            <select name="subJob" class="form-select" style="height:30px;flex:1 1 90px;min-width:0;max-width:120px">
                                                                                 <option value="">Sub (opt)</option>
                                                                                 @foreach (var j in Model.SignUpSubJobOptions)
                                                                                 {
@@ -200,40 +205,44 @@ else
                                                                                 }
                                                                             </select>
                                                                         }
-                                                                        <button type="submit" class="btn sm primary">Sign up</button>
+                                                                        <button type="submit" class="btn sm primary" style="flex:0 0 auto">Sign up</button>
                                                                     </form>
                                                                 }
                                                                 else if (mine)
                                                                 {
-                                                                    <span class="tag accent">
-                                                                        @slot.SignedUpCharacterName (you)
-                                                                        @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
-                                                                        {
-                                                                            <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
-                                                                        }
-                                                                    </span>
-                                                                    <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
-                                                                        @Html.AntiForgeryToken()
-                                                                        <button type="submit" class="btn sm danger-outline">Withdraw</button>
-                                                                    </form>
+                                                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                                                                        <span class="tag accent">
+                                                                            @slot.SignedUpCharacterName (you)
+                                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                            {
+                                                                                <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
+                                                                            }
+                                                                        </span>
+                                                                        <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
+                                                                            @Html.AntiForgeryToken()
+                                                                            <button type="submit" class="btn sm danger-outline">Withdraw</button>
+                                                                        </form>
+                                                                    </div>
                                                                 }
                                                                 else
                                                                 {
-                                                                    <span class="tag">
-                                                                        @slot.SignedUpCharacterName
-                                                                        @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                                                                        <span class="tag">
+                                                                            @slot.SignedUpCharacterName
+                                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                            {
+                                                                                <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
+                                                                            }
+                                                                        </span>
+                                                                        @if (Model.CanManagePartiesForSelected)
                                                                         {
-                                                                            <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
+                                                                            <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline"
+                                                                                  onsubmit="return confirm('Clear @slot.SignedUpCharacterName from this slot?');">
+                                                                                @Html.AntiForgeryToken()
+                                                                                <button type="submit" class="btn sm ghost" style="color:var(--danger)">Clear</button>
+                                                                            </form>
                                                                         }
-                                                                    </span>
-                                                                    @if (Model.CanManagePartiesForSelected)
-                                                                    {
-                                                                        <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline"
-                                                                              onsubmit="return confirm('Clear @slot.SignedUpCharacterName from this slot?');">
-                                                                            @Html.AntiForgeryToken()
-                                                                            <button type="submit" class="btn sm ghost" style="color:var(--danger)">Clear</button>
-                                                                        </form>
-                                                                    }
+                                                                    </div>
                                                                 }
                                                             </div>
                                                         }

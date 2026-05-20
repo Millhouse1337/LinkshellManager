@@ -21,6 +21,7 @@ public sealed class LinkshellSheetController : Controller
     private readonly GoogleSheetsOptions _options;
     private readonly SheetMigrationService _migration;
     private readonly SheetSyncQueue _sheetSync;
+    private readonly TimeZoneConversionService _timeZones;
 
     public LinkshellSheetController(
         ApplicationDbContext db,
@@ -29,7 +30,8 @@ public sealed class LinkshellSheetController : Controller
         GoogleOAuthService oauth,
         IOptions<GoogleSheetsOptions> options,
         SheetMigrationService migration,
-        SheetSyncQueue sheetSync)
+        SheetSyncQueue sheetSync,
+        TimeZoneConversionService timeZones)
     {
         _db = db;
         _userManager = userManager;
@@ -38,6 +40,7 @@ public sealed class LinkshellSheetController : Controller
         _options = options.Value;
         _migration = migration;
         _sheetSync = sheetSync;
+        _timeZones = timeZones;
     }
 
     [HttpGet("/linkshells/{linkshellId:int}/sheet")]
@@ -49,6 +52,19 @@ public sealed class LinkshellSheetController : Controller
 
         var viewModel = await BuildViewModelAsync(linkshellId);
         if (viewModel is null) return NotFound();
+        // ConnectedAt is stored UTC; surface a viewer-local copy so the
+        // "Step 1 -- Connected as ... since ..." line reads in the user's
+        // profile timezone instead of UTC. Falls back to UTC silently when
+        // the user has no zone configured (the view tag stays "UTC").
+        if (viewModel.ConnectedAt.HasValue)
+        {
+            var local = _timeZones.ToUserTime(viewModel.ConnectedAt, user.TimeZone);
+            if (local.HasValue && !string.IsNullOrWhiteSpace(user.TimeZone))
+            {
+                viewModel.ConnectedAtUserLocal = local;
+                viewModel.ConnectedAtTimeZoneLabel = user.TimeZone;
+            }
+        }
         return View(viewModel);
     }
 

@@ -17,7 +17,7 @@ public class ManageTeamViewModel
 
     // Members list pagination (View Team). SearchTerm above doubles as the
     // member-name filter on the Index page.
-    public const int MembersPageSize = 15;
+    public const int MembersPageSize = 10;
 
     public int PageNumber { get; set; } = 1;
 
