@@ -40,15 +40,17 @@ export class ActivitySidebarPanelComponent {
   protected readonly dkpPageSize = 15;
   protected isDkpAuditOpen = false;
   protected readonly dkpAuditModel: {
-    mode: 'Adjust' | 'Misc';
+    mode: 'Adjust' | 'Add' | 'Misc';
     targetAppUserId: string;
     relatedLedgerEntryId: number | null;
+    sourceWindowEventId: number | null;
     amount: number | null;
     reason: string;
   } = {
     mode: 'Misc',
     targetAppUserId: '',
     relatedLedgerEntryId: null,
+    sourceWindowEventId: null,
     amount: null,
     reason: ''
   };
@@ -427,8 +429,10 @@ export class ActivitySidebarPanelComponent {
     this.dkpAuditModel.targetAppUserId =
       this.selectedDkpHistoryAppUserId || history?.members[0]?.appUserId || '';
     this.dkpAuditModel.relatedLedgerEntryId = null;
+    this.dkpAuditModel.sourceWindowEventId = null;
     this.dkpAuditModel.amount = null;
     this.dkpAuditModel.reason = '';
+    this.activity.clearDkpAuditAddCandidates();
     this.isDkpAuditOpen = true;
   }
 
@@ -436,10 +440,32 @@ export class ActivitySidebarPanelComponent {
     this.isDkpAuditOpen = false;
   }
 
-  protected onDkpAuditModeChange(mode: 'Adjust' | 'Misc'): void {
+  protected onDkpAuditModeChange(mode: 'Adjust' | 'Add' | 'Misc'): void {
     this.dkpAuditModel.mode = mode;
-    if (mode === 'Misc') {
+    if (mode !== 'Adjust') {
       this.dkpAuditModel.relatedLedgerEntryId = null;
+    }
+    if (mode !== 'Add') {
+      this.dkpAuditModel.sourceWindowEventId = null;
+    } else {
+      void this.loadDkpAuditAddCandidates();
+    }
+  }
+
+  // Reload the "Add" snapshot candidates when the target member changes (the
+  // candidate list is per-member: it excludes events the member is already
+  // credited for).
+  protected onDkpAuditTargetChange(appUserId: string): void {
+    this.dkpAuditModel.targetAppUserId = appUserId;
+    this.dkpAuditModel.sourceWindowEventId = null;
+    if (this.dkpAuditModel.mode === 'Add') {
+      void this.loadDkpAuditAddCandidates();
+    }
+  }
+
+  private async loadDkpAuditAddCandidates(): Promise<void> {
+    if (this.selectedLinkshellId && this.dkpAuditModel.targetAppUserId) {
+      await this.activity.loadDkpAuditAddCandidates(this.selectedLinkshellId, this.dkpAuditModel.targetAppUserId);
     }
   }
 
@@ -471,15 +497,23 @@ export class ActivitySidebarPanelComponent {
       return;
     }
 
-    const amount = this.dkpAuditModel.amount;
-    if (amount === null || Number.isNaN(amount)) {
-      this.activity.actionError.set('Enter a numeric amount for the audit.');
-      return;
-    }
-
-    if (this.dkpAuditModel.mode === 'Adjust' && !this.dkpAuditModel.relatedLedgerEntryId) {
-      this.activity.actionError.set('Pick the previous entry you want to correct.');
-      return;
+    // "Add" credits the member for a posted snapshot — the amount comes from the
+    // event server-side, so only the snapshot pick is required (no amount).
+    if (this.dkpAuditModel.mode === 'Add') {
+      if (!this.dkpAuditModel.sourceWindowEventId) {
+        this.activity.actionError.set('Pick the snapshot entry to credit this member for.');
+        return;
+      }
+    } else {
+      const amount = this.dkpAuditModel.amount;
+      if (amount === null || Number.isNaN(amount)) {
+        this.activity.actionError.set('Enter a numeric amount for the audit.');
+        return;
+      }
+      if (this.dkpAuditModel.mode === 'Adjust' && !this.dkpAuditModel.relatedLedgerEntryId) {
+        this.activity.actionError.set('Pick the previous entry you want to correct.');
+        return;
+      }
     }
 
     const ok = await this.activity.submitDkpAudit({
@@ -488,7 +522,9 @@ export class ActivitySidebarPanelComponent {
       mode: this.dkpAuditModel.mode,
       relatedLedgerEntryId:
         this.dkpAuditModel.mode === 'Adjust' ? this.dkpAuditModel.relatedLedgerEntryId : null,
-      amount,
+      sourceWindowEventId:
+        this.dkpAuditModel.mode === 'Add' ? this.dkpAuditModel.sourceWindowEventId : null,
+      amount: this.dkpAuditModel.mode === 'Add' ? 0 : (this.dkpAuditModel.amount ?? 0),
       reason
     });
 

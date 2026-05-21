@@ -1,0 +1,104 @@
+.ps-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ps-notes {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ps-alliance {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px;
+}
+
+.ps-alliance-head {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.ps-party-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.ps-party {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  padding: 8px;
+}
+
+.ps-party-head {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.ps-slot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 6px;
+  font-size: 13px;
+}
+
+.ps-slot + .ps-slot {
+  border-top: 1px solid var(--border);
+}
+
+.ps-slot-req {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ps-crown {
+  color: var(--warning);
+}
+
+.ps-signup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ps-signup select {
+  min-height: 30px;
+}
+
+.ps-slot-member {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: right;
+}
+
+.ps-open {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.ps-name {
+  font-weight: 600;
+  color: var(--success);
+}
+
+.ps-jobs {
+  color: var(--muted);
+}
+
+.ps-loading {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}

@@ -240,6 +240,13 @@
   border-top: 1px solid var(--border);
 }
 
+/* ===== Inline party-setup sign-up panel (expanded under a Tracked Window) ===== */
+.tod-setup-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .tod-history-item {
   display: grid;
   gap: 8px;

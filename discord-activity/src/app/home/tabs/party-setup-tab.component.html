@@ -1,0 +1,96 @@
+<div class="panel-tab fade">
+  <div class="section-head">
+    <div>
+      <div class="section-label">ToD Tracker</div>
+      <div class="section-title">Party Setup</div>
+    </div>
+    <div class="section-head-right">
+      @if (canManage()) {
+        <button type="button" class="btn primary sm" (click)="openCreate()">+ New Setup</button>
+      }
+      <button type="button" class="btn sm" (click)="partySetup.loadList(primaryLinkshellId())" [disabled]="partySetup.busy()">Refresh</button>
+    </div>
+  </div>
+
+  @if (list(); as model) {
+    @if (model.items.length === 0) {
+      <section class="card">
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">
+            No party setups yet.
+            @if (canManage()) { Use &ldquo;New Setup&rdquo; to build one. }
+          </div>
+        </div>
+      </section>
+    } @else {
+      <section class="card">
+        <div class="card-head"><div class="card-title">Setups</div></div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Monster</th><th>Alliances</th><th>Parties</th><th>Slots</th><th>Updated</th></tr>
+            </thead>
+            <tbody>
+              @for (row of model.items; track row.id) {
+                <tr class="ps-row" [class.is-selected]="selectedId() === row.id" (click)="select(row.id)">
+                  <td><strong>{{ row.name }}</strong></td>
+                  <td>{{ row.assignedMonsterName || '-' }}</td>
+                  <td>{{ row.allianceCount }}</td>
+                  <td>{{ row.partyCount }}</td>
+                  <td>{{ row.slotCount }}</td>
+                  <td>{{ formatDate(row.updatedAt) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    @if (selectedRow(); as row) {
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title">
+            {{ row.name }}
+            @if (row.assignedMonsterName) { <span class="ps-assigned">&middot; {{ row.assignedMonsterName }}</span> }
+          </div>
+          <div class="section-head-right">
+            @if (canManage()) {
+              <button type="button" class="btn sm" (click)="openEdit(row.id)">Edit</button>
+              @if (confirmDeleteId() === row.id) {
+                <button type="button" class="btn sm danger-outline" (click)="confirmDelete(row.id)" [disabled]="partySetup.busy()">Confirm delete</button>
+                <button type="button" class="btn sm ghost" (click)="confirmDeleteId.set(null)">Cancel</button>
+              } @else {
+                <button type="button" class="btn sm danger-outline" (click)="confirmDeleteId.set(row.id)">Delete</button>
+              }
+            }
+            <button type="button" class="btn sm ghost" (click)="clearSelection()">Close</button>
+          </div>
+        </div>
+
+        @if (canManage()) {
+          <div class="ps-assign-row">
+            <span class="ps-assign-label">Assigned monster</span>
+            <select [ngModel]="assignDraft()" (ngModelChange)="assignDraft.set($event)">
+              <option value="">Unassigned</option>
+              @for (m of model.monsterOptions; track m) { <option [value]="m">{{ m }}</option> }
+            </select>
+            <button type="button" class="btn sm" (click)="applyAssign(row.id)" [disabled]="partySetup.busy()">Apply</button>
+          </div>
+        }
+
+        <div class="ps-detail">
+          <app-party-setup-panel [setupId]="row.id" [linkshellId]="primaryLinkshellId()" />
+        </div>
+      </section>
+    }
+  } @else {
+    <section class="card">
+      <div class="empty-state empty-state--compact">
+        <div class="empty-state-desc">Loading party setups...</div>
+      </div>
+    </section>
+  }
+
+  <app-party-setup-editor #editor [linkshellId]="primaryLinkshellId()" (saved)="onSaved($event)" />
+</div>

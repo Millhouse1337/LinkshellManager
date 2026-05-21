@@ -136,6 +136,15 @@
           }
         </button>
       }
+      @if (isFeatureEnabled('enableToDs')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('party-setup')"
+                [attr.aria-controls]="panelId('party-setup')"
+                [attr.aria-selected]="activeTab() === 'party-setup'"
+                [attr.tabindex]="activeTab() === 'party-setup' ? 0 : -1"
+                [class.active]="activeTab() === 'party-setup'"
+                (click)="setActiveTab('party-setup')">Party Setup</button>
+      }
       @if (isFeatureEnabled('enableDkp') && isDkpModeEnabled()) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('dkp')"
@@ -144,6 +153,15 @@
                 [attr.tabindex]="activeTab() === 'dkp' ? 0 : -1"
                 [class.active]="activeTab() === 'dkp'"
                 (click)="setActiveTab('dkp')">DKP</button>
+      }
+      @if (isFeatureEnabled('enableDkp') && isDkpModeEnabled()) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('dkp-sheet')"
+                [attr.aria-controls]="panelId('dkp-sheet')"
+                [attr.aria-selected]="activeTab() === 'dkp-sheet'"
+                [attr.tabindex]="activeTab() === 'dkp-sheet' ? 0 : -1"
+                [class.active]="activeTab() === 'dkp-sheet'"
+                (click)="setActiveTab('dkp-sheet')">DKP Sheet</button>
       }
       <!-- Loot History applies even to LootCouncil-mode linkshells (rename
            with reason, no DKP math), so we don't gate on isDkpModeEnabled.
@@ -250,6 +268,13 @@
     </div>
   }
 
+  <!-- ===== PARTY SETUP TAB ===== -->
+  @if (activeTab() === 'party-setup') {
+    <div role="tabpanel" [id]="panelId('party-setup')" [attr.aria-labelledby]="tabId('party-setup')">
+      <app-party-setup-tab />
+    </div>
+  }
+
   <!-- ===== AUCTIONS TAB ===== -->
   @if (activeTab() === 'auctions') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('auctions')" [attr.aria-labelledby]="tabId('auctions')">
@@ -261,6 +286,13 @@
   @if (activeTab() === 'dkp') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
       <app-activity-sidebar-panel [visibleSections]="['dkp']" />
+    </div>
+  }
+
+  <!-- ===== DKP SHEET TAB ===== -->
+  @if (activeTab() === 'dkp-sheet') {
+    <div role="tabpanel" [id]="panelId('dkp-sheet')" [attr.aria-labelledby]="tabId('dkp-sheet')">
+      <app-dkp-sheet-tab />
     </div>
   }
 

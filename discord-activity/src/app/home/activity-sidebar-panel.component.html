@@ -359,6 +359,14 @@
             </label>
             <label class="dkp-audit-form__mode-option">
               <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
+                (ngModelChange)="onDkpAuditModeChange('Add')" value="Add" />
+              <span>
+                <strong>Add to a previous entry</strong>
+                <span class="muted">Credit a member who was missed by a snapshot.</span>
+              </span>
+            </label>
+            <label class="dkp-audit-form__mode-option">
+              <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
                 (ngModelChange)="onDkpAuditModeChange('Misc')" value="Misc" />
               <span>
                 <strong>Miscellaneous adjustment</strong>
@@ -370,7 +378,8 @@
           <div class="dkp-audit-form__grid">
             <label>
               <span>Member</span>
-              <select [(ngModel)]="dkpAuditModel.targetAppUserId" name="auditTargetAppUserId" required>
+              <select [ngModel]="dkpAuditModel.targetAppUserId"
+                (ngModelChange)="onDkpAuditTargetChange($event)" name="auditTargetAppUserId" required>
                 <option value="" disabled>Select member</option>
                 @for (member of dkpHistory.members; track member.appUserId) {
                   <option [ngValue]="member.appUserId">
@@ -401,6 +410,21 @@
                 <span>Corrected amount (DKP)</span>
                 <input type="number" step="0.01" [(ngModel)]="dkpAuditModel.amount"
                   name="auditAmountAdjust" placeholder="e.g. 45" required />
+              </label>
+            } @else if (dkpAuditModel.mode === 'Add') {
+              <label>
+                <span>Snapshot entry to credit</span>
+                <select [(ngModel)]="dkpAuditModel.sourceWindowEventId" name="auditSourceWindowEventId" required>
+                  <option [ngValue]="null" disabled>Select a snapshot entry</option>
+                  @for (candidate of activity.dkpAddCandidates(); track candidate.windowEventId) {
+                    <option [ngValue]="candidate.windowEventId">{{ candidate.label }}</option>
+                  }
+                </select>
+                @if (activity.dkpAddCandidatesBusy()) {
+                  <span class="muted">Loading snapshot entries…</span>
+                } @else if (activity.dkpAddCandidates().length === 0) {
+                  <span class="muted">No snapshot entries this member is missing.</span>
+                }
               </label>
             } @else {
               <label>

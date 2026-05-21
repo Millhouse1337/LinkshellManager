@@ -67,6 +67,11 @@
                     {{ isTodLootExpanded(group.latest.id) ? 'Hide loot' : 'View Loot (' + group.latest.lootCount + ')' }}
                   </button>
                 }
+                @if (setupForMonster(group.latest.monsterName); as setup) {
+                  <button type="button" class="btn sm" (click)="toggleSetup(group.key)">
+                    {{ isSetupExpanded(group.key) ? 'Hide party' : 'Party Setup' }}
+                  </button>
+                }
                 <button type="button" class="btn sm" (click)="beginEditTod(group.latest)">Edit</button>
                 <button type="button" class="btn sm danger-outline"
                   [disabled]="activity.busyTodId() === group.latest.id"
@@ -86,6 +91,13 @@
                     </div>
                   }
                 </div>
+              }
+              @if (setupForMonster(group.latest.monsterName); as setup) {
+                @if (isSetupExpanded(group.key)) {
+                  <div class="tod-setup-panel">
+                    <app-party-setup-panel [setupId]="setup.id" [linkshellId]="selectedDashboardLinkshellId()" />
+                  </div>
+                }
               }
               @if (isTodGroupExpanded(group.key)) {
                 <div class="tod-history-list">

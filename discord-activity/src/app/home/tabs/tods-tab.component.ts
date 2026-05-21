@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateTodInput,
@@ -7,6 +7,9 @@ import {
   ActivityLootStructure,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
+import type { ActivityPartySetupListRow } from '../../discord/discord-activity.types';
+import { PartySetupService } from '../../discord/party-setup.service';
+import { PartySetupPanelComponent } from './party-setup-panel.component';
 import {
   createEmptyTodLootRow,
   formatElapsed,
@@ -24,12 +27,13 @@ import {
 
 @Component({
   selector: 'app-tods-tab',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PartySetupPanelComponent],
   templateUrl: './tods-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TodsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly partySetup = inject(PartySetupService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
 
@@ -137,6 +141,37 @@ export class TodsTabComponent {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
     this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
     this.resetTodDraft();
+
+    // Load party setups for the active linkshell so a ToD row whose monster has
+    // an assigned setup can offer the inline sign-up panel.
+    effect(() => {
+      const id = this.selectedDashboardLinkshellId();
+      if (id) queueMicrotask(() => void this.partySetup.loadList(id));
+    });
+  }
+
+  // ----- Party setup inline panel -----
+
+  // The party setup (if any) assigned to a ToD group's monster. Matched
+  // case-insensitively + trimmed, the same convention as
+  // PartySetupController.ClearSignupsForMonsterAsync.
+  protected setupForMonster(monsterName: string | null | undefined): ActivityPartySetupListRow | null {
+    const target = (monsterName ?? '').trim().toLowerCase();
+    if (!target) return null;
+    const items = this.partySetup.list()?.items ?? [];
+    return items.find(row => (row.assignedMonsterName ?? '').trim().toLowerCase() === target) ?? null;
+  }
+
+  protected readonly expandedSetupGroups = signal<Set<string>>(new Set());
+
+  protected isSetupExpanded(key: string): boolean {
+    return this.expandedSetupGroups().has(key);
+  }
+
+  protected toggleSetup(key: string): void {
+    const next = new Set(this.expandedSetupGroups());
+    if (next.has(key)) next.delete(key); else next.add(key);
+    this.expandedSetupGroups.set(next);
   }
 
   // ----- Re-implemented small reads -----

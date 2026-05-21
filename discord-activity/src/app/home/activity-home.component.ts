@@ -10,8 +10,10 @@ import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.componen
 import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
+import { DkpSheetTabComponent } from './tabs/dkp-sheet-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
 import { LinkshellTabComponent } from './tabs/linkshell-tab.component';
+import { PartySetupTabComponent } from './tabs/party-setup-tab.component';
 import { TodsTabComponent } from './tabs/tods-tab.component';
 import { WindowEventsTabComponent } from './tabs/window-events-tab.component';
 import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.component';
@@ -24,9 +26,11 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     ActivitySidebarPanelComponent,
     ConfigurationsTabComponent,
     DashboardTabComponent,
+    DkpSheetTabComponent,
     EventsTabComponent,
     LinkshellTabComponent,
     LootHistoryPanelComponent,
+    PartySetupTabComponent,
     TodsTabComponent,
     WindowEventsTabComponent
   ],

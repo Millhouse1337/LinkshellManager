@@ -1,0 +1,92 @@
+<dialog #editorDialog class="event-edit-modal-dialog" (click)="onDialogClick($event)">
+  <div class="card-head">
+    <div class="card-title">{{ editingId !== null ? 'Edit Party Setup' : 'New Party Setup' }}</div>
+    <button type="button" class="btn ghost sm" (click)="closeDialog()">Close</button>
+  </div>
+  <div class="card-body">
+    <form class="pse-form" (ngSubmit)="save()">
+      <div class="form-row">
+        <label class="field">
+          <span class="form-label">Name</span>
+          <input class="form-input" [(ngModel)]="name" name="psName" maxlength="128" placeholder="e.g. Nidhogg Alliance" required />
+        </label>
+        <label class="field">
+          <span class="form-label">Assigned monster</span>
+          <select class="form-select" [(ngModel)]="assignedMonster" name="psMonster">
+            <option value="">Unassigned</option>
+            @for (m of monsterOptions(); track m) { <option [value]="m">{{ m }}</option> }
+          </select>
+        </label>
+      </div>
+      <label class="field">
+        <span class="form-label">Notes (optional)</span>
+        <textarea class="form-input" [(ngModel)]="notes" name="psNotes" maxlength="1024" rows="2"></textarea>
+      </label>
+
+      @for (alliance of alliances; track alliance; let ai = $index) {
+        <div class="pse-alliance">
+          <div class="pse-alliance-head">
+            <input class="form-input pse-name-input" [(ngModel)]="alliance.name" [name]="'allianceName' + ai"
+              placeholder="Alliance {{ ai + 1 }}" maxlength="64" />
+            <div class="pse-head-actions">
+              <button type="button" class="btn sm" (click)="addParty(alliance)" [disabled]="alliance.parties.length >= MAX_PARTIES">+ Party</button>
+              <button type="button" class="btn sm danger-outline" (click)="removeAlliance(ai)">Remove alliance</button>
+            </div>
+          </div>
+
+          <div class="pse-party-grid">
+            @for (party of alliance.parties; track party; let pi = $index) {
+              <div class="pse-party">
+                <div class="pse-party-head">
+                  <input class="form-input pse-name-input" [(ngModel)]="party.name" [name]="'partyName' + ai + '_' + pi"
+                    placeholder="Party {{ pi + 1 }}" maxlength="64" />
+                  <div class="pse-head-actions">
+                    <button type="button" class="btn sm" (click)="addSlot(party)" [disabled]="party.slots.length >= MAX_SLOTS">+ Slot</button>
+                    <button type="button" class="btn sm danger-outline" (click)="removeParty(alliance, pi)">Remove</button>
+                  </div>
+                </div>
+
+                @for (slot of party.slots; track slot; let si = $index) {
+                  <div class="pse-slot">
+                    <select class="form-select" [(ngModel)]="slot.role" [name]="'slotRole' + ai + '_' + pi + '_' + si">
+                      <option [value]="ANY_ROLE">{{ ANY_ROLE }}</option>
+                      @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
+                    </select>
+                    <select class="form-select" [(ngModel)]="slot.mainJob" [name]="'slotMain' + ai + '_' + pi + '_' + si">
+                      <option value="">Any job</option>
+                      @for (j of mainJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                    </select>
+                    <select class="form-select" [(ngModel)]="slot.subJob" [name]="'slotSub' + ai + '_' + pi + '_' + si">
+                      <option value="">No sub</option>
+                      @for (j of subJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                    </select>
+                    <label class="pse-leader" title="Party leader">
+                      <input type="checkbox" [ngModel]="slot.isPartyLeader"
+                        (ngModelChange)="setLeader(party, slot, $event)" [name]="'slotLeader' + ai + '_' + pi + '_' + si" />
+                      <span>&#9733;</span>
+                    </label>
+                    <button type="button" class="btn sm danger-outline" (click)="removeSlot(party, si)">&times;</button>
+                  </div>
+                }
+                @if (party.slots.length === 0) {
+                  <div class="pse-empty">No slots &mdash; add one.</div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <div>
+        <button type="button" class="btn sm" (click)="addAlliance()">+ Alliance</button>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn primary" [disabled]="partySetup.busy()">
+          {{ partySetup.busy() ? 'Saving...' : (editingId !== null ? 'Save changes' : 'Create setup') }}
+        </button>
+        <button type="button" class="btn ghost" (click)="closeDialog()" [disabled]="partySetup.busy()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</dialog>

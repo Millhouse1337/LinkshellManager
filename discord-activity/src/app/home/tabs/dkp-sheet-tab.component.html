@@ -1,0 +1,81 @@
+<div class="panel-tab fade">
+  <div class="section-head">
+    <div>
+      <div class="section-label">DKP</div>
+      <div class="section-title">DKP Sheet</div>
+    </div>
+    <div class="section-head-right">
+      @if (data()?.openInSheetsUrl) {
+        <button type="button" class="btn sm ghost" (click)="openInSheets()">Open in Sheets</button>
+      }
+      <button type="button" class="btn sm" (click)="dkpSheet.load(primaryLinkshellId())" [disabled]="dkpSheet.busy()">Refresh</button>
+    </div>
+  </div>
+
+  @if (data(); as model) {
+    @if (!model.connected) {
+      <section class="card">
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">{{ model.error || 'Connect the Google Sheet on the web to view it here.' }}</div>
+        </div>
+      </section>
+    } @else if (model.error) {
+      <section class="card">
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">{{ model.error }}</div>
+        </div>
+      </section>
+    } @else if (model.tabs.length === 0) {
+      <section class="card">
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">The sheet has no tabs to show.</div>
+        </div>
+      </section>
+    } @else {
+      <section class="card">
+        <div class="dkp-sheet-toolbar">
+          <div class="dkp-sheet-tabs">
+            @for (tab of model.tabs; track tab.name) {
+              <button type="button" class="dkp-sheet-tabbtn" [class.active]="activeTab()?.name === tab.name" (click)="selectTab(tab.name)">{{ tab.name }}</button>
+            }
+          </div>
+          <input type="search" class="dkp-sheet-search" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)" placeholder="Search..." />
+        </div>
+
+        @if (activeTab(); as tab) {
+          <div class="table-scroll">
+            <table class="dkp-sheet-table" [class.is-main]="tab.isMainTab">
+              <thead>
+                <tr>
+                  <th class="dkp-sheet-rownum"></th>
+                  @for (header of tab.headers; track $index) {
+                    <th [class.dkp-sheet-col0]="tab.isMainTab && $index === 0">{{ header }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of filteredRows(); track row.rowNumber) {
+                  <tr>
+                    <td class="dkp-sheet-rownum">{{ row.rowNumber }}</td>
+                    @for (cell of row.cells; track $index) {
+                      <td [class.dkp-sheet-col0]="tab.isMainTab && $index === 0">{{ cell }}</td>
+                    }
+                  </tr>
+                }
+                @if (filteredRows().length === 0) {
+                  <tr><td class="dkp-sheet-empty" [attr.colspan]="tab.headers.length + 1">No matching rows.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    }
+  } @else {
+    <section class="card">
+      <div class="empty-state empty-state--compact">
+        <div class="empty-state-desc">Loading DKP sheet...</div>
+      </div>
+    </section>
+  }
+</div>

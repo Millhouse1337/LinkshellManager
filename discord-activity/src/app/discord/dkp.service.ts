@@ -3,7 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
-import type { ActivityDkpHistory } from './discord-activity.types';
+import type { ActivityDkpAddCandidate, ActivityDkpHistory } from './discord-activity.types';
 
 @Injectable({ providedIn: 'root' })
 export class DkpService {
@@ -13,6 +13,8 @@ export class DkpService {
   readonly dkpHistory = signal<ActivityDkpHistory | null>(null);
   readonly dkpHistoryBusy = signal(false);
   readonly busyDkpAudit = signal(false);
+  readonly dkpAddCandidates = signal<ActivityDkpAddCandidate[]>([]);
+  readonly dkpAddCandidatesBusy = signal(false);
 
   async loadDkpHistory(
     linkshellId?: number | null,
@@ -48,11 +50,43 @@ export class DkpService {
     this.dkpHistory.set(null);
   }
 
+  // Posted attendance/window events the target member was missed by — eligible
+  // for the audit "Add to a previous entry" mode.
+  async loadAddCandidates(linkshellId: number, targetAppUserId: string): Promise<void> {
+    if (!linkshellId || !targetAppUserId) {
+      this.dkpAddCandidates.set([]);
+      return;
+    }
+
+    this.dkpAddCandidatesBusy.set(true);
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      const query = new URLSearchParams();
+      query.set('linkshellId', String(linkshellId));
+      query.set('targetAppUserId', targetAppUserId);
+      const result = await this.http.fetchActivityJson<{ entries: ActivityDkpAddCandidate[] }>(
+        `/api/activity/dkp-audit/add-candidates?${query.toString()}`,
+        accessToken
+      );
+      this.dkpAddCandidates.set(result?.entries ?? []);
+    } catch (error) {
+      this.dkpAddCandidates.set([]);
+      this.auth.setActionError(formatActionError(error, 'Loading snapshot entries failed.'));
+    } finally {
+      this.dkpAddCandidatesBusy.set(false);
+    }
+  }
+
+  clearAddCandidates(): void {
+    this.dkpAddCandidates.set([]);
+  }
+
   async submitDkpAudit(input: {
     linkshellId: number;
     targetAppUserId: string;
-    mode: 'Adjust' | 'Misc';
+    mode: 'Adjust' | 'Add' | 'Misc';
     relatedLedgerEntryId?: number | null;
+    sourceWindowEventId?: number | null;
     amount: number;
     reason: string;
   }): Promise<boolean> {
@@ -66,6 +100,7 @@ export class DkpService {
         targetAppUserId: input.targetAppUserId,
         mode: input.mode,
         relatedLedgerEntryId: input.relatedLedgerEntryId ?? null,
+        sourceWindowEventId: input.sourceWindowEventId ?? null,
         amount: input.amount,
         reason: input.reason
       });

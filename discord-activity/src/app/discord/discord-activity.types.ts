@@ -786,3 +786,135 @@ export interface DiscordRpcErrorLike {
   evt?: string | null;
   message?: string;
 }
+
+// --- Party Setup (raid-composition planner) ---
+
+export interface ActivityPartySetupListRow {
+  id: number;
+  name: string;
+  assignedMonsterName?: string | null;
+  allianceCount: number;
+  partyCount: number;
+  slotCount: number;
+  updatedAt: string;
+}
+
+export interface ActivityPartySetupListResponse {
+  linkshellId: number;
+  linkshellName?: string | null;
+  canManage: boolean;
+  items: ActivityPartySetupListRow[];
+  // Option lists bundled with the list so the editor + sign-up dropdowns need
+  // no second call.
+  monsterOptions: string[];
+  roleOptions: string[];
+  mainJobOptions: string[];
+  subJobOptions: string[];
+}
+
+export interface ActivityPartySetupSlot {
+  slotId: number;
+  position: number;
+  requirementType: string;
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
+  label?: string | null;
+  isPartyLeader: boolean;
+  // Member sign-up snapshot (all null when the slot is open).
+  signedUpAppUserId?: string | null;
+  signedUpCharacterName?: string | null;
+  signedUpRole?: string | null;
+  signedUpMainJob?: string | null;
+  signedUpSubJob?: string | null;
+}
+
+export interface ActivityPartySetupParty {
+  name: string;
+  slots: ActivityPartySetupSlot[];
+}
+
+export interface ActivityPartySetupAlliance {
+  name: string;
+  parties: ActivityPartySetupParty[];
+}
+
+export interface ActivityPartySetupDetail {
+  id: number;
+  linkshellId: number;
+  name: string;
+  assignedMonsterName?: string | null;
+  notes?: string | null;
+  canManage: boolean;
+  alliances: ActivityPartySetupAlliance[];
+}
+
+export interface ActivityPartySetupSignUpInput {
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
+}
+
+// Officer editor: a flat slot list (each row carries its alliance/party/slot
+// index) the server rebuilds into the tree. RequirementType is derived from the
+// picks client-side (Job > Role > Any) so it matches the server's MapSlot.
+export interface ActivityPartySetupSlotInput {
+  allianceIndex: number;
+  partyIndex: number;
+  slotIndex: number;
+  allianceName?: string | null;
+  partyName?: string | null;
+  requirementType: string;
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
+  isPartyLeader: boolean;
+}
+
+export interface ActivityPartySetupEditorInput {
+  linkshellId: number;
+  name: string;
+  assignedMonsterName?: string | null;
+  notes?: string | null;
+  slots: ActivityPartySetupSlotInput[];
+}
+
+// --- App DKP Sheet (read-only Google Sheet viewer) ---
+
+export interface ActivityDkpSheetRow {
+  rowNumber: number;
+  cells: string[];
+  // Lowercased join of cells (Tally rows also carry the member name) for the
+  // client-side filter box.
+  searchText: string;
+}
+
+export interface ActivityDkpSheetTab {
+  name: string;
+  isMainTab: boolean;
+  headers: string[];
+  rows: ActivityDkpSheetRow[];
+}
+
+export interface ActivityDkpSheetResponse {
+  connected: boolean;
+  linkshellId: number;
+  linkshellName?: string | null;
+  openInSheetsUrl?: string | null;
+  error?: string | null;
+  tabs: ActivityDkpSheetTab[];
+}
+
+// DKP audit "Add to a previous entry" mode: a posted attendance/window event the
+// target member was missed by, eligible to be credited (amount is the event's
+// DKP, derived server-side on submit).
+export interface ActivityDkpAddCandidate {
+  windowEventId: number;
+  label: string;
+  occurredAt: string;
+  amount: number;
+  eventName?: string | null;
+  entryType?: string | null;
+  primaryZone?: string | null;
+  memberCount: number;
+}

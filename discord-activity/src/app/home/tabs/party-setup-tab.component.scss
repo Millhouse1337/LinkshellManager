@@ -1,0 +1,55 @@
+.table-scroll {
+  overflow-x: auto;
+  padding: 0 12px 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.ps-row {
+  cursor: pointer;
+}
+
+.ps-row:hover td,
+.ps-row.is-selected td {
+  background: var(--accent-weak);
+}
+
+.ps-assigned {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.ps-detail {
+  padding: 10px 12px 14px;
+}
+
+.ps-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ps-assign-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.ps-assign-row select {
+  min-height: 32px;
+  min-width: 160px;
+}

@@ -66,6 +66,7 @@ export type {
   ActivityCreateEventJobInput,
   ActivityCreateLinkshellInput,
   ActivityCreateTodInput,
+  ActivityDkpAddCandidate,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
   ActivityEventParticipant,
@@ -169,6 +170,8 @@ export class DiscordActivityService {
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
   readonly busyDkpAudit = this.dkpService.busyDkpAudit;
+  readonly dkpAddCandidates = this.dkpService.dkpAddCandidates;
+  readonly dkpAddCandidatesBusy = this.dkpService.dkpAddCandidatesBusy;
   readonly lootHistory = this.lootHistoryService.lootHistory;
   readonly lootHistoryBusy = this.lootHistoryService.lootHistoryBusy;
   readonly busyLootEdit = this.lootHistoryService.busyLootEdit;
@@ -647,7 +650,9 @@ export class DiscordActivityService {
   // --- DkpService ---
   loadDkpHistory(linkshellId?: number | null, appUserId?: string | null): Promise<ActivityDkpHistory | null> { return this.dkpService.loadDkpHistory(linkshellId, appUserId); }
   clearDkpHistory(): void { this.dkpService.clearDkpHistory(); }
-  submitDkpAudit(input: { linkshellId: number; targetAppUserId: string; mode: 'Adjust' | 'Misc'; relatedLedgerEntryId?: number | null; amount: number; reason: string }): Promise<boolean> { return this.dkpService.submitDkpAudit(input); }
+  submitDkpAudit(input: { linkshellId: number; targetAppUserId: string; mode: 'Adjust' | 'Add' | 'Misc'; relatedLedgerEntryId?: number | null; sourceWindowEventId?: number | null; amount: number; reason: string }): Promise<boolean> { return this.dkpService.submitDkpAudit(input); }
+  loadDkpAuditAddCandidates(linkshellId: number, targetAppUserId: string): Promise<void> { return this.dkpService.loadAddCandidates(linkshellId, targetAppUserId); }
+  clearDkpAuditAddCandidates(): void { this.dkpService.clearAddCandidates(); }
 
   // --- LootHistoryService ---
   loadLootHistory(source: 'all' | 'tod' | 'event' = 'all', page: number = 1, pageSize: number = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(source, page, pageSize); }

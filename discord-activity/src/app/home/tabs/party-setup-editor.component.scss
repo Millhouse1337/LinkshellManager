@@ -1,0 +1,74 @@
+.pse-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pse-alliance {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pse-alliance-head,
+.pse-party-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.pse-head-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pse-name-input {
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+
+.pse-party-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.pse-party {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pse-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pse-slot .form-select {
+  flex: 1 1 80px;
+  min-width: 68px;
+}
+
+.pse-leader {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--warning);
+  cursor: pointer;
+}
+
+.pse-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
