@@ -168,3 +168,28 @@
 .lsm-page .create-form__grid > label > textarea:focus-visible {
     outline: none; border-color: var(--blue-main); box-shadow: 0 0 0 3px rgba(79, 124, 255, .25);
 }
+
+/* ---------- Modals (Bootstrap; kept in-DOM under .lsm-page) ---------- */
+.lsm-page .modal-content {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    color: var(--text-main);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+}
+.lsm-page .modal-header { border-bottom: 1px solid var(--border-soft); }
+.lsm-page .modal-footer { border-top: 1px solid var(--border-soft); }
+.lsm-page .modal-title { color: var(--text-main); font-weight: 700; }
+.lsm-page .field > label { color: var(--text-muted); font-size: 13px; }
+
+/* Bootstrap form-control inputs (e.g. auction modals) themed like the rest. */
+.lsm-page .form-control {
+    background: var(--bg-panel-light); color: var(--text-main);
+    border: 1px solid var(--border-soft); border-radius: 8px;
+}
+.lsm-page .form-control:focus {
+    outline: none; border-color: var(--blue-main);
+    box-shadow: 0 0 0 3px rgba(79, 124, 255, .25);
+    background: var(--bg-panel-light); color: var(--text-main);
+}
+.lsm-page .form-control::placeholder { color: var(--text-muted); }

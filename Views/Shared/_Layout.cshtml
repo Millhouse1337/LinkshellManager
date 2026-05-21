@@ -146,7 +146,10 @@
                     </div>
                 </div>
 
-                <div class="content @(ViewData["BodyClass"])">
+                @* The lsm-theme is default-on for every page; a view opts OUT
+                   by setting ViewData["BodyClass"] = "" (used by the few pages
+                   with their own full-bleed bespoke styling). *@
+                <div class="content @(ViewData["BodyClass"] as string ?? "lsm-page")">
                     @RenderBody()
                 </div>
             </div>

@@ -2,6 +2,7 @@
 @using LinkshellManagerDiscordApp.Models
 @{
     ViewData["Title"] = "Attendance Events";
+    ViewData["BodyClass"] = ""; // bespoke .attendance-page styling; opt out of lsm-theme
 
     string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
 }

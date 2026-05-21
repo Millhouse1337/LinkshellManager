@@ -2,6 +2,7 @@
 
 @{
     ViewData["Title"] = "ToD Tracker";
+    ViewData["BodyClass"] = ""; // bespoke .tod-page styling; opt out of lsm-theme
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
 }
 
