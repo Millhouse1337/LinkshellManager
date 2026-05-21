@@ -174,21 +174,26 @@ else
                     <input class="input" type="text" name="spreadsheetId" value="@Model.SpreadsheetId" placeholder="e.g. 1YNfaF5AXbZoJdKrs21p29pfAl6Q9wJsQWafPztG3Nxk" />
                     <small>The long string between <code>/d/</code> and <code>/edit</code> in the sheet URL.</small>
                 </div>
-                <div class="form-row">
-                    <label>Main tab name (optional)</label>
-                    <input class="input" type="text" name="tabName" value="@Model.TabName" placeholder="Main" />
-                    <small>Defaults to <code>Main</code>. Used for the reconciliation page's read of B7:L200.</small>
-                </div>
-                <div class="form-row">
-                    <label>AttInput tab name (optional)</label>
-                    <input class="input" type="text" name="attInputTabName" value="@Model.AttInputTabName" placeholder="AttInput" />
-                    <small>Defaults to <code>AttInput</code>. The app appends one row per attendee/snapshot here. Your column-C formula is never overwritten.</small>
+                @* Main + AttInput tab names paired as 2 columns so AttInput
+                   sits beside Main instead of stacking below it, saving
+                   vertical space. Collapses to one column on narrow widths. *@
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px">
+                    <div class="form-row" style="margin:0">
+                        <label>Main tab name (optional)</label>
+                        <input class="input" type="text" name="tabName" value="@Model.TabName" placeholder="Main" />
+                        <small>Defaults to <code>Main</code>. Used for the reconciliation page's read of B7:L200.</small>
+                    </div>
+                    <div class="form-row" style="margin:0">
+                        <label>AttInput tab name (optional)</label>
+                        <input class="input" type="text" name="attInputTabName" value="@Model.AttInputTabName" placeholder="AttInput" />
+                        <small>Defaults to <code>AttInput</code>. The app appends one row per attendee/snapshot here. Your column-C formula is never overwritten.</small>
+                    </div>
                 </div>
                 @* Default Entry Type + ManualPoints tab name laid out as
                    2 columns -- they're independent text inputs and pair
                    visually since both are sheet-tab-related secondary
                    settings. Collapses to a single column on narrow widths. *@
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px">
                     <div class="form-row" style="margin:0">
                         <label>Default Entry Type for snapshots without a linked event (optional)</label>
                         <input class="input" type="text" name="attInputDefaultEntryType" value="@Model.AttInputDefaultEntryType" placeholder="e.g. Misc Camp" />

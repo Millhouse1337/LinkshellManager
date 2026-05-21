@@ -101,6 +101,7 @@
     <title>@pageTitle · LinkshellManager</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/lsm-theme.css" asp-append-version="true" />
 </head>
 <body>
     @if (isSignedIn && currentUser is not null)
@@ -145,7 +146,7 @@
                     </div>
                 </div>
 
-                <div class="content">
+                <div class="content @(ViewData["BodyClass"])">
                     @RenderBody()
                 </div>
             </div>

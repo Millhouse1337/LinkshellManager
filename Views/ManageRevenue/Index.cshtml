@@ -1,6 +1,7 @@
 @model IEnumerable<LinkshellManagerDiscordApp.ViewModels.ManageRevenueViewModel>
 @{
     ViewData["Title"] = "Revenue";
+    ViewData["BodyClass"] = "lsm-page";
     var canManage = (bool)(ViewBag.CanManage ?? false);
     var linkshellName = ViewBag.LinkshellName as string;
     var totalValue = (long)(ViewBag.TotalValue ?? 0L);

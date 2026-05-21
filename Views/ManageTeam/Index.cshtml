@@ -1,6 +1,7 @@
 @model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
 @{
     ViewData["Title"] = "Manage Team";
+    ViewData["BodyClass"] = "lsm-page";
     var message = ViewBag.Message as string;
     var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
 }

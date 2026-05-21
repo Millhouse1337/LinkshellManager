@@ -148,6 +148,7 @@ else
         {
             var tab = Model.Tabs[t];
             var isMainTab = string.Equals(tab.Name, "Main", StringComparison.OrdinalIgnoreCase);
+            var isTallyTab = string.Equals(tab.Name, "Tally", StringComparison.OrdinalIgnoreCase);
             var mainHeaderRow = isMainTab ? tab.Rows.FirstOrDefault(r => r.RowNumber == 6) : null;
             var mainTotalRow = isMainTab ? tab.Rows.FirstOrDefault(r => r.RowNumber == 7) : null;
             var mainHeaderStart = 1;
@@ -159,7 +160,10 @@ else
             // every data column is colWidth, the narrow A column is 38, the
             // # gutter is 58.
             var colWidth  = 110;  // every data/header column (px)
-            Func<int, int> bodyColWidth = c => c == 0 ? 38 : colWidth;
+            // Column A is a blank spacer on the Main tab (member names live in
+            // column B), so render it narrow there. On every other tab column A
+            // holds real data (member names), so give it the full column width.
+            Func<int, int> bodyColWidth = c => (c == 0 && isMainTab) ? 38 : colWidth;
             var hasDiagRow = isMainTab && mainHeaderRow is not null;
             <div class="app-sheet-panel" data-tab-index="@t" style="@(t == 0 ? "" : "display:none")">
                 @if (tab.ColumnCount == 0)
@@ -223,7 +227,7 @@ else
                                     @for (var c = 0; c < tab.Headers.Count; c++)
                                     {
                                         var columnWidth = bodyColWidth(c);
-                                        var columnPadding = c == 0 ? "8px 6px" : "8px 12px";
+                                        var columnPadding = (c == 0 && isMainTab) ? "8px 6px" : "8px 12px";
                                         <th class="app-sheet-sortable"
                                             data-sort-col="@c"
                                             style="text-align:center;padding:@columnPadding;position:sticky;top:@(hasDiagRow ? "96px" : "0");background:var(--surface,#111);z-index:2;cursor:pointer;user-select:none;width:@(columnWidth)px;min-width:@(columnWidth)px;max-width:@(columnWidth)px">
@@ -257,11 +261,12 @@ else
                                                 c <= 4 ? "#173f10" :
                                                 "#21484c";
                                             var columnWidth = bodyColWidth(c);
-                                            var columnPadding = c == 0 ? "7px 6px" : "7px 12px";
+                                            var columnPadding = (c == 0 && isMainTab) ? "7px 6px" : "7px 12px";
                                             <td style="padding:@columnPadding;white-space:nowrap;text-align:center;background:@bg;width:@(columnWidth)px;min-width:@(columnWidth)px;max-width:@(columnWidth)px">@totalValue</td>
                                         }
                                     </tr>
                                 }
+                                @{ var tallyMember = string.Empty; }
                                 @foreach (var row in tab.Rows)
                                 {
                                     // Sheet rows 6 (diagonal headers) and 7 (TOTAL) are
@@ -271,14 +276,32 @@ else
                                     {
                                         continue;
                                     }
+                                    // Tally is laid out in per-member blocks: a row with the
+                                    // member name in column A, then unnamed child rows (Kings
+                                    // Camp, Wyrms Camp, Misc Camp, Kill, Spent DKP, Legacy
+                                    // DKP). Carry the current member's name onto each child
+                                    // row's search text so filtering by name reveals the whole
+                                    // block, not just the lone name row.
+                                    if (isTallyTab)
+                                    {
+                                        var firstCell = row.Cells.Count > 0 ? (row.Cells[0] ?? string.Empty).Trim() : string.Empty;
+                                        if (!string.IsNullOrWhiteSpace(firstCell))
+                                        {
+                                            tallyMember = firstCell;
+                                        }
+                                    }
                                     var search = string.Join(" ", row.Cells).ToLowerInvariant();
+                                    if (isTallyTab && !string.IsNullOrWhiteSpace(tallyMember))
+                                    {
+                                        search = (search + " " + tallyMember).ToLowerInvariant();
+                                    }
                                     <tr class="app-sheet-row" data-search="@search" style="border-top:1px solid var(--border,#222)">
                                         <td style="text-align:right;padding:7px 10px;position:sticky;left:0;background:var(--surface,#111);color:var(--fg-muted,#888);z-index:1">@row.RowNumber</td>
                                         @for (var c = 0; c < tab.ColumnCount; c++)
                                         {
                                             var value = c < row.Cells.Count ? row.Cells[c] : string.Empty;
                                             var columnWidth = bodyColWidth(c);
-                                            var columnPadding = c == 0 ? "7px 6px" : "7px 12px";
+                                            var columnPadding = (c == 0 && isMainTab) ? "7px 6px" : "7px 12px";
                                             <td class="app-sheet-cell" data-col="@c" style="padding:@columnPadding;white-space:nowrap;text-align:center;width:@(columnWidth)px;min-width:@(columnWidth)px;max-width:@(columnWidth)px">@value</td>
                                         }
                                     </tr>

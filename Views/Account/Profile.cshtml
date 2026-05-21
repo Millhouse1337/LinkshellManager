@@ -1,6 +1,7 @@
 @model ProfileViewModel
 @{
     ViewData["Title"] = "Profile";
+    ViewData["BodyClass"] = "lsm-page";
     var imageSource = Model.ProfileImageData is { Length: > 0 }
         ? $"data:image/png;base64,{Convert.ToBase64String(Model.ProfileImageData)}"
         : null;

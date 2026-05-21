@@ -2,6 +2,7 @@
 @using LinkshellManagerDiscordApp.Models
 @{
     ViewData["Title"] = "Attendance History";
+    ViewData["BodyClass"] = "lsm-page";
     var from = Model.TotalCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
     var to = Math.Min(Model.Page * Model.PageSize, Model.TotalCount);
 }

@@ -171,6 +171,39 @@ After 24-48h of stable running:
 | Postgres shell | `ssh root@<IP> 'sudo -u postgres psql lsmanager'` |
 | Backup DB | `ssh root@<IP> 'sudo -u postgres pg_dump lsmanager' > backup-$(date +%F).sql` |
 
+## One-time migration: persistent Data Protection keys
+
+The app encrypts Google Sheet refresh tokens (and signs auth cookies / antiforgery
+tokens) with the ASP.NET Core Data Protection key ring. That key ring must live
+**outside** `/var/www/lsmanager`, because `deploy.ps1` replaces that directory on
+every release. Fresh bootstraps (`setup-droplet.sh`) now provision this
+automatically; **existing droplets created before this change need a one-time
+fixup** or they'll keep losing their Google Sheet connection (and logging
+everyone out) on every deploy:
+
+```bash
+ssh root@<IP>
+# 1. Create the persistent key ring dir owned by the service user.
+sudo mkdir -p /var/lib/lsmanager/keys
+sudo chown -R lsmanager:lsmanager /var/lib/lsmanager
+sudo chmod 700 /var/lib/lsmanager/keys
+
+# 2. Point the app at it (the deploy already ships an updated unit file, but the
+#    env file is left untouched by setup-droplet.sh, so add this line yourself).
+echo 'DataProtection__KeyRingPath=/var/lib/lsmanager/keys' | sudo tee -a /etc/lsmanager/env
+
+# 3. Reload the unit (new ReadWritePaths) and restart.
+sudo systemctl daemon-reload
+sudo systemctl restart lsmanager
+```
+
+After this, each linkshell reconnects its Google Sheet **one final time**; the
+key ring then persists across all future deploys, so the connection sticks.
+
+> If Google still drops the connection after ~7 days, the OAuth consent screen in
+> Google Cloud Console is in **Testing** mode (refresh tokens expire in 7 days).
+> Publish it to **Production** to stop that — that's a Google-side limit, not app code.
+
 ## Things to set up later (not blocking go-live)
 
 - Automated daily `pg_dump` to a DO Spaces bucket (or any object store).

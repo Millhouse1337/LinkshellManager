@@ -1046,6 +1046,10 @@ public sealed partial class AddonApiController
         _dbContext.Tods.Add(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // A new ToD = a new pop window, so reset any party sign-ups assigned to
+        // this monster (the old roster is for the pop that just happened).
+        await PartySetupController.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
+
         // Streamlined HNM workflow: queue the next-repop event automatically
         // when the captured monster is a tracked HNM. Failures here must not
         // bubble up -- the ToD itself is the contract of this endpoint, the

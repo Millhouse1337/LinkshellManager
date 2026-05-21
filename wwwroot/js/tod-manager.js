@@ -25,7 +25,11 @@
                 const endTime = Date.parse(el.dataset.endUtc);
                 if (Number.isNaN(endTime)) { el.textContent = '—'; return; }
                 const remaining = endTime - now;
-                el.textContent = remaining <= 0 ? 'Ready' : formatCountdown(remaining);
+                const isReady = remaining <= 0;
+                el.textContent = isReady ? 'Ready' : formatCountdown(remaining);
+                // Lets the ToD Tracker pill flip from neutral/blue (counting)
+                // to green only once the mob is poppable.
+                el.classList.toggle('is-ready', isReady);
             });
         }
         tick();

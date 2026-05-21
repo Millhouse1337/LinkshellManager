@@ -7,8 +7,26 @@
     var formHeader = isEditMode ? "Update ToD" : "Submit ToD";
     var formAction = isEditMode ? "Edit" : "Create";
     ViewData["Title"] = pageHeading;
+    ViewData["BodyClass"] = "lsm-page";
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
 }
+
+<style>
+    /* The global dark-theme reset hides the native up/down spinner on every
+       number input. Opt the Day Number field back in (class="show-spinner")
+       so it gets clickable increment/decrement arrows. */
+    input[type="number"].show-spinner {
+        -moz-appearance: number-input;
+        appearance: auto;
+    }
+    input[type="number"].show-spinner::-webkit-inner-spin-button,
+    input[type="number"].show-spinner::-webkit-outer-spin-button {
+        -webkit-appearance: inner-spin-button;
+        appearance: auto;
+        opacity: 1;
+        margin: 0;
+    }
+</style>
 
 <div class="page-head fade d1">
     <div>
@@ -88,7 +106,7 @@ else
 
             <label>
                 <span>Day number</span>
-                <input asp-for="Tod.DayNumber" type="number" min="0" inputmode="numeric" placeholder="0" />
+                <input asp-for="Tod.DayNumber" type="number" min="0" inputmode="numeric" placeholder="0" class="show-spinner" />
                 <span asp-validation-for="Tod.DayNumber" class="create-form__error"></span>
             </label>
 

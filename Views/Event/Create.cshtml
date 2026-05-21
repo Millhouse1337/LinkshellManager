@@ -1,6 +1,7 @@
 @model EventViewModel
 @{
     ViewData["Title"] = "Create event";
+    ViewData["BodyClass"] = "lsm-page";
     var mainJobOptionsJson = System.Text.Json.JsonSerializer.Serialize(LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions);
     var subJobOptionsJson = System.Text.Json.JsonSerializer.Serialize(LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions);
     var typeOptionsJson = System.Text.Json.JsonSerializer.Serialize(LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions);

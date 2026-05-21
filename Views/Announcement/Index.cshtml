@@ -1,6 +1,7 @@
 @model IEnumerable<LinkshellManagerDiscordApp.ViewModels.AnnouncementViewModel>
 @{
     ViewData["Title"] = "Announcements";
+    ViewData["BodyClass"] = "lsm-page";
     var canManage = (bool)(ViewBag.CanManage ?? false);
     var linkshellName = ViewBag.LinkshellName as string;
 }

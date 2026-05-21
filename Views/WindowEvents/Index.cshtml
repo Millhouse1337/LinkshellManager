@@ -6,123 +6,359 @@
     string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
 }
 
-<div class="page-head fade d1">
-    <div>
-        <h1 class="page-title">Attendance Events</h1>
-        <div class="page-sub">
-            <span>Alliance-wide snapshots posted from the LSM addon</span>
-            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
-            {
-                <span class="dot"> &middot; </span>
-                <span>@Model.LinkshellName</span>
-            }
+@* Scoped visual redesign of Attendance Events. Everything is namespaced under
+   .attendance-page so the new palette/components can't leak elsewhere, and the
+   shared we-* classes used by _WindowEventCard / _WindowSnapshotEntries are
+   re-themed in place — every form, route, and the per-row DKP sync script keep
+   working untouched. Matches the ToD Tracker redesign's visual language. *@
+<style>
+    .attendance-page {
+        /* Palette (scoped) */
+        --bg-main:#0d1117; --bg-panel:#161b22; --bg-panel-light:#1f2630;
+        --bg-card:#202833; --bg-card-hover:#273241;
+        --border-soft:#2f3b4a; --border-glow:#3f6cff;
+        --text-main:#e6edf3; --text-muted:#9ca3af;
+        --blue-main:#4f7cff; --blue-dark:#1f3bb3;
+        --gold-main:#d6a93f; --gold-dark:#7a5a16;
+        --purple-main:#8b5cf6; --cyan-main:#38bdf8;
+        --red-main:#ff6b6b; --green-main:#43d17a;
+
+        margin:-24px -28px -48px; padding:24px 28px 48px; min-height:calc(100vh - 48px);
+        color:var(--text-main);
+        background:
+            radial-gradient(900px 520px at 8% -6%, rgba(79,124,255,.10), transparent 60%),
+            radial-gradient(780px 540px at 102% 104%, rgba(139,92,246,.11), transparent 58%),
+            radial-gradient(620px 460px at 100% 0%, rgba(214,169,63,.05), transparent 55%),
+            var(--bg-main);
+    }
+
+    /* ---------- Header ---------- */
+    .attendance-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+    .attendance-title { font-size:26px; font-weight:800; letter-spacing:.01em; color:var(--text-main); margin:0 0 4px; }
+    .attendance-subtitle { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; color:var(--text-muted); }
+    .attendance-page .attendance-history-link { color:#bcd0ff; border-color:rgba(79,124,255,.4); background:rgba(79,124,255,.06); }
+    .attendance-page .attendance-history-link:hover { background:rgba(79,124,255,.16); color:#eaf0ff; }
+
+    /* ---------- Shared crystal accent ---------- */
+    .attendance-crystal {
+        width:13px; height:13px; transform:rotate(45deg); border-radius:2px; flex:0 0 auto;
+        background:linear-gradient(135deg,#7ea2ff,#1f3bb3);
+        border:1px solid rgba(150,180,255,.7);
+        box-shadow:0 0 12px rgba(79,124,255,.7), inset 0 0 4px rgba(255,255,255,.4);
+    }
+
+    /* ---------- Cards ---------- */
+    .attendance-page .card {
+        background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:14px;
+        box-shadow:0 12px 30px rgba(0,0,0,.4); overflow:hidden;
+    }
+    .attendance-page .card-head {
+        display:flex; align-items:center; justify-content:space-between; gap:10px;
+        padding:13px 18px; border-bottom:1px solid var(--border-soft);
+        background:linear-gradient(180deg, var(--bg-panel-light), var(--bg-panel));
+    }
+    .attendance-page .card-title { display:flex; align-items:center; gap:9px; font-size:15px; font-weight:700; color:var(--text-main); }
+    .attendance-page .empty { color:var(--text-muted); }
+
+    /* ---------- Instructions ---------- */
+    .attendance-page .instructions-card { border-left:3px solid var(--blue-main); box-shadow:0 0 0 1px rgba(79,124,255,.08), 0 12px 30px rgba(0,0,0,.4); }
+    .instructions-body { padding:14px 18px; display:flex; flex-direction:column; gap:11px; font-size:13px; color:var(--text-muted); }
+    .instruction-line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .instruction-line strong { color:var(--text-main); }
+    .instruction-line .hl-gold { color:var(--gold-main); }
+
+    /* Command chip */
+    .attendance-page code, .command-chip {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size:12px; padding:3px 8px; border-radius:6px;
+        background:#0b0f16; color:#ff7edb; border:1px solid var(--border-soft); white-space:nowrap;
+    }
+
+    /* ---------- Tags / alerts ---------- */
+    .attendance-page .tag { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; background:rgba(255,255,255,.05); color:var(--text-muted); border:1px solid var(--border-soft); }
+    .attendance-page .tag.warning { background:rgba(245,158,11,.14); color:#f5c451; border-color:rgba(245,158,11,.4); }
+    .attendance-page .alert { border-radius:10px; padding:10px 14px; font-size:13px; border:1px solid var(--border-soft); }
+    .attendance-page .alert-danger { background:rgba(255,107,107,.10); border-color:rgba(255,107,107,.4); color:#ffb4b4; }
+    .attendance-page .alert-success { background:rgba(67,209,122,.12); border-color:rgba(67,209,122,.4); color:#a7e9c4; }
+
+    /* ---------- Buttons (re-theme existing .btn variants in scope) ---------- */
+    .attendance-page .btn {
+        display:inline-flex; align-items:center; justify-content:center; gap:6px;
+        font-family:inherit; font-weight:600; font-size:13px; line-height:1;
+        padding:9px 14px; border-radius:9px; cursor:pointer; text-decoration:none; white-space:nowrap;
+        color:var(--text-main); background:var(--bg-card); border:1px solid var(--border-soft);
+        transition:all .15s ease;
+    }
+    .attendance-page .btn:hover { background:var(--bg-card-hover); border-color:#3a4757; }
+    .attendance-page .btn.sm { padding:7px 11px; font-size:12.5px; border-radius:8px; }
+    .attendance-page .btn svg { width:15px; height:15px; }
+    .attendance-page .btn.sm svg { width:14px; height:14px; }
+    .attendance-page .btn.ghost { background:rgba(255,255,255,.02); }
+    .attendance-page .btn.primary {
+        color:#fff; border-color:rgba(120,160,255,.55);
+        background:linear-gradient(180deg, var(--blue-main), var(--blue-dark));
+        box-shadow:0 4px 14px rgba(79,124,255,.35), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .attendance-page .btn.primary:hover { filter:brightness(1.08); box-shadow:0 6px 20px rgba(79,124,255,.5); }
+    .attendance-page .btn.danger-outline {
+        color:var(--red-main); background:rgba(255,107,107,.10); border-color:rgba(255,107,107,.45);
+    }
+    .attendance-page .btn.danger-outline:hover { background:rgba(255,107,107,.18); }
+
+    /* ---------- Inputs / dropdowns ---------- */
+    .attendance-page .input, .attendance-page .form-select {
+        background:var(--bg-panel-light); color:var(--text-main); border:1px solid var(--border-soft);
+        border-radius:8px; height:36px; padding:0 10px; font-size:13px;
+    }
+    .attendance-page .input:focus, .attendance-page .form-select:focus {
+        outline:none; border-color:var(--blue-main); box-shadow:0 0 0 3px rgba(79,124,255,.25);
+    }
+    .attendance-page .form-select option { background:#0f141c; color:var(--text-main); }
+
+    /* ---------- Event card (active) ---------- */
+    .attendance-page .we-card {
+        padding:0; border:1px solid rgba(79,124,255,.45); border-radius:16px; overflow:hidden;
+        background:var(--bg-panel);
+        box-shadow:0 0 0 1px rgba(79,124,255,.10), 0 16px 40px rgba(0,0,0,.5), 0 0 34px -12px rgba(79,124,255,.5);
+    }
+    .we-card__head {
+        display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+        padding:16px 18px; border-bottom:1px solid var(--border-soft);
+        background:linear-gradient(180deg, var(--bg-panel-light), var(--bg-panel));
+    }
+    .we-card__title-group { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .we-card__title { font-size:18px; font-weight:800; color:var(--text-main); margin:0; }
+    .we-card__meta {
+        display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+        font-size:12px; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-soft);
+    }
+    .we-card__meta svg { width:14px; height:14px; color:var(--text-muted); }
+    .we-card__counts { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .we-count {
+        display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:999px;
+        font-size:12px; font-weight:600; color:var(--text-muted); background:var(--bg-card); border:1px solid var(--border-soft);
+    }
+    .we-count svg { width:14px; height:14px; }
+    .we-card__counts .we-count:first-child svg { color:var(--blue-main); }
+    .we-card__counts .we-count:last-child svg { color:var(--cyan-main); }
+
+    /* ---------- Event controls ---------- */
+    .we-card__controls {
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+        padding:14px 18px; border-bottom:1px solid var(--border-soft);
+    }
+    .we-rename-form { display:flex; align-items:center; gap:8px; }
+    .we-rename-input { min-width:150px; }
+    .we-card__form { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .we-field { display:flex; align-items:center; gap:8px; }
+    .we-field__label { font-size:12px; color:var(--text-muted); white-space:nowrap; }
+    .we-field__input { width:78px; text-align:right; height:34px; }
+    .we-field__select { height:34px; min-width:150px; }
+    .we-card__actions { display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; }
+
+    /* ---------- Combined roster (nested card) ---------- */
+    .we-roster { margin:14px 18px; background:var(--bg-card); border:1px solid var(--border-soft); border-radius:12px; padding:12px 14px; }
+    .we-roster__subtitle { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; font-weight:700; color:var(--text-main); padding:2px 2px 10px; }
+    .we-roster__subtitle svg { width:16px; height:16px; color:var(--blue-main); flex:0 0 auto; }
+    .we-roster__subtitle-help { color:var(--text-muted); font-weight:400; }
+
+    .we-table__scroll { overflow-x:auto; }
+    /* Snapshot table reads as a contained, rounded dark panel kept clearly
+       inset from the snapshot card border (it was sitting almost flush). */
+    .we-table__scroll--snapshot { padding:2px 18px 16px; }
+    .attendance-page .we-table--snapshot { background:var(--bg-main); border-radius:10px; }
+    .attendance-page .we-table { width:100%; border-collapse:separate; border-spacing:0 8px; font-size:13px; min-width:520px; }
+    .attendance-page .we-table thead th {
+        text-transform:uppercase; font-size:10.5px; letter-spacing:.08em; font-weight:600;
+        color:var(--text-muted); text-align:left; padding:2px 12px 4px; white-space:nowrap;
+    }
+    .attendance-page .we-table thead th.num { text-align:right; }
+    .attendance-page .we-table tbody td {
+        background:var(--bg-panel); border-top:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft);
+        padding:11px 12px; vertical-align:middle; color:var(--text-main);
+    }
+    .attendance-page .we-table tbody td:first-child { border-left:1px solid var(--border-soft); border-radius:9px 0 0 9px; }
+    .attendance-page .we-table tbody td:last-child { border-right:1px solid var(--border-soft); border-radius:0 9px 9px 0; }
+    .attendance-page .we-table tbody tr:hover td { background:var(--bg-card-hover); }
+    .attendance-page .we-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    /* Combined DKP emphasized in gold (combined roster only, not the snapshot table). */
+    .attendance-page .we-roster .we-table:not(.we-table--snapshot) tbody td.num:last-child { color:var(--gold-main); font-weight:700; }
+
+    .attendance-page .we-job-pill {
+        display:inline-flex; align-items:center; padding:3px 9px; border-radius:7px; font-size:11px; font-weight:700; letter-spacing:.02em;
+        background:rgba(139,92,246,.18); color:#cbb8ff; border:1px solid rgba(139,92,246,.45);
+    }
+    .attendance-page .we-job-pill--sub { background:rgba(56,189,248,.16); color:#a6e4ff; border:1px solid rgba(56,189,248,.45); }
+    .attendance-page .we-zone { display:inline-flex; align-items:center; gap:6px; color:var(--text-muted); font-size:12.5px; }
+    .attendance-page .we-zone svg { width:14px; height:14px; color:var(--blue-main); opacity:.85; }
+    .attendance-page .we-muted { color:var(--text-muted); }
+
+    .we-roster__submit { display:flex; align-items:center; justify-content:flex-end; gap:12px; padding-top:8px; flex-wrap:wrap; }
+    .we-posted-meta { font-size:12px; color:var(--text-muted); margin-right:auto; }
+    .we-posted-meta strong { color:var(--text-main); }
+
+    /* ---------- Snapshots (nested cards) ---------- */
+    .we-snapshots { display:flex; flex-direction:column; gap:10px; padding:0 18px 18px; }
+    .we-snapshot { background:var(--bg-card); border:1px solid var(--border-soft); border-left:3px solid rgba(79,124,255,.55); border-radius:12px; overflow:hidden; }
+    .we-snapshot__head { display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer; list-style:none; }
+    .we-snapshot__head::-webkit-details-marker { display:none; }
+    .we-snapshot__caret { display:inline-flex; color:var(--text-muted); transition:transform .15s ease; }
+    .we-snapshot__caret svg { width:16px; height:16px; }
+    .we-snapshot[open] > .we-snapshot__head .we-snapshot__caret { transform:rotate(90deg); }
+    .we-snapshot__title { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13px; color:var(--text-main); }
+    .we-snapshot__title > strong { color:var(--text-main); }
+    .we-snapshot__meta { color:var(--text-muted); font-weight:400; }
+    .we-snapshot__actions { margin-left:auto; }
+
+    .we-unlinked-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:2px 14px 12px; }
+    .we-unlinked-form { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .we-unlinked-name { min-width:150px; }
+    .we-unlinked-select { min-width:180px; }
+
+    .attendance-page .we-dkp-input { width:84px; text-align:right; height:32px; }
+    .we-add-row td { background:transparent !important; border:0 !important; border-radius:0 !important; padding-top:10px !important; }
+    .we-hidden-form { display:none; }
+
+    /* ---------- Responsive ---------- */
+    @@media (max-width: 760px) {
+        .attendance-title { font-size:22px; }
+        .we-card__controls { align-items:stretch; }
+        .we-card__actions { margin-left:0; }
+        .attendance-page .we-table { min-width:0; }
+    }
+</style>
+
+<div class="attendance-page">
+    <div class="attendance-header fade d1">
+        <div>
+            <h1 class="attendance-title">Attendance Events</h1>
+            <div class="attendance-subtitle">
+                <span>Alliance-wide snapshots posted from the LSM addon</span>
+                @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+                {
+                    <span>·</span>
+                    <span>@Model.LinkshellName</span>
+                }
+            </div>
+        </div>
+        <div class="attendance-header-actions">
+            <a class="btn ghost sm attendance-history-link" asp-controller="WindowEvents" asp-action="History" asp-route-linkshellId="@Model.LinkshellId">Attendance History →</a>
         </div>
     </div>
-    <div class="page-actions">
-        <a class="btn ghost sm" asp-controller="WindowEvents" asp-action="History" asp-route-linkshellId="@Model.LinkshellId">Attendance History →</a>
-    </div>
-</div>
 
-@if (TempData["WindowEventError"] is string err)
-{
-    <div class="alert alert-danger fade d2">@err</div>
-}
-@if (TempData["WindowEventStatus"] is string statusMsg)
-{
-    <div class="alert alert-success fade d2">@statusMsg</div>
-}
+    @if (TempData["WindowEventError"] is string err)
+    {
+        <div class="alert alert-danger fade d2" style="margin-bottom:14px">@err</div>
+    }
+    @if (TempData["WindowEventStatus"] is string statusMsg)
+    {
+        <div class="alert alert-success fade d2" style="margin-bottom:14px">@statusMsg</div>
+    }
 
-<div class="card fade d2" style="margin-bottom:14px">
-    <div class="card-head">
-        <div class="card-title">Instructions</div>
-    </div>
-    <div style="padding:12px 16px;font-size:13px;color:var(--fg-muted,#aaa);display:flex;flex-direction:column;gap:10px">
-        <div><code>/lsm now &lt;Monster Name&gt;</code> creates new or updates existing Attendance Events.</div>
-        <div><code>/lsm now</code> will land under Unlinked Snapshots until a leader or officer attaches it.</div>
-        <div>Closed events move to <strong>Attendance History</strong>.</div>
-    </div>
-</div>
-
-@if (Model.UnlinkedSnapshots.Count > 0)
-{
-    <div class="card fade d3">
+    <div class="card instructions-card fade d2" style="margin-bottom:14px">
         <div class="card-head">
-            <div class="card-title">Unlinked Snapshots <span class="tag">@Model.UnlinkedSnapshots.Count</span></div>
+            <div class="card-title"><span class="attendance-crystal"></span> Instructions</div>
         </div>
-        <section class="we-snapshots">
-            @foreach (var snapshot in Model.UnlinkedSnapshots)
-            {
-                <details class="we-snapshot">
-                    <summary class="we-snapshot__head">
-                        <span class="we-snapshot__caret" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
-                        </span>
-                        <span class="we-snapshot__title">
-                            <strong>@snapshot.CapturedAtDisplay</strong>
-                            <span class="we-snapshot__meta">· posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong> · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
-                        </span>
-                    </summary>
-                    @if (Model.CanManage)
-                    {
-                        <div class="we-unlinked-actions">
-                            <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
-                                @Html.AntiForgeryToken()
-                                <input class="input we-unlinked-name" type="text" name="name" value="@snapshot.Name" placeholder="Monster name" maxlength="128" required />
-                                <button type="submit" class="btn sm">Create / attach</button>
-                            </form>
-                            @if (Model.OpenEvents.Count > 0)
-                            {
+        <div class="instructions-body">
+            <div class="instruction-line"><code>/lsm now &lt;Monster Name&gt;</code> <span>creates new or updates existing <strong>Attendance Events</strong>.</span></div>
+            <div class="instruction-line"><code>/lsm now</code> <span>will land under <strong>Unlinked Snapshots</strong> until a leader or officer attaches it.</span></div>
+            <div class="instruction-line"><span>Closed events move to <strong class="hl-gold">Attendance History</strong>.</span></div>
+        </div>
+    </div>
+
+    @if (Model.UnlinkedSnapshots.Count > 0)
+    {
+        <div class="card fade d3" style="margin-bottom:14px">
+            <div class="card-head">
+                <div class="card-title">Unlinked Snapshots <span class="tag">@Model.UnlinkedSnapshots.Count</span></div>
+            </div>
+            <section class="we-snapshots">
+                @foreach (var snapshot in Model.UnlinkedSnapshots)
+                {
+                    <details class="we-snapshot">
+                        <summary class="we-snapshot__head">
+                            <span class="we-snapshot__caret" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
+                            </span>
+                            <span class="we-snapshot__title">
+                                <strong>@snapshot.CapturedAtDisplay</strong>
+                                <span class="we-snapshot__meta">· posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong> · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
+                            </span>
+                        </summary>
+                        @if (Model.CanManage)
+                        {
+                            <div class="we-unlinked-actions">
                                 <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
                                     @Html.AntiForgeryToken()
-                                    <select class="form-select we-unlinked-select" name="windowEventId">
-                                        @foreach (var ev in Model.OpenEvents)
-                                        {
-                                            <option value="@ev.Id">@Dash(ev.Name) (@ev.CombinedMemberCount members)</option>
-                                        }
-                                    </select>
-                                    <button type="submit" class="btn sm">Attach existing</button>
+                                    <input class="input we-unlinked-name" type="text" name="name" value="@snapshot.Name" placeholder="Monster name" maxlength="128" required />
+                                    <button type="submit" class="btn sm">Create / attach</button>
                                 </form>
-                            }
-                            <form asp-action="SetSnapshotStatus" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
-                                <button type="submit" class="btn sm ghost">Ignore</button>
-                            </form>
-                            <form asp-action="DeleteSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post"
-                                  onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="btn sm danger-outline">Delete</button>
-                            </form>
-                        </div>
-                    }
-                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot, new ViewDataDictionary(ViewData)
-                    {
-                        ["LinkshellId"] = Model.LinkshellId,
-                        ["CanManage"] = Model.CanManage,
-                    })
-                </details>
-            }
-        </section>
-    </div>
-}
-
-@if (Model.OpenEvents.Count == 0 && Model.UnlinkedSnapshots.Count == 0)
-{
-    <div class="card fade d3">
-        <div class="card-head"><div class="card-title">No Attendance Events yet</div></div>
-        <div class="empty" style="padding:16px">
-            Run <code>/lsm now &lt;Monster Name&gt;</code> in-game while in an alliance to create the first Attendance Event.
+                                @if (Model.OpenEvents.Count > 0)
+                                {
+                                    <form asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
+                                        @Html.AntiForgeryToken()
+                                        <select class="form-select we-unlinked-select" name="windowEventId">
+                                            @foreach (var ev in Model.OpenEvents)
+                                            {
+                                                <option value="@ev.Id">@Dash(ev.Name) (@ev.CombinedMemberCount members)</option>
+                                            }
+                                        </select>
+                                        <button type="submit" class="btn sm">Attach existing</button>
+                                    </form>
+                                }
+                                <form asp-action="SetSnapshotStatus" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
+                                    <button type="submit" class="btn sm ghost">Ignore</button>
+                                </form>
+                                <form asp-action="DeleteSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post"
+                                      onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn sm danger-outline">Delete</button>
+                                </form>
+                            </div>
+                        }
+                        @await Html.PartialAsync("_WindowSnapshotEntries", snapshot, new ViewDataDictionary(ViewData)
+                        {
+                            ["LinkshellId"] = Model.LinkshellId,
+                            ["CanManage"] = Model.CanManage,
+                        })
+                    </details>
+                }
+            </section>
         </div>
-    </div>
-}
+    }
 
-@foreach (var ev in Model.OpenEvents)
-{
-    @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+    @if (Model.OpenEvents.Count == 0 && Model.UnlinkedSnapshots.Count == 0)
     {
-        ["LinkshellId"] = Model.LinkshellId,
-        ["CanManage"] = Model.CanManage,
-        ["IsClosed"] = false,
-    })
-}
+        <div class="card fade d3">
+            <div class="card-head"><div class="card-title">No Attendance Events yet</div></div>
+            <div class="empty" style="padding:16px">
+                Run <code>/lsm now &lt;Monster Name&gt;</code> in-game while in an alliance to create the first Attendance Event.
+            </div>
+        </div>
+    }
 
+    @foreach (var ev in Model.OpenEvents)
+    {
+        @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+        {
+            ["LinkshellId"] = Model.LinkshellId,
+            ["CanManage"] = Model.CanManage,
+            ["IsClosed"] = false,
+        })
+    }
+
+    @* Shared roster typeahead source for every "Add a character by name…"
+       input on this page (snapshot editors reference it via list=). Rendered
+       once; only for managers, who are the only ones who see the add form. *@
+    @if (Model.CanManage && Model.RosterCharacterNames.Count > 0)
+    {
+        <datalist id="we-roster-options">
+            @foreach (var name in Model.RosterCharacterNames)
+            {
+                <option value="@name"></option>
+            }
+        </datalist>
+    }
+</div>

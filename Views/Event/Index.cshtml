@@ -1,6 +1,7 @@
 @model IEnumerable<EventViewModel>
 @{
     ViewData["Title"] = "Events";
+    ViewData["BodyClass"] = "lsm-page";
     var currentCharacter = ViewBag.CharacterName as string;
     var mainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions;
     var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;

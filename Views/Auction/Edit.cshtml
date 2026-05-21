@@ -1,6 +1,7 @@
 @model LinkshellManagerDiscordApp.ViewModels.AuctionViewModel
 @{
     ViewData["Title"] = "Edit Auction";
+    ViewData["BodyClass"] = "lsm-page";
     var sourceItemsJson = System.Text.Json.JsonSerializer.Serialize(Model.SourceItems);
 }
 

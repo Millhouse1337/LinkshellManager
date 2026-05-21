@@ -72,6 +72,21 @@ public sealed class WindowEventsController : Controller
             .Include(s => s.Entries)
             .ToListAsync(cancellationToken);
 
+        // Linkshell roster character names, for the "Add a character by name…"
+        // typeahead on the snapshot editor. Only fetched for managers (the
+        // only ones who can edit a snapshot's roster).
+        var rosterNames = canManage
+            ? await _db.AppUserLinkshells
+                .AsNoTracking()
+                .Where(link => link.LinkshellId == linkshellId
+                               && link.CharacterName != null
+                               && link.CharacterName != "")
+                .Select(link => link.CharacterName!)
+                .Distinct()
+                .OrderBy(name => name)
+                .ToListAsync(cancellationToken)
+            : new List<string>();
+
         var vm = new WindowEventsViewModel
         {
             LinkshellId = linkshellId,
@@ -80,6 +95,7 @@ public sealed class WindowEventsController : Controller
             OpenEvents = openEvents.Select(e => MapWindowEvent(e, zone)).ToList(),
             ClosedEvents = new(),
             UnlinkedSnapshots = unlinked.Select(s => MapSnapshot(s, zone)).ToList(),
+            RosterCharacterNames = rosterNames,
         };
 
         return View(vm);

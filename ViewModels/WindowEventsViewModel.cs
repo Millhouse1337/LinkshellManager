@@ -17,6 +17,11 @@ public sealed class WindowEventsViewModel
     public List<WindowEventRow> OpenEvents { get; set; } = new();
     public List<WindowEventRow> ClosedEvents { get; set; } = new();
     public List<WindowSnapshotRow> UnlinkedSnapshots { get; set; } = new();
+
+    // Every character name in this linkshell, used to populate the
+    // "Add a character by name…" typeahead (a shared <datalist>) on the
+    // snapshot roster editor.
+    public List<string> RosterCharacterNames { get; set; } = new();
 }
 
 // Backs the searchable "Attendance History" page (closed Window Events only).

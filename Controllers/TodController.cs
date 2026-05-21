@@ -215,6 +215,10 @@ public class TodController : Controller
             await _context.SaveChangesAsync();
         }
 
+        // A new ToD = a new pop window, so reset any party sign-ups assigned to
+        // this monster (the old roster is for the pop that just happened).
+        await PartySetupController.ClearSignupsForMonsterAsync(_context, newTod.LinkshellId, newTod.MonsterName);
+
         return RedirectToAction(nameof(Index));
     }
 

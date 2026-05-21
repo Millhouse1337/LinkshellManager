@@ -144,9 +144,13 @@
             var addInputColspan = 3 + (showDkpInputs ? 1 : 0);
             <tr class="we-add-row">
                 <td colspan="@addInputColspan">
+                    @* list= binds to the shared #we-roster-options datalist
+                       rendered once on the Attendance Events page, giving a
+                       live typeahead filter over the entire linkshell roster.
+                       Free text is still allowed (server creates/links). *@
                     <input class="input" type="text" name="characterName"
                            placeholder="Add a character by name…" maxlength="256" required
-                           autocomplete="off" form="snap-@Model.Id-add"
+                           autocomplete="off" list="we-roster-options" form="snap-@Model.Id-add"
                            style="width:100%;max-width:280px" />
                 </td>
                 <td class="num">

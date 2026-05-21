@@ -6,6 +6,7 @@
     var pageHeading = isEditMode ? "Edit Party Setup" : "New Party Setup";
     var formAction = isEditMode ? "Edit" : "Create";
     ViewData["Title"] = pageHeading;
+    ViewData["BodyClass"] = "lsm-page";
     var linkshellName = Model.LinkshellName ?? "Selected Linkshell";
 
     // Group the flat slot list back into alliance -> party -> slot so the

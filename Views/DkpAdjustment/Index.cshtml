@@ -2,6 +2,7 @@
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "DKP Adjustments";
+    ViewData["BodyClass"] = "lsm-page";
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
 }
 

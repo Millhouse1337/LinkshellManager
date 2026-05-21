@@ -1,6 +1,7 @@
 @model List<LinkshellManagerDiscordApp.ViewModels.AuctionViewModel>
 @{
     ViewData["Title"] = "Auctions";
+    ViewData["BodyClass"] = "lsm-page";
     var characterName = ViewBag.CharacterName as string ?? "User";
     var currentUserId = ViewBag.CurrentUserId as string ?? string.Empty;
     var currentTime = ViewBag.CurrentTime is DateTime current ? current : DateTime.Now;

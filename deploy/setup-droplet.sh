@@ -34,8 +34,13 @@ fi
 
 echo "==> Creating app user and directories"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --shell /usr/sbin/nologin --home "$APP_DIR" "$APP_USER"
-mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager
-chown -R "$APP_USER:$APP_USER" "$APP_DIR" /var/log/lsmanager
+# /var/lib/lsmanager/keys is the persistent Data Protection key ring. It MUST
+# live outside $APP_DIR because the deploy script replaces $APP_DIR wholesale on
+# every release; keeping the keys here is what lets a Google Sheet connection
+# (and login sessions) survive redeploys.
+mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager /var/lib/lsmanager/keys
+chown -R "$APP_USER:$APP_USER" "$APP_DIR" /var/log/lsmanager /var/lib/lsmanager
+chmod 700 /var/lib/lsmanager/keys
 
 echo "==> Configuring firewall (allow OpenSSH + HTTPS only)"
 ufw allow OpenSSH
@@ -81,6 +86,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://127.0.0.1:5000
 ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+# Persistent Data Protection key ring (outside the deploy artifact dir) so
+# Google Sheet connections and login sessions survive redeploys.
+DataProtection__KeyRingPath=/var/lib/lsmanager/keys
 Discord__ClientId=REPLACE_ME
 Discord__ClientSecret=REPLACE_ME
 # Cloudflare IPv4 / IPv6 ranges (https://www.cloudflare.com/ips/).

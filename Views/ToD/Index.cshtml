@@ -5,365 +5,613 @@
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
 }
 
-<div class="page-head fade d1">
-    <div>
-        <h1 class="page-title">ToD Tracker</h1>
-        <div class="page-sub">
-            <span>@selectedLinkshellName</span>
-            <span>·</span>
-            <span><span class="num">@Model.TodItems.Count</span> entries</span>
-        </div>
-    </div>
+@* Scoped visual redesign of the ToD Tracker. Everything is namespaced under
+   .tod-page so the new palette/components can't leak into the rest of the app.
+   The markup keeps every JS hook intact: .countdown-timer[data-end-utc],
+   .tod-setup-toggle -> #tod-setup-<id>, .tod-history-toggle -> .tod-history-row,
+   .view-loot-btn, and the .d-none show/hide contract in tod-manager.js. *@
+<style>
+    .tod-page {
+        /* Palette (scoped) */
+        --bg-main:#0d1117; --bg-panel:#161b22; --bg-panel-light:#1f2630;
+        --bg-card:#202833; --bg-card-hover:#273241;
+        --border-soft:#2f3b4a; --border-glow:#3f6cff;
+        --text-main:#e6edf3; --text-muted:#9ca3af;
+        --blue-main:#4f7cff; --blue-dark:#1f3bb3;
+        --gold-main:#d6a93f; --gold-dark:#7a5a16;
+        --red-main:#ff6b6b; --green-main:#43d17a;
 
-    <div class="page-actions">
-        @if (Model.Linkshells.Any())
-        {
-            <a class="btn primary" asp-action="Create">+ Add ToD</a>
-        }
-    </div>
-</div>
+        /* Bleed the dark gradient backdrop to the .content edges, then re-pad. */
+        margin:-24px -28px -48px;
+        padding:24px 28px 48px;
+        min-height:calc(100vh - 48px);
+        color:var(--text-main);
+        background:
+            radial-gradient(900px 520px at 10% -6%, rgba(79,124,255,.10), transparent 60%),
+            radial-gradient(760px 460px at 102% -2%, rgba(214,169,63,.06), transparent 55%),
+            radial-gradient(720px 600px at 96% 102%, rgba(31,59,179,.12), transparent 60%),
+            var(--bg-main);
+    }
 
-@if (!Model.Linkshells.Any())
-{
-    <div class="card fade d2">
-        <div class="empty">Join a linkshell before submitting a ToD entry.</div>
-    </div>
-}
-else
-{
-    <div class="card fade d2">
-        <div class="card-head">
-            <div class="card-title">Submitted ToDs</div>
-            <span class="card-link">@selectedLinkshellName</span>
-        </div>
-        @if (TempData["PartySetupMessage"] is string psMsg && !string.IsNullOrWhiteSpace(psMsg))
-        {
-            <div class="alert" style="margin:0 0 12px;border:1px solid var(--accent);border-radius:var(--r-md);padding:8px 12px;color:var(--fg);font-size:13px">
-                @psMsg
+    /* ---------- Header ---------- */
+    .tod-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+    .tod-title { font-size:26px; font-weight:800; letter-spacing:.01em; color:var(--text-main); margin:0 0 4px; }
+    .tod-subtitle { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); }
+    .tod-subtitle .num { color:var(--text-main); font-weight:600; }
+
+    /* ---------- Main panel ---------- */
+    .tod-panel {
+        background:var(--bg-panel);
+        border:1px solid var(--border-soft);
+        border-radius:14px;
+        box-shadow:0 14px 34px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.02);
+        overflow:hidden;
+        margin-bottom:16px;
+    }
+    .tod-panel-header {
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        padding:14px 18px;
+        background:linear-gradient(180deg, var(--bg-panel-light), var(--bg-panel));
+        border-bottom:1px solid var(--border-soft);
+    }
+    .tod-panel-title { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:700; color:var(--text-main); }
+    .tod-panel-sub { font-size:12px; color:var(--text-muted); }
+    .tod-crystal {
+        width:13px; height:13px; transform:rotate(45deg); border-radius:2px;
+        background:linear-gradient(135deg,#7ea2ff,#1f3bb3);
+        border:1px solid rgba(150,180,255,.7);
+        box-shadow:0 0 12px rgba(79,124,255,.7), inset 0 0 4px rgba(255,255,255,.4);
+    }
+
+    .tod-alert {
+        margin:12px 14px 0;
+        background:rgba(79,124,255,.10);
+        border:1px solid rgba(79,124,255,.4);
+        border-radius:9px; padding:9px 13px; font-size:13px; color:var(--text-main);
+    }
+
+    /* ---------- Table as separated card-rows ---------- */
+    .tod-table-wrap { padding:6px 14px 14px; overflow-x:auto; }
+    .tod-table { width:100%; border-collapse:separate; border-spacing:0 10px; font-size:13px; min-width:760px; }
+    .tod-table thead th {
+        text-transform:uppercase; font-size:10.5px; letter-spacing:.09em; font-weight:600;
+        color:var(--text-muted); text-align:left; padding:2px 14px 4px; white-space:nowrap;
+    }
+    .tod-table thead th.col-num { text-align:right; }
+    .tod-table thead th.col-actions { text-align:right; }
+
+    .tod-row > td {
+        background:var(--bg-card);
+        border-top:1px solid var(--border-soft);
+        border-bottom:1px solid var(--border-soft);
+        padding:13px 14px; vertical-align:middle; color:var(--text-main);
+        transition:background .15s ease;
+    }
+    .tod-row > td:first-child { border-left:1px solid var(--border-soft); border-radius:10px 0 0 10px; }
+    .tod-row > td:last-child  { border-right:1px solid var(--border-soft); border-radius:0 10px 10px 0; text-align:right; }
+    .tod-row:hover > td { background:var(--bg-card-hover); }
+    .tod-row td.num { font-variant-numeric:tabular-nums; }
+    .tod-row td.col-actions { white-space:nowrap; }
+
+    /* Blue left accent on the row whose signup panel is expanded (progressive). */
+    .tod-table tr.tod-latest-row:has(+ tr.tod-setup-row:not(.d-none)) > td:first-child {
+        box-shadow:inset 3px 0 0 0 var(--blue-main);
+    }
+
+    .tod-history-row > td { background:rgba(31,38,48,.55); }
+    .tod-history-row:hover > td { background:rgba(39,50,65,.7); }
+    .tod-history-name { color:var(--text-muted); }
+
+    .tod-monster-name { color:var(--text-main); font-weight:600; font-size:14px; }
+    .count-badge {
+        display:inline-flex; align-items:center; margin-left:7px; padding:1px 7px; border-radius:999px;
+        font-size:11px; font-weight:700; color:var(--text-muted);
+        background:rgba(255,255,255,.05); border:1px solid var(--border-soft);
+    }
+    .setup-chip {
+        display:inline-flex; align-items:center; margin-left:7px; padding:3px 9px; border-radius:999px;
+        font:600 11px/1.4 inherit; cursor:pointer;
+        color:#bcd0ff; background:rgba(79,124,255,.12); border:1px solid rgba(79,124,255,.45);
+        transition:all .15s ease;
+    }
+    .setup-chip:hover { background:rgba(79,124,255,.22); color:#eaf0ff; }
+
+    /* Countdown pill: neutral/blue while counting down, green once the JS
+       ticker flips it to "Ready" (it adds .is-ready at the same time). */
+    .tod-row .countdown-timer {
+        display:inline-block; padding:4px 11px; border-radius:999px; font-weight:700; font-size:12px;
+        font-variant-numeric:tabular-nums;
+        color:#bcd0ff; background:rgba(79,124,255,.13); border:1px solid rgba(79,124,255,.34);
+    }
+    .tod-row .countdown-timer.is-ready {
+        color:var(--green-main); background:rgba(67,209,122,.14); border-color:rgba(67,209,122,.35);
+    }
+
+    /* ---------- Expanded signup section (inset child panel) ---------- */
+    .tod-setup-row > td { background:transparent !important; border:0 !important; padding:0 0 2px !important; }
+    .signup-section {
+        background:var(--bg-panel-light);
+        border:1px solid var(--border-soft);
+        border-left:3px solid var(--blue-main);
+        border-radius:12px; padding:16px 18px;
+        box-shadow:-8px 0 26px -14px rgba(79,124,255,.7), 0 12px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.02);
+    }
+    .signup-title { font-size:15px; font-weight:700; color:var(--text-main); margin-bottom:3px; }
+    .signup-desc { font-size:12px; color:var(--text-muted); margin-bottom:12px; }
+    .alliance-title {
+        display:flex; align-items:center; gap:8px; margin:14px 0 9px;
+        font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--gold-main);
+    }
+    .alliance-title::before {
+        content:""; width:8px; height:8px; transform:rotate(45deg); border-radius:1px;
+        background:var(--gold-main); box-shadow:0 0 9px rgba(214,169,63,.6);
+    }
+
+    /* ---------- Party cards ---------- */
+    .party-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
+    .party-card { background:var(--bg-card); border:1px solid var(--border-soft); border-radius:11px; padding:12px 12px 8px; }
+    .party-header {
+        display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:var(--text-main);
+        padding:2px 2px 10px; border-bottom:1px solid var(--border-soft); margin-bottom:4px;
+    }
+    .party-icon { width:16px; height:16px; color:var(--blue-main); flex:0 0 auto; }
+
+    /* ---------- Slot rows (mini cards) ---------- */
+    .slot-row {
+        display:flex; flex-direction:column; gap:7px; padding:9px 10px; margin:6px 0; border-radius:9px;
+        background:var(--bg-panel); border:1px solid var(--border-soft);
+    }
+    .slot-row-filled {
+        background:linear-gradient(180deg, rgba(79,124,255,.13), rgba(79,124,255,.05));
+        border-color:rgba(79,124,255,.42);
+    }
+    .slot-label { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:500; color:var(--text-main); }
+    .slot-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .slot-empty { color:var(--text-muted); font-size:12px; padding:4px 2px; }
+
+    .slot-chip {
+        display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:999px;
+        font-size:12px; font-weight:600; color:#cdd9ff;
+        background:rgba(79,124,255,.18); border:1px solid rgba(79,124,255,.45);
+    }
+    .slot-chip-you { background:rgba(79,124,255,.28); color:#eef3ff; border-color:rgba(79,124,255,.65); box-shadow:0 0 12px rgba(79,124,255,.25); }
+    .slot-chip .muted { opacity:.82; font-weight:500; }
+
+    /* ---------- Badges ---------- */
+    .badge {
+        display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px;
+        font-size:10.5px; font-weight:700; letter-spacing:.03em; line-height:1.6;
+    }
+    .badge-leader { background:linear-gradient(180deg,#f1ca5e,#d6a93f); color:#3a2c08; border:1px solid rgba(122,90,22,.6); box-shadow:0 0 9px rgba(214,169,63,.28); }
+    .badge-tank  { background:rgba(79,124,255,.18); color:#bcd0ff; border:1px solid rgba(79,124,255,.4); }
+    .badge-heal  { background:rgba(67,209,122,.16); color:#a7e9c4; border:1px solid rgba(67,209,122,.4); }
+    .badge-dps   { background:rgba(255,107,107,.15); color:#ffb4b4; border:1px solid rgba(255,107,107,.4); }
+    .badge-ready { background:rgba(67,209,122,.14); color:var(--green-main); border:1px solid rgba(67,209,122,.35); }
+
+    /* ---------- Buttons ---------- */
+    .tod-page .btn-primary,
+    .tod-page .btn-muted,
+    .tod-page .btn-danger,
+    .tod-page .btn-gold,
+    .tod-page .btn-outline-blue {
+        display:inline-flex; align-items:center; justify-content:center; gap:6px;
+        font-family:inherit; font-weight:600; font-size:12.5px; line-height:1;
+        padding:9px 15px; border-radius:9px; border:1px solid transparent;
+        cursor:pointer; text-decoration:none; white-space:nowrap; transition:all .15s ease;
+    }
+    .tod-page .tod-btn-sm { padding:7px 11px; font-size:12px; border-radius:8px; }
+
+    .tod-page .btn-primary {
+        color:#fff; border-color:rgba(120,160,255,.55);
+        background:linear-gradient(180deg, var(--blue-main), var(--blue-dark));
+        box-shadow:0 4px 14px rgba(79,124,255,.35), inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .tod-page .btn-primary:hover { filter:brightness(1.08); box-shadow:0 6px 20px rgba(79,124,255,.5), inset 0 1px 0 rgba(255,255,255,.22); }
+
+    .tod-page .btn-muted {
+        color:var(--text-main); background:var(--bg-card); border-color:var(--border-soft);
+    }
+    .tod-page .btn-muted:hover { background:var(--bg-card-hover); border-color:#3a4757; }
+
+    .tod-page .btn-danger {
+        color:var(--red-main); background:rgba(255,107,107,.10); border-color:rgba(255,107,107,.45);
+    }
+    .tod-page .btn-danger:hover { background:rgba(255,107,107,.18); }
+
+    .tod-page .btn-gold {
+        color:#f4dca0; background:linear-gradient(180deg, rgba(214,169,63,.22), rgba(122,90,22,.18)); border-color:rgba(214,169,63,.5);
+    }
+    .tod-page .btn-gold:hover { background:linear-gradient(180deg, rgba(214,169,63,.32), rgba(122,90,22,.24)); color:#fbe9bf; }
+
+    .tod-page .btn-outline-blue {
+        color:#bcd0ff; background:rgba(79,124,255,.06); border-color:rgba(79,124,255,.45);
+    }
+    .tod-page .btn-outline-blue:hover { background:rgba(79,124,255,.16); color:#eaf0ff; }
+
+    .tod-add-button { padding:10px 18px !important; font-size:13px !important; }
+    .tod-actions { display:inline-flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .tod-actions form { display:inline; margin:0; }
+
+    /* ---------- Dropdowns / inputs ---------- */
+    .tod-page select.form-select {
+        background:var(--bg-panel-light); color:var(--text-main);
+        border:1px solid var(--border-soft); border-radius:7px;
+        height:32px; padding:0 8px; font-size:12.5px; min-width:0;
+    }
+    .tod-page select.form-select:focus {
+        outline:none; border-color:var(--blue-main); box-shadow:0 0 0 3px rgba(79,124,255,.25);
+    }
+    .tod-page select.form-select option { background:#0f141c; color:var(--text-main); }
+
+    /* ---------- Claim-shield card harmonized to the palette ---------- */
+    .tod-page .card { background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:14px; box-shadow:0 12px 30px rgba(0,0,0,.4); }
+    .tod-page .card-head { border-bottom:1px solid var(--border-soft); }
+    .tod-page .empty { color:var(--text-muted); }
+
+    /* ---------- Responsive ---------- */
+    @@media (max-width: 860px) {
+        .party-grid { grid-template-columns:1fr; }
+        .tod-title { font-size:22px; }
+    }
+</style>
+
+<div class="tod-page">
+    <div class="tod-header fade d1">
+        <div>
+            <h1 class="tod-title">ToD Tracker</h1>
+            <div class="tod-subtitle">
+                <span>@selectedLinkshellName</span>
+                <span>·</span>
+                <span><span class="num">@Model.TodItems.Count</span> entries</span>
             </div>
-        }
-        @if (Model.TodItems.Any())
-        {
-            <div style="overflow-x:auto">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Day</th>
-                            <th>ToD</th>
-                            <th>Cooldown</th>
-                            <th>Repop</th>
-                            <th>Interval</th>
-                            <th>Countdown</th>
-                            <th style="text-align:right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @{
-                            // Group by monster, then order the groups by the
-                            // latest entry's repop time ascending so the mob
-                            // closest to popping (or already Ready — past
-                            // repop time) sits at the top of the list. Within
-                            // each group the ordering of TodItems (Time desc)
-                            // is preserved so .First() is still "latest kill".
-                            var todGroups = Model.TodItems
-                                .GroupBy(t => (t.MonsterName ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
-                                .OrderBy(g => g.First().RepopTimeUtc ?? DateTime.MaxValue);
-                        }
-                        @foreach (var group in todGroups)
-                        {
-                            var ordered = group.ToList();
-                            var latest = ordered.First();
-                            var history = ordered.Skip(1).Take(9).ToList();
-                            var groupKey = "tod-history-" + latest.Id;
-                            Model.AssignedPartySetupBoards.TryGetValue(group.Key, out var board);
-                            <tr class="tod-latest-row" data-monster="@group.Key">
-                                <td>
-                                    <span style="color:var(--fg);font-weight:500">@latest.MonsterName</span>
-                                    @if (ordered.Count > 1)
-                                    {
-                                        <span class="tag" style="margin-left:6px">@ordered.Count</span>
-                                    }
-                                    @if (board != null)
-                                    {
-                                        <button type="button" class="tag accent tod-setup-toggle"
-                                                data-target="tod-setup-@board.Id"
-                                                style="margin-left:6px;cursor:pointer;border:0;font:inherit">
-                                            Setup: @board.Name
-                                        </button>
-                                    }
-                                </td>
-                                <td class="num">@(latest.DayNumber?.ToString() ?? "—")</td>
-                                <td class="num">@latest.TodDisplay</td>
-                                <td>@latest.Cooldown</td>
-                                <td class="num">@latest.RepopTimeDisplay</td>
-                                <td>@latest.Interval</td>
-                                <td>
-                                    @if (latest.RepopTimeUtc.HasValue)
-                                    {
-                                        <span class="countdown-timer num" data-end-utc="@latest.RepopTimeUtc.Value.ToString("O")" style="color:var(--fg)">—</span>
-                                    }
-                                    else
-                                    {
-                                        <span>—</span>
-                                    }
-                                </td>
-                                <td style="text-align:right">
-                                    <div style="display:inline-flex;gap:6px">
-                                        @if (history.Count > 0)
-                                        {
-                                            <button type="button" class="btn sm tod-history-toggle" data-target="@groupKey">History (@history.Count)</button>
-                                        }
-                                        @if (latest.LootCount > 0)
-                                        {
-                                            <button type="button" class="btn sm view-loot-btn" data-id="@latest.Id">Loot</button>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(latest.ImagePath))
-                                        {
-                                            <a class="btn sm" href="@latest.ImagePath" target="_blank" rel="noopener">Screenshot</a>
-                                        }
-                                        <a class="btn sm" asp-action="Edit" asp-route-id="@latest.Id">Edit</a>
-                                        <form asp-action="Delete" asp-route-id="@latest.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this ToD entry?');">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn sm ghost" style="color:var(--danger)">Delete</button>
-                                        </form>
-                                    </div>
-                                </td>
+        </div>
+
+        <div class="tod-header-actions">
+            @if (Model.Linkshells.Any())
+            {
+                <a class="btn-primary tod-add-button" asp-action="Create">+ Add ToD</a>
+            }
+        </div>
+    </div>
+
+    @if (!Model.Linkshells.Any())
+    {
+        <div class="card fade d2">
+            <div class="empty">Join a linkshell before submitting a ToD entry.</div>
+        </div>
+    }
+    else
+    {
+        <div class="tod-panel fade d2">
+            <div class="tod-panel-header">
+                <span class="tod-panel-title"><span class="tod-crystal"></span> Submitted ToDs</span>
+                <span class="tod-panel-sub">@selectedLinkshellName</span>
+            </div>
+            @if (TempData["PartySetupMessage"] is string psMsg && !string.IsNullOrWhiteSpace(psMsg))
+            {
+                <div class="tod-alert">@psMsg</div>
+            }
+            @if (Model.TodItems.Any())
+            {
+                <div class="tod-table-wrap">
+                    <table class="tod-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="col-num">Day</th>
+                                <th>ToD</th>
+                                <th>Cooldown</th>
+                                <th>Repop</th>
+                                <th>Interval</th>
+                                <th>Countdown</th>
+                                <th class="col-actions">Actions</th>
                             </tr>
-                            @if (board != null)
+                        </thead>
+                        <tbody>
+                            @{
+                                // Group by monster, then order the groups by the
+                                // latest entry's repop time ascending so the mob
+                                // closest to popping (or already Ready — past
+                                // repop time) sits at the top of the list. Within
+                                // each group the ordering of TodItems (Time desc)
+                                // is preserved so .First() is still "latest kill".
+                                var todGroups = Model.TodItems
+                                    .GroupBy(t => (t.MonsterName ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+                                    .OrderBy(g => g.First().RepopTimeUtc ?? DateTime.MaxValue);
+                            }
+                            @foreach (var group in todGroups)
                             {
-                                <tr class="tod-setup-row d-none" id="tod-setup-@board.Id" data-monster="@group.Key">
-                                    <td colspan="8" style="padding:14px 16px;background:var(--surface,#16161a)">
-                                        <div style="font-weight:600;color:var(--fg);margin-bottom:4px">@board.Name</div>
-                                        <div style="font-size:12px;color:var(--fg-3);margin-bottom:12px">
-                                            Sign up for an open slot. You hold at most one slot per setup.
-                                        </div>
-                                        @foreach (var alliance in board.Alliances)
+                                var ordered = group.ToList();
+                                var latest = ordered.First();
+                                var history = ordered.Skip(1).Take(9).ToList();
+                                var groupKey = "tod-history-" + latest.Id;
+                                Model.AssignedPartySetupBoards.TryGetValue(group.Key, out var board);
+                                <tr class="tod-row tod-latest-row" data-monster="@group.Key">
+                                    <td>
+                                        <span class="tod-monster-name">@latest.MonsterName</span>
+                                        @if (ordered.Count > 1)
                                         {
-                                            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);margin:10px 0 6px">@alliance.Name</div>
-                                            <div style="display:flex;flex-wrap:wrap;gap:10px">
-                                                @foreach (var party in alliance.Parties)
-                                                {
-                                                    <div style="flex:1 1 280px;min-width:260px;border:1px solid var(--border);border-radius:var(--r-md);padding:10px">
-                                                        <div style="font-weight:600;color:var(--fg);margin-bottom:8px">@party.Name</div>
-                                                        @foreach (var slot in party.Slots)
-                                                        {
-                                                            var mine = !slot.IsOpen && slot.SignedUpAppUserId == Model.CurrentAppUserId;
-                                                            // The slot's hard requirements drive which sign-up inputs to
-                                                            // show. A field the slot already pins is hidden (the controller
-                                                            // takes the slot's value over any crafted form post); a field
-                                                            // the slot leaves open is rendered as a dropdown the member
-                                                            // fills in. Sub is optional even when unspecified.
-                                                            var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
-                                                            var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
-                                                            var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
-                                                            @* Stacked layout: requirement label on top, action area (form
-                                                               or signed-up tag) below it, right-aligned. Keeps the layout
-                                                               predictable inside narrow party cards regardless of how many
-                                                               dropdowns the slot needs, instead of the dropdowns + Sign up
-                                                               button wrapping unpredictably onto multiple rows. *@
-                                                            <div style="display:flex;flex-direction:column;gap:6px;padding:8px 2px;border-top:1px solid var(--border)">
-                                                                <div style="display:flex;align-items:center;gap:6px;color:var(--fg-1);font-size:13px;font-weight:500">
-                                                                    @slot.Display
-                                                                    @if (slot.IsPartyLeader)
-                                                                    {
-                                                                        <span class="tag" style="color:#1a1300;background:linear-gradient(180deg,#ffe27a,#f5b800);font-size:10px;padding:1px 6px">Leader</span>
-                                                                    }
-                                                                </div>
-                                                                @if (slot.IsOpen)
-                                                                {
-                                                                    <form asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post"
-                                                                          style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-                                                                        @Html.AntiForgeryToken()
-                                                                        @if (!slotRequiresRole)
-                                                                        {
-                                                                            <select name="role" required class="form-select" style="height:30px;flex:1 1 90px;min-width:0;max-width:130px">
-                                                                                <option value="">Role…</option>
-                                                                                @foreach (var r in Model.SignUpRoleOptions)
-                                                                                {
-                                                                                    <option value="@r">@r</option>
-                                                                                }
-                                                                            </select>
-                                                                        }
-                                                                        @if (!slotRequiresMain)
-                                                                        {
-                                                                            <select name="mainJob" required class="form-select" style="height:30px;flex:1 1 80px;min-width:0;max-width:110px">
-                                                                                <option value="">Main…</option>
-                                                                                @foreach (var j in Model.SignUpMainJobOptions)
-                                                                                {
-                                                                                    <option value="@j">@j</option>
-                                                                                }
-                                                                            </select>
-                                                                        }
-                                                                        @if (!slotRequiresSub)
-                                                                        {
-                                                                            <select name="subJob" class="form-select" style="height:30px;flex:1 1 90px;min-width:0;max-width:120px">
-                                                                                <option value="">Sub (opt)</option>
-                                                                                @foreach (var j in Model.SignUpSubJobOptions)
-                                                                                {
-                                                                                    <option value="@j">@j</option>
-                                                                                }
-                                                                            </select>
-                                                                        }
-                                                                        <button type="submit" class="btn sm primary" style="flex:0 0 auto">Sign up</button>
-                                                                    </form>
-                                                                }
-                                                                else if (mine)
-                                                                {
-                                                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-                                                                        <span class="tag accent">
-                                                                            @slot.SignedUpCharacterName (you)
-                                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
-                                                                            {
-                                                                                <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
-                                                                            }
-                                                                        </span>
-                                                                        <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
-                                                                            @Html.AntiForgeryToken()
-                                                                            <button type="submit" class="btn sm danger-outline">Withdraw</button>
-                                                                        </form>
-                                                                    </div>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-                                                                        <span class="tag">
-                                                                            @slot.SignedUpCharacterName
-                                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
-                                                                            {
-                                                                                <span style="opacity:.85;margin-left:4px">· @slot.SignedUpJobsDisplay</span>
-                                                                            }
-                                                                        </span>
-                                                                        @if (Model.CanManagePartiesForSelected)
-                                                                        {
-                                                                            <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline"
-                                                                                  onsubmit="return confirm('Clear @slot.SignedUpCharacterName from this slot?');">
-                                                                                @Html.AntiForgeryToken()
-                                                                                <button type="submit" class="btn sm ghost" style="color:var(--danger)">Clear</button>
-                                                                            </form>
-                                                                        }
-                                                                    </div>
-                                                                }
-                                                            </div>
-                                                        }
-                                                        @if (!party.Slots.Any())
-                                                        {
-                                                            <div style="color:var(--fg-4);font-size:12px">No slots.</div>
-                                                        }
-                                                    </div>
-                                                }
-                                            </div>
+                                            <span class="count-badge">@ordered.Count</span>
                                         }
-                                        @if (!board.Alliances.Any())
+                                        @if (board != null)
                                         {
-                                            <div class="empty">This setup has no alliances yet.</div>
+                                            <button type="button" class="setup-chip tod-setup-toggle"
+                                                    data-target="tod-setup-@board.Id">
+                                                Setup: @board.Name
+                                            </button>
                                         }
                                     </td>
-                                </tr>
-                            }
-                            @foreach (var item in history)
-                            {
-                                <tr class="tod-history-row d-none" data-group="@groupKey">
-                                    <td style="padding-left:28px;color:var(--fg-3)">↳ @item.MonsterName</td>
-                                    <td class="num">@(item.DayNumber?.ToString() ?? "—")</td>
-                                    <td class="num">@item.TodDisplay</td>
-                                    <td>@item.Cooldown</td>
-                                    <td class="num">@item.RepopTimeDisplay</td>
-                                    <td>@item.Interval</td>
-                                    <td>—</td>
-                                    <td style="text-align:right">
-                                        <div style="display:inline-flex;gap:6px">
-                                            @if (item.LootCount > 0)
+                                    <td class="num">@(latest.DayNumber?.ToString() ?? "—")</td>
+                                    <td class="num">@latest.TodDisplay</td>
+                                    <td>@latest.Cooldown</td>
+                                    <td class="num">@latest.RepopTimeDisplay</td>
+                                    <td>@latest.Interval</td>
+                                    <td>
+                                        @if (latest.RepopTimeUtc.HasValue)
+                                        {
+                                            <span class="countdown-timer num" data-end-utc="@latest.RepopTimeUtc.Value.ToString("O")">—</span>
+                                        }
+                                        else
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </td>
+                                    <td class="col-actions">
+                                        <div class="tod-actions">
+                                            @if (history.Count > 0)
                                             {
-                                                <button type="button" class="btn sm view-loot-btn" data-id="@item.Id">Loot</button>
+                                                <button type="button" class="btn-outline-blue tod-btn-sm tod-history-toggle" data-target="@groupKey">History (@history.Count)</button>
                                             }
-                                            @if (!string.IsNullOrWhiteSpace(item.ImagePath))
+                                            @if (latest.LootCount > 0)
                                             {
-                                                <a class="btn sm" href="@item.ImagePath" target="_blank" rel="noopener">Screenshot</a>
+                                                <button type="button" class="btn-gold tod-btn-sm view-loot-btn" data-id="@latest.Id">Loot</button>
                                             }
-                                            <a class="btn sm" asp-action="Edit" asp-route-id="@item.Id">Edit</a>
-                                            <form asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline" onsubmit="return confirm('Delete this ToD entry?');">
+                                            @if (!string.IsNullOrWhiteSpace(latest.ImagePath))
+                                            {
+                                                <a class="btn-outline-blue tod-btn-sm" href="@latest.ImagePath" target="_blank" rel="noopener">Screenshot</a>
+                                            }
+                                            <a class="btn-muted tod-btn-sm" asp-action="Edit" asp-route-id="@latest.Id">Edit</a>
+                                            <form asp-action="Delete" asp-route-id="@latest.Id" method="post" onsubmit="return confirm('Delete this ToD entry?');">
                                                 @Html.AntiForgeryToken()
-                                                <button type="submit" class="btn sm ghost" style="color:var(--danger)">Delete</button>
+                                                <button type="submit" class="btn-danger tod-btn-sm">Delete</button>
                                             </form>
                                         </div>
                                     </td>
                                 </tr>
+                                @if (board != null)
+                                {
+                                    <tr class="tod-setup-row d-none" id="tod-setup-@board.Id" data-monster="@group.Key">
+                                        <td colspan="8">
+                                            <div class="signup-section">
+                                                <div class="signup-title">@board.Name</div>
+                                                <div class="signup-desc">Sign up for an open slot. You hold at most one slot per setup.</div>
+                                                @foreach (var alliance in board.Alliances)
+                                                {
+                                                    <div class="alliance-title">@alliance.Name</div>
+                                                    <div class="party-grid">
+                                                        @foreach (var party in alliance.Parties)
+                                                        {
+                                                            <div class="party-card">
+                                                                <div class="party-header">
+                                                                    <svg class="party-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                                        <path d="M16 11a4 4 0 1 0-4-4"/><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M2 20c0-3 2.5-5 6-5s6 2 6 5"/><path d="M14 15c3 0 6 1.6 6 5"/>
+                                                                    </svg>
+                                                                    @party.Name
+                                                                </div>
+                                                                @foreach (var slot in party.Slots)
+                                                                {
+                                                                    var mine = !slot.IsOpen && slot.SignedUpAppUserId == Model.CurrentAppUserId;
+                                                                    // The slot's hard requirements drive which sign-up inputs to
+                                                                    // show. A field the slot already pins is hidden (the controller
+                                                                    // takes the slot's value over any crafted form post); a field
+                                                                    // the slot leaves open is rendered as a dropdown the member
+                                                                    // fills in. Sub is optional even when unspecified.
+                                                                    var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
+                                                                    var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
+                                                                    var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
+                                                                    <div class="slot-row @(slot.IsOpen ? "" : "slot-row-filled")">
+                                                                        <div class="slot-label">
+                                                                            @slot.Display
+                                                                            @if (slot.IsPartyLeader)
+                                                                            {
+                                                                                <span class="badge badge-leader">Leader</span>
+                                                                            }
+                                                                        </div>
+                                                                        @if (slot.IsOpen)
+                                                                        {
+                                                                            <form class="slot-controls" asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post">
+                                                                                @Html.AntiForgeryToken()
+                                                                                @if (!slotRequiresRole)
+                                                                                {
+                                                                                    <select name="role" required class="form-select" style="flex:1 1 90px;max-width:130px">
+                                                                                        <option value="">Role…</option>
+                                                                                        @foreach (var r in Model.SignUpRoleOptions)
+                                                                                        {
+                                                                                            <option value="@r">@r</option>
+                                                                                        }
+                                                                                    </select>
+                                                                                }
+                                                                                @if (!slotRequiresMain)
+                                                                                {
+                                                                                    <select name="mainJob" required class="form-select" style="flex:1 1 80px;max-width:110px">
+                                                                                        <option value="">Main…</option>
+                                                                                        @foreach (var j in Model.SignUpMainJobOptions)
+                                                                                        {
+                                                                                            <option value="@j">@j</option>
+                                                                                        }
+                                                                                    </select>
+                                                                                }
+                                                                                @if (!slotRequiresSub)
+                                                                                {
+                                                                                    <select name="subJob" class="form-select" style="flex:1 1 90px;max-width:120px">
+                                                                                        <option value="">Sub (opt)</option>
+                                                                                        @foreach (var j in Model.SignUpSubJobOptions)
+                                                                                        {
+                                                                                            <option value="@j">@j</option>
+                                                                                        }
+                                                                                    </select>
+                                                                                }
+                                                                                <button type="submit" class="btn-primary tod-btn-sm" style="flex:0 0 auto">Sign up</button>
+                                                                            </form>
+                                                                        }
+                                                                        else if (mine)
+                                                                        {
+                                                                            <div class="slot-controls">
+                                                                                <span class="slot-chip slot-chip-you">
+                                                                                    @slot.SignedUpCharacterName (you)
+                                                                                    @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                                    {
+                                                                                        <span class="muted">· @slot.SignedUpJobsDisplay</span>
+                                                                                    }
+                                                                                </span>
+                                                                                <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post">
+                                                                                    @Html.AntiForgeryToken()
+                                                                                    <button type="submit" class="btn-danger tod-btn-sm">Withdraw</button>
+                                                                                </form>
+                                                                            </div>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <div class="slot-controls">
+                                                                                <span class="slot-chip">
+                                                                                    @slot.SignedUpCharacterName
+                                                                                    @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                                                    {
+                                                                                        <span class="muted">· @slot.SignedUpJobsDisplay</span>
+                                                                                    }
+                                                                                </span>
+                                                                                @if (Model.CanManagePartiesForSelected)
+                                                                                {
+                                                                                    <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post"
+                                                                                          onsubmit="return confirm('Clear @slot.SignedUpCharacterName from this slot?');">
+                                                                                        @Html.AntiForgeryToken()
+                                                                                        <button type="submit" class="btn-danger tod-btn-sm">Clear</button>
+                                                                                    </form>
+                                                                                }
+                                                                            </div>
+                                                                        }
+                                                                    </div>
+                                                                }
+                                                                @if (!party.Slots.Any())
+                                                                {
+                                                                    <div class="slot-empty">No slots.</div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (!board.Alliances.Any())
+                                                {
+                                                    <div class="empty">This setup has no alliances yet.</div>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var item in history)
+                                {
+                                    <tr class="tod-row tod-history-row d-none" data-group="@groupKey">
+                                        <td class="tod-history-name">↳ @item.MonsterName</td>
+                                        <td class="num">@(item.DayNumber?.ToString() ?? "—")</td>
+                                        <td class="num">@item.TodDisplay</td>
+                                        <td>@item.Cooldown</td>
+                                        <td class="num">@item.RepopTimeDisplay</td>
+                                        <td>@item.Interval</td>
+                                        <td>—</td>
+                                        <td class="col-actions">
+                                            <div class="tod-actions">
+                                                @if (item.LootCount > 0)
+                                                {
+                                                    <button type="button" class="btn-gold tod-btn-sm view-loot-btn" data-id="@item.Id">Loot</button>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(item.ImagePath))
+                                                {
+                                                    <a class="btn-outline-blue tod-btn-sm" href="@item.ImagePath" target="_blank" rel="noopener">Screenshot</a>
+                                                }
+                                                <a class="btn-muted tod-btn-sm" asp-action="Edit" asp-route-id="@item.Id">Edit</a>
+                                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" onsubmit="return confirm('Delete this ToD entry?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn-danger tod-btn-sm">Delete</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
                             }
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-        else
-        {
-            <div class="empty">No ToD entries found for this linkshell yet.</div>
-        }
-    </div>
-
-    <div class="card fade d3" style="margin-top:16px">
-        <div class="card-head">
-            <div class="card-title">Recent Claim Shield Captures</div>
-            <span class="card-link">@selectedLinkshellName</span>
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="empty" style="padding:18px">No ToD entries found for this linkshell yet.</div>
+            }
         </div>
-        @if (Model.RecentClaimShieldCaptures.Any())
-        {
-            <div style="overflow-x:auto">
-                <table class="table themed">
-                    <thead>
-                        <tr>
-                            <th>Monster</th>
-                            <th>Result</th>
-                            <th style="text-align:right">Total Players</th>
-                            <th>Captured</th>
-                            <th>LS Members</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var cs in Model.RecentClaimShieldCaptures)
-                        {
-                            <tr>
-                                <td><span style="color:var(--fg);font-weight:500">@cs.MonsterName</span></td>
-                                <td>
-                                    @if (cs.Won)
-                                    {
-                                        <span class="tag success">Won</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="tag warning">Lost</span>
-                                    }
-                                </td>
-                                <td class="num" style="text-align:right">@cs.TotalPlayers</td>
-                                <td class="num">@cs.CapturedAtDisplay</td>
-                                <td>
-                                    @if (cs.Members.Count == 0)
-                                    {
-                                        <span style="color:var(--fg-3)">—</span>
-                                    }
-                                    else
-                                    {
-                                        <span style="color:var(--fg-3);font-size:12px">@cs.MatchedCount matched</span>
-                                        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
-                                            @foreach (var member in cs.Members)
-                                            {
-                                                <span class="tag accent">@member</span>
-                                            }
-                                        </div>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+
+        <div class="card fade d3" style="margin-top:16px">
+            <div class="card-head">
+                <div class="card-title">Recent Claim Shield Captures</div>
+                <span class="card-link">@selectedLinkshellName</span>
             </div>
-        }
-        else
-        {
-            <div class="empty">No claim shield captures recorded yet. They are posted from the in-game addon.</div>
-        }
-    </div>
-}
+            @if (Model.RecentClaimShieldCaptures.Any())
+            {
+                <div style="overflow-x:auto">
+                    <table class="table themed">
+                        <thead>
+                            <tr>
+                                <th>Monster</th>
+                                <th>Result</th>
+                                <th style="text-align:right">Total Players</th>
+                                <th>Captured</th>
+                                <th>LS Members</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cs in Model.RecentClaimShieldCaptures)
+                            {
+                                <tr>
+                                    <td><span style="color:var(--text-main);font-weight:500">@cs.MonsterName</span></td>
+                                    <td>
+                                        @if (cs.Won)
+                                        {
+                                            <span class="badge badge-ready">Won</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge badge-dps">Lost</span>
+                                        }
+                                    </td>
+                                    <td class="num" style="text-align:right">@cs.TotalPlayers</td>
+                                    <td class="num">@cs.CapturedAtDisplay</td>
+                                    <td>
+                                        @if (cs.Members.Count == 0)
+                                        {
+                                            <span style="color:var(--text-muted)">—</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:var(--text-muted);font-size:12px">@cs.MatchedCount matched</span>
+                                            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+                                                @foreach (var member in cs.Members)
+                                                {
+                                                    <span class="slot-chip">@member</span>
+                                                }
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="empty">No claim shield captures recorded yet. They are posted from the in-game addon.</div>
+            }
+        </div>
+    }
+</div>
 
 <div class="modal fade" id="viewLootModal" tabindex="-1" aria-labelledby="viewLootModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">

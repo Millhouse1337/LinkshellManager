@@ -13,6 +13,7 @@ using LinkshellManagerDiscordApp.Utils;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authentication.OAuth.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -150,7 +151,24 @@ builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();
 builder.Services.AddScoped<TodImageUploadService>();
 builder.Services.AddScoped<SubmissionApprovalService>();
-builder.Services.AddDataProtection();
+// Data Protection guards the encrypted Google refresh tokens, auth cookies and
+// antiforgery tokens. By default the key ring lands under the app's content
+// root, which the deploy script replaces wholesale on every release -- new keys
+// each deploy meant every linkshell's stored Google Sheet token became
+// undecryptable (then got wiped) and everyone was logged out. Persist the keys
+// to a stable directory OUTSIDE the deploy artifact dir (set
+// DataProtection:KeyRingPath in production, e.g. /var/lib/lsmanager/keys) so a
+// connection survives redeploys. Locally the key absent -> default behavior
+// (a stable per-user store), which already persists across runs.
+var dataProtection = builder.Services
+    .AddDataProtection()
+    .SetApplicationName("LSManager");
+var dataProtectionKeyRingPath = builder.Configuration["DataProtection:KeyRingPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeyRingPath))
+{
+    Directory.CreateDirectory(dataProtectionKeyRingPath);
+    dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath));
+}
 builder.Services.AddSingleton<GoogleSheetsSyncService>();
 builder.Services.AddSingleton<SheetSyncQueue>();
 builder.Services.AddScoped<GoogleOAuthService>();

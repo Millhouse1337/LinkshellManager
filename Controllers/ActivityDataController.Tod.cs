@@ -183,6 +183,10 @@ public sealed partial class ActivityDataController
             await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
         }
 
+        // A new ToD = a new pop window, so reset any party sign-ups assigned to
+        // this monster (the old roster is for the pop that just happened).
+        await PartySetupController.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
+
         return Ok(MapTodDto(tod));
     }
 

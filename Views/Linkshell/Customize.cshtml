@@ -2,6 +2,7 @@
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Customize Linkshell";
+    ViewData["BodyClass"] = "lsm-page";
     var savedMessage = TempData["CustomizeSaved"] as string;
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
     var canManageRolesValue = Model.CanManageRoles.ToString().ToLowerInvariant();

@@ -185,6 +185,10 @@ public sealed class SubmissionApprovalService
         _db.PendingTodSubmissions.Remove(pending);
         await _db.SaveChangesAsync(cancellationToken);
 
+        // A new ToD = a new pop window, so reset any party sign-ups assigned to
+        // this monster (the old roster is for the pop that just happened).
+        await PartySetupController.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, tod.MonsterName, cancellationToken);
+
         await _sheetSync.EnqueueAsync(pending.LinkshellId, cancellationToken);
 
         // Streamlined HNM workflow: mirror the immediate-addon path so an
