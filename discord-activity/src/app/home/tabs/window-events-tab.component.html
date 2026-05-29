@@ -8,6 +8,16 @@
   </div>
 
   @if (data(); as model) {
+    <!-- Shared datalist powers the "Add a character by name…" typeahead on
+         every snapshot's add-person input below. -->
+    @if (model.canManage) {
+      <datalist id="we-roster-options">
+        @for (name of model.rosterCharacterNames; track name) {
+          <option [value]="name"></option>
+        }
+      </datalist>
+    }
+
     @if (model.unlinkedSnapshots.length > 0) {
       <section class="card">
         <div class="card-head"><div class="card-title">Unlinked Snapshots</div></div>
@@ -31,9 +41,20 @@
                   <button type="button" class="btn sm" (click)="attachExisting(snapshot, +existingEvent.value)">Attach existing</button>
                 }
                 <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
+                @if (confirmDeleteSnapshotId() === snapshot.id) {
+                  <button type="button" class="btn sm danger-outline"
+                    (click)="deleteSnapshot(snapshot)" [disabled]="windows.busy()">Confirm delete</button>
+                  <button type="button" class="btn sm ghost"
+                    (click)="confirmDeleteSnapshotId.set(null)">Cancel</button>
+                } @else {
+                  <button type="button" class="btn sm danger-outline"
+                    (click)="confirmDeleteSnapshotId.set(snapshot.id)">Delete snapshot</button>
+                }
               </div>
+              <ng-container *ngTemplateOutlet="editableSnapshotTable; context: { snapshot: snapshot, event: null, closed: false }" />
+            } @else {
+              <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
             }
-            <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
           </details>
         }
       </section>
@@ -84,21 +105,69 @@
     </summary>
 
     @if (model.canManage) {
-      <div class="window-actions">
-        <input type="text" [ngModel]="renameDraft(event)" (ngModelChange)="setRenameDraft(event.id, $event)" />
-        <button type="button" class="btn sm" (click)="rename(event)">Rename</button>
-        @if (closed) {
-          <button type="button" class="btn sm" (click)="reopen(event)">Reopen</button>
-        } @else {
-          <button type="button" class="btn sm ghost" (click)="close(event)">Close</button>
-        }
+      <!-- Single horizontal control bar: rename + DKP posting controls all on
+           one row, wrapping only when the iframe is too narrow. -->
+      <div class="window-controls">
+        <label class="wc-field">
+          <span>Event name</span>
+          <input type="text" [ngModel]="renameDraft(event)" (ngModelChange)="setRenameDraft(event.id, $event)" />
+        </label>
+        <div class="wc-btns">
+          <button type="button" class="btn sm" (click)="rename(event)">Rename</button>
+          @if (closed) {
+            <button type="button" class="btn sm" (click)="reopen(event)">Reopen</button>
+          } @else {
+            <button type="button" class="btn sm ghost" (click)="close(event)">Close</button>
+          }
+          @if (confirmDeleteEventId() === event.id) {
+            <button type="button" class="btn sm danger-outline"
+              (click)="deleteEvent(event)" [disabled]="windows.busy()">Confirm delete</button>
+            <button type="button" class="btn sm ghost"
+              (click)="confirmDeleteEventId.set(null)">Cancel</button>
+          } @else {
+            <button type="button" class="btn sm danger-outline"
+              (click)="confirmDeleteEventId.set(event.id)">Delete Event</button>
+          }
+        </div>
+
+        <span class="wc-divider" aria-hidden="true"></span>
+
+        <label class="wc-field">
+          <span>Default DKP</span>
+          <input type="number" min="0" step="0.25" [ngModel]="dkpDraft(event).amount"
+            (ngModelChange)="setDkpAmount(event, $event)" placeholder="e.g. 1.5" />
+        </label>
+        <label class="wc-field">
+          <span>Entry type</span>
+          <select [ngModel]="dkpDraft(event).entryType" (ngModelChange)="setDkpEntryType(event.id, $event)">
+            <option value="">Select&hellip;</option>
+            @for (type of entryTypeOptions(); track type) { <option [value]="type">{{ type }}</option> }
+          </select>
+        </label>
+        <div class="wc-btns">
+          @if (isPosted(event)) {
+            <span class="status-pill ok">Posted {{ formatDate(event.postedToSheetUtc) }}</span>
+            <button type="button" class="btn sm" (click)="editPosted(event)" [disabled]="dkpActionsDisabled(event)">Update sheet</button>
+          } @else {
+            <button type="button" class="btn sm ghost" (click)="saveDkp(event)" [disabled]="dkpActionsDisabled(event)">Save</button>
+            <button type="button" class="btn sm primary" (click)="postToSheet(event)" [disabled]="dkpActionsDisabled(event)">Post to sheet</button>
+          }
+        </div>
       </div>
     }
 
-    <div class="subhead">Combined roster</div>
+    <div class="subhead">Combined roster <span class="subhead-help">— excludes duplicates and ignored snapshots</span></div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Character</th><th>Jobs</th><th>Zone</th><th>Snapshots</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Character</th>
+            <th>Jobs</th>
+            <th>Zone</th>
+            <th>Snapshots</th>
+            <th>Combined DKP</th>
+          </tr>
+        </thead>
         <tbody>
           @for (member of event.combinedMembers; track member.characterName) {
             <tr>
@@ -106,6 +175,13 @@
               <td>{{ jobs(member) }}</td>
               <td>{{ member.zone || '-' }}</td>
               <td>{{ member.snapshotCount }}</td>
+              <td>
+                @if (model.canManage) {
+                  {{ combinedDkpDisplay(event, member) }}
+                } @else {
+                  {{ formatDkp(member.effectiveDkpAmount) }}
+                }
+              </td>
             </tr>
           }
         </tbody>
@@ -128,9 +204,20 @@
             <button type="button" class="btn sm" (click)="setSnapshotStatus(snapshot, 'Active')" [disabled]="snapshot.snapshotStatus === 'Active'">Use</button>
             <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Duplicate')">Mark duplicate</button>
             <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
+            @if (confirmDeleteSnapshotId() === snapshot.id) {
+              <button type="button" class="btn sm danger-outline"
+                (click)="deleteSnapshot(snapshot)" [disabled]="windows.busy()">Confirm delete</button>
+              <button type="button" class="btn sm ghost"
+                (click)="confirmDeleteSnapshotId.set(null)">Cancel</button>
+            } @else {
+              <button type="button" class="btn sm danger-outline"
+                (click)="confirmDeleteSnapshotId.set(snapshot.id)">Delete snapshot</button>
+            }
           </div>
+          <ng-container *ngTemplateOutlet="editableSnapshotTable; context: { snapshot: snapshot, event: event, closed: closed }" />
+        } @else {
+          <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
         }
-        <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
       </details>
     }
   </details>
@@ -141,7 +228,7 @@
     <table>
       <thead><tr><th>Character</th><th>Jobs</th><th>Zone</th></tr></thead>
       <tbody>
-        @for (entry of snapshot.entries; track entry.characterName) {
+        @for (entry of snapshot.entries; track entry.id) {
           <tr>
             <td><strong>{{ entry.characterName }}</strong></td>
             <td>{{ jobs(entry) }}</td>
@@ -151,4 +238,81 @@
       </tbody>
     </table>
   </div>
+</ng-template>
+
+<!-- Editable snapshot table: per-row DKP input (linked to the parent event's
+     combined-roster draft when present), Remove button, and an Add Person
+     row underneath. Used for both unlinked snapshots (no event so no DKP
+     column) and attached snapshots inside the event card. -->
+<ng-template #editableSnapshotTable let-snapshot="snapshot" let-event="event" let-closed="closed">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Character</th>
+          <th>Jobs</th>
+          <th>Zone</th>
+          @if (event && !closed) { <th>DKP</th> }
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (entry of snapshot.entries; track entry.id) {
+          <tr>
+            <td><strong>{{ entry.characterName }}</strong></td>
+            <td>{{ jobs(entry) }}</td>
+            <td>{{ entry.zone || '-' }}</td>
+            @if (event && !closed) {
+              <td>
+                <ng-container *ngTemplateOutlet="memberDkpCell; context: { event: event, entry: entry }" />
+              </td>
+            }
+            <td>
+              @if (!closed) {
+                @if (confirmRemoveEntryId() === entry.id) {
+                  <button type="button" class="btn sm danger-outline"
+                    (click)="removePerson(snapshot, entry)" [disabled]="windows.busy()">Confirm</button>
+                  <button type="button" class="btn sm ghost"
+                    (click)="confirmRemoveEntryId.set(null)">Cancel</button>
+                } @else {
+                  <button type="button" class="btn sm danger-outline"
+                    (click)="confirmRemoveEntryId.set(entry.id)">Remove</button>
+                }
+              }
+            </td>
+          </tr>
+        }
+        @if (!closed) {
+          <tr class="we-add-row">
+            <td [attr.colspan]="event ? 4 : 3">
+              <input type="text" placeholder="Add a character by name…" maxlength="256"
+                autocomplete="off" list="we-roster-options"
+                [ngModel]="addPersonDraft(snapshot)"
+                (ngModelChange)="setAddPersonDraft(snapshot.id, $event)"
+                (keydown.enter)="addPerson(snapshot)" />
+            </td>
+            <td>
+              <button type="button" class="btn sm primary"
+                (click)="addPerson(snapshot)">+ Add person</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>
+
+<!-- The per-row DKP input lives on the parent event's combined-member draft.
+     If the snapshot's entry isn't in the combined roster (e.g. the snapshot
+     is currently marked Duplicate/Ignored), there's nothing to bind so we
+     just render a placeholder dash. -->
+<ng-template #memberDkpCell let-event="event" let-entry="entry">
+  @for (member of event.combinedMembers; track member.characterName) {
+    @if (member.characterName.trim().toLowerCase() === entry.characterName.trim().toLowerCase()) {
+      <input class="we-dkp-input" type="number" min="0" step="0.25"
+        [ngModel]="memberDkp(event, member).value"
+        (ngModelChange)="setMemberDkp(event, member, $event)"
+        title="Defaults to the event's Default DKP. Edit to override for this character." />
+    }
+  }
 </ng-template>

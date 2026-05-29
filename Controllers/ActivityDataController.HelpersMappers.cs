@@ -19,7 +19,7 @@ public sealed partial class ActivityDataController
         {
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
-                Array.Empty<string>());
+                Array.Empty<string>(), LinkshellTypes.Both);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -34,7 +34,8 @@ public sealed partial class ActivityDataController
             linkshell.EnableItems,
             linkshell.EnableRevenue,
             NormalizeDkpRounding(linkshell.DkpRoundingIncrement),
-            ParseHiddenTodMonsters(linkshell.HiddenTodMonsters));
+            ParseHiddenTodMonsters(linkshell.HiddenTodMonsters),
+            LinkshellTypes.Normalize(linkshell.LinkshellType));
     }
 
     // Splits the pipe-separated storage form into a clean list of names

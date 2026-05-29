@@ -177,6 +177,26 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken)
             : new List<RevenueEntry>();
 
+        // News-feed sources for the dashboard: recent auctions + DKP adjustments.
+        var primaryAuctions = primaryLinkshellId.HasValue
+            ? await _dbContext.Auctions
+                .AsNoTracking()
+                .Where(auction => auction.LinkshellId == primaryLinkshellId.Value)
+                .OrderByDescending(auction => auction.EndTime ?? auction.StartedAt ?? auction.StartTime)
+                .Take(10)
+                .ToListAsync(cancellationToken)
+            : new List<Auction>();
+
+        var primaryDkpAudits = primaryLinkshellId.HasValue
+            ? await _dbContext.DkpLedgerEntries
+                .AsNoTracking()
+                .Where(entry => entry.LinkshellId == primaryLinkshellId.Value
+                                && (entry.EntryType == "AuditMisc" || entry.EntryType == "AuditAdjustment"))
+                .OrderByDescending(entry => entry.OccurredAt)
+                .Take(10)
+                .ToListAsync(cancellationToken)
+            : new List<DkpLedgerEntry>();
+
         // Resolve creator/starter character names for each active event. Prefer
         // the user's linkshell-specific character name; fall back to their
         // top-level AppUser.CharacterName, then UserName.
@@ -257,7 +277,8 @@ public sealed partial class ActivityDataController
                         member.AppUser?.AltCharacterName2,
                         member.Rank,
                         member.Status,
-                        member.LinkshellDkp)).ToList(),
+                        member.LinkshellDkp,
+                        member.DateJoined)).ToList(),
                     primaryRules.Select(rule => new ActivityRuleDto(
                         rule.Id,
                         rule.LinkshellId,
@@ -295,7 +316,24 @@ public sealed partial class ActivityDataController
                         entry.OccurredAt,
                         entry.CreatedByAppUserId,
                         entry.CreatedByCharacterName,
-                        entry.CreatedAt)).ToList()),
+                        entry.CreatedAt)).ToList(),
+                    primaryAuctions.Select(auction =>
+                    {
+                        var closed = auction.EndTime is { } end && end <= DateTime.UtcNow;
+                        var when = closed
+                            ? auction.EndTime!.Value
+                            : (auction.StartedAt ?? auction.StartTime ?? auction.EndTime ?? DateTime.UtcNow);
+                        return new ActivityNewsAuctionDto(
+                            auction.Id,
+                            string.IsNullOrWhiteSpace(auction.AuctionTitle) ? "Auction" : auction.AuctionTitle!,
+                            when,
+                            closed);
+                    }).ToList(),
+                    primaryDkpAudits.Select(entry => new ActivityNewsDkpDto(
+                        entry.CharacterName ?? "Member",
+                        entry.Amount,
+                        entry.EntryType == "AuditAdjustment",
+                        entry.OccurredAt)).ToList()),
             activeEvents.Select(evt => new ActivityEventDto(
                 evt.Id,
                 evt.LinkshellId,

@@ -28,17 +28,51 @@
         <div class="table-scroll">
           <table>
             <thead>
-              <tr><th>Name</th><th>Monster</th><th>Alliances</th><th>Parties</th><th>Slots</th><th>Updated</th></tr>
+              <tr>
+                <th>Name</th>
+                <th>Monster</th>
+                <th>Alliances</th>
+                <th>Parties</th>
+                <th>Slots</th>
+                <th>Updated</th>
+                <th class="ps-actions-col">Actions</th>
+              </tr>
             </thead>
             <tbody>
               @for (row of model.items; track row.id) {
                 <tr class="ps-row" [class.is-selected]="selectedId() === row.id" (click)="select(row.id)">
                   <td><strong>{{ row.name }}</strong></td>
-                  <td>{{ row.assignedMonsterName || '-' }}</td>
+                  <td>
+                    @if (row.assignedMonsterName) {
+                      <span class="status-pill ok">{{ row.assignedMonsterName }}</span>
+                    } @else {
+                      <span class="we-muted">—</span>
+                    }
+                  </td>
                   <td>{{ row.allianceCount }}</td>
                   <td>{{ row.partyCount }}</td>
                   <td>{{ row.slotCount }}</td>
                   <td>{{ formatDate(row.updatedAt) }}</td>
+                  <!-- stopPropagation on each button so the row click handler
+                       doesn't fire alongside the action (which would re-select
+                       the row and clobber the action's intent). -->
+                  <td class="ps-actions-col" (click)="$event.stopPropagation()">
+                    <div class="ps-row-actions">
+                      <button type="button" class="btn sm" (click)="select(row.id)">View</button>
+                      @if (canManage()) {
+                        <button type="button" class="btn sm" (click)="openEdit(row.id)">Edit</button>
+                        @if (confirmDeleteId() === row.id) {
+                          <button type="button" class="btn sm danger-outline"
+                            (click)="confirmDelete(row.id)" [disabled]="partySetup.busy()">Confirm</button>
+                          <button type="button" class="btn sm ghost"
+                            (click)="confirmDeleteId.set(null)">Cancel</button>
+                        } @else {
+                          <button type="button" class="btn sm danger-outline"
+                            (click)="confirmDeleteId.set(row.id)">Delete</button>
+                        }
+                      }
+                    </div>
+                  </td>
                 </tr>
               }
             </tbody>

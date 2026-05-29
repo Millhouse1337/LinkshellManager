@@ -134,6 +134,27 @@ export class PartySetupEditorComponent {
     party.slots.splice(index, 1);
   }
 
+  // Clone a slot row directly below itself (web's ps-duplicate-slot button).
+  // Skipped silently when the party is at the 6-slot cap.
+  protected duplicateSlot(party: EditorParty, index: number): void {
+    if (party.slots.length >= this.MAX_SLOTS) return;
+    const source = party.slots[index];
+    party.slots.splice(index + 1, 0, {
+      role: source.role,
+      mainJob: source.mainJob,
+      subJob: source.subJob,
+      isPartyLeader: false
+    });
+  }
+
+  // A slot is "Any" — no specific role/job required — when the role is the
+  // sentinel "Any Role" pick (or blank) AND no main job is chosen. The view
+  // collapses the Main/Sub selects into a dashed "— Anything —" pill.
+  protected isAnySlot(slot: EditorSlot): boolean {
+    const role = (slot.role ?? '').trim();
+    return (role === '' || role === this.ANY_ROLE) && !slot.mainJob;
+  }
+
   // One leader per party: clear the rest when one is toggled on.
   protected setLeader(party: EditorParty, slot: EditorSlot, isLeader: boolean): void {
     if (isLeader) {

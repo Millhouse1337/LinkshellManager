@@ -25,11 +25,23 @@ public class DashboardViewModel
     public int HnmClaimsWindowDays { get; set; } = 30;
     public List<RecentActivityEntry> RecentActivity { get; set; } = new();
     public List<NewsUpdateEntry> NewsUpdates { get; set; } = new();
+    // ToD repops opening within the next 2 hours, surfaced in the Upcoming
+    // Events card alongside scheduled events.
+    public List<UpcomingRepopEntry> UpcomingRepops { get; set; } = new();
+    public List<RuleSummary> Rules { get; set; } = new();
     public List<AnnouncementSummary> RecentAnnouncements { get; set; } = new();
     public string? CurrentAppUserId { get; set; }
 }
 
 public class AnnouncementSummary
+{
+    public string Title { get; init; } = string.Empty;
+    public string? Details { get; init; }
+    public string RelativeTime { get; init; } = string.Empty;
+    public string? Author { get; init; }
+}
+
+public class RuleSummary
 {
     public string Title { get; init; } = string.Empty;
     public string? Details { get; init; }
@@ -85,6 +97,14 @@ public class RecentActivityEntry
     public string? Href { get; init; }
 }
 
+public class UpcomingRepopEntry
+{
+    public string MonsterName { get; init; } = string.Empty;
+    public DateTime RepopTime { get; init; }
+    // Pretty countdown to the window opening, e.g. "1h 35m".
+    public string TimeLabel { get; init; } = string.Empty;
+}
+
 public class NewsUpdateEntry
 {
     public string Title { get; init; } = string.Empty;
@@ -93,4 +113,6 @@ public class NewsUpdateEntry
     public int? Dkp { get; init; }
     public string RelativeTime { get; init; } = string.Empty;
     public string ColorClass { get; init; } = "a";
+    // Sort key for the merged multi-source feed (UTC). Not rendered directly.
+    public DateTime When { get; init; }
 }

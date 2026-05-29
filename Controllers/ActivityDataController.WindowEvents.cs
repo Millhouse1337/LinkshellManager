@@ -10,7 +10,9 @@ public sealed partial class ActivityDataController
         IReadOnlyList<ActivityWindowEventDto> OpenEvents,
         IReadOnlyList<ActivityWindowEventDto> ClosedEvents,
         IReadOnlyList<ActivityWindowSnapshotDto> UnlinkedSnapshots,
-        bool CanManage);
+        bool CanManage,
+        IReadOnlyList<string> EntryTypeOptions,
+        IReadOnlyList<string> RosterCharacterNames);
 
     public sealed record ActivityWindowEventDto(
         int Id,
@@ -26,7 +28,17 @@ public sealed partial class ActivityDataController
         int IgnoredSnapshotCount,
         int CombinedMemberCount,
         IReadOnlyList<ActivityWindowSnapshotDto> Snapshots,
-        IReadOnlyList<ActivityWindowCombinedMemberDto> CombinedMembers);
+        IReadOnlyList<ActivityWindowCombinedMemberDto> CombinedMembers,
+        double? DkpAmount,
+        string? EntryType,
+        DateTime? PostedToSheetUtc);
+
+    public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
+
+    public sealed record ActivityWindowEventDkpRequest(
+        double? DkpAmount,
+        string? EntryType,
+        IReadOnlyList<ActivityWindowEventMemberDkpInput>? MemberDkp);
 
     public sealed record ActivityWindowSnapshotDto(
         int Id,
@@ -41,6 +53,7 @@ public sealed partial class ActivityDataController
         IReadOnlyList<ActivityWindowSnapshotEntryDto> Entries);
 
     public sealed record ActivityWindowSnapshotEntryDto(
+        int Id,
         string CharacterName,
         string? MainJob,
         int? MainJobLevel,
@@ -55,11 +68,20 @@ public sealed partial class ActivityDataController
         string? SubJob,
         int? SubJobLevel,
         string? Zone,
-        int SnapshotCount);
+        int SnapshotCount,
+        double? DkpAmountOverride,
+        double? EffectiveDkpAmount);
 
     public sealed record ActivityAttachWindowSnapshotRequest(int? WindowEventId, string? Name);
     public sealed record ActivityWindowEventRenameRequest(string? Name);
     public sealed record ActivityWindowSnapshotStatusRequest(string Status);
+    public sealed record ActivityAddSnapshotEntryRequest(
+        string? CharacterName,
+        string? MainJob,
+        int? MainJobLevel,
+        string? SubJob,
+        int? SubJobLevel,
+        string? Zone);
 
     [HttpGet("window-events")]
     public async Task<IActionResult> GetWindowEventsAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)
@@ -77,6 +99,7 @@ public sealed partial class ActivityDataController
             .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Open)
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
+            .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
         var closedEvents = await _dbContext.WindowEvents
@@ -85,6 +108,7 @@ public sealed partial class ActivityDataController
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Take(25)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
+            .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
         var unlinkedSnapshots = await _dbContext.AttendanceSnapshots
@@ -95,11 +119,288 @@ public sealed partial class ActivityDataController
             .Include(s => s.Entries)
             .ToListAsync(cancellationToken);
 
+        // Roster character names (typeahead for the "Add a character by name…"
+        // input on snapshot editors). Only fetched for managers since they're
+        // the only ones who can edit a snapshot's roster.
+        var rosterCharacterNames = canManage
+            ? await _dbContext.AppUserLinkshells
+                .AsNoTracking()
+                .Where(link => link.LinkshellId == linkshellId
+                               && link.CharacterName != null
+                               && link.CharacterName != "")
+                .Select(link => link.CharacterName!)
+                .Distinct()
+                .OrderBy(name => name)
+                .ToListAsync(cancellationToken)
+            : new List<string>();
+
         return Ok(new ActivityWindowEventsResponse(
             openEvents.Select(MapActivityWindowEvent).ToList(),
             closedEvents.Select(MapActivityWindowEvent).ToList(),
             unlinkedSnapshots.Select(MapActivityWindowSnapshot).ToList(),
-            canManage));
+            canManage,
+            WindowEventEntryTypes.All,
+            rosterCharacterNames));
+    }
+
+    // Sets DKP + Entry Type on an UNposted event without pushing rows (draft).
+    // Ports WindowEventsController.SaveDetails including per-character DKP
+    // overrides so the Activity matches web parity.
+    [HttpPost("window-events/{windowEventId:int}/save-dkp")]
+    public async Task<IActionResult> SaveWindowEventDkpAsync(
+        int windowEventId,
+        [FromBody] ActivityWindowEventDkpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var windowEvent = await LoadManageableWindowEventAsync(
+            windowEventId, cancellationToken, includeMemberDkpOverrides: true);
+        if (windowEvent.Result is not null) return windowEvent.Result;
+
+        if (windowEvent.Value!.PostedToSheetAt.HasValue)
+        {
+            return BadRequest(new { error = "This event is already posted. Use Update to change DKP or Entry Type." });
+        }
+        if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
+
+        windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
+        windowEvent.Value.EntryType = request.EntryType;
+        ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Sets DKP + Entry Type (and any per-character overrides) and enqueues the
+    // AttInput append. Ports WindowEventsController.PostToSheet.
+    [HttpPost("window-events/{windowEventId:int}/post")]
+    public async Task<IActionResult> PostWindowEventToSheetAsync(
+        int windowEventId,
+        [FromBody] ActivityWindowEventDkpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var windowEvent = await LoadManageableWindowEventAsync(
+            windowEventId, cancellationToken, includeMemberDkpOverrides: true);
+        if (windowEvent.Result is not null) return windowEvent.Result;
+
+        if (windowEvent.Value!.PostedToSheetAt.HasValue)
+        {
+            return BadRequest(new { error = "This event has already been posted to the DKP sheet." });
+        }
+        if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
+
+        windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
+        windowEvent.Value.EntryType = request.EntryType;
+        ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _sheetSync.EnqueueWindowEventPostAsync(windowEvent.Value.Id, cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Edits a posted event's DKP + Entry Type (and overrides) and enqueues the
+    // reconcile job (rewrites the appended rows + ledger by the delta).
+    [HttpPost("window-events/{windowEventId:int}/edit-posted")]
+    public async Task<IActionResult> EditPostedWindowEventAsync(
+        int windowEventId,
+        [FromBody] ActivityWindowEventDkpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var windowEvent = await LoadManageableWindowEventAsync(
+            windowEventId, cancellationToken, includeMemberDkpOverrides: true);
+        if (windowEvent.Result is not null) return windowEvent.Result;
+
+        if (!windowEvent.Value!.PostedToSheetAt.HasValue)
+        {
+            return BadRequest(new { error = "This event hasn't been posted yet. Use Post to send it to the sheet." });
+        }
+        if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
+
+        windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
+        windowEvent.Value.EntryType = request.EntryType;
+        ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _sheetSync.EnqueueWindowEventEditAsync(windowEvent.Value.Id, cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Permanently deletes a Window Event. Linked snapshots become unlinked
+    // (FK is SetNull) rather than destroyed. Mirrors WindowEventsController.Delete.
+    [HttpPost("window-events/{windowEventId:int}/delete")]
+    public async Task<IActionResult> DeleteWindowEventAsync(
+        int windowEventId,
+        CancellationToken cancellationToken)
+    {
+        var windowEvent = await LoadManageableWindowEventAsync(windowEventId, cancellationToken);
+        if (windowEvent.Result is not null) return windowEvent.Result;
+
+        _dbContext.WindowEvents.Remove(windowEvent.Value!);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Hard-deletes a snapshot (and its entries). Mirrors
+    // WindowEventsController.DeleteSnapshot.
+    [HttpPost("window-events/snapshots/{snapshotId:int}/delete")]
+    public async Task<IActionResult> DeleteWindowSnapshotAsync(
+        int snapshotId,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await _dbContext.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId, cancellationToken);
+        if (snapshot is null) return NotFound(new { error = "Snapshot not found." });
+
+        var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
+        if (manageResult is not null) return manageResult;
+
+        if (snapshot.Entries.Count > 0)
+        {
+            _dbContext.AttendanceSnapshotEntries.RemoveRange(snapshot.Entries);
+        }
+        _dbContext.AttendanceSnapshots.Remove(snapshot);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Removes one person from a snapshot (officer correction). Mirrors
+    // WindowEventsController.DeleteSnapshotEntry.
+    [HttpPost("window-events/snapshots/{snapshotId:int}/entries/{entryId:int}/delete")]
+    public async Task<IActionResult> DeleteSnapshotEntryAsync(
+        int snapshotId,
+        int entryId,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await _dbContext.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId, cancellationToken);
+        if (snapshot is null) return NotFound(new { error = "Snapshot not found." });
+
+        var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
+        if (manageResult is not null) return manageResult;
+
+        var entry = snapshot.Entries.FirstOrDefault(e => e.Id == entryId);
+        if (entry is null) return NotFound(new { error = "Entry not found." });
+
+        _dbContext.AttendanceSnapshotEntries.Remove(entry);
+        snapshot.Entries.Remove(entry);
+        snapshot.EntryCount = snapshot.Entries.Count;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Adds a person the addon missed. Mirrors
+    // WindowEventsController.AddSnapshotEntry (alliance cap = 18, name de-dupe).
+    [HttpPost("window-events/snapshots/{snapshotId:int}/entries")]
+    public async Task<IActionResult> AddSnapshotEntryAsync(
+        int snapshotId,
+        [FromBody] ActivityAddSnapshotEntryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = await _dbContext.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId, cancellationToken);
+        if (snapshot is null) return NotFound(new { error = "Snapshot not found." });
+
+        var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
+        if (manageResult is not null) return manageResult;
+
+        var name = TrimToNull(request.CharacterName, 256);
+        if (name is null) return BadRequest(new { error = "Character name is required to add a person." });
+
+        if (snapshot.Entries.Count >= 18)
+        {
+            return BadRequest(new { error = "Snapshot already has the 18-member alliance maximum." });
+        }
+        if (snapshot.Entries.Any(e =>
+                string.Equals(e.CharacterName.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return BadRequest(new { error = $"{name} is already in this snapshot." });
+        }
+
+        snapshot.Entries.Add(new AttendanceSnapshotEntry
+        {
+            SnapshotId = snapshot.Id,
+            CharacterName = name,
+            MainJob = TrimToNull(request.MainJob, 8),
+            MainJobLevel = request.MainJobLevel,
+            SubJob = TrimToNull(request.SubJob, 8),
+            SubJobLevel = request.SubJobLevel,
+            Zone = TrimToNull(request.Zone, 128),
+        });
+        snapshot.EntryCount = snapshot.Entries.Count;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    private static string? ValidateWindowEventDkp(ActivityWindowEventDkpRequest request)
+    {
+        if (!request.DkpAmount.HasValue || request.DkpAmount.Value < 0)
+        {
+            return "DKP amount is required and must be zero or greater.";
+        }
+        if (!WindowEventEntryTypes.IsValid(request.EntryType))
+        {
+            return $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
+        }
+        if (request.MemberDkp is not null)
+        {
+            foreach (var input in request.MemberDkp)
+            {
+                if (input.DkpAmount.HasValue && input.DkpAmount.Value < 0)
+                {
+                    return $"Per-character DKP for \"{input.CharacterName}\" must be zero or greater.";
+                }
+            }
+        }
+        return null;
+    }
+
+    // Mirrors WindowEventsController.ApplyMemberDkpOverrides: characters whose
+    // value matches the event default (or is blank) have their override row
+    // removed; differing values get upserted.
+    private static void ApplyActivityMemberDkpOverrides(
+        WindowEvent windowEvent,
+        double defaultDkpAmount,
+        IReadOnlyList<ActivityWindowEventMemberDkpInput>? inputs)
+    {
+        if (inputs is null) return;
+
+        var existingByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var input in inputs)
+        {
+            var name = input.CharacterName?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+
+            existingByName.TryGetValue(name, out var existing);
+
+            if (!input.DkpAmount.HasValue ||
+                Math.Abs(input.DkpAmount.Value - defaultDkpAmount) < 0.0001)
+            {
+                if (existing is not null)
+                {
+                    windowEvent.MemberDkpOverrides.Remove(existing);
+                }
+                continue;
+            }
+
+            if (existing is null)
+            {
+                windowEvent.MemberDkpOverrides.Add(new WindowEventMemberDkp
+                {
+                    WindowEventId = windowEvent.Id,
+                    CharacterName = name,
+                    DkpAmount = input.DkpAmount.Value,
+                });
+            }
+            else if (Math.Abs(existing.DkpAmount - input.DkpAmount.Value) > 0.0001)
+            {
+                existing.DkpAmount = input.DkpAmount.Value;
+            }
+        }
     }
 
     [HttpPost("window-events/{windowEventId:int}/rename")]
@@ -228,10 +529,15 @@ public sealed partial class ActivityDataController
 
     private async Task<(WindowEvent? Value, IActionResult? Result)> LoadManageableWindowEventAsync(
         int windowEventId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeMemberDkpOverrides = false)
     {
-        var windowEvent = await _dbContext.WindowEvents
-            .FirstOrDefaultAsync(e => e.Id == windowEventId, cancellationToken);
+        var query = _dbContext.WindowEvents.AsQueryable();
+        if (includeMemberDkpOverrides)
+        {
+            query = query.Include(e => e.MemberDkpOverrides);
+        }
+        var windowEvent = await query.FirstOrDefaultAsync(e => e.Id == windowEventId, cancellationToken);
         if (windowEvent is null) return (null, NotFound(new { error = "Window Event not found." }));
 
         var manageResult = await RequireWindowEventManagerAsync(windowEvent.LinkshellId, cancellationToken);
@@ -346,7 +652,11 @@ public sealed partial class ActivityDataController
             .OrderByDescending(s => s.CapturedAtUtc)
             .Select(MapActivityWindowSnapshot)
             .ToList();
-        var combined = BuildActivityCombinedMembers(item.Snapshots);
+        var overrides = item.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+        var combined = BuildActivityCombinedMembers(item.Snapshots, overrides, item.DkpAmount);
         return new ActivityWindowEventDto(
             item.Id,
             item.LinkshellId,
@@ -361,7 +671,10 @@ public sealed partial class ActivityDataController
             snapshots.Count(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Ignored),
             combined.Count,
             snapshots,
-            combined);
+            combined,
+            item.DkpAmount,
+            item.EntryType,
+            item.PostedToSheetAt);
     }
 
     private static ActivityWindowSnapshotDto MapActivityWindowSnapshot(AttendanceSnapshot snapshot)
@@ -369,6 +682,7 @@ public sealed partial class ActivityDataController
         var entries = snapshot.Entries
             .OrderBy(e => e.CharacterName, StringComparer.OrdinalIgnoreCase)
             .Select(e => new ActivityWindowSnapshotEntryDto(
+                e.Id,
                 e.CharacterName,
                 e.MainJob,
                 e.MainJobLevel,
@@ -398,7 +712,10 @@ public sealed partial class ActivityDataController
             entries);
     }
 
-    private static List<ActivityWindowCombinedMemberDto> BuildActivityCombinedMembers(IEnumerable<AttendanceSnapshot> snapshots)
+    private static List<ActivityWindowCombinedMemberDto> BuildActivityCombinedMembers(
+        IEnumerable<AttendanceSnapshot> snapshots,
+        IDictionary<string, double>? memberDkpOverrides = null,
+        double? defaultDkpAmount = null)
     {
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
@@ -408,6 +725,11 @@ public sealed partial class ActivityDataController
             .Select(g =>
             {
                 var latest = g.OrderByDescending(x => x.Snapshot.CapturedAtUtc).First().Entry;
+                double? overrideAmount = null;
+                if (memberDkpOverrides is not null && memberDkpOverrides.TryGetValue(g.Key, out var found))
+                {
+                    overrideAmount = found;
+                }
                 return new ActivityWindowCombinedMemberDto(
                     g.Key,
                     latest.MainJob,
@@ -415,7 +737,9 @@ public sealed partial class ActivityDataController
                     latest.SubJob,
                     latest.SubJobLevel,
                     latest.Zone,
-                    g.Select(x => x.Snapshot.Id).Distinct().Count());
+                    g.Select(x => x.Snapshot.Id).Distinct().Count(),
+                    overrideAmount,
+                    overrideAmount ?? defaultDkpAmount);
             })
             .ToList();
     }

@@ -25,6 +25,49 @@ td {
   background: var(--accent-weak);
 }
 
+/* Actions column pins to the right and keeps its buttons on one line so
+   they don't wrap mid-row on a narrow iframe. */
+.ps-actions-col {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.ps-row-actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Local copy of the destructive outline button (mirrors the attendance
+   tab's .btn.danger-outline) so the Delete/Confirm buttons read clearly
+   without depending on cross-component CSS. */
+.btn.danger-outline {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #f87171;
+  background: transparent;
+}
+.btn.danger-outline:hover {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: #f87171;
+}
+
+/* Soft "assigned monster" pill + muted dash, reused from attendance. */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--muted);
+}
+.status-pill.ok {
+  background: var(--accent-weak);
+  color: var(--fg);
+}
+.we-muted { color: var(--muted); }
+
 .ps-assigned {
   color: var(--muted);
   font-weight: 400;
@@ -37,9 +80,10 @@ td {
 .ps-assign-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -47,9 +91,46 @@ td {
   font-size: 12px;
   color: var(--muted);
   text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
+/* Modern dropdown — same chevron/focus treatment as the sign-up selects. */
 .ps-assign-row select {
-  min-height: 32px;
-  min-width: 160px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  height: 36px;
+  min-width: 200px;
+  padding: 0 30px 0 12px;
+  font-size: 13px;
+  color: var(--fg);
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: var(--r-md);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.ps-assign-row select:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.ps-assign-row select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+}
+
+.ps-assign-row select option {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.ps-assign-row .btn {
+  height: 36px;
 }

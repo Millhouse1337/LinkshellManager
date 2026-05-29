@@ -18,7 +18,6 @@ import {
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
-  HNM_NAMES,
   LONG_WINDOW_TOD_MONSTERS,
   TOD_COOLDOWN_OPTIONS,
   TOD_INTERVAL_OPTIONS,
@@ -79,11 +78,10 @@ export class TodsTabComponent {
     }
   }
 
-  // True HNMs are managed in the dedicated HNM tab; drop them from the
-  // generic ToD form's monster picker. "Other" + custom name stays available
-  // for any edge case where someone really wants to log a manual HNM ToD
-  // outside the streamlined workflow.
-  protected readonly todMonsterOptions = TOD_MONSTER_OPTIONS.filter(m => !HNM_NAMES.has(m));
+  // Full monster picker, matching the web Add ToD form. Per-mob visibility is
+  // controlled by the linkshell's "Hide ToD Mobs" setting, not a blanket
+  // filter here.
+  protected readonly todMonsterOptions = [...TOD_MONSTER_OPTIONS];
   protected readonly todCooldownOptions = [...TOD_COOLDOWN_OPTIONS];
   protected readonly todIntervalOptions = [...TOD_INTERVAL_OPTIONS];
   protected readonly todDraft: ActivityCreateTodInput = {
@@ -219,10 +217,9 @@ export class TodsTabComponent {
     );
     return [...(this.activity.overview()?.recentTods ?? [])]
       .filter(tod => tod.linkshellId === selectedId)
+      // Visibility is controlled per-mob by the linkshell's "Hide ToD Mobs"
+      // setting (matches the web tracker, which shows every monster).
       .filter(tod => !hidden.has((tod.monsterName ?? '').trim().toLowerCase()))
-      // True HNMs are managed in the dedicated HNM tab, so they're dropped
-      // from the generic ToDs list to match the server-side filter.
-      .filter(tod => !HNM_NAMES.has((tod.monsterName ?? '').trim()))
       .sort((left, right) => {
         const leftTime = left.time ? new Date(left.time).getTime() : 0;
         const rightTime = right.time ? new Date(right.time).getTime() : 0;

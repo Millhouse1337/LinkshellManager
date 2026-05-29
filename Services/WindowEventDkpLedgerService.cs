@@ -42,14 +42,40 @@ public sealed class WindowEventDkpLedgerService
             return 0;
         }
 
-        var memberships = await _db.AppUserLinkshells
+        var membershipsWithUser = await _db.AppUserLinkshells
             .Where(link => link.LinkshellId == windowEvent.LinkshellId && link.AppUserId != null)
+            .Join(_db.Users,
+                  link => link.AppUserId,
+                  user => user.Id,
+                  (link, user) => new { Membership = link, User = user })
             .ToListAsync(cancellationToken);
 
-        var membershipsByCharacterName = memberships
-            .Where(link => !string.IsNullOrWhiteSpace(link.CharacterName) && !string.IsNullOrWhiteSpace(link.AppUserId))
-            .GroupBy(link => link.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        // Index every name a member might have been captured under: the
+        // membership's own CharacterName plus the account's CharacterName and
+        // alt names. This lets a linkshell/zone-scope snapshot credit a member
+        // who showed up on an alt. First-write-wins, so a membership's own
+        // CharacterName takes precedence over an alt that resolves to a
+        // different member (same rule PostAttendanceAsync uses).
+        var membershipsByCharacterName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in membershipsWithUser)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Membership.AppUserId)) continue;
+            foreach (var candidate in new[]
+                     {
+                         pair.Membership.CharacterName,
+                         pair.User.CharacterName,
+                         pair.User.AltCharacterName1,
+                         pair.User.AltCharacterName2,
+                     })
+            {
+                if (string.IsNullOrWhiteSpace(candidate)) continue;
+                var key = candidate.Trim();
+                if (!membershipsByCharacterName.ContainsKey(key))
+                {
+                    membershipsByCharacterName[key] = pair.Membership;
+                }
+            }
+        }
 
         var candidates = combined
             .Select(item => new

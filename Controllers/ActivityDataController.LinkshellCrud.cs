@@ -122,7 +122,8 @@ public sealed partial class ActivityDataController
                     link.AppUser?.AltCharacterName2,
                     link.Rank,
                     link.Status,
-                    link.LinkshellDkp))
+                    link.LinkshellDkp,
+                    link.DateJoined))
                 .ToList()));
     }
 
@@ -212,6 +213,15 @@ public sealed partial class ActivityDataController
                 return BadRequest(new { error = "Loot Structure must be Dkp, LootCouncil, or Hybrid." });
             }
             linkshell.LootStructure = NormalizeLootStructure(requestedStructure);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.LinkshellType))
+        {
+            if (!LinkshellTypes.IsValid(request.LinkshellType.Trim()))
+            {
+                return BadRequest(new { error = "Linkshell Type must be SkySeaDynamis, HnmOnly, or Both." });
+            }
+            linkshell.LinkshellType = LinkshellTypes.Normalize(request.LinkshellType);
         }
 
         if (request.EnableHnmSection.HasValue) linkshell.EnableHnmSection = request.EnableHnmSection.Value;

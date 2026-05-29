@@ -31,6 +31,17 @@ export class LinkshellTabComponent {
   protected get rosterSearch(): string { return this.rosterSearchValue; }
   protected set rosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
 
+  // App Sync filter: limits the Linkshell Roster (Manage Team) list to members
+  // who are both app-admitted (appUserId set) and Active. Defaults to true so
+  // the view leads with members the linkshell has tracking on; toggle off to
+  // also see Pending / Unclaimed rows pulled from the sheet without an app
+  // user. Mirrors the Dashboard tab's identical toggle.
+  protected readonly appSyncOnly = signal(true);
+  protected toggleAppSync(value: boolean): void {
+    this.appSyncOnly.set(value);
+    this.rosterPage.set(1);
+  }
+
   // ----- Re-implemented small reads via this.activity -----
 
   protected initials(value: string | null | undefined): string {
@@ -95,12 +106,20 @@ export class LinkshellTabComponent {
 
   protected filteredDashboardMembers() {
     const term = this.rosterSearch.trim().toLowerCase();
+    const appSyncOnly = this.appSyncOnly();
     const members = this.selectedDashboardMembers();
-    if (!term) return members;
-    return members.filter(member =>
-      (member.characterName ?? '').toLowerCase().includes(term) ||
-      (member.rank ?? '').toLowerCase().includes(term)
-    );
+    return members.filter(member => {
+      if (appSyncOnly) {
+        const status = (member.status ?? 'Active').toLowerCase();
+        if (!member.appUserId || status !== 'active') return false;
+      }
+      if (term) {
+        const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
+        const rankMatch = (member.rank ?? '').toLowerCase().includes(term);
+        if (!nameMatch && !rankMatch) return false;
+      }
+      return true;
+    });
   }
 
   // Roster pagination: 10 per page. rosterPage is 1-based; every read clamps

@@ -99,7 +99,33 @@ else
             <div class="card-title">Rules</div>
             <a class="card-link" asp-controller="Rule" asp-action="Index">View all</a>
         </div>
-        <div class="empty">No rules defined yet.</div>
+        @if (Model.Rules.Count == 0)
+        {
+            <div class="empty">No rules defined yet.</div>
+        }
+        else
+        {
+            <div class="act-list">
+                @foreach (var rule in Model.Rules)
+                {
+                    <div class="act-row">
+                        <div class="act-when">@rule.RelativeTime</div>
+                        <div class="act-dot claim"></div>
+                        <div class="act-text">
+                            <strong>@rule.Title</strong>
+                            @if (!string.IsNullOrWhiteSpace(rule.Details))
+                            {
+                                <span> · @rule.Details</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(rule.Author))
+                            {
+                                <span class="roster-name-sub"> — @rule.Author</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
     </div>
 
     <div class="card fade d2" style="margin-top:16px;margin-bottom:16px">
@@ -143,13 +169,34 @@ else
                     <div class="card-title">Upcoming Events</div>
                     <a class="card-link" asp-controller="Event" asp-action="Create">+ Create event</a>
                 </div>
-                @if (Model.Events.Count == 0)
+                @if (Model.Events.Count == 0 && Model.UpcomingRepops.Count == 0)
                 {
                     <div class="empty">No active events for this linkshell.</div>
                 }
                 else
                 {
                     <div class="list">
+                        @foreach (var repop in Model.UpcomingRepops)
+                        {
+                            <a class="row plain" asp-controller="Tod" asp-action="Index">
+                                <div class="row-main">
+                                    <div class="row-title">
+                                        @repop.MonsterName
+                                        <span class="tag warning">Repop</span>
+                                    </div>
+                                    <div class="row-meta">
+                                        <span>Window opens @repop.RepopTime.ToString("ddd MMM d, HH:mm") UTC</span>
+                                    </div>
+                                </div>
+                                <div class="row-time warn">
+                                    <span class="num">@repop.TimeLabel</span>
+                                    <div class="row-time-sub">until open</div>
+                                </div>
+                                <div class="row-cta">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+                                </div>
+                            </a>
+                        }
                         @foreach (var evt in Model.Events)
                         {
                             var href = evt.CommencementStartTime.HasValue
@@ -236,6 +283,16 @@ else
                         <input id="dashRosterSearch" type="text" class="input"
                                placeholder="Filter roster (character, rank, status…)…"
                                style="flex:1;min-width:180px" maxlength="64" autocomplete="off" />
+                        @* App Sync filter: limits the roster to "fully onboarded" members --
+                           an app account is linked (AppUserId != null) AND status is Active.
+                           Defaults to ON so the dashboard view leads with members the linkshell
+                           actually has tracking on; flip OFF to see unclaimed / pending rows
+                           too. The data-appsync attribute is pre-baked per row so the JS
+                           filter stays O(1) per row. *@
+                        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
+                            <input type="checkbox" id="dashRosterAppSync" checked />
+                            App Sync
+                        </label>
                         <span id="dashRosterCount" style="font-size:12px;color:var(--fg-3);white-space:nowrap"></span>
                     </div>
 
@@ -263,7 +320,13 @@ else
                             // Pre-baked lowercased haystack the JS filter matches
                             // against. Keeps filtering O(1) per row at search time.
                             var searchKey = (name + " " + rank + " " + status).ToLowerInvariant();
-                            <div class="roster-row" data-search="@searchKey">
+                            // App Sync flag: member has an app account (AppUserId set) AND
+                            // their status reads Active. Drives the "App Sync" checkbox
+                            // filter; "1" means visible while the toggle is on.
+                            var isAppSynced = m.AppUserId != null
+                                && (string.IsNullOrEmpty(m.Status)
+                                    || m.Status.Equals("Active", StringComparison.OrdinalIgnoreCase));
+                            <div class="roster-row" data-search="@searchKey" data-appsync="@(isAppSynced ? "1" : "0")">
                                 <div class="roster-av @RosterAvClass(name)">@Initials(name)</div>
                                 <div>
                                     <div class="roster-name">@name</div>
@@ -286,6 +349,7 @@ else
                             var PAGE_SIZE = 5;
                             var list      = document.getElementById('dashRosterList');
                             var search    = document.getElementById('dashRosterSearch');
+                            var appSync   = document.getElementById('dashRosterAppSync');
                             var prevBtn   = document.getElementById('dashRosterPrev');
                             var nextBtn   = document.getElementById('dashRosterNext');
                             var pageLabel = document.getElementById('dashRosterPageLabel');
@@ -315,18 +379,22 @@ else
 
                             function applyFilter() {
                                 var q = (search ? search.value : '').trim().toLowerCase();
-                                if (q === '') {
-                                    state.filtered = rows;
-                                } else {
-                                    state.filtered = rows.filter(function (r) {
-                                        return (r.getAttribute('data-search') || '').indexOf(q) >= 0;
-                                    });
-                                }
+                                var appSyncOnly = appSync ? appSync.checked : false;
+                                state.filtered = rows.filter(function (r) {
+                                    if (appSyncOnly && r.getAttribute('data-appsync') !== '1') {
+                                        return false;
+                                    }
+                                    if (q !== '' && (r.getAttribute('data-search') || '').indexOf(q) < 0) {
+                                        return false;
+                                    }
+                                    return true;
+                                });
                                 state.page = 1;
                                 render();
                             }
 
                             if (search) { search.addEventListener('input', applyFilter); }
+                            if (appSync) { appSync.addEventListener('change', applyFilter); }
                             if (prevBtn) {
                                 prevBtn.addEventListener('click', function () {
                                     if (state.page > 1) { state.page--; render(); }
@@ -431,7 +499,7 @@ else
                 </div>
                 @if (Model.NewsUpdates.Count == 0)
                 {
-                    <div class="empty">No loot recorded yet.</div>
+                    <div class="empty">No recent updates yet.</div>
                 }
                 else
                 {

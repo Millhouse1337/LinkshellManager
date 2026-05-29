@@ -23,7 +23,7 @@
           @if (dashboardLinkshell.settings?.enableRevenue) {
             <div class="stat-cell">
               <div class="stat-cell-label">Revenue</div>
-              <div class="stat-cell-value">{{ dashboardLinkshell.revenue }}</div>
+              <div class="stat-cell-value">{{ dashboardLinkshell.revenue | number }}</div>
             </div>
           }
           <div class="stat-cell">
@@ -182,13 +182,26 @@
             </div>
           </div>
           @if (selectedDashboardMembers().length > 0) {
-            <div class="ac-roster-search">
+            <div class="ac-roster-search" style="display:flex;align-items:center;gap:8px">
               <input
                 type="text"
                 class="form-input"
                 placeholder="Search roster"
+                style="flex:1"
                 [(ngModel)]="dashboardRosterSearch"
                 name="dashboardRosterSearch" />
+              <!--
+                App Sync filter: limits the roster to members who are both
+                app-admitted (appUserId set) and Active. Defaults ON; toggle
+                off to also see Pending / Unclaimed rows from the sheet.
+              -->
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
+                <input
+                  type="checkbox"
+                  [checked]="appSyncOnly()"
+                  (change)="toggleAppSync($any($event.target).checked)" />
+                App Sync
+              </label>
             </div>
             <div class="ac-roster">
               <div class="ac-roster-head">
@@ -264,7 +277,7 @@
               </div>
             } @else {
               <div class="empty-state empty-state--compact">
-                <div class="empty-state-desc">No loot recorded yet.</div>
+                <div class="empty-state-desc">No recent updates yet.</div>
               </div>
             }
           </div>

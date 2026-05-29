@@ -84,6 +84,8 @@ export class LinkshellService {
       dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null;
       // null = leave unchanged; [] = clear; [...names] = replace.
       hiddenTodMonsters?: string[] | null;
+      // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
+      linkshellType?: string | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -105,7 +107,8 @@ export class LinkshellService {
         enableItems: input.enableItems ?? null,
         enableRevenue: input.enableRevenue ?? null,
         dkpRoundingIncrement: input.dkpRoundingIncrement ?? null,
-        hiddenTodMonsters: input.hiddenTodMonsters ?? null
+        hiddenTodMonsters: input.hiddenTodMonsters ?? null,
+        linkshellType: input.linkshellType ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');

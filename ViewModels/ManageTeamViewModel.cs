@@ -15,6 +15,12 @@ public class ManageTeamViewModel
 
     public string? SearchTerm { get; set; }
 
+    // App Sync filter: when true (the default), the Members list is limited to
+    // rows that have an AppUserId AND a non-Pending/Unclaimed Status -- i.e.,
+    // members the linkshell actually has app + DKP tracking on. Flipping it
+    // off shows every AppUserLinkshell row, including sheet-only placeholders.
+    public bool AppSyncOnly { get; set; } = true;
+
     // Members list pagination (View Team). SearchTerm above doubles as the
     // member-name filter on the Index page.
     public const int MembersPageSize = 10;

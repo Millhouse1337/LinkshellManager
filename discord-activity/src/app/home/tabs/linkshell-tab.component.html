@@ -34,13 +34,26 @@
             </div>
           </div>
           @if (selectedDashboardMembers().length > 0) {
-            <div class="ac-roster-search">
+            <div class="ac-roster-search" style="display:flex;align-items:center;gap:8px">
               <input
                 type="text"
                 class="form-input"
                 placeholder="Search roster"
+                style="flex:1"
                 [(ngModel)]="rosterSearch"
                 name="manageRosterSearch" />
+              <!--
+                App Sync filter: limits the roster to members who are both
+                app-admitted (appUserId set) and Active. Defaults ON; toggle
+                off to also see Pending / Unclaimed rows from the sheet.
+              -->
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
+                <input
+                  type="checkbox"
+                  [checked]="appSyncOnly()"
+                  (change)="toggleAppSync($any($event.target).checked)" />
+                App Sync
+              </label>
             </div>
             <div class="ac-roster ac-roster--with-actions">
               <div class="ac-roster-head">

@@ -11,7 +11,7 @@
         </div>
       </div>
 
-      @if (dashboardLinkshells().length > 1) {
+      @if (dashboardLinkshells().length > 0) {
         <div class="card">
           <div class="card-head">
             <div class="card-title">Switch Linkshells</div>
@@ -83,42 +83,87 @@
           </div>
         } @else {
           <form class="customize-form" (ngSubmit)="$event.preventDefault(); saveCustomizeDraft()">
-            <div class="customize-form__section">
-              <strong>Loot structure</strong>
-              <p class="muted">Choose how loot is awarded for this linkshell.</p>
-              <div class="customize-form__options">
-                <label class="customize-form__option">
-                  <input type="radio" name="lootStructureDraft" value="Dkp"
-                    [ngModel]="customizeDraft.lootStructure"
-                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
-                  <span>
-                    <strong>DKP</strong>
-                    <span class="muted">Time-based DKP earned per event, spent on loot.</span>
-                  </span>
-                </label>
-                <label class="customize-form__option">
-                  <input type="radio" name="lootStructureDraft" value="LootCouncil"
-                    [ngModel]="customizeDraft.lootStructure"
-                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
-                  <span>
-                    <strong>Loot Council</strong>
-                    <span class="muted">Leader decides; DKP is not tracked.</span>
-                  </span>
-                </label>
-                <label class="customize-form__option">
-                  <input type="radio" name="lootStructureDraft" value="Hybrid"
-                    [ngModel]="customizeDraft.lootStructure"
-                    (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
-                  <span>
-                    <strong>Percentage Based</strong>
-                    <span class="muted">DKP earned as usual; loot deducts a percentage of the winner's balance.</span>
-                  </span>
-                </label>
-              </div>
+            <div class="customize-cards-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">
+              <section class="card" style="flex:1 1 0;min-width:280px;margin:0">
+                <div class="card-head"><div class="card-title">Loot structure</div></div>
+                <div class="card-body">
+                  <p class="muted">Choose how loot is awarded for this linkshell.</p>
+                  <div class="customize-form__options">
+                    <label class="customize-form__option">
+                      <input type="radio" name="lootStructureDraft" value="Dkp"
+                        [ngModel]="customizeDraft.lootStructure"
+                        (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                      <span>
+                        <strong>DKP</strong>
+                        <span class="muted">Time-based DKP earned per event, spent on loot.</span>
+                      </span>
+                    </label>
+                    <label class="customize-form__option">
+                      <input type="radio" name="lootStructureDraft" value="LootCouncil"
+                        [ngModel]="customizeDraft.lootStructure"
+                        (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                      <span>
+                        <strong>Loot Council</strong>
+                        <span class="muted">Leader decides; DKP is not tracked.</span>
+                      </span>
+                    </label>
+                    <label class="customize-form__option">
+                      <input type="radio" name="lootStructureDraft" value="Hybrid"
+                        [ngModel]="customizeDraft.lootStructure"
+                        (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
+                      <span>
+                        <strong>Percentage Based</strong>
+                        <span class="muted">DKP earned as usual; loot deducts a percentage of the winner's balance.</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </section>
 
+              <section class="card" style="flex:1 1 0;min-width:280px;margin:0">
+                <div class="card-head"><div class="card-title">Linkshell type</div></div>
+                <div class="card-body">
+                  <p class="muted">Tells the addon and website which content this linkshell runs.</p>
+                  <div class="customize-form__options">
+                    <label class="customize-form__option">
+                      <input type="radio" name="linkshellTypeDraft" value="SkySeaDynamis"
+                        [ngModel]="customizeDraft.linkshellType"
+                        (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
+                      <span>
+                        <strong>Sky/Sea/Dynamis etc.</strong>
+                        <span class="muted">Timed-event experience only. No HNM presets.</span>
+                      </span>
+                    </label>
+                    <label class="customize-form__option">
+                      <input type="radio" name="linkshellTypeDraft" value="HnmOnly"
+                        [ngModel]="customizeDraft.linkshellType"
+                        (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
+                      <span>
+                        <strong>HNM Only</strong>
+                        <span class="muted">HNM snapshot sessions only. Hides the Event System.</span>
+                      </span>
+                    </label>
+                    <label class="customize-form__option">
+                      <input type="radio" name="linkshellTypeDraft" value="Both"
+                        [ngModel]="customizeDraft.linkshellType"
+                        (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
+                      <span>
+                        <strong>Both</strong>
+                        <span class="muted">Everything — timed events and HNM. Default.</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </section>
             </div>
 
-            <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+            <div class="customize-form__actions">
+              <button type="submit" class="btn primary" [disabled]="!customizeDirty">
+                {{ customizeDirty ? 'Save changes' : 'Saved' }}
+              </button>
+            </div>
+
+            <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;justify-content:center">
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
                 <div class="customize-form__section" style="flex:0 0 260px">
                   <strong>DKP rounding increment</strong>
@@ -134,7 +179,7 @@
                 </div>
               }
 
-              <div class="customize-form__section" style="flex:1 1 360px;min-width:280px">
+              <div class="customize-form__section" style="flex:0 1 auto;min-width:280px">
                 <strong>Feature toggles</strong>
                 <p class="muted">Hide sections your linkshell doesn't use.</p>
                 <div class="customize-form__toggles">

@@ -1,37 +1,227 @@
-.window-event-card,
-.window-row {
+.window-event-card {
   margin-top: 12px;
 }
 
-.window-event-card > summary,
+/* The event-card summary reads as a header band so the card has clear
+   structure instead of looking flat. */
+.window-event-card > summary {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  cursor: pointer;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  list-style: none;
+}
+.window-event-card > summary::-webkit-details-marker { display: none; }
+.window-event-card > summary > strong:first-child {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* Snapshot rows: inset + bordered with a chevron affordance so it's clear
+   they expand. */
+.window-row {
+  margin: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
 .window-row > summary {
   display: flex;
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 9px 12px;
   cursor: pointer;
+  list-style: none;
+}
+.window-row > summary::-webkit-details-marker { display: none; }
+.window-row > summary::before {
+  content: "\25B8"; /* ▸ */
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+.window-row[open] > summary::before {
+  transform: rotate(90deg);
 }
 
 .window-actions {
   display: flex;
   gap: 8px;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
   padding: 8px 12px;
 }
 
 .window-actions input,
 .window-actions select {
-  min-height: 32px;
-  min-width: 150px;
+  height: 36px;
+  min-width: 160px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 400;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.window-actions input::placeholder { color: var(--muted); }
+.window-actions input:hover,
+.window-actions select:hover { border-color: rgba(255, 255, 255, 0.22); }
+.window-actions input:focus,
+.window-actions select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+.window-actions select { padding-right: 30px; cursor: pointer; }
+.window-actions .btn { height: 36px; }
+
+/* Rename + DKP posting controls, combined into one horizontal control bar.
+   Fields (label-on-top) and button groups bottom-align on a single row and
+   only wrap when the iframe gets too narrow. */
+.window-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px;
+}
+
+.wc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Modern input: subtle elevated fill, rounded, with an accent focus ring. */
+.wc-field input,
+.wc-field select {
+  height: 36px;
+  min-width: 160px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.wc-field input::placeholder { color: var(--muted); }
+.wc-field input:hover,
+.wc-field select:hover { border-color: rgba(255, 255, 255, 0.22); }
+.wc-field input:focus,
+.wc-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+.wc-field select { padding-right: 30px; cursor: pointer; }
+
+/* Button clusters sit flush with the bottom of the inputs. */
+.wc-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wc-btns .btn { height: 36px; }
+
+/* Thin separator between the rename group and the DKP group. Collapses to a
+   full-width zero-height spacer once the bar wraps. */
+.wc-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0 2px;
+  background: var(--border);
 }
 
 .subhead {
-  padding: 10px 12px 4px;
-  font-size: 12px;
+  padding: 12px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.subhead-help {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.85;
+}
+
+/* Per-row DKP override input on the snapshot tables — narrower than the
+   header-bar inputs so 18-row alliances stay compact. */
+.we-dkp-input {
+  width: 80px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.we-dkp-input:hover { border-color: rgba(255, 255, 255, 0.22); }
+.we-dkp-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+}
+
+/* "Add a character by name…" row spans the table; the input fills the cell
+   so officers can type freely. */
+.we-add-row td { padding-top: 10px; }
+.we-add-row input[type="text"] {
+  width: 100%;
+  max-width: 320px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.we-add-row input[type="text"]::placeholder { color: var(--muted); }
+.we-add-row input[type="text"]:hover { border-color: rgba(255, 255, 255, 0.22); }
+.we-add-row input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+}
+
+.we-muted { color: var(--muted); }
+
+/* Destructive outline button (Delete event / Delete snapshot / Remove). */
+.btn.danger-outline {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #f87171;
+  background: transparent;
+}
+.btn.danger-outline:hover {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: #f87171;
 }
 
 .status-pill {
@@ -47,6 +237,11 @@
 .status-pill.warn {
   background: rgba(251, 191, 36, 0.16);
   color: #fbbf24;
+}
+
+.status-pill.ok {
+  background: var(--success-weak);
+  color: var(--success);
 }
 
 .table-scroll {

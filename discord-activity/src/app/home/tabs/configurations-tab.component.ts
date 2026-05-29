@@ -132,7 +132,8 @@ export class ConfigurationsTabComponent {
         enableItems: settings?.enableItems ?? null,
         enableRevenue: settings?.enableRevenue ?? null,
         dkpRoundingIncrement: settings?.dkpRoundingIncrement ?? null,
-        hiddenTodMonsters: settings?.hiddenTodMonsters ?? null
+        hiddenTodMonsters: settings?.hiddenTodMonsters ?? null,
+        linkshellType: settings?.linkshellType ?? null
       });
       this.cancelEditLinkshell();
     } catch {
@@ -368,6 +369,8 @@ export class ConfigurationsTabComponent {
     enableItems: boolean;
     enableRevenue: boolean;
     dkpRoundingIncrement: ActivityDkpRoundingIncrement;
+    // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
+    linkshellType: string;
     // Lower-cased names of monsters the linkshell wants hidden from the
     // ToD Tracker. Lower-case for comparison stability — re-cased to the
     // canonical built-in label on save.
@@ -384,6 +387,7 @@ export class ConfigurationsTabComponent {
     enableItems: true,
     enableRevenue: true,
     dkpRoundingIncrement: 'Quarter',
+    linkshellType: 'Both',
     hiddenTodMonsters: new Set<string>()
   };
 
@@ -427,6 +431,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableItems = settings.enableItems;
     this.customizeDraft.enableRevenue = settings.enableRevenue;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
+    this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
     this.customizeDraft.hiddenTodMonsters = new Set(
@@ -491,7 +496,8 @@ export class ConfigurationsTabComponent {
         enableItems: this.customizeDraft.enableItems,
         enableRevenue: this.customizeDraft.enableRevenue,
         dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement,
-        hiddenTodMonsters: this.buildHiddenTodMonstersPayload()
+        hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
+        linkshellType: this.customizeDraft.linkshellType
       });
       this.customizeDirty = false;
       this.syncCustomizeDraft();

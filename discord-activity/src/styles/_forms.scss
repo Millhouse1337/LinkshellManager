@@ -919,16 +919,8 @@
 }
 
 .job-editor {
-  // `auto-fit` lets the four selects (Role / Main job / Sub job /
-  // Quantity) wrap to new rows the moment a column would drop below
-  // ~170px, instead of waiting for a media-query breakpoint that may
-  // never fire inside Discord's iframe (it reports a wider viewport
-  // than what's actually visible on a phone). 170px is wide enough
-  // that the Quantity column's "Not specified" toggle sits inline
-  // next to the number input without wrapping.
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  // Row gap is wider than column gap so wrapped rows feel like
-  // distinct fields, not one squashed strip.
+  // The job card stacks its two blocks: the row of selects
+  // (.job-editor__fields) and the full-width Details field below it.
   row-gap: 12px;
   column-gap: 12px;
   padding: 14px 14px 14px;
@@ -938,6 +930,18 @@
   // Anchor for the absolutely-positioned Remove (×) button in the
   // top-right corner.
   position: relative;
+}
+
+// The four selects (Role / Main job / Sub job / Quantity) spread evenly
+// across the full row and auto-wrap when a column would drop below ~170px.
+// `auto-fit` collapses the empty trailing tracks so the four fields stretch
+// to fill the width instead of bunching on the left — and it works inside
+// Discord's iframe without relying on a media-query breakpoint that may
+// never fire there.
+.job-editor__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
 }
 
 // Details textarea/input always spans the full row regardless of how

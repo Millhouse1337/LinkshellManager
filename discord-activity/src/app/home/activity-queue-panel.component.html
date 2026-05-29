@@ -52,11 +52,8 @@
       <div class="create-form__grid">
         <label>
           <span>Linkshell</span>
-          <select [(ngModel)]="createModel.linkshellId" name="linkshellId" required [disabled]="isEditingLiveEvent">
-            @for (linkshell of activity.overview()?.linkshells ?? []; track linkshell.id) {
-              <option [ngValue]="linkshell.id">{{ linkshell.name }}</option>
-            }
-          </select>
+          <input type="text" [value]="createLinkshellName()" readonly
+            title="Set by the active linkshell — switch it in Configurations" />
         </label>
 
         <label>
@@ -160,6 +157,7 @@
         @if (!partySetupNotSpecified) {
         @for (job of createModel.jobs; track $index) {
           <div class="job-editor">
+            <div class="job-editor__fields">
             <label>
               <span>Role</span>
               <select [(ngModel)]="job.jobType" [name]="'jobType' + $index">
@@ -204,6 +202,7 @@
                 </label>
               </div>
             </label>
+            </div>
             <label class="job-editor__details">
               <span>Details</span>
               <input [(ngModel)]="job.details" [name]="'jobDetails' + $index" />

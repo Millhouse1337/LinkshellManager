@@ -441,6 +441,13 @@ public class LinkshellController : Controller
         linkshell.EnableDkp      = model.EnableDkp;
         linkshell.EnableItems    = model.EnableItems;
         linkshell.EnableRevenue  = model.EnableRevenue;
+        // Pipe-separated, trimmed, de-duped — same storage format the Discord
+        // Activity writes and TodController reads when filtering the tracker.
+        linkshell.HiddenTodMonsters = string.Join('|',
+            (model.HiddenTodMonsters ?? new List<string>())
+                .Select(name => name?.Trim())
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase));
         // Upsert by URL so an existing webhook's TodBoardMessageId survives an
         // edit (otherwise a blunt delete+recreate would orphan the live board
         // message and post a duplicate). Rows whose URL is gone are deleted;
@@ -529,6 +536,9 @@ public class LinkshellController : Controller
             EnableDkp             = target.EnableDkp,
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
+            HiddenTodMonsters     = (target.HiddenTodMonsters ?? string.Empty)
+                .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList(),
             CanManageRoles        = canManageRoles,
             ManageableLinkshells  = manageableLinkshells.ToList()
         };

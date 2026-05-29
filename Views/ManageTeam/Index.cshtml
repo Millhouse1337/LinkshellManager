@@ -74,16 +74,31 @@ else
     <div class="card fade d3">
         <div class="card-head">
             <div class="card-title">Members</div>
-            <form asp-action="Index" method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <form asp-action="Index" method="get" id="manageTeamFilterForm"
+                  style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                 <input type="hidden" name="selectedLinkshellId" value="@Model.SelectedLinkshellId" />
                 <input type="text" name="search" value="@Model.SearchTerm"
                        placeholder="Search character…" class="form-control"
                        style="height:32px;min-width:200px" />
+                @* App Sync filter: defaults ON so the roster leads with members
+                   the linkshell actually has app + DKP tracking on. Toggling it
+                   re-submits the form so the server can re-query with the new
+                   filter state (pagination is server-side here). The hidden
+                   "false" sentinel guarantees an unchecked box still sends a
+                   value -- browsers omit unchecked inputs otherwise. *@
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
+                    <input type="hidden" name="appSync" value="false" />
+                    <input type="checkbox" name="appSync" value="true"
+                           @(Model.AppSyncOnly ? "checked" : "")
+                           onchange="document.getElementById('manageTeamFilterForm').submit()" />
+                    App Sync
+                </label>
                 <button type="submit" class="btn sm">Search</button>
                 @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
                 {
                     <a class="btn sm ghost" asp-action="Index"
-                       asp-route-selectedLinkshellId="@Model.SelectedLinkshellId">Clear</a>
+                       asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
+                       asp-route-appSync="@(Model.AppSyncOnly ? "true" : "false")">Clear</a>
                 }
             </form>
         </div>
@@ -149,6 +164,7 @@ else
                         <a class="btn sm" asp-action="Index"
                            asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
                            asp-route-search="@Model.SearchTerm"
+                           asp-route-appSync="@(Model.AppSyncOnly ? "true" : "false")"
                            asp-route-page="@(Model.PageNumber - 1)">Prev</a>
                     }
                     <span class="muted" style="font-size:12px">Page @Model.PageNumber of @Model.TotalPages</span>
@@ -157,6 +173,7 @@ else
                         <a class="btn sm" asp-action="Index"
                            asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
                            asp-route-search="@Model.SearchTerm"
+                           asp-route-appSync="@(Model.AppSyncOnly ? "true" : "false")"
                            asp-route-page="@(Model.PageNumber + 1)">Next</a>
                     }
                 </div>

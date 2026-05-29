@@ -20,7 +20,7 @@ public class ManageTeamController : Controller
         _userManager = userManager;
     }
 
-    public async Task<IActionResult> Index(int? selectedLinkshellId, string? search, int page = 1)
+    public async Task<IActionResult> Index(int? selectedLinkshellId, string? search, int page = 1, bool appSync = true)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -63,6 +63,18 @@ public class ManageTeamController : Controller
                     && ul.AppUser.CharacterName.ToLower().Contains(lowered)));
         }
 
+        // App Sync filter: limits the roster to "fully onboarded" rows -- app
+        // account linked AND Status is Active (or null, which the view renders
+        // as Active). Defaults ON so the page leads with members the linkshell
+        // actually has tracking on; the view's checkbox flips it off to also
+        // show Unclaimed / Pending sheet placeholders.
+        if (appSync)
+        {
+            filteredQuery = filteredQuery.Where(ul =>
+                ul.AppUserId != null
+                && (ul.Status == null || ul.Status == "Active"));
+        }
+
         var totalCount = await filteredQuery.CountAsync();
         const int pageSize = ManageTeamViewModel.MembersPageSize;
         var totalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -83,6 +95,7 @@ public class ManageTeamController : Controller
             SelectedLinkshellId = targetId,
             CanManage = canManage,
             SearchTerm = term,
+            AppSyncOnly = appSync,
             PageNumber = pageNumber,
             PageSize = pageSize,
             TotalCount = totalCount,

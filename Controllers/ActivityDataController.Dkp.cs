@@ -24,7 +24,11 @@ public sealed partial class ActivityDataController
         int MemberCount);
 
     [HttpGet("dkp-history")]
-    public async Task<IActionResult> GetDkpHistoryAsync(int? linkshellId, string? appUserId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDkpHistoryAsync(
+        int? linkshellId,
+        string? appUserId,
+        [FromServices] SheetDkpPullService sheetDkpPull,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -65,6 +69,11 @@ public sealed partial class ActivityDataController
 
         var selectedLinkshell = accessibleMemberships.First(link => link.LinkshellId == selectedLinkshellId);
         await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, cancellationToken);
+        // Pull-on-load (cached): when the sheet is connected it is the source of
+        // truth for DKP, so refresh stored balances from it AFTER the app-side
+        // crediting above. Running it last keeps the sheet authoritative without
+        // double-counting app-originated earnings already reflected on the sheet.
+        await sheetDkpPull.EnsureFreshAsync(selectedLinkshellId, cancellationToken);
 
         var linkshellMembers = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == selectedLinkshellId && link.AppUserId != null)

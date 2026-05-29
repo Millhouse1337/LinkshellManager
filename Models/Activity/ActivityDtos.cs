@@ -56,7 +56,9 @@ public sealed record ActivityLinkshellSettingsDto(
     // Mob names the linkshell admin has chosen to hide from the ToD Tracker.
     // Stored on the server as a single pipe-separated string; the wire DTO
     // surfaces them as a list to keep the client side ergonomic.
-    IReadOnlyList<string> HiddenTodMonsters);
+    IReadOnlyList<string> HiddenTodMonsters,
+    // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
+    string LinkshellType);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -83,7 +85,17 @@ public sealed record ActivityPrimaryLinkshellDto(
     IReadOnlyList<ActivityRuleDto> Rules,
     IReadOnlyList<ActivityAnnouncementDto> Announcements,
     IReadOnlyList<ActivityItemDto> Items,
-    IReadOnlyList<ActivityRevenueEntryDto> RevenueEntries);
+    IReadOnlyList<ActivityRevenueEntryDto> RevenueEntries,
+    // News-feed sources: recent auctions (open/close) and DKP adjustments.
+    IReadOnlyList<ActivityNewsAuctionDto> RecentAuctions,
+    IReadOnlyList<ActivityNewsDkpDto> RecentDkpAudits);
+
+// One auction surfaced in the News & Updates feed. `Closed` => the EndTime
+// (auction wrapped up); otherwise `When` is when bidding opened.
+public sealed record ActivityNewsAuctionDto(int Id, string Title, DateTime When, bool Closed);
+
+// One DKP adjustment surfaced in the News & Updates feed.
+public sealed record ActivityNewsDkpDto(string CharacterName, double Amount, bool IsCorrection, DateTime OccurredAt);
 
 public sealed record ActivityItemDto(
     int Id,
@@ -153,7 +165,8 @@ public sealed record ActivityMemberDto(
     string? AltCharacterName2,
     string? Rank,
     string? Status,
-    double? LinkshellDkp);
+    double? LinkshellDkp,
+    DateTime? DateJoined);
 
 public sealed record ActivityEventDto(
     int Id,
@@ -523,7 +536,9 @@ public sealed record ActivityUpdateLinkshellRequest(
     bool? EnableRevenue,
     string? DkpRoundingIncrement,
     // null = leave unchanged, [] = clear, [...names] = replace.
-    IReadOnlyList<string>? HiddenTodMonsters);
+    IReadOnlyList<string>? HiddenTodMonsters,
+    // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
+    string? LinkshellType);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
 

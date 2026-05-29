@@ -99,7 +99,7 @@
           }
         </button>
       }
-      @if (isFeatureEnabled('enableEvents')) {
+      @if (isFeatureEnabled('enableEvents') && !isHnmOnly()) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('timed-events')"
                 [attr.aria-controls]="panelId('timed-events')"
@@ -112,6 +112,8 @@
             <span class="tab-badge default">{{ openEventsCount() }}</span>
           }
         </button>
+      }
+      @if (isFeatureEnabled('enableEvents')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('window-events')"
                 [attr.aria-controls]="panelId('window-events')"
@@ -153,15 +155,6 @@
                 [attr.tabindex]="activeTab() === 'dkp' ? 0 : -1"
                 [class.active]="activeTab() === 'dkp'"
                 (click)="setActiveTab('dkp')">DKP</button>
-      }
-      @if (isFeatureEnabled('enableDkp') && isDkpModeEnabled()) {
-        <button type="button" class="tab" role="tab"
-                [id]="tabId('dkp-sheet')"
-                [attr.aria-controls]="panelId('dkp-sheet')"
-                [attr.aria-selected]="activeTab() === 'dkp-sheet'"
-                [attr.tabindex]="activeTab() === 'dkp-sheet' ? 0 : -1"
-                [class.active]="activeTab() === 'dkp-sheet'"
-                (click)="setActiveTab('dkp-sheet')">DKP Sheet</button>
       }
       <!-- Loot History applies even to LootCouncil-mode linkshells (rename
            with reason, no DKP math), so we don't gate on isDkpModeEnabled.
@@ -282,16 +275,10 @@
     </div>
   }
 
-  <!-- ===== DKP TAB ===== -->
+  <!-- ===== DKP TAB (ledger/audit + the synced DKP Sheet, combined) ===== -->
   @if (activeTab() === 'dkp') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
       <app-activity-sidebar-panel [visibleSections]="['dkp']" />
-    </div>
-  }
-
-  <!-- ===== DKP SHEET TAB ===== -->
-  @if (activeTab() === 'dkp-sheet') {
-    <div role="tabpanel" [id]="panelId('dkp-sheet')" [attr.aria-labelledby]="tabId('dkp-sheet')">
       <app-dkp-sheet-tab />
     </div>
   }

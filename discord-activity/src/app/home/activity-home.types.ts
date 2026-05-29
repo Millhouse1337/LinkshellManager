@@ -24,18 +24,26 @@ export const TAB_NAMES = [
 
 export type TabName = typeof TAB_NAMES[number];
 
+// Full curated ToD monster list — mirrors TodManagerViewModel.SupportedMonsters
+// (the web Add ToD picker) plus the "Other" free-text sentinel, so the Activity
+// Log ToD form offers the same monsters as the web app.
 export const TOD_MONSTER_OPTIONS = [
-  'Fafnir',
-  'Nidhogg',
-  'Behemoth',
-  'King Behemoth',
   'Adamantoise',
   'Aspidochelone',
-  'Tiamat',
+  'Behemoth',
+  'Fafnir',
   'Jormungand',
+  'King Behemoth',
+  'Nidhogg',
+  'Tiamat',
   'Vrtra',
+  'Bloodsucker',
   'King Arthro',
+  'King Vinegarroon',
+  'Serket',
+  'Shikigami Weapon',
   'Simurgh',
+  'Xolotl',
   'Other'
 ] as const;
 

@@ -144,6 +144,72 @@ public sealed class SheetMigrationService
         return result;
     }
 
+    // Lightweight sheet -> app balance refresh used by the "pull on page load"
+    // path (SheetDkpPullService). Reads the same Main!B:C range as the manual
+    // Import and SETS each EXISTING member's LinkshellDkp to the sheet value,
+    // recording a SheetImport delta whenever a balance changed. Unlike
+    // CommitAsync it never creates placeholder members -- it only touches rows
+    // that already match a member by name -- so it is safe to run on every page
+    // load. Callers should run app-side crediting first; because this SETS to
+    // the sheet value, an increment already reflected on the sheet produces no
+    // change here (no double-count, no spurious ledger row).
+    public async Task<int> RefreshMemberBalancesAsync(int linkshellId, string spreadsheetId, string? readRange, CancellationToken cancellationToken)
+    {
+        var range = string.IsNullOrWhiteSpace(readRange) ? DefaultReadRange : readRange!;
+        var raw = await _sheets.ReadAsync(linkshellId, spreadsheetId, range, cancellationToken)
+                  ?? new List<IList<object>>();
+
+        var rows = ExtractRows(raw);
+        if (rows.Count == 0) return 0;
+
+        var members = await _db.AppUserLinkshells
+            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null)
+            .ToListAsync(cancellationToken);
+
+        var byName = members
+            .Where(m => !string.IsNullOrWhiteSpace(m.CharacterName))
+            .GroupBy(m => m.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var now = DateTime.UtcNow;
+        var updated = 0;
+
+        foreach (var row in rows)
+        {
+            if (string.Equals(row.Name, "TOTAL", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!byName.TryGetValue(row.Name, out var member)) continue; // no placeholder creation
+
+            var oldValue = member.LinkshellDkp ?? 0;
+            if (Math.Abs(oldValue - row.Dkp) < 0.0001) continue;
+
+            var delta = row.Dkp - oldValue;
+            member.LinkshellDkp = row.Dkp;
+
+            _db.DkpLedgerEntries.Add(new DkpLedgerEntry
+            {
+                AppUserId = member.AppUserId,
+                LinkshellId = linkshellId,
+                EntryType = "SheetImport",
+                EventName = "Spreadsheet Import",
+                EventType = "Sheet",
+                Amount = delta,
+                Sequence = 1,
+                OccurredAt = now,
+                CharacterName = member.CharacterName,
+                Details = $"Balance synced from sheet ({oldValue} -> {row.Dkp}).",
+            });
+
+            updated++;
+        }
+
+        if (updated > 0)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return updated;
+    }
+
     public async Task<ReconciliationSheetData> ReadForReconciliationAsync(int linkshellId, string spreadsheetId, string? tabName, CancellationToken cancellationToken)
     {
         var tab = string.IsNullOrWhiteSpace(tabName) ? "Main" : tabName!;

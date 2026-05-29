@@ -254,14 +254,22 @@ export class ActivityQueuePanelComponent {
     this.activity.clearActionState();
     this.isCreateOpen = true;
     this.editingEventId = null;
-    const defaultLinkshellId =
+    // Always bind a new event to the active linkshell (selected in
+    // Configurations) — the Linkshell field is read-only in the form.
+    this.createModel.linkshellId =
       this.activity.overview()?.primaryLinkshell?.id ??
       this.activity.overview()?.linkshells?.[0]?.id ??
       0;
+  }
 
-    if (!this.createModel.linkshellId) {
-      this.createModel.linkshellId = defaultLinkshellId;
-    }
+  // Display name for the read-only Linkshell field, resolved from the model's
+  // linkshellId (the active linkshell for new events, or the event's own
+  // linkshell when editing).
+  protected createLinkshellName(): string {
+    const id = this.createModel.linkshellId;
+    return this.activity.overview()?.linkshells?.find(l => l.id === id)?.name
+      ?? this.activity.overview()?.primaryLinkshell?.name
+      ?? '—';
   }
 
   protected closeCreateForm(): void {

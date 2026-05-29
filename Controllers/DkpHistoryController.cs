@@ -26,7 +26,12 @@ public class DkpHistoryController : Controller
         _timeZones = timeZones;
     }
 
-    public async Task<IActionResult> Index(string? appUserId, int page = 1)
+    public async Task<IActionResult> Index(
+        string? appUserId,
+        int page = 1,
+        [FromServices] WindowEventDkpLedgerService? windowEventDkpLedger = null,
+        [FromServices] SheetDkpPullService? sheetDkpPull = null,
+        CancellationToken cancellationToken = default)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
@@ -64,6 +69,19 @@ public class DkpHistoryController : Controller
         if (viewModel.Linkshells.All(link => link.Id != selectedLinkshellId))
         {
             selectedLinkshellId = viewModel.Linkshells.First().Id;
+        }
+
+        // Mirror the Activity DKP endpoint: materialize any posted window-event
+        // credit, then pull-on-load (cached) from the connected sheet so the
+        // stored balance reflects the sheet (the source of truth). The pull is a
+        // SET that runs last, so it never double-counts app-side credit.
+        if (windowEventDkpLedger is not null)
+        {
+            await windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, cancellationToken);
+        }
+        if (sheetDkpPull is not null)
+        {
+            await sheetDkpPull.EnsureFreshAsync(selectedLinkshellId, cancellationToken);
         }
 
         var linkshellMembers = await _context.AppUserLinkshells

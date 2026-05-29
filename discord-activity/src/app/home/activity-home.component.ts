@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { AutoRefreshService } from '../discord/auto-refresh.service';
 import {
   ActivityLinkshellSettings,
   ActivityLootStructure,
@@ -40,6 +41,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
 })
 export class ActivityHomeComponent {
   protected readonly activity = inject(DiscordActivityService);
+  private readonly autoRefresh = inject(AutoRefreshService);
   protected readonly activeTab = signal<TabName>('dashboard');
   protected readonly reconnecting = signal(false);
 
@@ -121,9 +123,17 @@ export class ActivityHomeComponent {
       }
     });
 
+    // Central polling — keeps every tab's data fresh without per-feature
+    // plumbing. Cadence flips to 5s on live surfaces (open window event,
+    // started auction, commenced timed event), 25s otherwise; pauses while
+    // the iframe is hidden.
+    this.autoRefresh.setActiveTab(this.activeTab());
+    this.autoRefresh.start();
+
     destroyRef.onDestroy(() => {
       clearTimeout(timeoutId);
       if (intervalId !== null) clearInterval(intervalId);
+      this.autoRefresh.stop();
     });
   }
 
@@ -139,6 +149,7 @@ export class ActivityHomeComponent {
 
   protected setActiveTab(tab: TabName): void {
     this.activeTab.set(tab);
+    this.autoRefresh.setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -291,6 +302,12 @@ export class ActivityHomeComponent {
 
   protected isDkpModeEnabled(): boolean {
     return this.primaryLootStructure() !== 'LootCouncil';
+  }
+
+  // HNM-only linkshells hide the Event System (timed events) tab; Attendance
+  // System stays since HNM linkshells run snapshot sessions.
+  protected isHnmOnly(): boolean {
+    return this.primaryLinkshellSettings()?.linkshellType === 'HnmOnly';
   }
 
   // ----- Tab badges -----

@@ -110,6 +110,8 @@ export interface ActivityLinkshellSettings {
   // Names of monsters the linkshell admin has elected to hide from the
   // ToD Tracker (Dashboard + ToDs tab). Empty when none are hidden.
   hiddenTodMonsters: string[];
+  // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
+  linkshellType: string;
 }
 
 export interface ActivityLinkshellPermissions {
@@ -183,6 +185,23 @@ export interface ActivityPrimaryLinkshell {
   announcements: ActivityAnnouncement[];
   items: ActivityItem[];
   revenueEntries: ActivityRevenueEntry[];
+  // News & Updates feed sources.
+  recentAuctions: ActivityNewsAuction[];
+  recentDkpAudits: ActivityNewsDkp[];
+}
+
+export interface ActivityNewsAuction {
+  id: number;
+  title: string;
+  when: string;
+  closed: boolean;
+}
+
+export interface ActivityNewsDkp {
+  characterName: string;
+  amount: number;
+  isCorrection: boolean;
+  occurredAt: string;
 }
 
 export interface ActivityRule {
@@ -264,6 +283,7 @@ export interface ActivityMember {
   rank?: string | null;
   status?: string | null;
   linkshellDkp?: number | null;
+  dateJoined?: string | null;
 }
 
 export interface ActivityEventJob {
@@ -374,6 +394,28 @@ export interface ActivityWindowEventsResponse {
   closedEvents: ActivityWindowEvent[];
   unlinkedSnapshots: ActivityWindowSnapshot[];
   canManage: boolean;
+  entryTypeOptions: string[];
+  rosterCharacterNames: string[];
+}
+
+export interface ActivityWindowEventMemberDkpInput {
+  characterName: string;
+  dkpAmount: number | null;
+}
+
+export interface ActivityWindowEventDkpPayload {
+  dkpAmount: number;
+  entryType: string;
+  memberDkp?: ActivityWindowEventMemberDkpInput[];
+}
+
+export interface ActivityAddSnapshotEntryInput {
+  characterName: string;
+  mainJob?: string | null;
+  mainJobLevel?: number | null;
+  subJob?: string | null;
+  subJobLevel?: number | null;
+  zone?: string | null;
 }
 
 export interface ActivityWindowEvent {
@@ -391,6 +433,9 @@ export interface ActivityWindowEvent {
   combinedMemberCount: number;
   snapshots: ActivityWindowSnapshot[];
   combinedMembers: ActivityWindowCombinedMember[];
+  dkpAmount?: number | null;
+  entryType?: string | null;
+  postedToSheetUtc?: string | null;
 }
 
 export interface ActivityWindowSnapshot {
@@ -407,6 +452,7 @@ export interface ActivityWindowSnapshot {
 }
 
 export interface ActivityWindowSnapshotEntry {
+  id: number;
   characterName: string;
   mainJob?: string | null;
   mainJobLevel?: number | null;
@@ -423,6 +469,12 @@ export interface ActivityWindowCombinedMember {
   subJobLevel?: number | null;
   zone?: string | null;
   snapshotCount: number;
+  // Per-character override if one is set on this Window Event; null means
+  // the event default applies.
+  dkpAmountOverride?: number | null;
+  // Override (when set) else the event default — used to seed the per-row
+  // DKP input on the combined roster table.
+  effectiveDkpAmount?: number | null;
 }
 
 export interface ActivityParticipation {

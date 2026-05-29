@@ -129,10 +129,48 @@ public class DashboardController : Controller
         var upcomingTodsCount = tods.Count(tod => tod.RepopTime.HasValue
             && DateTime.SpecifyKind(tod.RepopTime.Value, DateTimeKind.Utc) > nowUtc);
 
+        var rules = selectedLinkshellId.HasValue
+            ? await _context.Rules
+                .AsNoTracking()
+                .Where(rule => rule.LinkshellId == selectedLinkshellId.Value)
+                .OrderByDescending(rule => rule.CreatedAt)
+                .Take(5)
+                .ToListAsync()
+            : new List<Rule>();
+
+        var announcements = selectedLinkshellId.HasValue
+            ? await _context.Announcements
+                .AsNoTracking()
+                .Where(announcement => announcement.LinkshellId == selectedLinkshellId.Value)
+                .OrderByDescending(announcement => announcement.CreatedAt)
+                .Take(5)
+                .ToListAsync()
+            : new List<Announcement>();
+
+        var auctions = selectedLinkshellId.HasValue
+            ? await _context.Auctions
+                .AsNoTracking()
+                .Where(auction => auction.LinkshellId == selectedLinkshellId.Value)
+                .OrderByDescending(auction => auction.EndTime ?? auction.StartedAt ?? auction.StartTime)
+                .Take(10)
+                .ToListAsync()
+            : new List<Auction>();
+
+        var dkpAudits = selectedLinkshellId.HasValue
+            ? await _context.DkpLedgerEntries
+                .AsNoTracking()
+                .Where(entry => entry.LinkshellId == selectedLinkshellId.Value
+                                && (entry.EntryType == "AuditMisc" || entry.EntryType == "AuditAdjustment"))
+                .OrderByDescending(entry => entry.OccurredAt)
+                .Take(10)
+                .ToListAsync()
+            : new List<DkpLedgerEntry>();
+
         var todTracker = BuildTodTracker(tods);
+        var upcomingRepops = BuildUpcomingRepops(tods);
         var hnmClaims = BuildHnmClaims(tods, out var hnmTotal);
         var recentActivity = BuildRecentActivity(eventHistories, tods);
-        var newsUpdates = BuildNewsUpdates(tods, user.Id);
+        var newsUpdates = BuildNewsUpdates(announcements, rules, auctions, dkpAudits, members);
 
         return View(new DashboardViewModel
         {
@@ -156,6 +194,21 @@ public class DashboardController : Controller
             HnmClaimsWindowDays = HnmClaimsWindowDays,
             RecentActivity = recentActivity,
             NewsUpdates = newsUpdates,
+            UpcomingRepops = upcomingRepops,
+            Rules = rules.Select(rule => new RuleSummary
+            {
+                Title = rule.RuleTitle,
+                Details = rule.RuleDetails,
+                RelativeTime = FormatRelative(rule.CreatedAt),
+                Author = rule.CreatedByCharacterName
+            }).ToList(),
+            RecentAnnouncements = announcements.Select(announcement => new AnnouncementSummary
+            {
+                Title = announcement.AnnouncementTitle,
+                Details = announcement.AnnouncementDetails,
+                RelativeTime = FormatRelative(announcement.CreatedAt),
+                Author = announcement.CreatedByCharacterName
+            }).ToList(),
             CurrentAppUserId = user.Id
         });
     }
@@ -224,6 +277,37 @@ public class DashboardController : Controller
             .ToList();
     }
 
+    // ToD repops opening within the next 2 hours (future windows only — already
+    // open windows live in the ToD Tracker card). Latest ToD per monster, soonest
+    // first. Surfaced in the Upcoming Events card.
+    private static List<UpcomingRepopEntry> BuildUpcomingRepops(IReadOnlyCollection<Tod> tods)
+    {
+        var now = DateTime.UtcNow;
+        var window = now + TimeSpan.FromHours(2);
+
+        var latestPerMonster = tods
+            .Where(tod => !string.IsNullOrWhiteSpace(tod.MonsterName))
+            .GroupBy(tod => tod.MonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(tod => tod.Time ?? tod.TimeStamp).First())
+            .ToList();
+
+        var entries = new List<UpcomingRepopEntry>();
+        foreach (var tod in latestPerMonster)
+        {
+            if (!tod.RepopTime.HasValue) continue;
+            var repopUtc = DateTime.SpecifyKind(tod.RepopTime.Value, DateTimeKind.Utc);
+            if (repopUtc <= now || repopUtc > window) continue;
+            entries.Add(new UpcomingRepopEntry
+            {
+                MonsterName = tod.MonsterName!.Trim(),
+                RepopTime = repopUtc,
+                TimeLabel = FormatShortDuration(repopUtc - now)
+            });
+        }
+
+        return entries.OrderBy(entry => entry.RepopTime).ToList();
+    }
+
     private static List<HnmClaimEntry> BuildHnmClaims(IReadOnlyCollection<Tod> tods, out int total)
     {
         var cutoff = DateTime.UtcNow - TimeSpan.FromDays(HnmClaimsWindowDays);
@@ -277,6 +361,27 @@ public class DashboardController : Controller
         foreach (var tod in tods.Take(40))
         {
             var when = tod.Time ?? tod.TimeStamp ?? DateTime.UtcNow;
+
+            // A claimed kill with loot expands to a row per item ("Ridill ·
+            // Millhouse"); the loot row stands in for the claim row.
+            if (tod.Claim == true && tod.TodLootDetails.Count > 0)
+            {
+                foreach (var loot in tod.TodLootDetails.OrderByDescending(l => l.Id))
+                {
+                    if (string.IsNullOrWhiteSpace(loot.ItemName)) continue;
+                    var winner = (loot.ItemWinner ?? string.Empty).Trim();
+                    items.Add(new RecentActivityEntry
+                    {
+                        When = when,
+                        RelativeTime = FormatRelative(when),
+                        DotClass = "claim",
+                        Title = loot.ItemName!,
+                        Subtitle = winner.Length > 0 ? $"{tod.MonsterName} · {winner}" : $"{tod.MonsterName} drop"
+                    });
+                }
+                continue;
+            }
+
             string title;
             string dotClass;
             if (tod.Claim == true)
@@ -300,7 +405,7 @@ public class DashboardController : Controller
                 RelativeTime = FormatRelative(when),
                 DotClass = dotClass,
                 Title = title,
-                Subtitle = tod.TodLootDetails.Count > 0 ? $"{tod.TodLootDetails.Count} loot" : null
+                Subtitle = null
             });
         }
 
@@ -310,32 +415,102 @@ public class DashboardController : Controller
             .ToList();
     }
 
-    private static List<NewsUpdateEntry> BuildNewsUpdates(IReadOnlyCollection<Tod> tods, string currentUserId)
+    // "News & Updates" feed — the "newsy" side of the dashboard: new
+    // announcements + rules, auction open/close, DKP adjustments, and new
+    // members (newest first). Operational stuff (kills/claims/loot/events)
+    // lives in Recent Activity instead.
+    private static List<NewsUpdateEntry> BuildNewsUpdates(
+        IReadOnlyCollection<Announcement> announcements,
+        IReadOnlyCollection<Rule> rules,
+        IReadOnlyCollection<Auction> auctions,
+        IReadOnlyCollection<DkpLedgerEntry> dkpAudits,
+        IReadOnlyCollection<AppUserLinkshell> members)
     {
         var items = new List<NewsUpdateEntry>();
-        foreach (var tod in tods.Take(40))
+        var now = DateTime.UtcNow;
+
+        foreach (var announcement in announcements)
         {
-            var when = tod.Time ?? tod.TimeStamp ?? DateTime.UtcNow;
-            foreach (var loot in tod.TodLootDetails.OrderByDescending(l => l.Id))
+            items.Add(new NewsUpdateEntry
             {
-                if (string.IsNullOrWhiteSpace(loot.ItemName)) continue;
+                When = announcement.CreatedAt,
+                Title = announcement.AnnouncementTitle,
+                Subtitle = string.IsNullOrWhiteSpace(announcement.CreatedByCharacterName)
+                    ? "Announcement"
+                    : $"Announcement · {announcement.CreatedByCharacterName}",
+                RelativeTime = FormatRelative(announcement.CreatedAt),
+                ColorClass = "c"
+            });
+        }
+
+        foreach (var rule in rules)
+        {
+            items.Add(new NewsUpdateEntry
+            {
+                When = rule.CreatedAt,
+                Title = rule.RuleTitle,
+                Subtitle = "Rule updated",
+                RelativeTime = FormatRelative(rule.CreatedAt),
+                ColorClass = "d"
+            });
+        }
+
+        foreach (var auction in auctions)
+        {
+            var title = string.IsNullOrWhiteSpace(auction.AuctionTitle) ? "Auction" : auction.AuctionTitle!;
+            if (auction.EndTime is { } endTime && endTime <= now)
+            {
                 items.Add(new NewsUpdateEntry
                 {
-                    Title = loot.ItemWinner is { Length: > 0 } winner
-                        ? $"{loot.ItemName}"
-                        : loot.ItemName!,
-                    Subtitle = string.IsNullOrWhiteSpace(loot.ItemWinner)
-                        ? $"{tod.MonsterName} defeated"
-                        : $"{tod.MonsterName} defeated · {loot.ItemWinner}",
-                    Dkp = loot.WinningDkpSpent,
-                    RelativeTime = FormatRelative(when),
-                    IsMine = false,
-                    ColorClass = PickColorFromName(loot.ItemName!)
+                    When = endTime,
+                    Title = $"{title} closed",
+                    Subtitle = "Auction",
+                    RelativeTime = FormatRelative(endTime),
+                    ColorClass = "e"
+                });
+            }
+            else if ((auction.StartedAt ?? auction.StartTime) is { } openedAt)
+            {
+                items.Add(new NewsUpdateEntry
+                {
+                    When = openedAt,
+                    Title = $"{title} opened",
+                    Subtitle = "Auction",
+                    RelativeTime = FormatRelative(openedAt),
+                    ColorClass = "e"
                 });
             }
         }
 
-        return items.Take(8).ToList();
+        foreach (var entry in dkpAudits)
+        {
+            var sign = entry.Amount >= 0 ? "+" : "";
+            items.Add(new NewsUpdateEntry
+            {
+                When = entry.OccurredAt,
+                Title = $"{entry.CharacterName ?? "Member"} DKP {sign}{entry.Amount:0.##}",
+                Subtitle = entry.EntryType == "AuditAdjustment" ? "DKP correction" : "DKP adjustment",
+                RelativeTime = FormatRelative(entry.OccurredAt),
+                ColorClass = "f"
+            });
+        }
+
+        foreach (var member in members.Where(m => m.DateJoined.HasValue))
+        {
+            items.Add(new NewsUpdateEntry
+            {
+                When = member.DateJoined!.Value,
+                Title = $"{member.CharacterName ?? member.AppUser?.UserName ?? "Member"} joined",
+                Subtitle = "New member",
+                RelativeTime = FormatRelative(member.DateJoined.Value),
+                ColorClass = "a"
+            });
+        }
+
+        return items
+            .OrderByDescending(item => item.When)
+            .Take(12)
+            .ToList();
     }
 
     private static string PickColorFromName(string name)

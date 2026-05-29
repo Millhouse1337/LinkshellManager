@@ -30,6 +30,16 @@ export class DashboardTabComponent {
   protected get dashboardRosterSearch(): string { return this.rosterSearchValue; }
   protected set dashboardRosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
 
+  // App Sync filter: limits the dashboard roster to members who are both
+  // app-admitted (appUserId set) and Active. Defaults to true so the card
+  // leads with the linkshell's actually-tracked members; toggle off to also
+  // see Pending / Unclaimed rows pulled from the sheet without an app user.
+  protected readonly appSyncOnly = signal(true);
+  protected toggleAppSync(value: boolean): void {
+    this.appSyncOnly.set(value);
+    this.rosterPage.set(1);
+  }
+
   public constructor() {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
     this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
@@ -103,12 +113,20 @@ export class DashboardTabComponent {
 
   protected filteredDashboardMembers() {
     const term = this.dashboardRosterSearch.trim().toLowerCase();
+    const appSyncOnly = this.appSyncOnly();
     const members = this.selectedDashboardMembers();
-    if (!term) return members;
-    return members.filter(member =>
-      (member.characterName ?? '').toLowerCase().includes(term) ||
-      (member.rank ?? '').toLowerCase().includes(term)
-    );
+    return members.filter(member => {
+      if (appSyncOnly) {
+        const status = (member.status ?? 'Active').toLowerCase();
+        if (!member.appUserId || status !== 'active') return false;
+      }
+      if (term) {
+        const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
+        const rankMatch = (member.rank ?? '').toLowerCase().includes(term);
+        if (!nameMatch && !rankMatch) return false;
+      }
+      return true;
+    });
   }
 
   // Roster pagination: 5 per page (compact dashboard card). rosterPage is
@@ -379,31 +397,84 @@ export class DashboardTabComponent {
     when: number;
   }[] {
     const selectedId = this.selectedDashboardLinkshellId();
-    const palette = ['a', 'b', 'c', 'd', 'e', 'f'];
     const items: ReturnType<typeof this.dashboardNewsUpdates> = [];
 
-    const tods = (this.activity.overview()?.recentTods ?? []).filter(tod => tod.linkshellId === selectedId);
-    for (const tod of tods) {
-      if (!tod.claim || !tod.lootDetails?.length) continue;
-      const when = parseDate(tod.time) ?? 0;
-      for (const loot of tod.lootDetails) {
-        if (!loot.itemName) continue;
-        const winner = (loot.itemWinner ?? '').trim();
-        items.push({
-          title: loot.itemName,
-          subtitle: `${tod.monsterName} defeated${winner ? ` · ${winner}` : ''}`,
-          dkp: loot.winningDkpSpent ?? null,
-          relative: this.shortPastRelative(when),
-          colorClass: palette[(tod.monsterName?.length ?? 0) % palette.length],
-          when
-        });
-      }
+    // The "newsy" feed: announcements, rules, auctions, DKP adjustments, and new
+    // members. Operational stuff (kills/claims/loot/events) lives in Recent
+    // Activity instead. All sourced from the active linkshell in the overview.
+    const primary = this.activity.overview()?.primaryLinkshell;
+    if (!primary || primary.id !== selectedId) {
+      return [];
+    }
+
+    for (const announcement of primary.announcements ?? []) {
+      const when = parseDate(announcement.createdAt) ?? 0;
+      items.push({
+        title: announcement.title,
+        subtitle: announcement.createdByCharacterName
+          ? `Announcement · ${announcement.createdByCharacterName}`
+          : 'Announcement',
+        dkp: null,
+        relative: this.shortPastRelative(when),
+        colorClass: 'c',
+        when
+      });
+    }
+
+    for (const rule of primary.rules ?? []) {
+      const when = parseDate(rule.createdAt) ?? 0;
+      items.push({
+        title: rule.title,
+        subtitle: 'Rule updated',
+        dkp: null,
+        relative: this.shortPastRelative(when),
+        colorClass: 'd',
+        when
+      });
+    }
+
+    for (const auction of primary.recentAuctions ?? []) {
+      const when = parseDate(auction.when) ?? 0;
+      items.push({
+        title: `${auction.title} ${auction.closed ? 'closed' : 'opened'}`,
+        subtitle: 'Auction',
+        dkp: null,
+        relative: this.shortPastRelative(when),
+        colorClass: 'e',
+        when
+      });
+    }
+
+    for (const audit of primary.recentDkpAudits ?? []) {
+      const when = parseDate(audit.occurredAt) ?? 0;
+      const sign = audit.amount >= 0 ? '+' : '';
+      items.push({
+        title: `${audit.characterName} DKP ${sign}${audit.amount}`,
+        subtitle: audit.isCorrection ? 'DKP correction' : 'DKP adjustment',
+        dkp: null,
+        relative: this.shortPastRelative(when),
+        colorClass: 'f',
+        when
+      });
+    }
+
+    for (const member of primary.members ?? []) {
+      if (!member.dateJoined) continue;
+      const when = parseDate(member.dateJoined) ?? 0;
+      items.push({
+        title: `${member.characterName} joined`,
+        subtitle: 'New member',
+        dkp: null,
+        relative: this.shortPastRelative(when),
+        colorClass: 'a',
+        when
+      });
     }
 
     return items
       .filter(item => item.when > 0)
       .sort((left, right) => right.when - left.when)
-      .slice(0, 8);
+      .slice(0, 12);
   }
 
   protected activityFilter: 'all' | 'kills' | 'claims' | 'events' | 'loot' = 'all';
@@ -483,42 +554,15 @@ export class DashboardTabComponent {
       });
     }
 
-    const primary = this.activity.overview()?.primaryLinkshell;
-    if (primary && primary.id === selectedId) {
-      for (const rule of primary.rules ?? []) {
-        const when = parseDate(rule.createdAt) ?? 0;
-        items.push({
-          kind: 'rule',
-          name: rule.title,
-          action: 'rule added',
-          detail: rule.createdByCharacterName ? `by ${rule.createdByCharacterName}` : '',
-          dkp: null,
-          categoryLabel: 'Rule',
-          relative: this.longPastRelative(when),
-          when
-        });
-      }
-      for (const announcement of primary.announcements ?? []) {
-        const when = parseDate(announcement.createdAt) ?? 0;
-        items.push({
-          kind: 'announcement',
-          name: announcement.title,
-          action: 'announcement posted',
-          detail: announcement.createdByCharacterName ? `by ${announcement.createdByCharacterName}` : '',
-          dkp: null,
-          categoryLabel: 'Announcement',
-          relative: this.longPastRelative(when),
-          when
-        });
-      }
-    }
+    // Announcements + rules now live in the News & Updates feed, not here —
+    // Recent Activity is the operational feed (kills/claims/loot/events).
 
     const filter = this.activityFilter;
     const filtered = items.filter(item => {
       if (filter === 'all') return true;
       if (filter === 'kills') return item.kind === 'loot' || item.kind === 'no-claim' || item.kind === 'claim';
       if (filter === 'claims') return item.kind === 'claim';
-      if (filter === 'events') return item.kind === 'event' || item.kind === 'announcement' || item.kind === 'rule';
+      if (filter === 'events') return item.kind === 'event';
       if (filter === 'loot') return item.kind === 'loot';
       return true;
     });

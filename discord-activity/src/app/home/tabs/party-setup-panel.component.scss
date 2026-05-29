@@ -1,104 +1,276 @@
 .ps-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  padding: 4px 4px 12px;
 }
 
+/* Pinned "note" callout — left accent stripe + icon so it doesn't read as
+   body text. */
 .ps-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  background: rgba(99, 102, 241, 0.05);
+  color: var(--fg-2);
   font-size: 13px;
-  color: var(--muted);
+  line-height: 1.45;
 }
+.ps-notes svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--accent); }
+
+/* ===== Alliance ===== */
 
 .ps-alliance {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 10px;
+  border-radius: var(--r-lg, 12px);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(99, 102, 241, 0.07), transparent 60%),
+    var(--surface);
 }
 
 .ps-alliance-head {
-  font-size: 12px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-bottom: 4px;
 }
+
+.ps-alliance-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border: 1px solid var(--accent-weak);
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.ps-alliance-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* ===== Party grid ===== */
 
 .ps-party-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
 .ps-party {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--bg-elev);
-  padding: 8px;
+  overflow: hidden;
 }
 
 .ps-party-head {
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.ps-slot {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  padding: 5px 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.ps-party-head svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; }
+
+.ps-party-name {
   font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  flex: 1;
 }
 
-.ps-slot + .ps-slot {
-  border-top: 1px solid var(--border);
+.ps-party-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* ===== Slots ===== */
+
+.ps-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+/* Each slot is its own mini card: requirement label as a header line on
+   top, sign-up controls on a fresh row below so the dropdowns get full
+   width instead of being squeezed against the label. */
+.ps-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ps-slot.is-open { border-style: dashed; }
+.ps-slot:hover { border-color: rgba(255, 255, 255, 0.18); }
+
+.ps-slot.is-leader {
+  border-color: rgba(245, 197, 24, 0.45);
+  background: linear-gradient(180deg, rgba(245, 197, 24, 0.05), transparent 60%), var(--surface);
 }
 
 .ps-slot-req {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.ps-slot-req-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
 }
 
 .ps-crown {
-  color: var(--warning);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: #f5c518;
+  filter: drop-shadow(0 0 4px rgba(245, 197, 24, 0.5));
 }
+.ps-crown svg { width: 14px; height: 14px; fill: currentColor; }
 
+/* Sign-up control row — grid-like flex so dropdowns spread evenly and the
+   button anchors on the right. */
 .ps-signup {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
+/* Modern dropdowns: native chrome stripped, inlined SVG chevron, accent
+   focus ring. Each select takes a fair share of the row. */
 .ps-signup select {
-  min-height: 30px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  flex: 1 1 120px;
+  min-width: 110px;
+  height: 34px;
+  padding: 0 28px 0 12px;
+  font-size: 13px;
+  color: var(--fg);
+  background-color: var(--bg-elev);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 11px 7px;
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: var(--r-md);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.ps-signup select:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.ps-signup select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+}
+.ps-signup select option {
+  background: var(--surface);
+  color: var(--fg);
 }
 
+.ps-signup-btn {
+  height: 34px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* Filled slot — avatar bubble + name above, jobs underneath. */
 .ps-slot-member {
   display: flex;
   align-items: center;
-  gap: 6px;
-  text-align: right;
+  gap: 10px;
 }
 
-.ps-open {
-  color: var(--muted);
-  font-style: italic;
+.ps-member-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35));
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.ps-member-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
 }
 
 .ps-name {
   font-weight: 600;
   color: var(--success);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ps-jobs {
+  font-size: 11px;
   color: var(--muted);
 }
 
+.ps-empty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+}
+
 .ps-loading {
-  padding: 12px;
+  padding: 16px;
   color: var(--muted);
   font-size: 13px;
+  text-align: center;
 }

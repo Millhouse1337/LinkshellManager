@@ -42,11 +42,16 @@ public sealed partial class AddonApiController
         {
             return BadRequest(new { error = "Snapshot must contain at least one entry." });
         }
-        // FFXI alliance caps at 18 members (3 parties of 6). Reject anything
-        // larger as malformed; the addon should never produce >18 rows.
-        if (entries.Count > 18)
+        // Party/alliance snapshots cap at 18 (3 parties of 6), but zone- and
+        // linkshell-scope captures read the FFXI entity list directly and can
+        // legitimately include every linkshell member the client can see in
+        // the zone -- well past 18. Keep an upper bound as a sanity guard
+        // against a malformed/runaway scan, but high enough to fit a full
+        // linkshell turnout in one zone.
+        const int MaxSnapshotEntries = 64;
+        if (entries.Count > MaxSnapshotEntries)
         {
-            return BadRequest(new { error = "Snapshot exceeds the 18-member alliance maximum." });
+            return BadRequest(new { error = $"Snapshot exceeds the {MaxSnapshotEntries}-entry maximum." });
         }
 
         var token = AddonApiAuthAttribute.GetToken(HttpContext);

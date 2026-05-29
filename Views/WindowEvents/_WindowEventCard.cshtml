@@ -167,11 +167,11 @@
                         <td>
                             @if (!string.IsNullOrWhiteSpace(member.MainJob))
                             {
-                                <span class="we-job-pill">@(member.MainJob)@(member.MainJobLevel?.ToString())</span>
+                                <span class="we-job-pill">@(member.MainJob) @(member.MainJobLevel?.ToString())</span>
                             }
                             @if (!string.IsNullOrWhiteSpace(member.SubJob))
                             {
-                                <span class="we-job-pill we-job-pill--sub">@(member.SubJob)@(member.SubJobLevel?.ToString())</span>
+                                <span class="we-job-pill we-job-pill--sub">@(member.SubJob) @(member.SubJobLevel?.ToString())</span>
                             }
                         </td>
                         <td>
