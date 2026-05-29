@@ -1,3 +1,16 @@
+// DbWipe — DESTRUCTIVE local/dev database reset utility.
+//
+// TRUNCATEs every domain + ASP.NET Identity table in the target Postgres
+// database (RESTART IDENTITY CASCADE), resetting the environment to empty.
+// AspNetRoles / AspNetRoleClaims are preserved (roles are re-seeded at startup).
+//
+// Excluded from the main web-app build (see LinkshellManagerDiscordApp.csproj);
+// run by hand against a local or test database only. NEVER point it at production.
+//
+// Usage (set LSM_CONN to the target Postgres connection string first):
+//   dotnet run --project DbWipe -- verify           # read-only: print row counts
+//   dotnet run --project DbWipe -- wipe <database>   # destructive; <database> must
+//                                                    # match the connected DB name
 using Npgsql;
 
 var conn = Environment.GetEnvironmentVariable("LSM_CONN")
@@ -16,7 +29,19 @@ if (args.Length > 0 && args[0] == "verify")
         var n = await cmd.ExecuteScalarAsync();
         Console.WriteLine($"{t}: {n}");
     }
-    return;
+    return 0;
+}
+
+// The destructive path requires an explicit confirmation that names the
+// connected database, so an accidental run (no args, or the wrong database)
+// can never wipe data.
+if (args.Length < 2 || args[0] != "wipe" || !string.Equals(args[1], c.Database, StringComparison.Ordinal))
+{
+    Console.Error.WriteLine(
+        "Refusing to wipe. To confirm, name the connected database:\n" +
+        $"  dotnet run --project DbWipe -- wipe {c.Database}\n" +
+        "Use 'verify' to print row counts without changing anything.");
+    return 1;
 }
 
 // Full reset: domain tables + Identity. CASCADE on AspNetUsers also drops
@@ -57,3 +82,4 @@ await using var truncCmd = c.CreateCommand();
 truncCmd.CommandText = sql;
 await truncCmd.ExecuteNonQueryAsync();
 Console.WriteLine($"TRUNCATE complete ({tables.Length} tables).");
+return 0;

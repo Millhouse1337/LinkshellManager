@@ -1,3 +1,16 @@
+// DbInspector — read-only Postgres inspection helper (+ one destructive reset).
+//
+// Reads the connection string from the APP_CS env var, falling back to the main
+// app's user-secrets so it can run without copying credentials around. Excluded
+// from the main web-app build; run by hand during development.
+//
+// Usage:
+//   dotnet run --project tools/DbInspector -- tables             # list public tables
+//   dotnet run --project tools/DbInspector -- history            # list applied EF migrations
+//   dotnet run --project tools/DbInspector -- exists:TableName   # check a table exists
+//   dotnet run --project tools/DbInspector -- reset-public <db>  # DESTRUCTIVE: drop+recreate
+//                                                                # the public schema; <db> must
+//                                                                # match the connected DB name
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 
@@ -33,6 +46,16 @@ await connection.OpenAsync();
 var mode = argsList[0];
 if (string.Equals(mode, "reset-public", StringComparison.OrdinalIgnoreCase))
 {
+    // Destructive: require the connected database name as confirmation so an
+    // accidental run can never drop the wrong (e.g. production) schema.
+    if (argsList.Count < 2 || !string.Equals(argsList[1], connection.Database, StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine(
+            $"Refusing to reset. To confirm, name the connected database:\n" +
+            $"  dotnet run --project tools/DbInspector -- reset-public {connection.Database}");
+        return 1;
+    }
+
     await using var resetCommand = new NpgsqlCommand("drop schema if exists public cascade; create schema public;", connection);
     await resetCommand.ExecuteNonQueryAsync();
     Console.WriteLine("reset");

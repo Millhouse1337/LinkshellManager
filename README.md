@@ -54,7 +54,7 @@ Design constraints for this restoration:
 - `AppUser` is now the primary ASP.NET Identity user type.
 - Discord launch/auth stays on the existing `POST /auth/discord/exchange` and `GET /api/me` flow.
 - The MVC slice uses the same host, same cookies, same PostgreSQL database, and same CSP/frame policy as the Discord Activity host.
-- Non-priority legacy modules such as Auctions, Admin, Contact/Messaging, Rule management, and revenue/item management are intentionally excluded from compilation in this pass.
+- The earlier restoration pass deferred modules such as Auctions, Rule management, and revenue/item management; these have since been implemented and now compile and ship. Contact/Messaging remains a "coming soon" stub (see `Controllers/MessagesController.cs`).
 - The ToD (Time of Death) tracker has been restored as a first-class feature, with logging, editing, and per-linkshell monster tracking.
 
 ## Local user model
@@ -172,10 +172,10 @@ Create the database and apply the EF migration:
 "$env:USERPROFILE\\.dotnet\\tools\\dotnet-ef.exe" database update
 ```
 
-Current migrations applied by `database update`:
-
-- `20260501223012_InitialBeta` — initial schema for the restored MVC slice and Discord Activity tables.
-- `20260502190212_AddAltCharacterNames` — adds `AltCharacterName1` and `AltCharacterName2` columns to `AspNetUsers`.
+`database update` applies every migration under `Migrations/` in order. The initial schema is
+`20260512035741_InitialSchema`; later migrations add per-linkshell job levels, Google Sheet config,
+attendance snapshots, window events, party setup, and more. Run `dotnet ef migrations list` to see the
+full, current set.
 
 The default repo connection string targets:
 

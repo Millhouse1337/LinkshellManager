@@ -2,6 +2,9 @@
 bin/
 obj/
 
+# EF-tools build output (was previously committed; never belongs in source control)
+bin-ef/
+
 discord-activity/node_modules/
 discord-activity/.angular/
 
