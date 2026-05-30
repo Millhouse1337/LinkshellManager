@@ -48,6 +48,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: discord-activity/package-lock.json
 
+      # Match the npm major that authored package-lock.json (lockfileVersion 3,
+      # npm 11) so `npm ci`'s strict check interprets it the same way.
+      - name: Pin npm
+        run: npm install -g npm@11
+
       - name: Install
         run: npm ci
 
