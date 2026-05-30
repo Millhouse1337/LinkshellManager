@@ -311,8 +311,7 @@ public sealed partial class ActivityDataController
         var lootStructure = NormalizeLootStructure(eventEntity.Linkshell?.LootStructure ?? "Dkp");
         var isLootCouncil = lootStructure == "LootCouncil";
         var isHybrid = lootStructure == "Hybrid";
-        var roundingStep = NormalizeDkpRounding(eventEntity.Linkshell?.DkpRoundingIncrement) == "Half" ? 0.5 : 0.25;
-        var roundingMultiplier = 1d / roundingStep;
+        var roundingStep = DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement);
 
         var endTimeUtc = DateTime.UtcNow;
         var history = new EventHistory
@@ -352,7 +351,7 @@ public sealed partial class ActivityDataController
         foreach (var participation in eventEntity.AppUserEvents)
         {
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
-            var roundedDuration = Math.Round(durationHours * roundingMultiplier) / roundingMultiplier;
+            var roundedDuration = DkpRounding.Round(durationHours, roundingStep);
             var eventDkp = isLootCouncil ? 0 : roundedDuration * (eventEntity.DkpPerHour ?? 0);
 
             participation.Duration = roundedDuration;
@@ -432,7 +431,7 @@ public sealed partial class ActivityDataController
                 {
                     var pct = Math.Clamp(rawValue, 0, 100);
                     var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
-                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct);
+                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
                     lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
                 }
                 else

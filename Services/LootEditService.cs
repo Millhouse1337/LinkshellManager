@@ -420,6 +420,18 @@ public sealed class LootEditService
 
     // --- internals ---
 
+    // The grid step (0.25 / 0.5) for the linkshell's DKP rounding setting, so
+    // Hybrid loot spends/refunds land on the same increment as every other DKP
+    // value. One lightweight lookup per loot edit (an infrequent action).
+    private async Task<double> GetRoundingStepAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var increment = await _db.Linkshells
+            .Where(linkshell => linkshell.Id == linkshellId)
+            .Select(linkshell => linkshell.DkpRoundingIncrement)
+            .FirstOrDefaultAsync(cancellationToken);
+        return DkpRounding.StepFor(increment);
+    }
+
     // Credits the winner back the DKP a now-deleted loot row debited and writes
     // a single "LootDeleteRefund" ledger entry (positive amount, so it never
     // triggers the DKP-spend Discord post). Refund amount mirrors the refund
@@ -475,8 +487,9 @@ public sealed class LootEditService
             }
             else
             {
+                var roundingStep = await GetRoundingStepAsync(linkshellId, cancellationToken);
                 var currentBalance = Math.Max(0, membership.LinkshellDkp ?? 0);
-                refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct);
+                refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct, roundingStep);
             }
         }
         else
@@ -648,6 +661,10 @@ public sealed class LootEditService
             .Select(group => new { AppUserId = group.Key, NextSequence = group.Max(entry => entry.Sequence) + 1 })
             .ToDictionaryAsync(item => item.AppUserId, item => item.NextSequence, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
+        var roundingStep = isHybrid
+            ? await GetRoundingStepAsync(linkshellId, cancellationToken)
+            : DkpRounding.QuarterStep;
+
         var ledgerEntries = new List<DkpLedgerEntry>();
 
         // ----- Refund the OLD debit -----
@@ -670,7 +687,7 @@ public sealed class LootEditService
                 else
                 {
                     var currentBalance = Math.Max(0, oldMembership.LinkshellDkp ?? 0);
-                    refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct);
+                    refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct, roundingStep);
                 }
             }
             else
@@ -718,7 +735,7 @@ public sealed class LootEditService
                 // winner edits since they share the same membership row).
                 var pct = Math.Clamp((double)newDkpRaw, 0, 100);
                 var currentBalance = Math.Max(0, newMembership.LinkshellDkp ?? 0);
-                debitAmount = LootDkpCalculator.ComputeHybridDebit(currentBalance, pct);
+                debitAmount = LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
             }
             else
             {
