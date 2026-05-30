@@ -432,7 +432,7 @@ public sealed partial class ActivityDataController
                 {
                     var pct = Math.Clamp(rawValue, 0, 100);
                     var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
-                    amount = -Math.Round(currentBalance * pct / 100d, 2);
+                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct);
                     lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
                 }
                 else

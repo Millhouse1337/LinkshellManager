@@ -121,13 +121,13 @@ public sealed partial class ActivityDataController
                         {
                             continue;
                         }
-                        amount = Math.Round(currentBalance * pct / (100d - pct), 2);
+                        amount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct);
                         detailsText = $"Refunded Hybrid DKP ({pct}%) for removed ToD loot on {tod.MonsterName ?? "Unknown monster"}.";
                     }
                 }
                 else
                 {
-                    amount = -Math.Round(currentBalance * pct / 100d, 2);
+                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct);
                     detail.ActualDeductedDkp = Math.Abs(amount);
                     detailsText = $"Hybrid DKP spent ({pct}%, {Math.Abs(amount):0.##} DKP) on ToD loot from {tod.MonsterName ?? "Unknown monster"}.";
                 }
