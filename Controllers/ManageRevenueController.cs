@@ -206,17 +206,14 @@ public class ManageRevenueController : Controller
         if (!linkshellId.HasValue) return false;
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId.Value);
-        return membership is not null
-               && !string.IsNullOrWhiteSpace(membership.Rank)
-               && (membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase)
-                   || membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase));
+        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
     }
 
     private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)
     {
         return await _context.AppUserLinkshells
             .Where(ul => ul.AppUserId == appUserId
-                         && (ul.Rank == "Leader" || ul.Rank == "Officer"))
+                         && (ul.Rank == LinkshellRanks.Leader || ul.Rank == LinkshellRanks.Officer))
             .Select(ul => ul.Linkshell!)
             .Where(l => l != null)
             .OrderBy(l => l.LinkshellName)

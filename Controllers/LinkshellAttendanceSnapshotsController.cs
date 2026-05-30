@@ -144,10 +144,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
         var membership = await _db.AppUserLinkshells
             .AsNoTracking()
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
-        var canRename = membership is not null
-                        && !string.IsNullOrWhiteSpace(membership.Rank)
-                        && (membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase)
-                            || membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase));
+        var canRename = membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
 
         var viewModel = new LinkshellAttendanceSnapshotsViewModel
         {
@@ -174,7 +171,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
         if (membership is null) return Forbid();
         var rank = membership.Rank ?? string.Empty;
-        if (!rank.Equals("Leader", StringComparison.OrdinalIgnoreCase) && !rank.Equals("Officer", StringComparison.OrdinalIgnoreCase))
+        if (!LinkshellRanks.IsLeaderOrOfficer(rank))
         {
             return Forbid();
         }
@@ -293,7 +290,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
         if (membership is null) return Forbid();
         var rank = membership.Rank ?? string.Empty;
-        if (!rank.Equals("Leader", StringComparison.OrdinalIgnoreCase) && !rank.Equals("Officer", StringComparison.OrdinalIgnoreCase))
+        if (!LinkshellRanks.IsLeaderOrOfficer(rank))
         {
             return Forbid();
         }

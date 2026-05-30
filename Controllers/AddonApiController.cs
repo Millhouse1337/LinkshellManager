@@ -207,12 +207,7 @@ public sealed partial class AddonApiController : ControllerBase
 
     private static bool CanManageLinkshell(AppUserLinkshell? membership)
     {
-        if (membership is null || string.IsNullOrWhiteSpace(membership.Rank))
-        {
-            return false;
-        }
-        return membership.Rank.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase)
-            || membership.Rank.Equals(LinkshellRanks.Officer, StringComparison.OrdinalIgnoreCase);
+        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
     }
 
     // ---------------------------------------------------------------------
