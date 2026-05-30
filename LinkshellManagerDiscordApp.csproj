@@ -27,6 +27,8 @@
     <Content Remove="tools\\**" />
     <Compile Remove="DbWipe\\**\\*.cs" />
     <Content Remove="DbWipe\\**" />
+    <Compile Remove="tests\\**\\*.cs" />
+    <Content Remove="tests\\**" />
   </ItemGroup>
 
 </Project>
