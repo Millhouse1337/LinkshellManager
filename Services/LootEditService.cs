@@ -476,7 +476,7 @@ public sealed class LootEditService
             else
             {
                 var currentBalance = Math.Max(0, membership.LinkshellDkp ?? 0);
-                refundAmount = Math.Round(currentBalance * pct / (100d - pct), 2);
+                refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct);
             }
         }
         else
@@ -670,7 +670,7 @@ public sealed class LootEditService
                 else
                 {
                     var currentBalance = Math.Max(0, oldMembership.LinkshellDkp ?? 0);
-                    refundAmount = Math.Round(currentBalance * pct / (100d - pct), 2);
+                    refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct);
                 }
             }
             else
@@ -718,7 +718,7 @@ public sealed class LootEditService
                 // winner edits since they share the same membership row).
                 var pct = Math.Clamp((double)newDkpRaw, 0, 100);
                 var currentBalance = Math.Max(0, newMembership.LinkshellDkp ?? 0);
-                debitAmount = Math.Round(currentBalance * pct / 100d, 2);
+                debitAmount = LootDkpCalculator.ComputeHybridDebit(currentBalance, pct);
             }
             else
             {
