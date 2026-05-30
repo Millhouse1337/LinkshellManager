@@ -1,12 +1,15 @@
 using System.ComponentModel.DataAnnotations;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -18,10 +21,17 @@ public sealed class DiscordIdentityService
     private static readonly Uri OAuth2MeEndpoint = new("https://discord.com/api/oauth2/@me");
     private static readonly Uri DiscordCdnBaseUri = new("https://cdn.discordapp.com/");
 
+    // How long a validated bearer-token -> local-user resolution is trusted
+    // before we re-validate against discord.com. Short enough that a revoked
+    // token stops working quickly; long enough to spare the per-request round
+    // trip + LastSeen write during normal Activity polling.
+    private static readonly TimeSpan TokenValidationTtl = TimeSpan.FromSeconds(90);
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ApplicationDbContext _dbContext;
     private readonly UserManager<AppUser> _userManager;
     private readonly DiscordOAuthOptions _options;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<DiscordIdentityService> _logger;
 
     public DiscordIdentityService(
@@ -29,12 +39,14 @@ public sealed class DiscordIdentityService
         ApplicationDbContext dbContext,
         UserManager<AppUser> userManager,
         IOptions<DiscordOAuthOptions> options,
+        IMemoryCache cache,
         ILogger<DiscordIdentityService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _dbContext = dbContext;
         _userManager = userManager;
         _options = options.Value;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -69,6 +81,12 @@ public sealed class DiscordIdentityService
 
         var discordUser = await GetCurrentDiscordUserAsync(accessToken, cancellationToken);
         return await UpsertLocalUserAsync(discordUser, preferredAppUser: null, cancellationToken);
+    }
+
+    private static string BuildTokenCacheKey(string accessToken)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(accessToken));
+        return "discord-token-profile:" + Convert.ToHexString(hash);
     }
 
     public async Task<DiscordWebsiteSignInResult> ResolveWebsiteSignInAsync(
@@ -139,6 +157,18 @@ public sealed class DiscordIdentityService
     // here to impersonate them.
     private async Task<DiscordIdentityProfile> GetCurrentDiscordUserAsync(string accessToken, CancellationToken cancellationToken)
     {
+        // Cache the validated Discord identity (the user + the application-id
+        // check) keyed by a hash of the token, so repeated authenticated calls
+        // reuse it instead of hitting discord.com every time — which under
+        // raid-time polling risks rate-limiting the whole linkshell. Local data
+        // and LastSeenAtUtc still refresh every request via the upsert below;
+        // only successful validations are cached, so a bad token always re-checks.
+        var cacheKey = BuildTokenCacheKey(accessToken);
+        if (_cache.TryGetValue<DiscordIdentityProfile>(cacheKey, out var cachedProfile) && cachedProfile is not null)
+        {
+            return cachedProfile;
+        }
+
         var client = _httpClientFactory.CreateClient();
 
         using var request = new HttpRequestMessage(HttpMethod.Get, OAuth2MeEndpoint);
@@ -169,12 +199,15 @@ public sealed class DiscordIdentityService
         }
 
         var user = envelope.User;
-        return new DiscordIdentityProfile(
+        var profile = new DiscordIdentityProfile(
             user.Id,
             user.Username,
             user.Discriminator ?? "0",
             user.GlobalName,
             user.Avatar);
+
+        _cache.Set(cacheKey, profile, TokenValidationTtl);
+        return profile;
     }
 
     private async Task<DiscordActivityUserDto> UpsertLocalUserAsync(
