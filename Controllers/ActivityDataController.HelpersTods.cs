@@ -60,6 +60,7 @@ public sealed partial class ActivityDataController
             return;
         }
         var isHybrid = structure == "Hybrid";
+        var roundingStep = DkpRounding.StepFor(linkshell?.DkpRoundingIncrement);
 
         var winnerNames = actionableLoot
             .Select(detail => detail.ItemWinner!.Trim())
@@ -121,13 +122,13 @@ public sealed partial class ActivityDataController
                         {
                             continue;
                         }
-                        amount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct);
+                        amount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct, roundingStep);
                         detailsText = $"Refunded Hybrid DKP ({pct}%) for removed ToD loot on {tod.MonsterName ?? "Unknown monster"}.";
                     }
                 }
                 else
                 {
-                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct);
+                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
                     detail.ActualDeductedDkp = Math.Abs(amount);
                     detailsText = $"Hybrid DKP spent ({pct}%, {Math.Abs(amount):0.##} DKP) on ToD loot from {tod.MonsterName ?? "Unknown monster"}.";
                 }
