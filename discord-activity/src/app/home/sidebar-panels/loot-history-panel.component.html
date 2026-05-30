@@ -122,7 +122,7 @@
           <div class="loot-edit-form__header">
             <div>
               <strong>Edit loot record</strong>
-              <p class="muted">{{ item.source === 'Tod' ? 'ToD' : 'Event' }}<span *ngIf="item.context"> · {{ item.context }}</span></p>
+              <p class="muted">{{ item.source === 'Tod' ? 'ToD' : 'Event' }}@if (item.context) {<span> · {{ item.context }}</span>}</p>
             </div>
             <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Close</button>
           </div>

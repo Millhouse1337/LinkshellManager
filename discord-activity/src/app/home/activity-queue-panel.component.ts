@@ -57,7 +57,7 @@ export class ActivityQueuePanelComponent {
   };
 
   protected readonly eventTypeOptions = ['Sky', 'Sea', 'HNM', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
-  protected eventTypeSelection: string = '';
+  protected eventTypeSelection = '';
   protected eventTypeError = false;
 
   protected isCreateOpen = false;
@@ -172,7 +172,7 @@ export class ActivityQueuePanelComponent {
   // Per-event draft of the user's job selection for pending events that have
   // no pre-defined party setup. Mirrors the late-join draft pattern used in
   // activity-home; lazily seeded so the template can two-way bind directly.
-  protected readonly signupDrafts: { [eventId: number]: ActivityQuickJoinInput } = {};
+  protected readonly signupDrafts: Record<number, ActivityQuickJoinInput> = {};
 
 
   protected getSignupDraft(eventId: number): ActivityQuickJoinInput {

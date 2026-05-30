@@ -655,7 +655,7 @@ export class DiscordActivityService {
   clearDkpAuditAddCandidates(): void { this.dkpService.clearAddCandidates(); }
 
   // --- LootHistoryService ---
-  loadLootHistory(source: 'all' | 'tod' | 'event' = 'all', page: number = 1, pageSize: number = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(source, page, pageSize); }
+  loadLootHistory(source: 'all' | 'tod' | 'event' = 'all', page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(source, page, pageSize); }
   async editTodLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
     const ok = await this.lootHistoryService.editTodLoot(lootDetailId, input);
     if (ok) { await this.auth.refreshOverview(); }

@@ -102,7 +102,7 @@ export function parseDate(value?: string | null): number | null {
 
   const trimmed = value.trim();
   const hasExplicitZone =
-    /[Zz]$/.test(trimmed) || /[+\-]\d{2}:?\d{2}$/.test(trimmed);
+    /[Zz]$/.test(trimmed) || /[+-]\d{2}:?\d{2}$/.test(trimmed);
   const normalized = hasExplicitZone ? trimmed : `${trimmed}Z`;
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();

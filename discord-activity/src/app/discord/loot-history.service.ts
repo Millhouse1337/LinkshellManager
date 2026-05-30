@@ -23,8 +23,8 @@ export class LootHistoryService {
 
   async loadLootHistory(
     source: 'all' | 'tod' | 'event' = 'all',
-    page: number = 1,
-    pageSize: number = 20
+    page = 1,
+    pageSize = 20
   ): Promise<ActivityLootHistoryList | null> {
     this.lootHistoryBusy.set(true);
     try {

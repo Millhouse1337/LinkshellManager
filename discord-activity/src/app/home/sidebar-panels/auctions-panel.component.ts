@@ -131,14 +131,14 @@ export class AuctionsPanelComponent {
     title?: string | null;
     startTime?: string | null;
     endTime?: string | null;
-    items: Array<{
+    items: {
       id: number;
       itemName?: string | null;
       itemType?: string | null;
       startingBidDkp?: number | null;
       notes?: string | null;
       sourceItemId?: number | null;
-    }>;
+    }[];
   }): void {
     this.activity.clearActionState();
     this.isAuctionFormOpen = true;
@@ -174,7 +174,7 @@ export class AuctionsPanelComponent {
     this.auctionItemFromInventory = [...this.auctionItemFromInventory, true];
   }
 
-  protected inventoryItemsForAuctionForm(): Array<{ id: number; itemName: string; itemType?: string | null; quantity: number }> {
+  protected inventoryItemsForAuctionForm(): { id: number; itemName: string; itemType?: string | null; quantity: number }[] {
     const linkshellId = this.auctionFormModel.linkshellId;
     const primary = this.activity.overview()?.primaryLinkshell;
     if (primary && primary.id === linkshellId) {
@@ -491,7 +491,7 @@ export class AuctionsPanelComponent {
     for (let i = 0; i < raw.length; i++) {
       hash = (hash * 31 + raw.charCodeAt(i)) & 0xffffffff;
     }
-    const variants: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
+    const variants: ('a' | 'b' | 'c' | 'd')[] = ['a', 'b', 'c', 'd'];
     return variants[Math.abs(hash) % variants.length];
   }
 

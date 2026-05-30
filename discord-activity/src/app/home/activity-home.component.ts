@@ -108,8 +108,10 @@ export class ActivityHomeComponent {
     // overview arrives after first paint, or the user updates their profile)
     // so we don't sit on a stale zone for up to a minute.
     effect(() => {
-      this.activity.overview()?.appUser?.timeZone;
-      this.activity.localUser()?.appUser?.timeZone;
+      // Touch these signals so the effect re-runs whenever the saved zone
+      // changes (reading a signal registers it as a dependency).
+      this.activity.overview();
+      this.activity.localUser();
       tick();
     });
 
