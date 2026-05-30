@@ -226,13 +226,14 @@ export class ActivityQueuePanelComponent {
     return this.linkshellMemberships().some(link => this.canManageLinkshell(link.id));
   }
 
-  // HNM events get their start time from the addon's window-post flow, not
-  // the Activity. Block the click before it hits the server (the server
-  // rejects HNM starts anyway, but doing the check here lets us show a
-  // friendlier popup instead of a generic action error toast).
+  // HNM events get their start time from the addon's window-post flow, not the
+  // Activity. Block the click before it hits the server (which rejects HNM starts
+  // anyway) and show the reason via the in-app action error — native dialogs like
+  // window.alert are silently suppressed inside the Discord iframe, so the message
+  // would otherwise never appear.
   protected attemptStartEvent(event: { id: number; type?: string | null }): void {
     if (this.isAddonOnlyStart(event)) {
-      window.alert('HNM events are started with the in-game addon (Att launcher). Use /attend in-game to start this event.');
+      this.activity.actionError.set('HNM events are started with the in-game addon (Att launcher). Use /attend in-game to start this event.');
       return;
     }
     void this.activity.startEvent(event.id);
