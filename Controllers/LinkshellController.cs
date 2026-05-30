@@ -79,7 +79,7 @@ public class LinkshellController : Controller
             AppUserId = user.Id,
             LinkshellId = linkshell.Id,
             CharacterName = user.CharacterName,
-            Rank = "Leader",
+            Rank = LinkshellRanks.Leader,
             Status = "Active",
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow

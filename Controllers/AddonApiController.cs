@@ -166,13 +166,13 @@ public sealed partial class AddonApiController : ControllerBase
         var membership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
         if (membership is null) return null;
-        var rank = string.IsNullOrWhiteSpace(membership.Rank) ? "Member" : membership.Rank.Trim();
+        var rank = string.IsNullOrWhiteSpace(membership.Rank) ? LinkshellRanks.Member : membership.Rank.Trim();
         var role = await _dbContext.LinkshellRoles
             .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rank, cancellationToken);
         if (role is null)
         {
             role = await _dbContext.LinkshellRoles
-                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == "Member", cancellationToken);
+                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == LinkshellRanks.Member, cancellationToken);
         }
         return role;
     }
@@ -211,8 +211,8 @@ public sealed partial class AddonApiController : ControllerBase
         {
             return false;
         }
-        return membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase)
-            || membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase);
+        return membership.Rank.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase)
+            || membership.Rank.Equals(LinkshellRanks.Officer, StringComparison.OrdinalIgnoreCase);
     }
 
     // ---------------------------------------------------------------------

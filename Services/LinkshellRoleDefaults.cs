@@ -9,7 +9,7 @@ public static class LinkshellRoleDefaults
         yield return new LinkshellRole
         {
             LinkshellId = linkshellId,
-            Name = "Leader",
+            Name = LinkshellRanks.Leader,
             IsSystem = true,
             SortOrder = 0,
             CanManageRoles = true,
@@ -33,7 +33,7 @@ public static class LinkshellRoleDefaults
         yield return new LinkshellRole
         {
             LinkshellId = linkshellId,
-            Name = "Officer",
+            Name = LinkshellRanks.Officer,
             IsSystem = true,
             SortOrder = 1,
             CanManageRoles = false,
@@ -57,7 +57,7 @@ public static class LinkshellRoleDefaults
         yield return new LinkshellRole
         {
             LinkshellId = linkshellId,
-            Name = "Member",
+            Name = LinkshellRanks.Member,
             IsSystem = true,
             SortOrder = 2
         };

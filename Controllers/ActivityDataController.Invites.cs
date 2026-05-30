@@ -388,7 +388,7 @@ public sealed partial class ActivityDataController
                 LinkshellDkp = 0,
                 DateJoined = DateTime.UtcNow,
                 CharacterName = appUser.CharacterName ?? appUser.UserName,
-                Rank = "Member",
+                Rank = LinkshellRanks.Member,
                 Status = "Active"
             });
         }
@@ -468,7 +468,7 @@ public sealed partial class ActivityDataController
                 LinkshellDkp = 0,
                 DateJoined = DateTime.UtcNow,
                 CharacterName = invite.AppUser?.CharacterName ?? invite.AppUser?.UserName,
-                Rank = "Member",
+                Rank = LinkshellRanks.Member,
                 Status = "Active"
             });
         }

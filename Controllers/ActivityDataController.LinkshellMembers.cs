@@ -155,11 +155,11 @@ public sealed partial class ActivityDataController
                 return BadRequest(new { error = "You are already the leader of this linkshell." });
             }
 
-            if (string.Equals(currentMembership!.Rank, "Leader", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(currentMembership!.Rank, LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase))
             {
-                currentMembership.Rank = "Officer";
+                currentMembership.Rank = LinkshellRanks.Officer;
             }
-            targetMembership.Rank = "Leader";
+            targetMembership.Rank = LinkshellRanks.Leader;
         }
         else
         {

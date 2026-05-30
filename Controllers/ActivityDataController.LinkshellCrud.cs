@@ -59,7 +59,7 @@ public sealed partial class ActivityDataController
             AppUserId = appUser.Id,
             LinkshellId = linkshell.Id,
             CharacterName = appUser.CharacterName ?? appUser.UserName,
-            Rank = "Leader",
+            Rank = LinkshellRanks.Leader,
             Status = "Active",
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow
