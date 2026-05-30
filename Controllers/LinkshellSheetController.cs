@@ -301,9 +301,6 @@ public sealed class LinkshellSheetController : Controller
         var membership = await _db.AppUserLinkshells
             .AsNoTracking()
             .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId);
-        return membership is not null
-               && !string.IsNullOrWhiteSpace(membership.Rank)
-               && (membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase)
-                   || membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase));
+        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
     }
 }

@@ -11,4 +11,17 @@ public static class LinkshellRanks
     public const string Leader = "Leader";
     public const string Officer = "Officer";
     public const string Member = "Member";
+
+    /// <summary>True if the rank is Leader (case-insensitive).</summary>
+    public static bool IsLeader(string? rank)
+        => string.Equals(rank, Leader, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True if the rank is Leader or Officer (case-insensitive) — the "can manage
+    /// the linkshell" bar shared by most management endpoints. Use this for
+    /// in-memory checks; EF queries must compare against the constants directly
+    /// (e.g. <c>r.Rank == LinkshellRanks.Leader</c>) so they translate to SQL.
+    /// </summary>
+    public static bool IsLeaderOrOfficer(string? rank)
+        => IsLeader(rank) || string.Equals(rank, Officer, StringComparison.OrdinalIgnoreCase);
 }

@@ -33,7 +33,7 @@ public partial class EventController : Controller
         var linkshells = await _context.AppUserLinkshells
             .Where(link =>
                 link.AppUserId == user.Id &&
-                (link.Rank == "Leader" || link.Rank == "Officer"))
+                (link.Rank == LinkshellRanks.Leader || link.Rank == LinkshellRanks.Officer))
             .Select(link => link.Linkshell!)
             .OrderBy(linkshell => linkshell.LinkshellName)
             .ToListAsync();
@@ -76,7 +76,7 @@ public partial class EventController : Controller
         var linkshellIds = await _context.AppUserLinkshells
             .Where(link =>
                 link.AppUserId == user.Id &&
-                (link.Rank == "Leader" || link.Rank == "Officer"))
+                (link.Rank == LinkshellRanks.Leader || link.Rank == LinkshellRanks.Officer))
             .OrderBy(link => link.Linkshell!.LinkshellName)
             .Select(link => link.LinkshellId)
             .ToListAsync();
@@ -91,13 +91,7 @@ public partial class EventController : Controller
 
     private static bool CanManageLinkshell(AppUserLinkshell? membership)
     {
-        if (membership is null || string.IsNullOrWhiteSpace(membership.Rank))
-        {
-            return false;
-        }
-
-        return membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase) ||
-               membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase);
+        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
     }
 
     internal static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)

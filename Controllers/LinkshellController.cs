@@ -312,7 +312,7 @@ public class LinkshellController : Controller
 
         var manageableLinkshells = await _context.AppUserLinkshells
             .Where(link => link.AppUserId == user.Id
-                        && (link.Rank == "Leader" || link.Rank == "Officer"))
+                        && (link.Rank == LinkshellRanks.Leader || link.Rank == LinkshellRanks.Officer))
             .Include(link => link.Linkshell)
             .OrderBy(link => link.Linkshell!.LinkshellName)
             .Select(link => link.Linkshell!)
@@ -416,7 +416,7 @@ public class LinkshellController : Controller
         {
             var manageable = await _context.AppUserLinkshells
                 .Where(link => link.AppUserId == user.Id
-                            && (link.Rank == "Leader" || link.Rank == "Officer"))
+                            && (link.Rank == LinkshellRanks.Leader || link.Rank == LinkshellRanks.Officer))
                 .Include(link => link.Linkshell)
                 .OrderBy(link => link.Linkshell!.LinkshellName)
                 .Select(link => link.Linkshell!)
@@ -613,13 +613,7 @@ public class LinkshellController : Controller
 
     private static bool CanManageLinkshell(AppUserLinkshell? membership)
     {
-        if (membership is null || string.IsNullOrWhiteSpace(membership.Rank))
-        {
-            return false;
-        }
-
-        return membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase) ||
-               membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase);
+        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
     }
 
     private static bool IsLeader(AppUserLinkshell? membership)
