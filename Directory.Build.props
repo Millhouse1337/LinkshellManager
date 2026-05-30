@@ -1,0 +1,15 @@
+<Project>
+
+  <!-- Shared build settings for every project in the repo (web app + utilities + tests). -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <!-- Run code-style (IDExxxx) analyzers as part of `dotnet build`; keep the
+         analyzer set at the SDK default so the build stays signal-rich, not noisy. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <!-- Nullable correctness is enforced as a build error in C# code (see the
+         [*.cs] nullable diagnostics in .editorconfig). Razor views are left at
+         warning level because their `Model` is framework-nullable by design. -->
+  </PropertyGroup>
+
+</Project>

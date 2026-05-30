@@ -1,6 +1,5 @@
 @model LinkshellManagerDiscordApp.ViewModels.WindowSnapshotRow
 @{
-    string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
     string FormatDkp(double? value) => value.HasValue
         ? value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
         : "";

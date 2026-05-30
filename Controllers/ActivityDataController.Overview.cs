@@ -209,7 +209,7 @@ public sealed partial class ActivityDataController
 
         var membershipNamesByPair = creatorStarterUserIds.Count > 0
             ? await _dbContext.AppUserLinkshells
-                .Where(link => creatorStarterUserIds.Contains(link.AppUserId))
+                .Where(link => creatorStarterUserIds.Contains(link.AppUserId!))
                 .Select(link => new { link.LinkshellId, link.AppUserId, link.CharacterName })
                 .AsNoTracking()
                 .ToListAsync(cancellationToken)

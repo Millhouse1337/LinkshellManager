@@ -2,6 +2,10 @@
 @model LinkshellManagerDiscordApp.ViewModels.TodManagerViewModel
 
 @{
+    // This view always receives a populated model from the ToD controller, but
+    // Razor types `Model` as framework-nullable, so its dropdown/option closures
+    // would otherwise emit nullable-deref noise. Silence it for this view only.
+#pragma warning disable CS8602
     var isEditMode = (Model.Tod?.Id ?? 0) > 0;
     var pageHeading = isEditMode ? "Edit ToD" : "Add ToD";
     var formHeader = isEditMode ? "Update ToD" : "Submit ToD";
@@ -71,11 +75,14 @@ else
 
         <div class="create-form__grid">
             @{
-                var isCustomMonster = !string.IsNullOrWhiteSpace(Model.Tod.MonsterName)
+                // Model is always supplied by the action; capture Tod once as
+                // non-null so the dropdown logic below stays free of null noise.
+                var tod = Model!.Tod;
+                var isCustomMonster = !string.IsNullOrWhiteSpace(tod.MonsterName)
                     && !Model.MonsterOptions.Any(m =>
-                        string.Equals(m, Model.Tod.MonsterName, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(m, tod.MonsterName, StringComparison.OrdinalIgnoreCase));
                 var customMonsterValue = isCustomMonster
-                    ? Model.Tod.MonsterName
+                    ? tod.MonsterName
                     : Model.CustomMonsterName;
             }
             <label>
