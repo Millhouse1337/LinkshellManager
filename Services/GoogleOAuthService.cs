@@ -78,15 +78,26 @@ public sealed class GoogleOAuthService
         return $"{AuthEndpoint}?{qs}";
     }
 
-    public async Task<int> HandleCallbackAsync(string code, string state, string currentAppUserId, string redirectUri, CancellationToken cancellationToken)
+    // Resolve the linkshell id from the (DataProtector-signed) OAuth state and
+    // confirm the state was issued to the current user, WITHOUT exchanging the
+    // code or persisting anything. Lets the caller run its manage-permission
+    // check before any token is stored on the shared linkshell row.
+    public int ResolveLinkshellFromState(string state, string currentAppUserId)
     {
-        if (!IsConfigured) throw new GoogleOAuthException("Google OAuth is not configured.");
-
         var (linkshellId, appUserId) = UnprotectState(state);
         if (!string.Equals(appUserId, currentAppUserId, StringComparison.Ordinal))
         {
             throw new GoogleOAuthException("OAuth state was issued for a different user.");
         }
+
+        return linkshellId;
+    }
+
+    public async Task<int> HandleCallbackAsync(string code, string state, string currentAppUserId, string redirectUri, CancellationToken cancellationToken)
+    {
+        if (!IsConfigured) throw new GoogleOAuthException("Google OAuth is not configured.");
+
+        var linkshellId = ResolveLinkshellFromState(state, currentAppUserId);
 
         var token = await ExchangeCodeAsync(code, redirectUri, cancellationToken);
         if (string.IsNullOrWhiteSpace(token.RefreshToken))

@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authentication.OAuth.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,23 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services
-    .AddDefaultIdentity<AppUser>(options => options.SignIn.RequireConfirmedAccount = false)
+    .AddDefaultIdentity<AppUser>(options =>
+    {
+        options.SignIn.RequireConfirmedAccount = false;
+
+        // Make the password/lockout policy explicit rather than relying on
+        // framework defaults (6 chars, no lockout). Discord OAuth is the primary
+        // identity provider, so this only governs any local password accounts.
+        options.Password.RequiredLength = 10;
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = false;
+
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        options.Lockout.AllowedForNewUsers = true;
+    })
     .AddEntityFrameworkStores<ApplicationDbContext>();
 
 var discordClientId = builder.Configuration["Discord:ClientId"]
@@ -174,6 +191,11 @@ builder.Services.AddSingleton<SheetSyncQueue>();
 builder.Services.AddScoped<GoogleOAuthService>();
 builder.Services.AddScoped<SheetMigrationService>();
 builder.Services.AddMemoryCache();
+
+// Liveness has no checks (process up = healthy); readiness verifies the database
+// is reachable so an orchestrator/proxy can gate traffic until the DB is ready.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ApplicationDbContext>("database", tags: new[] { "ready" });
 builder.Services.AddScoped<SheetDkpPullService>();
 builder.Services.AddScoped<WindowEventDkpLedgerService>();
 builder.Services.AddScoped<SnapshotAttInputAuditService>();
@@ -329,9 +351,26 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    db.Database.Migrate();
+    // Auto-migrate on startup by default, but allow it to be turned off
+    // (Database:RunMigrationsOnStartup=false) for multi-instance deploys where
+    // migrations are applied as a separate, single-runner step. A failure is
+    // fatal and logged so it surfaces clearly instead of an opaque crash loop.
+    var runMigrations = app.Configuration.GetValue("Database:RunMigrationsOnStartup", true);
+    if (runMigrations)
+    {
+        using var scope = app.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        try
+        {
+            services.GetRequiredService<ApplicationDbContext>().Database.Migrate();
+        }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<ILogger<Program>>()
+                .LogCritical(ex, "Database migration on startup failed; aborting startup.");
+            throw;
+        }
+    }
 }
 
 app.UseForwardedHeaders();
@@ -421,5 +460,12 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapRazorPages();
+
+// Liveness: process is up. Readiness: database is reachable.
+app.MapHealthChecks("/healthz", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/readyz", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 app.Run();

@@ -149,11 +149,15 @@ public sealed class LinkshellSheetController : Controller
 
         try
         {
-            var linkshellId = await _oauth.HandleCallbackAsync(code, state, user.Id, BuildCallbackUri(), cancellationToken);
+            // Authorize BEFORE exchanging the code or persisting any token onto
+            // the shared linkshell row: resolve the linkshell from the signed
+            // state, check manage permission, only then complete the exchange.
+            var linkshellId = _oauth.ResolveLinkshellFromState(state, user.Id);
             if (!await CanManageAsync(user.Id, linkshellId))
             {
                 return Forbid();
             }
+            await _oauth.HandleCallbackAsync(code, state, user.Id, BuildCallbackUri(), cancellationToken);
             await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
             TempData["SheetConfigSuccess"] = "Google account connected.";
             return RedirectToAction(nameof(Index), new { linkshellId });
