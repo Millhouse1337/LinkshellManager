@@ -131,7 +131,7 @@ public sealed partial class ActivityDataController : ControllerBase
 
     private static bool IsLeader(AppUserLinkshell? membership)
     {
-        return membership?.Rank?.Equals("Leader", StringComparison.OrdinalIgnoreCase) == true;
+        return membership?.Rank?.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static string? NormalizeMemberRole(string? role)
@@ -143,9 +143,9 @@ public sealed partial class ActivityDataController : ControllerBase
 
         return role.Trim().ToLowerInvariant() switch
         {
-            "member" => "Member",
-            "officer" => "Officer",
-            "leader" => "Leader",
+            "member" => LinkshellRanks.Member,
+            "officer" => LinkshellRanks.Officer,
+            "leader" => LinkshellRanks.Leader,
             _ => null
         };
     }

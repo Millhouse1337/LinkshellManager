@@ -82,8 +82,8 @@ public sealed partial class ActivityDataController
             return false;
         }
 
-        return membership.Rank.Equals("Leader", StringComparison.OrdinalIgnoreCase) ||
-               membership.Rank.Equals("Officer", StringComparison.OrdinalIgnoreCase);
+        return membership.Rank.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase) ||
+               membership.Rank.Equals(LinkshellRanks.Officer, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<bool> CanAsync(
@@ -106,7 +106,7 @@ public sealed partial class ActivityDataController
         CancellationToken cancellationToken)
     {
         await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
-        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+        var rankName = string.IsNullOrWhiteSpace(rank) ? LinkshellRanks.Member : rank.Trim();
         var role = await _dbContext.LinkshellRoles
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rankName, cancellationToken);
@@ -114,7 +114,7 @@ public sealed partial class ActivityDataController
         {
             role = await _dbContext.LinkshellRoles
                 .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == "Member", cancellationToken);
+                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == LinkshellRanks.Member, cancellationToken);
         }
         return role;
     }
