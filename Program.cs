@@ -163,6 +163,7 @@ builder.Services.AddScoped<DiscordIdentityService>();
 builder.Services.AddScoped<AltCharacterValidator>();
 builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
+builder.Services.AddScoped<GlobalSettingsService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
 builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();
@@ -370,6 +371,56 @@ if (!app.Environment.IsDevelopment())
                 .LogCritical(ex, "Database migration on startup failed; aborting startup.");
             throw;
         }
+    }
+}
+
+// Promote the configured super admin account(s). Idempotent — only flips the
+// flag when not already set. Matched by normalized email and/or character name
+// so it lands regardless of whether Discord OAuth captured an email. Wrapped so
+// an un-migrated dev DB (no IsSuperAdmin column yet) doesn't abort startup.
+using (var seedScope = app.Services.CreateScope())
+{
+    var seedLogger = seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var superAdminEmail = app.Configuration["SuperAdmin:Email"];
+        var superAdminCharacter = app.Configuration["SuperAdmin:CharacterName"];
+        if (!string.IsNullOrWhiteSpace(superAdminEmail) || !string.IsNullOrWhiteSpace(superAdminCharacter))
+        {
+            var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var normalizedEmail = superAdminEmail?.Trim().ToUpperInvariant();
+            var matches = await db.Users
+                .Where(u =>
+                    (normalizedEmail != null && u.NormalizedEmail == normalizedEmail) ||
+                    (superAdminCharacter != null && u.CharacterName == superAdminCharacter))
+                .ToListAsync();
+
+            var promoted = 0;
+            foreach (var candidate in matches)
+            {
+                if (!candidate.IsSuperAdmin)
+                {
+                    candidate.IsSuperAdmin = true;
+                    promoted++;
+                }
+            }
+            if (promoted > 0)
+            {
+                await db.SaveChangesAsync();
+                seedLogger.LogInformation("SuperAdmin seeding: promoted {Count} account(s).", promoted);
+            }
+            else if (matches.Count == 0)
+            {
+                seedLogger.LogWarning(
+                    "SuperAdmin seeding: no AppUser matched email '{Email}' or character '{Character}'. " +
+                    "The addon kill-switch toggle will be hidden until a matching account exists.",
+                    superAdminEmail, superAdminCharacter);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        seedLogger.LogWarning(ex, "SuperAdmin seeding skipped (is the database migrated?).");
     }
 }
 

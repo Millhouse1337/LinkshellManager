@@ -48,6 +48,10 @@ public class LinkshellCustomizeViewModel
 
     public bool CanManageRoles { get; set; }
 
+    // True when a super admin has globally disabled the addon. The Game Addon
+    // pairing card is hidden when set.
+    public bool AddonGloballyDisabled { get; set; }
+
     public List<Linkshell> ManageableLinkshells { get; set; } = new();
 
     // Canonical names of monsters hidden from the ToD Tracker (Dashboard +

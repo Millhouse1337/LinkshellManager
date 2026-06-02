@@ -112,6 +112,10 @@ export interface ActivityLinkshellSettings {
   hiddenTodMonsters: string[];
   // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
   linkshellType: string;
+  // Discord guild this linkshell is locked to (null = not locked). When set,
+  // the Activity only exposes it when launched from this server.
+  lockedToDiscordGuildId?: string | null;
+  lockedToDiscordGuildName?: string | null;
 }
 
 export interface ActivityLinkshellPermissions {
@@ -129,6 +133,7 @@ export interface ActivityLinkshellPermissions {
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
+  canManageInvites: boolean;
 }
 
 export interface ActivityLinkshellRole {
@@ -150,6 +155,7 @@ export interface ActivityLinkshellRole {
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
+  canManageInvites: boolean;
 }
 
 export interface ActivityLinkshellRolesResponse {
@@ -173,6 +179,7 @@ export interface ActivityLinkshellRolePermissionsInput {
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
+  canManageInvites: boolean;
 }
 
 export interface ActivityPrimaryLinkshell {
@@ -640,6 +647,8 @@ export interface ActivityAuctionItem {
   notes?: string | null;
   bidCount: number;
   sourceItemId?: number | null;
+  // Set when this item is a gil sale (treasury gil sold for DKP).
+  gilAmount?: number | null;
 }
 
 export interface ActivityAuction {
@@ -732,6 +741,7 @@ export interface ActivityOverview {
   recentTods: ActivityTodEntry[];
   stats: ActivityOverviewStats;
   addonConfigured: boolean;
+  addonGloballyDisabled: boolean;
 }
 
 export interface ActivityCreateEventJobInput {
@@ -811,6 +821,8 @@ export interface ActivityAuctionItemInput {
   startingBidDkp?: number | null;
   notes?: string | null;
   sourceItemId?: number | null;
+  // When > 0 this item is a gil sale: gil sold for DKP, paid from treasury.
+  gilAmount?: number | null;
 }
 
 export interface ActivityCreateAuctionInput {

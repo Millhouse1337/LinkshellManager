@@ -246,6 +246,11 @@ export class DiscordActivityService {
         platform: sdk.platform ?? null
       });
 
+      // Publish the guild id to AuthService so every Activity request carries
+      // the X-Discord-Guild-Id header (used for per-linkshell guild locks).
+      // Set before the overview fetch below so that first request is tagged.
+      this.auth.discordGuildId.set(sdk.guildId ?? null);
+
       this.phase.set('Requesting Discord authorization');
       const { code } = await sdk.commands.authorize({
         client_id: this.clientId,
@@ -644,7 +649,7 @@ export class DiscordActivityService {
 
   // --- AddonTokenService ---
   loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> { return this.addonTokenService.loadAddonTokens(linkshellId); }
-  createAddonPairingCode(linkshellId: number, label: string | null): Promise<ActivityAddonPairingCodeResponse | null> { return this.addonTokenService.createAddonPairingCode(linkshellId, label); }
+  createAddonPairingCode(linkshellId: number): Promise<ActivityAddonPairingCodeResponse | null> { return this.addonTokenService.createAddonPairingCode(linkshellId); }
   revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> { return this.addonTokenService.revokeAddonToken(tokenId, linkshellId); }
 
   // --- DkpService ---
@@ -744,6 +749,11 @@ export class DiscordActivityService {
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
   updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
+  lockLinkshellToGuild(linkshellId: number, guildName: string | null): Promise<boolean> { return this.linkshellService.lockLinkshellToGuild(linkshellId, guildName); }
+  unlockLinkshellGuild(linkshellId: number): Promise<boolean> { return this.linkshellService.unlockLinkshellGuild(linkshellId); }
+  // Discord guild id the Activity is launched in (null on web). Drives the
+  // "lock to this server" config card.
+  currentGuildId(): string | null { return this.auth.discordGuildId(); }
   deleteLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.deleteLinkshell(linkshellId); }
   leaveLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.leaveLinkshell(linkshellId); }
   removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> { return this.linkshellService.removeLinkshellMember(linkshellId, memberId); }

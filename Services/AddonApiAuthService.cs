@@ -24,10 +24,12 @@ public sealed class AddonApiAuthService
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
     private readonly ApplicationDbContext _dbContext;
+    private readonly GlobalSettingsService _globalSettings;
 
-    public AddonApiAuthService(ApplicationDbContext dbContext)
+    public AddonApiAuthService(ApplicationDbContext dbContext, GlobalSettingsService globalSettings)
     {
         _dbContext = dbContext;
+        _globalSettings = globalSettings;
     }
 
     public async Task<string> CreatePairingCodeAsync(
@@ -130,6 +132,11 @@ public sealed class AddonApiAuthService
 
         if (record is null) return null;
         if (record.RevokedAt is not null) return null;
+
+        // Global kill-switch: a super admin can disable the addon for everyone.
+        // Checked here (the single per-request choke point shared by every
+        // [AddonApiAuth] endpoint) so one flag blocks all in-game addon traffic.
+        if (await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken)) return null;
 
         var now = DateTime.UtcNow;
 

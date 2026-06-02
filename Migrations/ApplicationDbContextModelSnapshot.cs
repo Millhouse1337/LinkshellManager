@@ -166,6 +166,21 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("Announcements", (string)null);
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AppSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("AppSettings", (string)null);
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AppUser", b =>
                 {
                     b.Property<string>("Id")
@@ -194,6 +209,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("LockoutEnabled")
@@ -733,6 +751,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int?>("EndingBidDkp")
                         .HasColumnType("integer");
+
+                    b.Property<long?>("GilAmount")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("ItemName")
                         .HasMaxLength(256)
@@ -1469,6 +1490,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("LockedToDiscordGuildId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("LockedToDiscordGuildName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("LootStructure")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1564,6 +1593,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageInventory")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageInvites")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMembers")

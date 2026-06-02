@@ -68,6 +68,38 @@ public sealed partial class ActivityDataController
         return true;
     }
 
+    // The Discord guild (server) this request came from, sent by the Activity
+    // as X-Discord-Guild-Id. Null on the website (no Discord context) and when
+    // launched outside a server. Used to enforce per-linkshell guild locks.
+    private string? GetRequestGuildId()
+    {
+        var value = Request.Headers["X-Discord-Guild-Id"].ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    // A linkshell locked to a guild is only accessible from the Activity when
+    // launched from that guild. Returns true when the lock blocks this request.
+    // The website (no guild header) is intentionally unaffected — the lock only
+    // governs the Discord Activity, so a request with no guild id passes.
+    private bool IsBlockedByGuildLock(Linkshell? linkshell)
+    {
+        if (linkshell is null || string.IsNullOrWhiteSpace(linkshell.LockedToDiscordGuildId))
+        {
+            return false;
+        }
+
+        var requestGuildId = GetRequestGuildId();
+        // No guild context (website / non-Discord) → not blocked. Activity
+        // requests always carry the header, so a mismatch here means the
+        // Activity is open in a different server than the linkshell is locked to.
+        if (requestGuildId is null)
+        {
+            return false;
+        }
+
+        return !string.Equals(requestGuildId, linkshell.LockedToDiscordGuildId, StringComparison.Ordinal);
+    }
+
     private async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
     {
         return await _dbContext.AppUserLinkshells
@@ -198,5 +230,6 @@ public sealed partial class ActivityDataController
         role.CanManageAuctions = permissions.CanManageAuctions;
         role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
         role.CanManageParties = permissions.CanManageParties;
+        role.CanManageInvites = permissions.CanManageInvites;
     }
 }

@@ -17,19 +17,22 @@ public class AccountController : Controller
     private readonly ApplicationDbContext _context;
     private readonly AppUserProfileService _appUserProfileService;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly GlobalSettingsService _globalSettings;
 
     public AccountController(
         UserManager<AppUser> userManager,
         SignInManager<AppUser> signInManager,
         ApplicationDbContext context,
         AppUserProfileService appUserProfileService,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        GlobalSettingsService globalSettings)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _context = context;
         _appUserProfileService = appUserProfileService;
         _timeZones = timeZones;
+        _globalSettings = globalSettings;
     }
 
     [AllowAnonymous]
@@ -131,8 +134,35 @@ public class AccountController : Controller
         return View(new SettingsViewModel
         {
             Linkshells = linkshells,
-            SelectedLinkshellId = user.PrimaryLinkshellId
+            SelectedLinkshellId = user.PrimaryLinkshellId,
+            IsSuperAdmin = user.IsSuperAdmin,
+            AddonGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsAddonGloballyDisabledAsync()
         });
+    }
+
+    // Super-admin-only global kill-switch for the in-game addon. When disabled,
+    // every addon API call is rejected and no new pairing codes can be issued
+    // or redeemed (see GlobalSettingsService + AddonApiAuthService).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetAddonKillSwitch(bool disabled)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (!user.IsSuperAdmin)
+        {
+            return Forbid();
+        }
+
+        await _globalSettings.SetAddonGloballyDisabledAsync(disabled);
+        TempData["AddonKillSwitchMessage"] = disabled
+            ? "Addon disabled globally. No one can sync the addon until you re-enable it."
+            : "Addon re-enabled globally.";
+        return RedirectToAction(nameof(Settings));
     }
 
     [HttpPost]

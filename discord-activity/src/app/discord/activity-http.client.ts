@@ -19,7 +19,7 @@ export class ActivityHttpClient {
   private antiforgeryTokenPromise: Promise<ActivityAntiforgeryToken | null> | null = null;
 
   async fetchActivityJson<T>(path: string, accessToken?: string): Promise<T> {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...this.auth.guildHeaders() };
     const token = accessToken ?? this.auth.currentAccessToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -60,7 +60,8 @@ export class ActivityHttpClient {
 
   async postActivityJson<T = void>(path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...this.auth.guildHeaders()
     };
 
     const accessToken = this.auth.currentAccessToken();

@@ -16,7 +16,10 @@ public sealed record ActivityOverviewDto(
     ActivityOverviewStatsDto Stats,
     // True when the user has at least one non-revoked AddonApiToken.
     // Drives the onboarding "Set up the addon" checklist item.
-    bool AddonConfigured);
+    bool AddonConfigured,
+    // True when a super admin has globally disabled the addon. Hides the
+    // Game Addon pairing card in the Configurations tab.
+    bool AddonGloballyDisabled);
 
 public sealed record ActivityAppUserDto(
     string Id,
@@ -58,7 +61,12 @@ public sealed record ActivityLinkshellSettingsDto(
     // surfaces them as a list to keep the client side ergonomic.
     IReadOnlyList<string> HiddenTodMonsters,
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
-    string LinkshellType);
+    string LinkshellType,
+    // Discord guild this linkshell is locked to (null = not locked). When set,
+    // the Activity only exposes it when launched from this guild. The name is a
+    // display cache so the Configurations UI can show which server it's locked to.
+    string? LockedToDiscordGuildId,
+    string? LockedToDiscordGuildName);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -74,7 +82,8 @@ public sealed record ActivityPermissionsDto(
     bool CanAuditDkp,
     bool CanManageAuctions,
     bool CanCustomizeLinkshell,
-    bool CanManageParties);
+    bool CanManageParties,
+    bool CanManageInvites);
 
 public sealed record ActivityPrimaryLinkshellDto(
     int Id,
@@ -305,7 +314,8 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanAuditDkp,
     bool CanManageAuctions,
     bool CanCustomizeLinkshell,
-    bool CanManageParties);
+    bool CanManageParties,
+    bool CanManageInvites);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -325,7 +335,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanAuditDkp,
     bool CanManageAuctions,
     bool CanCustomizeLinkshell,
-    bool CanManageParties);
+    bool CanManageParties,
+    bool CanManageInvites);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,
@@ -409,7 +420,9 @@ public sealed record ActivityAuctionItemDto(
     string? Status,
     string? Notes,
     int BidCount,
-    int? SourceItemId);
+    int? SourceItemId,
+    // Set when this item is a gil sale (treasury gil sold for DKP).
+    long? GilAmount);
 
 public sealed record ActivityAuctionBidDto(
     int Id,
@@ -540,6 +553,12 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
     string? LinkshellType);
 
+// Lock a linkshell to the Discord server the Activity is currently launched in.
+// The guild id comes from the X-Discord-Guild-Id header (the server the caller
+// is actually in — not spoofable via the body); the body only carries the
+// human-entered server name for display.
+public sealed record ActivityLockLinkshellRequest(string? GuildName);
+
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
 public sealed record ActivityParticipantInviteCandidatesRequest(int LinkshellId, IReadOnlyList<string> DiscordUserIds);
@@ -602,7 +621,9 @@ public sealed record ActivityAuctionItemInput(
     string? ItemType,
     int? StartingBidDkp,
     string? Notes,
-    int? SourceItemId);
+    int? SourceItemId,
+    // When > 0 this item is a gil sale: gil sold for DKP, paid from treasury.
+    long? GilAmount);
 
 public sealed record ActivityCreateAuctionRequest(
     int LinkshellId,

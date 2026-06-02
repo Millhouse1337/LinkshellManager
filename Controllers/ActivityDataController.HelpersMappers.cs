@@ -19,7 +19,7 @@ public sealed partial class ActivityDataController
         {
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
-                Array.Empty<string>(), LinkshellTypes.Both);
+                Array.Empty<string>(), LinkshellTypes.Both, null, null);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -35,7 +35,9 @@ public sealed partial class ActivityDataController
             linkshell.EnableRevenue,
             NormalizeDkpRounding(linkshell.DkpRoundingIncrement),
             ParseHiddenTodMonsters(linkshell.HiddenTodMonsters),
-            LinkshellTypes.Normalize(linkshell.LinkshellType));
+            LinkshellTypes.Normalize(linkshell.LinkshellType),
+            linkshell.LockedToDiscordGuildId,
+            linkshell.LockedToDiscordGuildName);
     }
 
     // Splits the pipe-separated storage form into a clean list of names
@@ -110,7 +112,8 @@ public sealed partial class ActivityDataController
             role.CanAuditDkp,
             role.CanManageAuctions,
             role.CanCustomizeLinkshell,
-            role.CanManageParties);
+            role.CanManageParties,
+            role.CanManageInvites);
     }
 
     private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
@@ -133,7 +136,8 @@ public sealed partial class ActivityDataController
             role.CanAuditDkp,
             role.CanManageAuctions,
             role.CanCustomizeLinkshell,
-            role.CanManageParties);
+            role.CanManageParties,
+            role.CanManageInvites);
     }
 
     private static ActivityTodDto MapTodDto(Tod tod)
@@ -203,7 +207,8 @@ public sealed partial class ActivityDataController
                     item.Status,
                     item.Notes,
                     item.Bids.Count,
-                    item.SourceItemId))
+                    item.SourceItemId,
+                    item.GilAmount))
                 .ToList(),
             availableDkp);
     }
@@ -234,7 +239,8 @@ public sealed partial class ActivityDataController
                     item.Status,
                     item.Notes,
                     0,
-                    item.SourceItemId))
+                    item.SourceItemId,
+                    item.GilAmount))
                 .ToList());
     }
 }

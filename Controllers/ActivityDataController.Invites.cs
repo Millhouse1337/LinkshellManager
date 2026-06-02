@@ -39,7 +39,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -98,7 +98,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -177,7 +177,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -344,7 +344,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -451,7 +451,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -506,7 +506,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }

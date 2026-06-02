@@ -233,7 +233,8 @@ export class ConfigurationsTabComponent {
     { key: 'canAuditDkp', label: 'Audit DKP' },
     { key: 'canManageAuctions', label: 'Manage auctions' },
     { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' },
-    { key: 'canManageParties', label: 'Manage party setups' }
+    { key: 'canManageParties', label: 'Manage party setups' },
+    { key: 'canManageInvites', label: 'Manage invites' }
   ] as const;
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
@@ -314,7 +315,8 @@ export class ConfigurationsTabComponent {
       canAuditDkp: !!this.roleDraft.permissions['canAuditDkp'],
       canManageAuctions: !!this.roleDraft.permissions['canManageAuctions'],
       canCustomizeLinkshell: !!this.roleDraft.permissions['canCustomizeLinkshell'],
-      canManageParties: !!this.roleDraft.permissions['canManageParties']
+      canManageParties: !!this.roleDraft.permissions['canManageParties'],
+      canManageInvites: !!this.roleDraft.permissions['canManageInvites']
     };
 
     const ok = this.editingRoleId !== null
@@ -415,6 +417,43 @@ export class ConfigurationsTabComponent {
     return !!link?.permissions?.canCustomizeLinkshell;
   }
 
+  // ----- Discord server lock -----
+  // Draft for the "server name" the user types when locking.
+  protected guildLockNameDraft = '';
+
+  // The guild id the Activity is currently launched in (null on the website).
+  protected currentGuildId(): string | null {
+    return this.activity.currentGuildId();
+  }
+
+  protected lockedGuildId(): string | null {
+    const id = this.customizeTargetLinkshellId();
+    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.lockedToDiscordGuildId ?? null;
+  }
+
+  protected lockedGuildName(): string | null {
+    const id = this.customizeTargetLinkshellId();
+    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.lockedToDiscordGuildName ?? null;
+  }
+
+  protected isLockedToCurrentGuild(): boolean {
+    const locked = this.lockedGuildId();
+    return !!locked && locked === this.currentGuildId();
+  }
+
+  protected async lockToCurrentGuild(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id || !this.currentGuildId()) return;
+    const ok = await this.activity.lockLinkshellToGuild(id, this.guildLockNameDraft.trim() || null);
+    if (ok) this.guildLockNameDraft = '';
+  }
+
+  protected async unlockGuild(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id) return;
+    await this.activity.unlockLinkshellGuild(id);
+  }
+
   protected syncCustomizeDraft(): void {
     const id = this.customizeTargetLinkshellId();
     const link = this.dashboardLinkshells().find(l => l.id === id);
@@ -509,15 +548,6 @@ export class ConfigurationsTabComponent {
   // ----- Game Addon (att) pairing -----
   protected readonly addonTokens = signal<ActivityAddonToken[]>([]);
   protected addonModalOpen = false;
-  // Slot the user is generating a pairing code for. FFXI only supports
-  // two equipped linkpearl slots (LS1 / LS2), and the lsm addon's
-  // /lsm link command accepts a slot argument (1 or 2) to bind a code
-  // to a specific equipped pearl. Replacing the old free-text "Label"
-  // field with a 1/2 toggle makes the choice explicit and stops users
-  // from typing arbitrary strings that don't match anything the addon
-  // can parse. The chosen value is sent as the token's label so the
-  // listing still has a meaningful column to display.
-  protected addonModalSlot: 1 | 2 = 1;
   protected addonGeneratedCode: string | null = null;
   protected addonCountdownLabel = '';
   protected addonModalError: string | null = null;
@@ -526,6 +556,12 @@ export class ConfigurationsTabComponent {
 
   protected canManageAddonTokens(): boolean {
     return this.canCustomizeSelectedLinkshell();
+  }
+
+  // True when a super admin has globally disabled the addon — the whole Game
+  // Addon card is hidden (pairing endpoints reject requests anyway).
+  protected addonGloballyDisabled(): boolean {
+    return this.activity.overview()?.addonGloballyDisabled === true;
   }
 
   protected async loadAddonTokensForCurrent(): Promise<void> {
@@ -543,7 +579,6 @@ export class ConfigurationsTabComponent {
   }
 
   protected openAddonPairingModal(): void {
-    this.addonModalSlot = 1;
     this.addonGeneratedCode = null;
     this.addonCountdownLabel = '';
     this.addonModalError = null;
@@ -564,12 +599,7 @@ export class ConfigurationsTabComponent {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;
     this.addonModalError = null;
-    // Persist the chosen slot as the token label ("Slot 1" / "Slot 2")
-    // so the listing's Slot column has a value to display and an officer
-    // glancing at the table can tell at a glance which equipped pearl
-    // each token is for.
-    const slotLabel = `Slot ${this.addonModalSlot}`;
-    const result = await this.activity.createAddonPairingCode(id, slotLabel);
+    const result = await this.activity.createAddonPairingCode(id);
     if (!result) {
       this.addonModalError = this.activity.actionError() ?? 'Could not generate pairing code.';
       return;

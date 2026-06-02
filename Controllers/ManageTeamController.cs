@@ -131,10 +131,15 @@ public class ManageTeamController : Controller
         var players = new List<AppUser>();
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            var term = searchTerm.Trim();
+            // Case-insensitive character-name search. LOWER(..) Contains LOWER(..)
+            // translates to a case-insensitive Postgres LIKE; the bare
+            // .Contains(term) used previously was case-sensitive, so a search
+            // that didn't match the stored casing returned nothing. Mirrors the
+            // roster search in Index().
+            var lowered = searchTerm.Trim().ToLower();
             players = await _context.Users
                 .Where(u => u.CharacterName != null
-                            && u.CharacterName.Contains(term)
+                            && u.CharacterName.ToLower().Contains(lowered)
                             && u.Id != user.Id)
                 .OrderBy(u => u.CharacterName)
                 .ToListAsync();

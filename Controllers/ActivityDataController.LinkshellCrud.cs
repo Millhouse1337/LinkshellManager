@@ -269,6 +269,92 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
+    // Lock this linkshell to the Discord server the Activity is launched in.
+    // The guild id is taken from the request header (the server the caller is
+    // actually in) so a member can only lock to their current server, never an
+    // arbitrary one. Requires the CanCustomizeLinkshell permission.
+    [HttpPost("linkshells/{linkshellId:int}/lock-guild")]
+    public async Task<IActionResult> LockLinkshellToGuildAsync(
+        int linkshellId,
+        [FromBody] ActivityLockLinkshellRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to lock the linkshell to a server." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanCustomizeLinkshell, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var guildId = GetRequestGuildId();
+        if (string.IsNullOrWhiteSpace(guildId))
+        {
+            return BadRequest(new { error = "Open the Activity inside the Discord server you want to lock to." });
+        }
+
+        // Don't let a member lock a linkshell to a server they can't currently
+        // see it from (their request must originate from that guild). Since the
+        // guild id is read from the header, this is implicitly satisfied, but we
+        // also reject if the linkshell is already locked to a different guild
+        // the caller isn't in (they'd be blocked from the overview anyway).
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        if (IsBlockedByGuildLock(linkshell))
+        {
+            return Forbid();
+        }
+
+        linkshell.LockedToDiscordGuildId = guildId;
+        var name = request.GuildName?.Trim();
+        linkshell.LockedToDiscordGuildName = string.IsNullOrWhiteSpace(name) ? null : name;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Remove the guild lock so the linkshell is accessible from any server again.
+    [HttpPost("linkshells/{linkshellId:int}/unlock-guild")]
+    public async Task<IActionResult> UnlockLinkshellGuildAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to unlock the linkshell." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanCustomizeLinkshell, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        // Only someone currently in the locked guild (or with no lock) can
+        // unlock — IsBlockedByGuildLock guards against unlocking from elsewhere.
+        if (IsBlockedByGuildLock(linkshell))
+        {
+            return Forbid();
+        }
+
+        linkshell.LockedToDiscordGuildId = null;
+        linkshell.LockedToDiscordGuildName = null;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     [HttpPost("linkshells/{linkshellId:int}/delete")]
     public async Task<IActionResult> DeleteLinkshellAsync(int linkshellId, CancellationToken cancellationToken)
     {

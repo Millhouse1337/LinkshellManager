@@ -104,6 +104,18 @@ public class Linkshell
 
     public bool SheetSyncEnabled { get; set; } = false;
 
+    // When set, this linkshell is locked to a single Discord server (guild):
+    // the Discord Activity only surfaces / allows access to it when launched
+    // from this guild. Prevents members from opening the linkshell's data in
+    // a different server. Null = not locked (accessible from any server). The
+    // website is unaffected — the lock only governs the Activity. The name is
+    // a display cache captured at lock time.
+    [MaxLength(32)]
+    public string? LockedToDiscordGuildId { get; set; }
+
+    [MaxLength(256)]
+    public string? LockedToDiscordGuildName { get; set; }
+
     // Per-LS override of the AttInput tab name. Default is "AttInput", but
     // each linkshell can rename their tab. The sync service appends rows here
     // rather than overwriting Main!C so the user's existing formula chain

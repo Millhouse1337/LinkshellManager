@@ -224,6 +224,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
+        public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -249,6 +250,14 @@ namespace LinkshellManagerDiscordApp.Data
             builder.Entity<Job>(entity =>
             {
                 entity.Property(job => job.Enlisted).HasColumnType("text[]");
+            });
+
+            builder.Entity<AppSetting>(entity =>
+            {
+                entity.ToTable("AppSettings");
+                entity.HasKey(setting => setting.Key);
+                entity.Property(setting => setting.Key).HasMaxLength(128);
+                entity.Property(setting => setting.Value).HasMaxLength(512);
             });
 
             builder.Entity<Invite>(entity =>

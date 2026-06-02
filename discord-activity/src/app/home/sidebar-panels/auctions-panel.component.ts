@@ -27,9 +27,11 @@ export class AuctionsPanelComponent {
     title: '',
     startTimeLocal: '',
     endTimeLocal: '',
-    items: [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }]
+    items: [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }]
   };
-  protected auctionItemFromInventory: boolean[] = [true];
+  // Per-item source mode driving the form UI: inventory pick, free-text
+  // external, or a gil sale (treasury gil sold for DKP).
+  protected auctionItemSourceMode: ('inventory' | 'external' | 'gil')[] = ['external'];
   protected readonly auctionBidDrafts: Record<number, number | null> = {};
   protected readonly expandedAuctionBidItems: Record<number, boolean> = {};
   protected isAuctionFormOpen = false;
@@ -106,8 +108,8 @@ export class AuctionsPanelComponent {
     this.auctionFormModel.title = '';
     this.auctionFormModel.startTimeLocal = '';
     this.auctionFormModel.endTimeLocal = '';
-    this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }];
-    this.auctionItemFromInventory = [true];
+    this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }];
+    this.auctionItemSourceMode = ['external'];
     this.scrollFormIntoView();
   }
 
@@ -138,6 +140,7 @@ export class AuctionsPanelComponent {
       startingBidDkp?: number | null;
       notes?: string | null;
       sourceItemId?: number | null;
+      gilAmount?: number | null;
     }[];
   }): void {
     this.activity.clearActionState();
@@ -154,10 +157,12 @@ export class AuctionsPanelComponent {
           itemType: item.itemType ?? '',
           startingBidDkp: item.startingBidDkp ?? 0,
           notes: item.notes ?? '',
-          sourceItemId: item.sourceItemId ?? null
+          sourceItemId: item.sourceItemId ?? null,
+          gilAmount: item.gilAmount ?? null
         }))
-      : [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }];
-    this.auctionItemFromInventory = this.auctionFormModel.items.map(item => item.sourceItemId != null);
+      : [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }];
+    this.auctionItemSourceMode = this.auctionFormModel.items.map(item =>
+      item.gilAmount != null ? 'gil' : item.sourceItemId != null ? 'inventory' : 'external');
     this.scrollFormIntoView();
   }
 
@@ -169,9 +174,9 @@ export class AuctionsPanelComponent {
   protected addAuctionFormItem(): void {
     this.auctionFormModel.items = [
       ...this.auctionFormModel.items,
-      { id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null }
+      { id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }
     ];
-    this.auctionItemFromInventory = [...this.auctionItemFromInventory, true];
+    this.auctionItemSourceMode = [...this.auctionItemSourceMode, 'external'];
   }
 
   protected inventoryItemsForAuctionForm(): { id: number; itemName: string; itemType?: string | null; quantity: number }[] {
@@ -183,13 +188,23 @@ export class AuctionsPanelComponent {
     return [];
   }
 
-  protected onAuctionItemSourceModeChange(index: number, mode: 'inventory' | 'external'): void {
-    this.auctionItemFromInventory[index] = mode === 'inventory';
+  protected onAuctionItemSourceModeChange(index: number, mode: 'inventory' | 'external' | 'gil'): void {
+    this.auctionItemSourceMode[index] = mode;
     const item = this.auctionFormModel.items[index];
     if (!item) return;
+    // Reset cross-mode fields so a switched row never carries stale values.
     item.sourceItemId = null;
     item.itemName = '';
-    item.itemType = '';
+    item.itemType = mode === 'gil' ? 'Gil' : '';
+    item.gilAmount = null;
+  }
+
+  protected isGilItem(index: number): boolean {
+    return this.auctionItemSourceMode[index] === 'gil';
+  }
+
+  protected isInventoryItem(index: number): boolean {
+    return this.auctionItemSourceMode[index] === 'inventory';
   }
 
   protected onAuctionItemInventoryPick(index: number, inventoryItemId: number | null): void {
@@ -213,7 +228,7 @@ export class AuctionsPanelComponent {
     }
 
     this.auctionFormModel.items = this.auctionFormModel.items.filter((_, itemIndex) => itemIndex !== index);
-    this.auctionItemFromInventory = this.auctionItemFromInventory.filter((_, itemIndex) => itemIndex !== index);
+    this.auctionItemSourceMode = this.auctionItemSourceMode.filter((_, itemIndex) => itemIndex !== index);
   }
 
   protected getAuctionBidDraft(itemId: number): number | null {
@@ -242,13 +257,18 @@ export class AuctionsPanelComponent {
         title: this.auctionFormModel.title.trim(),
         startTimeLocal: this.auctionFormModel.startTimeLocal?.trim() || null,
         endTimeLocal: this.auctionFormModel.endTimeLocal?.trim() || null,
-        items: this.auctionFormModel.items.map<ActivityAuctionItemInput>(item => ({
-          id: item.id,
-          itemName: item.itemName.trim(),
-          itemType: item.itemType?.trim() || null,
-          startingBidDkp: item.startingBidDkp ?? 0,
-          notes: item.notes?.trim() || null
-        }))
+        items: this.auctionFormModel.items.map<ActivityAuctionItemInput>((item, index) => {
+          const isGil = this.auctionItemSourceMode[index] === 'gil';
+          return {
+            id: item.id,
+            itemName: item.itemName.trim(),
+            itemType: isGil ? 'Gil' : (item.itemType?.trim() || null),
+            startingBidDkp: item.startingBidDkp ?? 0,
+            notes: item.notes?.trim() || null,
+            sourceItemId: isGil ? null : (item.sourceItemId ?? null),
+            gilAmount: isGil ? (item.gilAmount ?? null) : null
+          };
+        })
       };
 
       if (this.editingAuctionId) {

@@ -120,6 +120,47 @@ export class LinkshellService {
     }
   }
 
+  // Lock this linkshell to the Discord server the Activity is launched in. The
+  // server reads the guild id from the X-Discord-Guild-Id header (sent on every
+  // request); we only pass the human-entered server name for display.
+  async lockLinkshellToGuild(linkshellId: number, guildName: string | null): Promise<boolean> {
+    this.busyLinkshellId.set(linkshellId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/lock-guild`, {
+        guildName: guildName?.trim() || null
+      });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Linkshell locked to this Discord server.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Locking the linkshell to this server failed.'));
+      return false;
+    } finally {
+      this.busyLinkshellId.set(null);
+    }
+  }
+
+  async unlockLinkshellGuild(linkshellId: number): Promise<boolean> {
+    this.busyLinkshellId.set(linkshellId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/unlock-guild`);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Linkshell unlocked — accessible from any server.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Unlocking the linkshell failed.'));
+      return false;
+    } finally {
+      this.busyLinkshellId.set(null);
+    }
+  }
+
   async setPrimaryLinkshell(linkshellId: number): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
     this.auth.setActionError(null);

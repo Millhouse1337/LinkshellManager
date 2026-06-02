@@ -163,7 +163,7 @@
               </button>
             </div>
 
-            <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;justify-content:center">
+            <div style="display:flex;gap:24px 72px;flex-wrap:wrap;align-items:flex-start;justify-content:center">
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
                 <div class="customize-form__section" style="flex:0 0 260px">
                   <strong>DKP rounding increment</strong>
@@ -284,6 +284,61 @@
         }
       </div>
 
+      @if (canCustomizeSelectedLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Discord server lock</div>
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Locking the currently active linkshell">{{ activeName }}</span>
+            }
+          </div>
+          <div class="card-body">
+            <p class="muted">
+              Lock this linkshell to a single Discord server so its data can only be opened
+              in the Activity from that server. Members can't access it from any other server.
+            </p>
+
+            @if (lockedGuildId()) {
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <span class="tag success">Locked</span>
+                <span>Locked to <strong>{{ lockedGuildName() || 'a Discord server' }}</strong></span>
+              </div>
+              @if (isLockedToCurrentGuild()) {
+                <button type="button" class="btn ghost" (click)="unlockGuild()" [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                  Unlock (allow any server)
+                </button>
+              } @else {
+                <p class="muted" style="font-size:12px">
+                  This linkshell is locked to a different server. Open the Activity in that
+                  server to unlock or change it.
+                </p>
+              }
+            } @else {
+              @if (currentGuildId()) {
+                <label class="customize-form__field" style="max-width:360px">
+                  <span>Discord server name</span>
+                  <input type="text" name="guildLockName" maxlength="256"
+                    placeholder="e.g. My Linkshell Server"
+                    [(ngModel)]="guildLockNameDraft" />
+                </label>
+                <div style="margin-top:10px">
+                  <button type="button" class="btn primary" (click)="lockToCurrentGuild()"
+                    [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                    Lock to this server
+                  </button>
+                </div>
+              } @else {
+                <div class="empty-state empty-state--compact">
+                  <div class="empty-state-desc">
+                    Open the Activity inside the Discord server you want to lock this linkshell to.
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
+
       <div class="card">
         <div class="card-head">
           <div class="card-title">Permissions</div>
@@ -383,6 +438,7 @@
         }
       </div>
 
+      @if (!addonGloballyDisabled()) {
       <div class="card" (mouseenter)="loadAddonTokensForCurrent()">
         <div class="card-head">
           <div>
@@ -418,7 +474,6 @@
               <thead>
                 <tr>
                   <th>Token</th>
-                  <th>Slot</th>
                   <th>Created</th>
                   <th>Last used</th>
                   <th class="num"></th>
@@ -428,7 +483,6 @@
                 @for (token of addonTokens(); track token.id) {
                   <tr>
                     <td><code>{{ token.prefix }}…</code></td>
-                    <td>{{ token.label || '—' }}</td>
                     <td>{{ formatAddonTokenDate(token.createdAt) }}</td>
                     <td>{{ formatAddonTokenDate(token.lastUsedAt) }}</td>
                     <td class="num">
@@ -459,6 +513,7 @@
           </div>
         }
       </div>
+      }
 
     </div>
 
@@ -470,31 +525,12 @@
         <button type="button" class="btn ghost sm" (click)="closeAddonPairingModal()">×</button>
       </div>
       <div class="addon-modal-body">
-        <!--
-          Slot picker replaces the old free-text label. The lsm addon
-          binds each pairing to either LS1 or LS2 (the two equipped
-          linkpearl slots in FFXI); offering an arbitrary text label
-          allowed users to type strings the addon couldn't act on. Now
-          the only choice is "Slot 1" / "Slot 2", which doubles as the
-          token's listing label.
-        -->
-        <div class="addon-modal-field">
-          <span>Linkpearl slot</span>
-          <div class="addon-modal-slot-options">
-            <label class="addon-modal-slot-option">
-              <input type="radio" name="addonSlot" [value]="1"
-                [(ngModel)]="addonModalSlot"
-                [disabled]="!!addonGeneratedCode" />
-              <span>Slot 1</span>
-            </label>
-            <label class="addon-modal-slot-option">
-              <input type="radio" name="addonSlot" [value]="2"
-                [(ngModel)]="addonModalSlot"
-                [disabled]="!!addonGeneratedCode" />
-              <span>Slot 2</span>
-            </label>
-          </div>
-        </div>
+        @if (!addonGeneratedCode) {
+          <p class="muted" style="font-size:13px;margin:0">
+            Generate a one-time code, then in FFXI type
+            <code>/lsm link &lt;code&gt;</code> to connect the addon to this linkshell.
+          </p>
+        }
         @if (addonGeneratedCode) {
           <div class="addon-modal-code">
             <div class="addon-modal-code__value">{{ addonGeneratedCode }}</div>

@@ -173,8 +173,8 @@ public sealed partial class ActivityDataController
             StartedAt = null,
             AuctionItems = normalizedItems.Select(item => new AuctionItem
             {
-                ItemName = item.ItemName?.Trim(),
-                ItemType = item.ItemType?.Trim(),
+                ItemName = ResolveAuctionItemName(item),
+                ItemType = item.GilAmount.HasValue ? "Gil" : item.ItemType?.Trim(),
                 StartingBidDkp = item.StartingBidDkp,
                 CurrentHighestBid = null,
                 CurrentHighestBidder = null,
@@ -184,7 +184,8 @@ public sealed partial class ActivityDataController
                 EndTime = endTimeUtc,
                 Status = "Pending",
                 Notes = item.Notes?.Trim(),
-                SourceItemId = item.SourceItemId
+                SourceItemId = item.GilAmount.HasValue ? null : item.SourceItemId,
+                GilAmount = item.GilAmount
             }).ToList()
         };
 
@@ -250,21 +251,22 @@ public sealed partial class ActivityDataController
         {
             if (itemRequest.Id > 0 && remainingItems.TryGetValue(itemRequest.Id, out var existingItem))
             {
-                existingItem.ItemName = itemRequest.ItemName?.Trim();
-                existingItem.ItemType = itemRequest.ItemType?.Trim();
+                existingItem.ItemName = ResolveAuctionItemName(itemRequest);
+                existingItem.ItemType = itemRequest.GilAmount.HasValue ? "Gil" : itemRequest.ItemType?.Trim();
                 existingItem.StartingBidDkp = itemRequest.StartingBidDkp;
                 existingItem.StartTime = startTimeUtc;
                 existingItem.EndTime = endTimeUtc;
                 existingItem.Notes = itemRequest.Notes?.Trim();
-                existingItem.SourceItemId = itemRequest.SourceItemId;
+                existingItem.SourceItemId = itemRequest.GilAmount.HasValue ? null : itemRequest.SourceItemId;
+                existingItem.GilAmount = itemRequest.GilAmount;
                 remainingItems.Remove(itemRequest.Id);
                 continue;
             }
 
             auction.AuctionItems.Add(new AuctionItem
             {
-                ItemName = itemRequest.ItemName?.Trim(),
-                ItemType = itemRequest.ItemType?.Trim(),
+                ItemName = ResolveAuctionItemName(itemRequest),
+                ItemType = itemRequest.GilAmount.HasValue ? "Gil" : itemRequest.ItemType?.Trim(),
                 StartingBidDkp = itemRequest.StartingBidDkp,
                 CurrentHighestBid = null,
                 CurrentHighestBidder = null,
@@ -274,7 +276,8 @@ public sealed partial class ActivityDataController
                 EndTime = endTimeUtc,
                 Status = "Pending",
                 Notes = itemRequest.Notes?.Trim(),
-                SourceItemId = itemRequest.SourceItemId
+                SourceItemId = itemRequest.GilAmount.HasValue ? null : itemRequest.SourceItemId,
+                GilAmount = itemRequest.GilAmount
             });
         }
 
@@ -472,6 +475,7 @@ public sealed partial class ActivityDataController
         }
 
         var auction = await _dbContext.Auctions
+            .Include(item => item.Linkshell)
             .Include(item => item.AuctionItems)
                 .ThenInclude(item => item.Bids)
             .FirstOrDefaultAsync(item => item.Id == auctionId, cancellationToken);
@@ -491,8 +495,9 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "End the auction before closing it." });
         }
 
-        var deliveredIds = (request?.DeliveredItemIds ?? Array.Empty<int>()).ToHashSet();
-
+        // Inventory now auto-draws down on close for any inventory-sourced item
+        // with a winner — no separate "delivered" tick. DeliveredItemIds is
+        // accepted for backward compatibility but ignored.
         var closedAt = DateTime.UtcNow;
         var history = new AuctionHistory
         {
@@ -509,7 +514,11 @@ public sealed partial class ActivityDataController
                 .Select(item =>
                 {
                     var hasWinner = !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId);
-                    var delivered = hasWinner && deliveredIds.Contains(item.Id);
+                    // Inventory-sourced winners are auto-delivered (marked
+                    // Received); the decrement below transitions through
+                    // AuctionInventoryService so the post-close Received/Undo
+                    // toggle stays consistent and never double-decrements.
+                    var autoReceived = hasWinner && item.SourceItemId.HasValue;
                     return new AuctionItem
                     {
                         ItemName = item.ItemName,
@@ -521,40 +530,16 @@ public sealed partial class ActivityDataController
                         EndingBidDkp = item.CurrentHighestBid,
                         StartTime = item.StartTime,
                         EndTime = item.EndTime,
-                        Status = !hasWinner ? "NoBids" : delivered ? "Received" : "Closed",
+                        Status = !hasWinner ? "NoBids" : autoReceived ? "Received" : "Closed",
                         Notes = item.Notes,
-                        SourceItemId = item.SourceItemId
+                        SourceItemId = item.SourceItemId,
+                        GilAmount = item.GilAmount
                     };
                 })
                 .ToList()
         };
 
         _dbContext.AuctionHistories.Add(history);
-
-        var sourceItemIds = auction.AuctionItems
-            .Where(item => item.SourceItemId.HasValue && deliveredIds.Contains(item.Id) && !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId))
-            .Select(item => item.SourceItemId!.Value)
-            .Distinct()
-            .ToList();
-        var inventoryItems = sourceItemIds.Count == 0
-            ? new List<Item>()
-            : await _dbContext.Items
-                .Where(inv => sourceItemIds.Contains(inv.Id) && inv.LinkshellId == auction.LinkshellId)
-                .ToListAsync(cancellationToken);
-        foreach (var auctionItem in auction.AuctionItems.Where(item =>
-                     item.SourceItemId.HasValue &&
-                     deliveredIds.Contains(item.Id) &&
-                     !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId)))
-        {
-            var inv = inventoryItems.FirstOrDefault(candidate => candidate.Id == auctionItem.SourceItemId!.Value);
-            if (inv is null) continue;
-            inv.Quantity = Math.Max(0, inv.Quantity - 1);
-            inv.UpdatedAt = closedAt;
-            if (inv.Quantity == 0)
-            {
-                _dbContext.Items.Remove(inv);
-            }
-        }
 
         foreach (var item in auction.AuctionItems.Where(item =>
                      !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId) &&
@@ -587,8 +572,41 @@ public sealed partial class ActivityDataController
                 EventStartTime = auction.StartedAt ?? auction.StartTime,
                 EventEndTime = auction.EndTime ?? closedAt,
                 ItemName = item.ItemName,
-                Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}."
+                Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
+                // Link to the new history row so ManualPoints batches this close
+                // into one sheet column (mirrors the web close path).
+                SourceAuctionHistory = history
             });
+
+            // Gil auctions pay out of the treasury: record the listed gil as a
+            // negative RevenueEntry so it appears in revenue and lowers the total.
+            if (item.GilAmount.HasValue && item.GilAmount.Value > 0)
+            {
+                _dbContext.RevenueEntries.Add(new RevenueEntry
+                {
+                    LinkshellId = auction.LinkshellId,
+                    LinkshellName = auction.Linkshell?.LinkshellName,
+                    EntryType = "Auction Payout",
+                    Category = "Gil",
+                    Value = -item.GilAmount.Value,
+                    Details = $"Gil auction: {item.ItemName} won by {winnerMembership.CharacterName} for {winningBid} DKP.",
+                    OccurredAt = closedAt,
+                    CreatedByAppUserId = appUser.Id,
+                    CreatedByCharacterName = winnerMembership.CharacterName,
+                    CreatedAt = closedAt
+                });
+            }
+        }
+
+        // Auto-drawdown inventory for every inventory-sourced item with a winner,
+        // routed through the shared service (transition into "Received").
+        foreach (var item in auction.AuctionItems.Where(item =>
+                     item.SourceItemId.HasValue &&
+                     !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId)))
+        {
+            await AuctionInventoryService.AdjustForStatusChangeAsync(
+                _dbContext, item, previousStatus: "Closed", newStatus: AuctionInventoryService.ReceivedStatus,
+                auction.LinkshellId, closedAt, cancellationToken);
         }
 
         _dbContext.Bids.RemoveRange(auction.AuctionItems.SelectMany(item => item.Bids));

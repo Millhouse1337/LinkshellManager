@@ -32,6 +32,14 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        // Guild lock (Activity only): hide linkshells locked to a different
+        // Discord server than the one the Activity is launched in. A request
+        // with no guild header (the website) is never filtered — the lock only
+        // governs the Discord Activity, so web access is unaffected.
+        linkshellMemberships = linkshellMemberships
+            .Where(link => !IsBlockedByGuildLock(link.Linkshell))
+            .ToList();
+
         var linkshellIds = linkshellMemberships
             .Select(link => link.LinkshellId)
             .Distinct()
@@ -236,6 +244,8 @@ public sealed partial class ActivityDataController
 
         var addonConfigured = await _dbContext.AddonApiTokens
             .AnyAsync(token => token.IssuedToAppUserId == appUser.Id && token.RevokedAt == null, cancellationToken);
+
+        var addonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken);
 
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
@@ -487,7 +497,8 @@ public sealed partial class ActivityDataController
                 activeEvents.Count,
                 recentHistory.Count,
                 activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
-            addonConfigured));
+            addonConfigured,
+            addonGloballyDisabled));
     }
 
     [HttpGet("history")]

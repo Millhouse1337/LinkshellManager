@@ -54,4 +54,10 @@ public class AuctionItem
 
     [ForeignKey(nameof(SourceItemId))]
     public Item? SourceItem { get; set; }
+
+    // Gil auction: when set, this item is a stack of linkshell gil being sold
+    // for DKP. Members bid DKP as normal; on close the winner's DKP is deducted
+    // AND this gil amount is paid out of the treasury as a negative
+    // RevenueEntry. Null for normal (external / inventory-sourced) items.
+    public long? GilAmount { get; set; }
 }

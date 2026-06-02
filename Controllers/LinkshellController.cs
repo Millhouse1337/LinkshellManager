@@ -15,15 +15,18 @@ public class LinkshellController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly Services.DiscordTodBoardQueue _todBoardQueue;
+    private readonly GlobalSettingsService _globalSettings;
 
     public LinkshellController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        Services.DiscordTodBoardQueue todBoardQueue)
+        Services.DiscordTodBoardQueue todBoardQueue,
+        GlobalSettingsService globalSettings)
     {
         _context = context;
         _userManager = userManager;
         _todBoardQueue = todBoardQueue;
+        _globalSettings = globalSettings;
     }
     public async Task<IActionResult> Index()
     {
@@ -354,6 +357,9 @@ public class LinkshellController : Controller
             })
             .ToListAsync();
         EnsureWebhookRow(vm);
+        // Hide the Game Addon pairing card while a super admin has globally
+        // disabled the addon (the pairing-code endpoints reject requests anyway).
+        vm.AddonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
         return View(vm);
     }
 

@@ -36,15 +36,14 @@ export class AddonTokenService {
   }
 
   async createAddonPairingCode(
-    linkshellId: number,
-    label: string | null
+    linkshellId: number
   ): Promise<ActivityAddonPairingCodeResponse | null> {
     this.busyAddonTokens.set(true);
     this.auth.setActionError(null);
     try {
       return await this.http.postActivityJson<ActivityAddonPairingCodeResponse>(
         '/api/addon/management/pairing-code',
-        { linkshellId, label }
+        { linkshellId }
       );
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Generating the pairing code failed.'));
