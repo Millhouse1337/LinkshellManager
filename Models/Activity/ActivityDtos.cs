@@ -181,11 +181,15 @@ public sealed record ActivityEventDto(
     int? DkpPerHour,
     string? Details,
     int ParticipantCount,
-    int RequestedSlots,
     ActivityParticipationDto? CurrentParticipation,
     IReadOnlyList<ActivityEventParticipantDto> Participants,
     IReadOnlyList<ActivityLootDto> Loot,
-    IReadOnlyList<ActivityJobDto> Jobs,
+    // Optional FK to a PartySetup in the same linkshell. The expanded event
+    // card fetches the full setup tree (alliances → parties → slots) on
+    // demand from /api/activity/party-setups/{id}.
+    int? PartySetupId,
+    string? PartySetupName,
+    string? PartySetupAssignedMonsterName,
     int WindowCount,
     IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows,
     string? CreatorCharacterName,
@@ -246,15 +250,6 @@ public sealed record ActivityStatusLedgerDto(
     DateTime? DeniedAt,
     string? DeniedBy,
     string? Source);
-
-public sealed record ActivityJobDto(
-    int Id,
-    string? JobName,
-    string? SubJobName,
-    string? JobType,
-    int? Quantity,
-    int? SignedUp,
-    IReadOnlyList<string> Enlisted);
 
 public sealed record ActivityHistoryDto(
     int Id,
@@ -510,14 +505,10 @@ public sealed record ActivityCreateEventRequest(
     double? Duration,
     int? DkpPerHour,
     string? Details,
-    IReadOnlyList<ActivityCreateJobRequest> Jobs);
-
-public sealed record ActivityCreateJobRequest(
-    string? JobName,
-    string? SubJobName,
-    string? JobType,
-    int? Quantity,
-    string? Details);
+    // Optional FK to a PartySetup in the same linkshell. Null means "no party
+    // setup attached" (event becomes ad-hoc signup only). The old inline Jobs
+    // editor was removed in favour of this dropdown.
+    int? PartySetupId);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 

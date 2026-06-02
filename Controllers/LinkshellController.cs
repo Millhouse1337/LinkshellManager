@@ -227,8 +227,6 @@ public class LinkshellController : Controller
         var linkshell = await _context.Linkshells
             .Include(ls => ls.AppUserLinkshells)
             .Include(ls => ls.Events)
-            .ThenInclude(evt => evt.Jobs)
-            .Include(ls => ls.Events)
             .ThenInclude(evt => evt.AppUserEvents)
             .Include(ls => ls.Events)
             .ThenInclude(evt => evt.EventLootDetails)
@@ -285,7 +283,6 @@ public class LinkshellController : Controller
         }
 
         _context.AppUserLinkshells.RemoveRange(linkshell.AppUserLinkshells);
-        _context.Jobs.RemoveRange(linkshell.Events.SelectMany(evt => evt.Jobs));
         _context.AppUserEvents.RemoveRange(linkshell.Events.SelectMany(evt => evt.AppUserEvents));
         _context.EventLootDetails.RemoveRange(linkshell.Events.SelectMany(evt => evt.EventLootDetails));
         _context.Events.RemoveRange(linkshell.Events);

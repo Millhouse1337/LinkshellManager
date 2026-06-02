@@ -19,15 +19,19 @@ import {
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
+import { PartySetupService } from '../discord/party-setup.service';
+import type { ActivityPartySetupListRow } from '../discord/discord-activity.types';
+import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
 
 @Component({
   selector: 'app-activity-queue-panel',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PartySetupPanelComponent],
   templateUrl: './activity-queue-panel.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ActivityQueuePanelComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly partySetups = inject(PartySetupService);
   private readonly cdr = inject(ChangeDetectorRef);
   // The live-event edit form renders inside a native <dialog> opened with
   // showModal() so it escapes the .panel-tab.fade ancestor's stacking context
@@ -45,15 +49,7 @@ export class ActivityQueuePanelComponent {
     duration: 1,
     dkpPerHour: 1,
     details: '',
-    jobs: [
-      {
-        jobName: '',
-        subJobName: '',
-        jobType: '',
-        quantity: 1,
-        details: ''
-      }
-    ]
+    partySetupId: null
   };
 
   protected readonly eventTypeOptions = ['Sky', 'Sea', 'HNM', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
@@ -64,8 +60,22 @@ export class ActivityQueuePanelComponent {
   protected isSubmittingCreate = false;
   protected durationNotSpecified = false;
   protected endTimeNotSpecified = false;
+  // True = "No" (no party setup attached). False = "Yes" (dropdown enabled).
+  // Defaults to "Yes" so the dropdown is visible on form open — most events
+  // get a linked setup, so showing the picker by default saves a click.
   protected partySetupNotSpecified = false;
-  protected jobQuantityNotSpecified: boolean[] = [false];
+
+  // Expanded queued-event ids whose linked PartySetup detail tree should be
+  // loaded + shown inline. Members click "View slots" on a card to expand.
+  protected readonly expandedPartySetupIds = signal<Set<number>>(new Set());
+
+  // Event ids whose manual ad-hoc signup form is open inside the expanded
+  // party setup panel. Members click "Sign Up Manually" to reveal the form.
+  protected readonly expandedManualSignupEventIds = signal<Set<number>>(new Set());
+
+  protected availablePartySetups(): ActivityPartySetupListRow[] {
+    return this.partySetups.list()?.items ?? [];
+  }
 
   protected onEventTypeSelectionChange(value: string): void {
     this.eventTypeSelection = value;
@@ -85,14 +95,10 @@ export class ActivityQueuePanelComponent {
     }
   }
 
-  protected onJobQuantityNotSpecifiedChange(index: number, checked: boolean): void {
-    this.jobQuantityNotSpecified = this.jobQuantityNotSpecified.map((v, i) => i === index ? checked : v);
-    const job = this.createModel.jobs[index];
-    if (!job) return;
+  protected onPartySetupNotSpecifiedChange(checked: boolean): void {
+    this.partySetupNotSpecified = checked;
     if (checked) {
-      job.quantity = null;
-    } else if (job.quantity == null) {
-      job.quantity = 1;
+      this.createModel.partySetupId = null;
     }
   }
 
@@ -261,6 +267,10 @@ export class ActivityQueuePanelComponent {
       this.activity.overview()?.primaryLinkshell?.id ??
       this.activity.overview()?.linkshells?.[0]?.id ??
       0;
+    // Lazy-load the linkshell's PartySetup list so the dropdown is populated.
+    if (this.createModel.linkshellId) {
+      void this.partySetups.loadList(this.createModel.linkshellId);
+    }
   }
 
   // Display name for the read-only Linkshell field, resolved from the model's
@@ -289,34 +299,6 @@ export class ActivityQueuePanelComponent {
     }
   }
 
-  protected addJobRow(): void {
-    this.createModel.jobs.push({
-      jobName: '',
-      subJobName: '',
-      jobType: '',
-      quantity: 1,
-      details: ''
-    });
-    this.jobQuantityNotSpecified = [...this.jobQuantityNotSpecified, false];
-  }
-
-  protected removeJobRow(index: number): void {
-    if (this.createModel.jobs.length === 1) {
-      this.createModel.jobs[0] = {
-        jobName: '',
-        subJobName: '',
-        jobType: '',
-        quantity: 1,
-        details: ''
-      };
-      this.jobQuantityNotSpecified = [false];
-      return;
-    }
-
-    this.createModel.jobs.splice(index, 1);
-    this.jobQuantityNotSpecified = this.jobQuantityNotSpecified.filter((_, i) => i !== index);
-  }
-
   protected async submitCreateForm(): Promise<void> {
     const eventType = this.createModel.eventType?.trim() ?? '';
     if (!this.eventTypeSelection || !eventType) {
@@ -329,9 +311,9 @@ export class ActivityQueuePanelComponent {
     this.isSubmittingCreate = true;
 
     try {
-      const payload = {
+      const payload: ActivityCreateEventInput = {
         ...this.createModel,
-        jobs: this.partySetupNotSpecified ? [] : this.createModel.jobs
+        partySetupId: this.partySetupNotSpecified ? null : (this.createModel.partySetupId ?? null)
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -359,12 +341,7 @@ export class ActivityQueuePanelComponent {
     duration?: number | null;
     dkpPerHour?: number | null;
     details?: string | null;
-    jobs: {
-      jobName?: string | null;
-      subJobName?: string | null;
-      jobType?: string | null;
-      quantity?: number | null;
-    }[];
+    partySetupId?: number | null;
   }): void {
     this.activity.clearActionState();
     this.isCreateOpen = true;
@@ -389,33 +366,17 @@ export class ActivityQueuePanelComponent {
     this.createModel.duration = event.duration ?? 1;
     this.durationNotSpecified = event.duration == null;
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
-    this.partySetupNotSpecified = !(event.jobs && event.jobs.some(j =>
-      !!j.jobName || !!j.subJobName || !!j.jobType || (j.quantity != null && j.quantity > 0)));
+    this.createModel.partySetupId = event.partySetupId ?? null;
+    this.partySetupNotSpecified = event.partySetupId == null;
+    // Lazy-load the linkshell's PartySetup list so the dropdown populates.
+    if (this.createModel.linkshellId) {
+      void this.partySetups.loadList(this.createModel.linkshellId);
+    }
     if (!this.durationNotSpecified && !this.endTimeNotSpecified) {
       this.recomputeDurationFromStartEnd();
     }
     this.createModel.dkpPerHour = event.dkpPerHour ?? 0;
     this.createModel.details = event.details ?? '';
-    this.createModel.jobs = event.jobs.map(job => ({
-      jobName: job.jobName ?? '',
-      subJobName: job.subJobName ?? '',
-      jobType: job.jobType ?? '',
-      quantity: job.quantity ?? 1,
-      details: ''
-    }));
-
-    if (this.createModel.jobs.length === 0) {
-      this.createModel.jobs = [
-        {
-          jobName: '',
-          subJobName: '',
-          jobType: '',
-          quantity: 1,
-          details: ''
-        }
-      ];
-    }
-    this.jobQuantityNotSpecified = this.createModel.jobs.map(job => job.quantity == null);
     // External callers (e.g. live-event Edit on the events tab) reach this
     // method through a viewChild — Angular's OnPush check for the queue panel
     // wouldn't otherwise run on this synchronous mutation.
@@ -473,16 +434,62 @@ export class ActivityQueuePanelComponent {
     this.durationNotSpecified = false;
     this.endTimeNotSpecified = false;
     this.partySetupNotSpecified = false;
-    this.createModel.jobs = [
-      {
-        jobName: '',
-        subJobName: '',
-        jobType: '',
-        quantity: 1,
-        details: ''
-      }
-    ];
-    this.jobQuantityNotSpecified = [false];
+    this.createModel.partySetupId = null;
     this.isEditingLiveEvent = false;
+  }
+
+  // ----- Inline PartySetup slot tree (members expand a queued event to sign
+  // up against the planned slots — uses the embedded PartySetupPanelComponent
+  // which renders the exact same alliance → parties → slots tree as the
+  // Party Setup tab, and shares its signUp / withdraw flow.
+  protected togglePartySetupExpanded(setupId: number, linkshellId: number): void {
+    const next = new Set(this.expandedPartySetupIds());
+    if (next.has(setupId)) {
+      next.delete(setupId);
+    } else {
+      next.add(setupId);
+      // The embedded panel pulls option lists (role / main / sub) from
+      // partySetups.list(); load it once so the sign-up dropdowns populate
+      // even when the user hasn't visited the Party Setup tab yet.
+      if (linkshellId) void this.partySetups.loadList(linkshellId);
+    }
+    this.expandedPartySetupIds.set(next);
+  }
+
+  protected isPartySetupExpanded(setupId: number): boolean {
+    return this.expandedPartySetupIds().has(setupId);
+  }
+
+  // Manual signup form inside the expanded party setup panel — gated behind a
+  // "Sign Up Manually" button so the party setup slots stay visually primary.
+  protected toggleManualSignupExpanded(eventId: number): void {
+    const next = new Set(this.expandedManualSignupEventIds());
+    if (next.has(eventId)) {
+      next.delete(eventId);
+    } else {
+      next.add(eventId);
+    }
+    this.expandedManualSignupEventIds.set(next);
+  }
+
+  protected isManualSignupExpanded(eventId: number): boolean {
+    return this.expandedManualSignupEventIds().has(eventId);
+  }
+
+  // True when the current viewer already owns a slot in the linked PartySetup.
+  // We hide the "Sign Up Manually" affordance in that case so a user who already
+  // claimed a slot above can't double-sign as an ad-hoc participant on the same
+  // event.
+  protected isCurrentUserInPartySetup(partySetupId: number | null | undefined): boolean {
+    if (!partySetupId) return false;
+    const detail = this.partySetups.detailFor(partySetupId);
+    if (!detail) return false;
+    const me = this.activity.overview()?.appUser?.id;
+    if (!me) return false;
+    return detail.alliances.some(alliance =>
+      alliance.parties.some(party =>
+        party.slots.some(slot => slot.signedUpAppUserId === me)
+      )
+    );
   }
 }

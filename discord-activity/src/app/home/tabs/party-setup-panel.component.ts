@@ -32,6 +32,12 @@ export class PartySetupPanelComponent {
 
   readonly setupId = input.required<number>();
   readonly linkshellId = input.required<number>();
+  // When true, render the tree as a view-only roster: open slots show an
+  // "Open" placeholder instead of the signup dropdowns + button, and filled
+  // slots hide the Withdraw/Clear actions. Used by the live-event view to
+  // recap "who signed up before this event started" without letting anyone
+  // change the roster mid-run.
+  readonly readOnly = input<boolean>(false);
 
   private readonly drafts = signal<Record<number, SlotSignupDraft>>({});
 

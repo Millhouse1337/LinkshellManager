@@ -295,8 +295,6 @@ public sealed partial class ActivityDataController
         var linkshell = await _dbContext.Linkshells
             .Include(ls => ls.AppUserLinkshells)
             .Include(ls => ls.Events)
-                .ThenInclude(evt => evt.Jobs)
-            .Include(ls => ls.Events)
                 .ThenInclude(evt => evt.AppUserEvents)
             .Include(ls => ls.Events)
                 .ThenInclude(evt => evt.EventLootDetails)
@@ -363,7 +361,6 @@ public sealed partial class ActivityDataController
         }
 
         _dbContext.AppUserLinkshells.RemoveRange(linkshell.AppUserLinkshells);
-        _dbContext.Jobs.RemoveRange(linkshell.Events.SelectMany(evt => evt.Jobs));
         _dbContext.AppUserEvents.RemoveRange(linkshell.Events.SelectMany(evt => evt.AppUserEvents));
         _dbContext.EventLootDetails.RemoveRange(linkshell.Events.SelectMany(evt => evt.EventLootDetails));
         _dbContext.Events.RemoveRange(linkshell.Events);
@@ -432,37 +429,6 @@ public sealed partial class ActivityDataController
 
         if (eventParticipations.Count > 0)
         {
-            var affectedEventIds = eventParticipations.Select(participation => participation.EventId).Distinct().ToList();
-            var jobs = await _dbContext.Jobs.Where(job => affectedEventIds.Contains(job.EventId)).ToListAsync(cancellationToken);
-            var displayNames = new[]
-            {
-                appUser.CharacterName,
-                appUser.UserName
-            }.Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
-
-            foreach (var participation in eventParticipations)
-            {
-                var job = jobs.FirstOrDefault(item =>
-                    item.EventId == participation.EventId &&
-                    item.JobName == participation.JobName &&
-                    item.SubJobName == participation.SubJobName);
-
-                if (job is not null)
-                {
-                    foreach (var name in displayNames)
-                    {
-                        job.Enlisted.RemoveAll(item => item == name);
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(participation.CharacterName))
-                    {
-                        job.Enlisted.RemoveAll(item => item == participation.CharacterName);
-                    }
-
-                    job.SignedUp = job.Enlisted.Count;
-                }
-            }
-
             _dbContext.AppUserEvents.RemoveRange(eventParticipations);
         }
 

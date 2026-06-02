@@ -47,7 +47,6 @@
               </div>
               <div class="event-card__meta">
                 <span>{{ event.participantCount }} participants</span>
-                <span>{{ event.requestedSlots }} requested slots</span>
                 <span class="num">{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
                 @if (canManageLinkshell(event.linkshellId)) {
                   <button type="button" class="btn sm event-card__edit"
@@ -73,18 +72,27 @@
             </button>
 
             @if (!isLiveEventCollapsed(event.id)) {
-            @if (event.jobs.length > 0) {
+            @if (event.partySetupId) {
               <div class="jobs-needed-row">
-                <span class="jobs-needed-row__label">Jobs Requested:</span>
-                <ul class="job-tags jobs-needed-row__tags">
-                  @for (job of event.jobs; track job.id) {
-                    <li>
-                      {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
-                      <span class="num">{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
-                    </li>
-                  }
-                </ul>
+                <span class="jobs-needed-row__label">Party Setup:</span>
+                <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
+                @if (event.partySetupAssignedMonsterName) {
+                  <span class="num">· {{ event.partySetupAssignedMonsterName }}</span>
+                }
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  (click)="toggleLiveEventPartySetupExpanded(event.id, event.partySetupId, event.linkshellId)">
+                  {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View Party Setup' }}
+                </button>
               </div>
+
+              @if (isLiveEventPartySetupExpanded(event.id)) {
+                <app-party-setup-panel
+                  [setupId]="event.partySetupId"
+                  [linkshellId]="event.linkshellId"
+                  [readOnly]="true" />
+              }
             }
 
             @if (event.windowCount > 1) {

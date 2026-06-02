@@ -286,16 +286,6 @@ export interface ActivityMember {
   dateJoined?: string | null;
 }
 
-export interface ActivityEventJob {
-  id: number;
-  jobName?: string | null;
-  subJobName?: string | null;
-  jobType?: string | null;
-  quantity?: number | null;
-  signedUp?: number | null;
-  enlisted: string[];
-}
-
 export interface ActivityEventParticipant {
   id: number;
   appUserId?: string | null;
@@ -359,11 +349,15 @@ export interface ActivityEvent {
   dkpPerHour?: number | null;
   details?: string | null;
   participantCount: number;
-  requestedSlots: number;
   currentParticipation?: ActivityParticipation | null;
   participants: ActivityEventParticipant[];
   loot: ActivityLootEntry[];
-  jobs: ActivityEventJob[];
+  // Optional FK to a PartySetup. When set, the expanded event card fetches
+  // the full setup tree (alliances → parties → slots) on demand from the
+  // PartySetupService.
+  partySetupId?: number | null;
+  partySetupName?: string | null;
+  partySetupAssignedMonsterName?: string | null;
   windowCount: number;
   attendanceWindows: ActivityAttendanceWindow[];
   creatorCharacterName?: string | null;
@@ -734,14 +728,6 @@ export interface ActivityOverview {
   addonConfigured: boolean;
 }
 
-export interface ActivityCreateEventJobInput {
-  jobName: string;
-  subJobName: string;
-  jobType?: string | null;
-  quantity?: number | null;
-  details?: string | null;
-}
-
 export interface ActivityCreateEventInput {
   linkshellId: number;
   eventName: string;
@@ -752,7 +738,9 @@ export interface ActivityCreateEventInput {
   duration?: number | null;
   dkpPerHour?: number | null;
   details?: string | null;
-  jobs: ActivityCreateEventJobInput[];
+  // Optional FK to a PartySetup in the same linkshell. Replaces the old
+  // inline jobs/slots editor.
+  partySetupId?: number | null;
 }
 
 export interface ActivityCreateLinkshellInput {

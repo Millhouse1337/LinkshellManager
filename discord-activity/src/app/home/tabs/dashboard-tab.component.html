@@ -301,11 +301,8 @@
                         }
                       </div>
                       <div class="upcoming-sub">
-                        @if (event.requestedSlots) {
-                          {{ event.participantCount }} signed / {{ event.requestedSlots }} slots
-                        } @else {
-                          {{ event.participantCount }} signed
-                        }
+                        {{ event.participantCount }} signed
+                        @if (event.partySetupName) { · {{ event.partySetupName }} }
                         @if (event.location) { · {{ event.location }} }
                       </div>
                     </div>

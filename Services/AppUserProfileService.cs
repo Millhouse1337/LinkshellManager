@@ -97,8 +97,7 @@ public sealed class AppUserProfileService
 
         // Only rename participations on events that are still in progress. Completed
         // events live in AppUserEventHistory and should keep their original character
-        // attribution; this also keeps the Jobs lookup below from scanning every job
-        // the user ever signed up to.
+        // attribution.
         var participations = await _dbContext.AppUserEvents
             .Where(participation => participation.AppUserId == user.Id && participation.Event!.EndTime == null)
             .ToListAsync(cancellationToken);
@@ -113,46 +112,10 @@ public sealed class AppUserProfileService
             participation.CharacterName = displayName;
         }
 
-        if (participations.Count > 0)
-        {
-            var eventIds = participations
-                .Select(participation => participation.EventId)
-                .Distinct()
-                .ToList();
-
-            var jobs = await _dbContext.Jobs
-                .Where(job => eventIds.Contains(job.EventId))
-                .ToListAsync(cancellationToken);
-
-            foreach (var participation in participations)
-            {
-                var job = jobs.FirstOrDefault(item =>
-                    item.EventId == participation.EventId &&
-                    item.JobName == participation.JobName &&
-                    item.SubJobName == participation.SubJobName);
-
-                if (job is null)
-                {
-                    continue;
-                }
-
-                foreach (var previousName in previousCharacterNames)
-                {
-                    job.Enlisted.RemoveAll(name => string.Equals(name, previousName, StringComparison.OrdinalIgnoreCase));
-                }
-
-                if (!job.Enlisted.Contains(displayName, StringComparer.OrdinalIgnoreCase))
-                {
-                    job.Enlisted.Add(displayName);
-                }
-
-                job.SignedUp = job.Enlisted.Count;
-            }
-        }
-
         // UserManager.UpdateAsync uses our ApplicationDbContext via Identity's
         // EF stores, so the SaveChangesAsync it calls also flushes the membership /
-        // participation / job mutations above in the same transaction.
+        // participation mutations above in the same transaction.
+        _ = previousCharacterNames; // retained for potential future audit logging
         return await _userManager.UpdateAsync(user);
     }
 }

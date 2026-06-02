@@ -274,3 +274,21 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* Open-slot placeholder shown in readOnly mode — same row height as the
+   signup form so the slot card doesn't visually collapse. */
+.ps-slot-open-readonly {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+

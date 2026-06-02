@@ -1,11 +1,17 @@
 @model IEnumerable<EventViewModel>
+@using LinkshellManagerDiscordApp.Models
 @{
     ViewData["Title"] = "Events";
     ViewData["BodyClass"] = "lsm-page";
     var currentCharacter = ViewBag.CharacterName as string;
+    var currentAppUserId = ViewBag.CurrentAppUserId as string;
     var mainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions;
     var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;
     var jobTypeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
+    var signUpRoleOptions = ViewBag.SignUpRoleOptions as List<string> ?? jobTypeOptions.ToList();
+    var signUpMainOptions = ViewBag.SignUpMainJobOptions as List<string> ?? mainJobOptions.ToList();
+    var signUpSubOptions = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList();
+    var eventIndexUrl = Url.Action("Index", "Event") ?? "/Event";
 
     string RelativeTime(DateTime? when)
     {
@@ -20,6 +26,94 @@
         return when.Value.ToString("MMM d");
     }
 }
+
+@* Scoped styles for the inline Party Setup panel + manual signup toggle.
+   Mirrors the Discord Activity "View & Sign Up" UX: click expands the
+   alliance/parties/slots tree inline, with a "Sign Up Manually" affordance
+   at the bottom that's hidden when the user already owns a slot. *@
+<style>
+    .event-ps-row {
+        padding: 12px 16px; border-top: 1px solid var(--border);
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 12px; flex-wrap: wrap;
+    }
+    .event-ps-row__label { font-size: 12px; color: var(--fg-3); }
+    .event-ps-row__label strong { color: var(--fg); margin-left: 4px; }
+    .event-ps-panel { padding: 12px 16px 14px; border-top: 1px solid var(--border); background: rgba(124, 92, 255, 0.04); }
+    .event-ps-panel[hidden] { display: none; }
+
+    .event-ps-alliance-title {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--accent); margin: 6px 0 8px;
+    }
+    .event-ps-party-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .event-ps-party {
+        flex: 1 1 280px; min-width: 260px;
+        border: 1px solid var(--border); border-radius: var(--r-md);
+        padding: 10px; background: var(--surface);
+    }
+    .event-ps-party__head {
+        display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--fg);
+        font-size: 13px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+    }
+    .event-ps-party__count {
+        margin-left: auto; padding: 2px 8px; border-radius: 999px;
+        background: rgba(148, 163, 184, 0.14); font-size: 11px; color: var(--fg-3); font-weight: 600;
+    }
+
+    .event-ps-slot {
+        display: flex; flex-direction: column; gap: 7px; padding: 8px 10px;
+        border-radius: var(--r-sm); background: var(--bg-elev); border: 1px solid var(--border);
+        margin-bottom: 6px;
+    }
+    .event-ps-slot--leader {
+        border-color: rgba(245, 197, 24, 0.42);
+        background: linear-gradient(180deg, rgba(245, 197, 24, 0.06), transparent 60%), var(--bg-elev);
+    }
+    .event-ps-slot__label {
+        display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--fg);
+    }
+    .event-ps-leader-tag {
+        display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+        font-size: 10.5px; font-weight: 700; color: #1a1300;
+        background: linear-gradient(180deg, #ffe27a, #f5b800);
+        box-shadow: 0 0 6px rgba(245, 197, 24, 0.4);
+    }
+    .event-ps-leader-tag svg { width: 11px; height: 11px; fill: currentColor; }
+
+    .event-ps-slot__controls {
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end;
+    }
+    .event-ps-slot__controls select.form-select {
+        flex: 1 1 90px; max-width: 130px; height: 32px; padding: 0 8px; font-size: 12.5px;
+    }
+    .event-ps-chip {
+        display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+        font-size: 12px; font-weight: 600; color: #cdd9ff;
+        background: rgba(124, 92, 255, 0.18); border: 1px solid rgba(124, 92, 255, 0.45);
+    }
+    .event-ps-chip--mine {
+        background: rgba(124, 92, 255, 0.32); color: #f0ecff;
+        border-color: rgba(124, 92, 255, 0.65);
+        box-shadow: 0 0 12px rgba(124, 92, 255, 0.25);
+    }
+    .event-ps-chip .muted { opacity: 0.82; font-weight: 500; }
+
+    .event-manual {
+        margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border);
+        display: flex; flex-direction: column; gap: 10px;
+    }
+    .event-manual__toggle { align-self: center; }
+    .event-manual__locked {
+        padding: 10px 12px; text-align: center; color: var(--fg-3); font-size: 12.5px;
+        border: 1px dashed var(--border); border-radius: var(--r-sm);
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .event-manual__form { padding: 4px 0; }
+    .event-manual__form[hidden] { display: none; }
+
+    .event-ps-empty { padding: 14px; color: var(--fg-3); font-size: 12.5px; }
+</style>
 
 <div class="page-head fade d1">
     <div>
@@ -42,6 +136,15 @@
     </div>
 }
 
+@* PartySetup signup/withdraw posts redirect back here with a flash message
+   stored in TempData. Surface it the same way ToD Tracker does. *@
+@if (TempData["PartySetupMessage"] is string psMsg && !string.IsNullOrWhiteSpace(psMsg))
+{
+    <div class="card fade d1" style="border:1px solid var(--accent);padding:12px 14px;margin-bottom:12px">
+        <div style="color:var(--fg);font-size:14px">@psMsg</div>
+    </div>
+}
+
 @if (!Model.Any())
 {
     <div class="card fade d2">
@@ -54,6 +157,31 @@
 }
 else
 {
+    @* Inline panel toggle: clicking a .event-ps-toggle button shows/hides the
+       matching .event-ps-panel (by id stored in data-target). Same handler
+       also drives the "Sign Up Manually" toggle. On page load, if the URL
+       has a fragment matching a panel id (e.g. "#event-ps-panel-42"), open
+       that panel — used after a PartySetup signup/withdraw round-trip. *@
+    <script>
+        (function () {
+            document.addEventListener('click', function (e) {
+                var t = e.target.closest('.event-ps-toggle, .event-manual__toggle');
+                if (!t) return;
+                var panel = document.getElementById(t.getAttribute('data-target'));
+                if (!panel) return;
+                if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden');
+                else panel.setAttribute('hidden', '');
+            });
+            var hash = window.location.hash;
+            if (hash && hash.length > 1) {
+                var panel = document.getElementById(hash.substring(1));
+                if (panel && panel.classList.contains('event-ps-panel')) {
+                    panel.removeAttribute('hidden');
+                    panel.scrollIntoView({ behavior: 'auto', block: 'center' });
+                }
+            }
+        })();
+    </script>
     <div class="fade d2" style="display:grid;gap:16px">
         @foreach (var item in Model)
         {
@@ -126,14 +254,210 @@ else
                     <div style="padding:0 16px 12px;color:var(--fg-3);font-size:13px">@item.Event.Details</div>
                 }
 
-                @if (item.Jobs.Count == 0 && !isLive && !signedUp)
+                @{
+                    var hasLinkedBoard = item.LinkedPartySetupBoard != null;
+                    var setupPanelId = $"event-ps-panel-{item.Event.Id}";
+                    var manualFormId = $"event-manual-form-{item.Event.Id}";
+                    var userOwnsSlot = item.CurrentUserOwnsLinkedPartySetupSlot;
+                    // Per-event returnUrl with a fragment so the PartySetup
+                    // controller's redirect lands back here AND re-opens the
+                    // matching event's panel (page-load JS reads the hash).
+                    var returnUrl = $"{eventIndexUrl}#{setupPanelId}";
+                }
+
+                @if (hasLinkedBoard)
+                {
+                    var board = item.LinkedPartySetupBoard!;
+                    <div class="event-ps-row">
+                        <div class="event-ps-row__label">
+                            <span>Linked party setup:</span>
+                            <strong>@(item.LinkedPartySetupName ?? "(unnamed setup)")</strong>
+                            @if (!string.IsNullOrWhiteSpace(item.LinkedPartySetupMonsterName))
+                            {
+                                <span class="tag" style="margin-left:6px">@item.LinkedPartySetupMonsterName</span>
+                            }
+                        </div>
+                        <button type="button" class="btn ghost sm event-ps-toggle"
+                                data-target="@setupPanelId">
+                            View &amp; Sign Up
+                        </button>
+                    </div>
+
+                    @* Inline party setup tree. Hidden by default; the toggle
+                       button above flips [hidden] off. Slot signup/withdraw
+                       posts go through PartySetupController and return to this
+                       page via the returnUrl. *@
+                    <div id="@setupPanelId" class="event-ps-panel" hidden>
+                        @if (!board.Alliances.Any())
+                        {
+                            <div class="event-ps-empty">This party setup has no alliances yet.</div>
+                        }
+                        @foreach (var alliance in board.Alliances)
+                        {
+                            <div class="event-ps-alliance-title">@alliance.Name</div>
+                            <div class="event-ps-party-grid">
+                                @foreach (var party in alliance.Parties)
+                                {
+                                    <div class="event-ps-party">
+                                        <div class="event-ps-party__head">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;color:var(--accent)">
+                                                <path d="M16 11a4 4 0 1 0-4-4"/><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M2 20c0-3 2.5-5 6-5s6 2 6 5"/><path d="M14 15c3 0 6 1.6 6 5"/>
+                                            </svg>
+                                            <span>@party.Name</span>
+                                            <span class="event-ps-party__count">@party.Slots.Count</span>
+                                        </div>
+                                        @foreach (var slot in party.Slots)
+                                        {
+                                            var mine = !slot.IsOpen && slot.SignedUpAppUserId == currentAppUserId;
+                                            var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
+                                            var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
+                                            var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
+                                            <div class="event-ps-slot @(slot.IsPartyLeader ? "event-ps-slot--leader" : null)">
+                                                <div class="event-ps-slot__label">
+                                                    @if (slot.IsPartyLeader)
+                                                    {
+                                                        <span class="event-ps-leader-tag" title="Party leader">
+                                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5l4.6 3.2L12 3.5l4.9 7.2 4.6-3.2-1.9 11.5H4.4L2.5 7.5z"/></svg>
+                                                            Leader
+                                                        </span>
+                                                    }
+                                                    <span>@slot.Display</span>
+                                                </div>
+                                                @if (slot.IsOpen)
+                                                {
+                                                    <form class="event-ps-slot__controls" asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                        @if (!slotRequiresRole)
+                                                        {
+                                                            <select name="role" required class="form-select">
+                                                                <option value="">Role…</option>
+                                                                @foreach (var r in signUpRoleOptions) { <option value="@r">@r</option> }
+                                                            </select>
+                                                        }
+                                                        @if (!slotRequiresMain)
+                                                        {
+                                                            <select name="mainJob" required class="form-select">
+                                                                <option value="">Main…</option>
+                                                                @foreach (var j in signUpMainOptions) { <option value="@j">@j</option> }
+                                                            </select>
+                                                        }
+                                                        @if (!slotRequiresSub)
+                                                        {
+                                                            <select name="subJob" class="form-select">
+                                                                <option value="">Sub (opt)</option>
+                                                                @foreach (var j in signUpSubOptions) { <option value="@j">@j</option> }
+                                                            </select>
+                                                        }
+                                                        <button type="submit" class="btn primary sm">Sign up</button>
+                                                    </form>
+                                                }
+                                                else if (mine)
+                                                {
+                                                    <div class="event-ps-slot__controls">
+                                                        <span class="event-ps-chip event-ps-chip--mine">
+                                                            @slot.SignedUpCharacterName (you)
+                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                            {
+                                                                <span class="muted">· @slot.SignedUpJobsDisplay</span>
+                                                            }
+                                                        </span>
+                                                        <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)">Withdraw</button>
+                                                        </form>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="event-ps-slot__controls">
+                                                        <span class="event-ps-chip">
+                                                            @slot.SignedUpCharacterName
+                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                            {
+                                                                <span class="muted">· @slot.SignedUpJobsDisplay</span>
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                        @if (!party.Slots.Any())
+                                        {
+                                            <div class="event-ps-empty">No slots.</div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @* Sign Up Manually toggle, mirroring the Discord Activity:
+                           hidden when the viewer already owns a slot above. *@
+                        @if (!isLive && !signedUp)
+                        {
+                            <div class="event-manual">
+                                @if (userOwnsSlot)
+                                {
+                                    <div class="event-manual__locked">
+                                        You're signed up to a slot above. Withdraw from it first if you want to sign up as a different job.
+                                    </div>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn ghost sm event-manual__toggle"
+                                            data-target="@manualFormId">
+                                        Sign Up Manually
+                                    </button>
+                                    <div id="@manualFormId" class="event-manual__form" hidden>
+                                        <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
+                                            Sign up as a job that isn't in the party setup above.
+                                        </div>
+                                        <form asp-action="SignUp" method="post">
+                                            <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                            <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                                                <div class="field">
+                                                    <label>Role</label>
+                                                    <select class="form-select" name="jobType" required>
+                                                        <option value="">Select role</option>
+                                                        @foreach (var jobTypeOption in jobTypeOptions) { <option value="@jobTypeOption">@jobTypeOption</option> }
+                                                    </select>
+                                                </div>
+                                                <div class="field">
+                                                    <label>Main job</label>
+                                                    <select class="form-select" name="jobName" required>
+                                                        <option value="">Select main job</option>
+                                                        @foreach (var jobOption in mainJobOptions) { <option value="@jobOption">@jobOption</option> }
+                                                    </select>
+                                                </div>
+                                                <div class="field">
+                                                    <label>Sub job</label>
+                                                    <select class="form-select" name="subJobName" required>
+                                                        <option value="">Select sub job</option>
+                                                        @foreach (var jobOption in subJobOptions) { <option value="@jobOption">@jobOption</option> }
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                                                <button class="btn primary sm" type="submit">Sign up</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* For events with NO linked party setup, keep the original
+                   bare-bones ad-hoc signup form so members can still join. *@
+                @if (!hasLinkedBoard && !isLive && !signedUp)
                 {
                     <div style="padding:12px 16px;border-top:1px solid var(--border)">
                         <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
-                            No party setup specified — pick the job you'll bring and sign up.
+                            Pick the job you'll bring and sign up.
                         </div>
                         <form asp-action="SignUp" method="post">
-                            <input type="hidden" name="jobId" value="0" />
                             <input type="hidden" name="eventId" value="@item.Event.Id" />
                             <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
                                 <div class="field">
@@ -173,7 +497,7 @@ else
                         </form>
                     </div>
                 }
-                else if (item.Jobs.Count == 0 && !isLive && signedUp)
+                else if (!isLive && signedUp)
                 {
                     var ownSignup = item.AppUserEvents.FirstOrDefault(entry => entry.CharacterName == currentCharacter);
                     <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -186,62 +510,10 @@ else
                             }
                         </div>
                         <form asp-action="Unsign" method="post" style="display:inline">
-                            <input type="hidden" name="jobId" value="0" />
                             <input type="hidden" name="eventId" value="@item.Event.Id" />
                             <button class="btn ghost sm" type="submit">Unsign</button>
                         </form>
                     </div>
-                }
-
-                @if (item.Jobs.Count > 0)
-                {
-                    <table class="table themed">
-                        <thead>
-                            <tr>
-                                <th>Job</th>
-                                <th>Role</th>
-                                <th>Qty</th>
-                                <th>Signed</th>
-                                <th>Roster</th>
-                                <th style="text-align:right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var job in item.Jobs)
-                            {
-                                var onThisJob = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter && entry.JobName == job.JobName && entry.SubJobName == job.SubJobName);
-                                <tr>
-                                    <td>@job.JobName/@job.SubJobName</td>
-                                    <td><span class="tag">@job.JobType</span></td>
-                                    <td>@(job.Quantity ?? 0)</td>
-                                    <td>@(job.SignedUp ?? 0)</td>
-                                    <td style="color:var(--fg-3);font-size:12px">@(job.Enlisted.Count > 0 ? string.Join(", ", job.Enlisted) : "—")</td>
-                                    <td style="text-align:right">
-                                        @if (isLive)
-                                        {
-                                            <span style="color:var(--fg-4)">—</span>
-                                        }
-                                        else if (onThisJob)
-                                        {
-                                            <form asp-action="Unsign" method="post" style="display:inline">
-                                                <input type="hidden" name="jobId" value="@job.Id" />
-                                                <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                                <button class="btn ghost sm" type="submit">Unsign</button>
-                                            </form>
-                                        }
-                                        else
-                                        {
-                                            <form asp-action="SignUp" method="post" style="display:inline">
-                                                <input type="hidden" name="jobId" value="@job.Id" />
-                                                <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                                <button class="btn primary sm" type="submit">Sign up</button>
-                                            </form>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
                 }
 
                 <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--fg-3)">

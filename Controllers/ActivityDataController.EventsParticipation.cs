@@ -13,6 +13,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
+    // Ad-hoc event signup. Slot-level claiming lives on the linked PartySetup's
+    // own signup endpoint (see ActivityDataController.PartySetup.cs).
     [HttpPost("events/{eventId:int}/signup")]
     public async Task<IActionResult> SignUpAsync(int eventId, [FromBody] ActivityEventSignupRequest request, CancellationToken cancellationToken)
     {
@@ -27,100 +29,35 @@ public sealed partial class ActivityDataController
 
         var displayName = appUser.CharacterName ?? appUser.UserName ?? "Unknown";
 
-        if (request.JobId <= 0)
+        var eventEntity = await _dbContext.Events
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
         {
-            var eventEntity = await _dbContext.Events
-                .Include(item => item.Jobs)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
-
-            if (eventEntity is null)
-            {
-                return NotFound(new { error = "The selected event was not found." });
-            }
-
-            if (eventEntity.Jobs.Count > 0)
-            {
-                return BadRequest(new { error = "A job selection is required." });
-            }
-
-            var existingNoJobSignup = await _dbContext.AppUserEvents
-                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
-
-            if (existingNoJobSignup is not null)
-            {
-                _dbContext.AppUserEvents.Remove(existingNoJobSignup);
-            }
-
-            // For events with no pre-defined party setup, accept the user's
-            // ad-hoc Main/Sub/Role from the body. Strings are trimmed and
-            // null-coalesced so blank picks land as null instead of "".
-            static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-            _dbContext.AppUserEvents.Add(new AppUserEvent
-            {
-                AppUserId = appUser.Id,
-                EventId = eventId,
-                CharacterName = displayName,
-                JobName = Clean(request.JobName),
-                SubJobName = Clean(request.SubJobName),
-                JobType = Clean(request.JobType),
-                EventDkp = 0,
-                StartTime = eventEntity.CommencementStartTime
-            });
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new { success = true });
+            return NotFound(new { error = "The selected event was not found." });
         }
 
-        var job = await _dbContext.Jobs
-            .Include(item => item.Event)
-            .FirstOrDefaultAsync(item => item.Id == request.JobId && item.EventId == eventId, cancellationToken);
-
-        if (job?.Event is null)
-        {
-            return NotFound(new { error = "The selected event job was not found." });
-        }
-
-        var existingSignup = await _dbContext.AppUserEvents
+        var existing = await _dbContext.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
 
-        if (existingSignup is not null)
+        if (existing is not null)
         {
-            var previousJob = await _dbContext.Jobs
-                .FirstOrDefaultAsync(item =>
-                    item.EventId == eventId &&
-                    item.JobName == existingSignup.JobName &&
-                    item.SubJobName == existingSignup.SubJobName,
-                    cancellationToken);
-
-            if (previousJob is not null)
-            {
-                previousJob.Enlisted.RemoveAll(name => name == existingSignup.CharacterName || name == displayName);
-                previousJob.SignedUp = previousJob.Enlisted.Count;
-            }
-
-            _dbContext.AppUserEvents.Remove(existingSignup);
+            _dbContext.AppUserEvents.Remove(existing);
         }
 
-        job.Enlisted ??= new List<string>();
-        if (!job.Enlisted.Contains(displayName))
-        {
-            job.Enlisted.Add(displayName);
-        }
-
-        job.SignedUp = job.Enlisted.Count;
+        static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
         _dbContext.AppUserEvents.Add(new AppUserEvent
         {
             AppUserId = appUser.Id,
             EventId = eventId,
             CharacterName = displayName,
-            JobName = job.JobName,
-            SubJobName = job.SubJobName,
-            JobType = job.JobType,
+            JobName = Clean(request.JobName),
+            SubJobName = Clean(request.SubJobName),
+            JobType = Clean(request.JobType),
             EventDkp = 0,
-            StartTime = job.Event.CommencementStartTime
+            StartTime = eventEntity.CommencementStartTime
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -211,20 +148,6 @@ public sealed partial class ActivityDataController
         if (participation is null)
         {
             return NotFound(new { error = "No signup was found for the current app user." });
-        }
-
-        var job = await _dbContext.Jobs
-            .FirstOrDefaultAsync(item =>
-                item.EventId == eventId &&
-                item.JobName == participation.JobName &&
-                item.SubJobName == participation.SubJobName,
-                cancellationToken);
-
-        if (job is not null)
-        {
-            var displayName = appUser.CharacterName ?? appUser.UserName ?? "Unknown";
-            job.Enlisted.RemoveAll(name => name == participation.CharacterName || name == displayName);
-            job.SignedUp = job.Enlisted.Count;
         }
 
         _dbContext.AppUserEvents.Remove(participation);

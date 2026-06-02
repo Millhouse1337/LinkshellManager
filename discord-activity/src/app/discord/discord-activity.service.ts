@@ -63,7 +63,6 @@ export type {
   ActivityAuctionItemInput,
   ActivityCreateAuctionInput,
   ActivityCreateEventInput,
-  ActivityCreateEventJobInput,
   ActivityCreateLinkshellInput,
   ActivityCreateTodInput,
   ActivityDkpAddCandidate,

@@ -47,6 +47,15 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Use valid local start and end times in the event form." });
         }
 
+        // Cross-linkshell defense: a PartySetup attached to an event must
+        // belong to the same linkshell as the event. The frontend dropdown
+        // is already filtered, but verify server-side too.
+        if (request.PartySetupId.HasValue &&
+            !await PartySetupBelongsToLinkshellAsync(request.PartySetupId.Value, request.LinkshellId, cancellationToken))
+        {
+            return BadRequest(new { error = "Selected party setup does not belong to this linkshell." });
+        }
+
         var eventEntity = new Event
         {
             LinkshellId = request.LinkshellId,
@@ -59,29 +68,21 @@ public sealed partial class ActivityDataController
             Duration = request.Duration,
             DkpPerHour = request.DkpPerHour,
             Details = request.Details?.Trim(),
+            PartySetupId = request.PartySetupId,
             TimeStamp = DateTime.UtcNow
         };
 
         _dbContext.Events.Add(eventEntity);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        foreach (var job in request.Jobs.Where(job => !string.IsNullOrWhiteSpace(job.JobName)))
-        {
-            _dbContext.Jobs.Add(new Job
-            {
-                EventId = eventEntity.Id,
-                JobName = job.JobName?.Trim(),
-                SubJobName = job.SubJobName?.Trim(),
-                JobType = job.JobType?.Trim(),
-                Quantity = job.Quantity,
-                SignedUp = 0,
-                Enlisted = new List<string>(),
-                Details = job.Details?.Trim()
-            });
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true, eventId = eventEntity.Id });
+    }
+
+    private async Task<bool> PartySetupBelongsToLinkshellAsync(
+        int partySetupId, int linkshellId, CancellationToken cancellationToken)
+    {
+        return await _dbContext.PartySetups
+            .AnyAsync(setup => setup.Id == partySetupId && setup.LinkshellId == linkshellId, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/update")]
@@ -116,7 +117,6 @@ public sealed partial class ActivityDataController
         }
 
         var eventEntity = await _dbContext.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
 
@@ -146,15 +146,10 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "A live event's linkshell cannot be changed. End the event first." });
         }
 
-        var hasJobChanges = eventEntity.Jobs.Count != request.Jobs.Count ||
-                            eventEntity.Jobs
-                                .Select(CreateJobSignature)
-                                .OrderBy(signature => signature)
-                                .SequenceEqual(request.Jobs.Select(CreateJobSignature).OrderBy(signature => signature)) == false;
-
-        if (eventEntity.AppUserEvents.Count > 0 && hasJobChanges)
+        if (request.PartySetupId.HasValue &&
+            !await PartySetupBelongsToLinkshellAsync(request.PartySetupId.Value, request.LinkshellId, cancellationToken))
         {
-            return BadRequest(new { error = "Jobs cannot be changed after players have signed up. Remove signups or keep the existing job list." });
+            return BadRequest(new { error = "Selected party setup does not belong to this linkshell." });
         }
 
         eventEntity.LinkshellId = request.LinkshellId;
@@ -166,24 +161,7 @@ public sealed partial class ActivityDataController
         eventEntity.Duration = request.Duration;
         eventEntity.DkpPerHour = request.DkpPerHour;
         eventEntity.Details = request.Details?.Trim();
-
-        _dbContext.Jobs.RemoveRange(eventEntity.Jobs);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        foreach (var job in request.Jobs.Where(job => !string.IsNullOrWhiteSpace(job.JobName)))
-        {
-            _dbContext.Jobs.Add(new Job
-            {
-                EventId = eventEntity.Id,
-                JobName = job.JobName?.Trim(),
-                SubJobName = job.SubJobName?.Trim(),
-                JobType = job.JobType?.Trim(),
-                Quantity = job.Quantity,
-                SignedUp = 0,
-                Enlisted = new List<string>(),
-                Details = job.Details?.Trim()
-            });
-        }
+        eventEntity.PartySetupId = request.PartySetupId;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -241,26 +219,9 @@ public sealed partial class ActivityDataController
                 .Where(p => absentSet.Contains(p.Id))
                 .ToList();
 
-            if (absentParticipations.Count > 0)
+            foreach (var participation in absentParticipations)
             {
-                var jobs = await _dbContext.Jobs
-                    .Where(job => job.EventId == eventId)
-                    .ToListAsync(cancellationToken);
-
-                foreach (var participation in absentParticipations)
-                {
-                    var job = jobs.FirstOrDefault(j =>
-                        j.JobName == participation.JobName &&
-                        j.SubJobName == participation.SubJobName);
-
-                    if (job is not null)
-                    {
-                        job.Enlisted.RemoveAll(name => name == participation.CharacterName);
-                        job.SignedUp = job.Enlisted.Count;
-                    }
-
-                    _dbContext.AppUserEvents.Remove(participation);
-                }
+                _dbContext.AppUserEvents.Remove(participation);
             }
         }
 
@@ -468,9 +429,6 @@ public sealed partial class ActivityDataController
         _dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
         _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
         _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
-
-        var eventJobs = await _dbContext.Jobs.Where(job => job.EventId == eventId).ToListAsync(cancellationToken);
-        _dbContext.Jobs.RemoveRange(eventJobs);
         _dbContext.Events.Remove(eventEntity);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -490,7 +448,6 @@ public sealed partial class ActivityDataController
         }
 
         var eventEntity = await _dbContext.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
             .Include(evt => evt.EventLootDetails)
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
@@ -511,7 +468,6 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
         }
 
-        _dbContext.Jobs.RemoveRange(eventEntity.Jobs);
         _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
         _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
         _dbContext.Events.Remove(eventEntity);

@@ -899,6 +899,46 @@
   margin-top: 4px;
 }
 
+// Yes / No segmented toggle. Used in the queue panel's "Party Setup (Optional)"
+// header in place of the older "Not specified" checkbox so the answer reads as
+// a binary choice with the active option clearly highlighted.
+.yesno-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.yesno-toggle__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.yesno-toggle__btn + .yesno-toggle__btn {
+  border-left: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+}
+
+.yesno-toggle__btn:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+}
+
+.yesno-toggle__btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .tod-toggle {
   display: inline-flex !important;
   align-items: center;

@@ -143,73 +143,39 @@
       <div class="create-form__jobs">
         <div class="panel__header">
           <div class="panel__header-title-row">
-            <h3>Minimal Party Setup (Optional)</h3>
-            <label class="tod-toggle">
-              <input type="checkbox" [(ngModel)]="partySetupNotSpecified" name="partySetupNotSpecified" />
-              <span>Not specified</span>
-            </label>
+            <h3>Party Setup (Optional)</h3>
+            <div class="yesno-toggle" role="radiogroup" aria-label="Use a party setup">
+              <button type="button" class="yesno-toggle__btn"
+                [class.is-active]="!partySetupNotSpecified"
+                [attr.aria-checked]="!partySetupNotSpecified"
+                role="radio"
+                (click)="onPartySetupNotSpecifiedChange(false)">Yes</button>
+              <button type="button" class="yesno-toggle__btn"
+                [class.is-active]="partySetupNotSpecified"
+                [attr.aria-checked]="partySetupNotSpecified"
+                role="radio"
+                (click)="onPartySetupNotSpecifiedChange(true)">No</button>
+            </div>
           </div>
-          @if (!partySetupNotSpecified) {
-            <button type="button" class="action-button action-button--secondary" (click)="addJobRow()">Add job</button>
-          }
         </div>
 
         @if (!partySetupNotSpecified) {
-        @for (job of createModel.jobs; track $index) {
-          <div class="job-editor">
-            <div class="job-editor__fields">
-            <label>
-              <span>Role</span>
-              <select [(ngModel)]="job.jobType" [name]="'jobType' + $index">
-                <option value="">Not specified</option>
-                @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
-                  <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
-                }
-              </select>
-            </label>
-            <label>
-              <span>Main job</span>
-              <select [(ngModel)]="job.jobName" [name]="'jobName' + $index">
-                <option value="">Select main job</option>
-                @for (jobOption of mainJobOptions; track jobOption) {
-                  <option [value]="jobOption">{{ jobOption }}</option>
-                }
-              </select>
-            </label>
-            <label>
-              <span>Sub job</span>
-              <select [(ngModel)]="job.subJobName" [name]="'subJobName' + $index">
-                <option value="">Select sub job</option>
-                @for (jobOption of subJobOptions; track jobOption) {
-                  <option [value]="jobOption">{{ jobOption }}</option>
-                }
-              </select>
-            </label>
-            <label>
-              <span>Quantity</span>
-              <div class="tod-day-number-row">
-                @if (!jobQuantityNotSpecified[$index]) {
-                  <input [(ngModel)]="job.quantity" [name]="'jobQuantity' + $index" type="number" min="1" />
-                } @else {
-                  <input value="Not specified" disabled />
-                }
-                <label class="tod-toggle">
-                  <input type="checkbox"
-                    [ngModel]="jobQuantityNotSpecified[$index]"
-                    (ngModelChange)="onJobQuantityNotSpecifiedChange($index, $event)"
-                    [name]="'jobQuantityNotSpec' + $index" />
-                  <span>Not specified</span>
-                </label>
-              </div>
-            </label>
-            </div>
-            <label class="job-editor__details">
-              <span>Details</span>
-              <input [(ngModel)]="job.details" [name]="'jobDetails' + $index" />
-            </label>
-            <button type="button" class="action-button action-button--secondary action-button--danger job-editor__remove" (click)="removeJobRow($index)">Remove</button>
-          </div>
-        }
+          <label class="job-editor__details">
+            <span>Linked party setup</span>
+            <select [(ngModel)]="createModel.partySetupId" name="partySetupId">
+              <option [ngValue]="null">— Select party setup —</option>
+              @for (setup of availablePartySetups(); track setup.id) {
+                <option [ngValue]="setup.id">
+                  {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
+                </option>
+              }
+            </select>
+          </label>
+          @if (availablePartySetups().length === 0) {
+            <p class="ad-hoc-signup__hint">
+              No party setups exist for this linkshell yet. Create one from the Party Setup tab first.
+            </p>
+          }
         }
       </div>
 
@@ -261,22 +227,93 @@
             </div>
             <div class="queue-card__meta">
               <span>{{ event.participantCount }} participants</span>
-              <span>{{ event.requestedSlots }} slots</span>
             </div>
           </div>
 
-          @if (event.jobs.length > 0) {
+          @if (event.partySetupId) {
             <div class="jobs-needed-row">
-              <span class="jobs-needed-row__label">Jobs Needed:</span>
-              <ul class="job-tags jobs-needed-row__tags">
-                @for (job of event.jobs; track job.id) {
-                  <li>
-                    {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
-                    <span>{{ job.signedUp ?? 0 }}/{{ job.quantity ?? 0 }}</span>
-                  </li>
-                }
-              </ul>
+              <span class="jobs-needed-row__label">Party Setup:</span>
+              <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
+              @if (event.partySetupAssignedMonsterName) {
+                <span class="ad-hoc-signup__hint">{{ event.partySetupAssignedMonsterName }}</span>
+              }
+              <button
+                type="button"
+                class="action-button action-button--secondary"
+                (click)="togglePartySetupExpanded(event.partySetupId, event.linkshellId)">
+                {{ isPartySetupExpanded(event.partySetupId) ? 'Hide slots' : 'View &amp; Sign Up' }}
+              </button>
             </div>
+
+            @if (isPartySetupExpanded(event.partySetupId)) {
+              <app-party-setup-panel
+                [setupId]="event.partySetupId"
+                [linkshellId]="event.linkshellId" />
+
+              @if (!event.currentParticipation) {
+                <div class="manual-signup">
+                  @if (isCurrentUserInPartySetup(event.partySetupId)) {
+                    <p class="manual-signup__locked-hint">
+                      You're signed up to a slot above. Withdraw from it first if you want to sign up as a different job.
+                    </p>
+                  } @else if (!isManualSignupExpanded(event.id)) {
+                    <button
+                      type="button"
+                      class="action-button action-button--secondary manual-signup__toggle"
+                      (click)="toggleManualSignupExpanded(event.id)">
+                      Sign Up Manually
+                    </button>
+                  } @else {
+                    <div class="manual-signup__slot">
+                      <div class="manual-signup__head">
+                        <span class="manual-signup__label">Sign Up Manually</span>
+                        <button
+                          type="button"
+                          class="manual-signup__close"
+                          aria-label="Hide manual signup"
+                          (click)="toggleManualSignupExpanded(event.id)">×</button>
+                      </div>
+                      <p class="manual-signup__hint">
+                        Sign up as a job that isn't in the party setup above.
+                      </p>
+                      <div class="manual-signup__row">
+                        <select
+                          [(ngModel)]="getSignupDraft(event.id).jobType"
+                          [name]="'signupJobType' + event.id">
+                          <option value="">Role&hellip;</option>
+                          @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
+                            <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
+                          }
+                        </select>
+                        <select
+                          [(ngModel)]="getSignupDraft(event.id).jobName"
+                          [name]="'signupJobName' + event.id">
+                          <option value="">Main job&hellip;</option>
+                          @for (jobOption of mainJobOptions; track jobOption) {
+                            <option [value]="jobOption">{{ jobOption }}</option>
+                          }
+                        </select>
+                        <select
+                          [(ngModel)]="getSignupDraft(event.id).subJobName"
+                          [name]="'signupSubJobName' + event.id">
+                          <option value="">Sub job&hellip;</option>
+                          @for (jobOption of subJobOptions; track jobOption) {
+                            <option [value]="jobOption">{{ jobOption }}</option>
+                          }
+                        </select>
+                        <button
+                          type="button"
+                          class="btn sm primary manual-signup__btn"
+                          [disabled]="activity.busyEventId() === event.id || !isSignupDraftComplete(event.id)"
+                          (click)="submitAdHocSignup(event.id)">
+                          {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            }
           }
 
           @if (event.currentParticipation) {
@@ -350,10 +387,10 @@
             </div>
           } @else {
             <div class="event-action-grid">
-              @if (event.jobs.length === 0) {
+              @if (!event.partySetupId) {
                 <div class="ad-hoc-signup">
                   <p class="ad-hoc-signup__hint">
-                    No party setup specified — pick the job you'll bring and sign up.
+                    Pick the job you'll bring and sign up.
                   </p>
                   <div class="ad-hoc-signup__grid">
                     <label>
@@ -398,16 +435,6 @@
                     {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
                   </button>
                 </div>
-              } @else {
-                @for (job of event.jobs; track job.id) {
-                  <button
-                    type="button"
-                    class="action-button"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="activity.signUpForEvent(event.id, job.id)">
-                    Join as: {{ job.jobName || 'Job' }}/{{ job.subJobName || 'Sub' }}
-                  </button>
-                }
               }
               @if (canManageLinkshell(event.linkshellId)) {
                 <div class="event-action-grid__manage">

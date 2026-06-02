@@ -53,10 +53,24 @@ public partial class EventController : Controller
             eventDraft.LinkshellId = selectedLinkshellId;
         }
 
+        var availablePartySetups = selectedLinkshellId > 0
+            ? await _context.PartySetups
+                .Where(setup => setup.LinkshellId == selectedLinkshellId)
+                .OrderBy(setup => setup.Name)
+                .Select(setup => new PartySetupOption
+                {
+                    Id = setup.Id,
+                    Name = setup.Name,
+                    AssignedMonsterName = setup.AssignedMonsterName
+                })
+                .ToListAsync()
+            : new List<PartySetupOption>();
+
         return new EventViewModel
         {
             Event = eventDraft,
-            Jobs = source?.Jobs ?? new List<Job>(),
+            PartySetupId = source?.PartySetupId ?? eventDraft.PartySetupId,
+            AvailablePartySetups = availablePartySetups,
             Linkshells = linkshells,
             LinkshellId = selectedLinkshellId
         };

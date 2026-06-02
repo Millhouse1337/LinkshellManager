@@ -47,27 +47,31 @@
                     </div>
 
                     @if (isOpen(slot)) {
-                      <div class="ps-signup">
-                        @if (needsRole(slot)) {
-                          <select [ngModel]="draftFor(slot.slotId).role" (ngModelChange)="setDraft(slot.slotId, { role: $event })">
-                            <option value="">Role&hellip;</option>
-                            @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
-                          </select>
-                        }
-                        @if (needsMainJob(slot)) {
-                          <select [ngModel]="draftFor(slot.slotId).mainJob" (ngModelChange)="setDraft(slot.slotId, { mainJob: $event })">
-                            <option value="">Main job&hellip;</option>
-                            @for (j of mainJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
-                          </select>
-                        }
-                        @if (needsSubJob(slot)) {
-                          <select [ngModel]="draftFor(slot.slotId).subJob" (ngModelChange)="setDraft(slot.slotId, { subJob: $event })">
-                            <option value="">Sub job&hellip;</option>
-                            @for (j of subJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
-                          </select>
-                        }
-                        <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
-                      </div>
+                      @if (readOnly()) {
+                        <div class="ps-slot-open-readonly">Open</div>
+                      } @else {
+                        <div class="ps-signup">
+                          @if (needsRole(slot)) {
+                            <select [ngModel]="draftFor(slot.slotId).role" (ngModelChange)="setDraft(slot.slotId, { role: $event })">
+                              <option value="">Role&hellip;</option>
+                              @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
+                            </select>
+                          }
+                          @if (needsMainJob(slot)) {
+                            <select [ngModel]="draftFor(slot.slotId).mainJob" (ngModelChange)="setDraft(slot.slotId, { mainJob: $event })">
+                              <option value="">Main job&hellip;</option>
+                              @for (j of mainJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                            </select>
+                          }
+                          @if (needsSubJob(slot)) {
+                            <select [ngModel]="draftFor(slot.slotId).subJob" (ngModelChange)="setDraft(slot.slotId, { subJob: $event })">
+                              <option value="">Sub job&hellip;</option>
+                              @for (j of subJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                            </select>
+                          }
+                          <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
+                        </div>
+                      }
                     } @else {
                       <div class="ps-slot-member">
                         <span class="ps-member-avatar" aria-hidden="true">{{ (slot.signedUpCharacterName || '?').charAt(0) }}</span>
@@ -75,10 +79,12 @@
                           <span class="ps-name">{{ slot.signedUpCharacterName }}</span>
                           @if (signedUpJobs(slot)) { <span class="ps-jobs">{{ signedUpJobs(slot) }}</span> }
                         </span>
-                        @if (isMine(slot)) {
-                          <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Withdraw</button>
-                        } @else if (canManage()) {
-                          <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Clear</button>
+                        @if (!readOnly()) {
+                          @if (isMine(slot)) {
+                            <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Withdraw</button>
+                          } @else if (canManage()) {
+                            <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Clear</button>
+                          }
                         }
                       </div>
                     }

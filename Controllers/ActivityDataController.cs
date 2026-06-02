@@ -150,16 +150,6 @@ public sealed partial class ActivityDataController : ControllerBase
         };
     }
 
-    private static string CreateJobSignature(ActivityCreateJobRequest job)
-    {
-        return $"{job.JobName?.Trim()}|{job.SubJobName?.Trim()}|{job.JobType?.Trim()}|{job.Quantity}";
-    }
-
-    private static string CreateJobSignature(Job job)
-    {
-        return $"{job.JobName?.Trim()}|{job.SubJobName?.Trim()}|{job.JobType?.Trim()}|{job.Quantity}";
-    }
-
     private bool TryConvertUserTimeZoneToUtc(string? localDateTimeValue, string? timeZoneId, out DateTime? utcDateTime)
         => _timeZones.TryParseUserLocalOrUtc(localDateTimeValue, timeZoneId, out utcDateTime);
 }

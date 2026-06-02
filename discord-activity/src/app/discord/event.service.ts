@@ -16,9 +16,12 @@ export class EventService {
 
   readonly busyEventId = signal<number | null>(null);
 
+  // Ad-hoc event signup. Slot-level claiming for an event's linked PartySetup
+  // is done through PartySetupService.signUp(...) — this method always posts
+  // an ad-hoc body (user's chosen Main/Sub/Role).
   async signUpForEvent(
     eventId: number,
-    jobId: number,
+    _legacyJobId: number,
     adHocJob?: ActivityQuickJoinInput
   ): Promise<void> {
     this.busyEventId.set(eventId);
@@ -26,10 +29,8 @@ export class EventService {
     this.auth.setActionMessage(null);
 
     try {
-      const body: { jobId: number; jobName?: string; subJobName?: string; jobType?: string } = {
-        jobId
-      };
-      if (jobId <= 0 && adHocJob) {
+      const body: { jobName?: string; subJobName?: string; jobType?: string } = {};
+      if (adHocJob) {
         body.jobName = adHocJob.jobName;
         body.subJobName = adHocJob.subJobName;
         body.jobType = adHocJob.jobType;
@@ -75,15 +76,7 @@ export class EventService {
         duration: input.duration ?? null,
         dkpPerHour: input.dkpPerHour ?? null,
         details: input.details || null,
-        jobs: input.jobs
-          .filter(job => job.jobName.trim().length > 0)
-          .map(job => ({
-            jobName: job.jobName,
-            subJobName: job.subJobName,
-            jobType: job.jobType || null,
-            quantity: job.quantity ?? null,
-            details: job.details || null
-          }))
+        partySetupId: input.partySetupId ?? null
       });
 
       await this.auth.refreshOverview();
@@ -109,15 +102,7 @@ export class EventService {
         duration: input.duration ?? null,
         dkpPerHour: input.dkpPerHour ?? null,
         details: input.details || null,
-        jobs: input.jobs
-          .filter(job => job.jobName.trim().length > 0)
-          .map(job => ({
-            jobName: job.jobName,
-            subJobName: job.subJobName,
-            jobType: job.jobType || null,
-            quantity: job.quantity ?? null,
-            details: job.details || null
-          }))
+        partySetupId: input.partySetupId ?? null
       });
 
       await this.auth.refreshOverview();

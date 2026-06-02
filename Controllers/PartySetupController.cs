@@ -127,7 +127,7 @@ public class PartySetupController : Controller
     // `slotId` = PartySetupSlot id.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SignUp(int id, int slotId, string? role, string? mainJob, string? subJob)
+    public async Task<IActionResult> SignUp(int id, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null) return Challenge();
@@ -143,7 +143,7 @@ public class PartySetupController : Controller
         {
             TempData["PartySetupMessage"] =
                 $"That slot was just taken by {slot.SignedUpCharacterName ?? "another member"}.";
-            return RedirectBack(setup.Id);
+            return RedirectBack(setup.Id, returnUrl);
         }
 
         // Snapshot the member's character name in this linkshell (fall back to
@@ -177,12 +177,12 @@ public class PartySetupController : Controller
             if (string.IsNullOrWhiteSpace(trimmed))
             {
                 TempData["PartySetupMessage"] = "Pick a role before signing up.";
-                return RedirectBack(setup.Id);
+                return RedirectBack(setup.Id, returnUrl);
             }
             if (!ValidRoles.Contains(trimmed))
             {
                 TempData["PartySetupMessage"] = "That role isn't a valid pick.";
-                return RedirectBack(setup.Id);
+                return RedirectBack(setup.Id, returnUrl);
             }
             signedRole = trimmed;
         }
@@ -198,12 +198,12 @@ public class PartySetupController : Controller
             if (string.IsNullOrWhiteSpace(trimmed))
             {
                 TempData["PartySetupMessage"] = "Pick a main job before signing up.";
-                return RedirectBack(setup.Id);
+                return RedirectBack(setup.Id, returnUrl);
             }
             if (!ValidMainJobs.Contains(trimmed))
             {
                 TempData["PartySetupMessage"] = "That main job isn't a valid pick.";
-                return RedirectBack(setup.Id);
+                return RedirectBack(setup.Id, returnUrl);
             }
             signedMain = trimmed;
         }
@@ -224,7 +224,7 @@ public class PartySetupController : Controller
             else if (!ValidSubJobs.Contains(trimmed))
             {
                 TempData["PartySetupMessage"] = "That sub job isn't a valid pick.";
-                return RedirectBack(setup.Id);
+                return RedirectBack(setup.Id, returnUrl);
             }
             else
             {
@@ -258,14 +258,14 @@ public class PartySetupController : Controller
         await _context.SaveChangesAsync();
 
         TempData["PartySetupMessage"] = $"Signed up as {characterName} for {setup.Name}.";
-        return RedirectBack(setup.Id);
+        return RedirectBack(setup.Id, returnUrl);
     }
 
     // Release a slot. The member who holds it can withdraw themselves; an
     // officer with CanManageParties can clear anyone's sign-up.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Withdraw(int id, int slotId)
+    public async Task<IActionResult> Withdraw(int id, int slotId, string? returnUrl = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null) return Challenge();
@@ -292,13 +292,20 @@ public class PartySetupController : Controller
         await _context.SaveChangesAsync();
 
         TempData["PartySetupMessage"] = "Slot is open again.";
-        return RedirectBack(setup.Id);
+        return RedirectBack(setup.Id, returnUrl);
     }
 
-    // Return to the ToD Tracker with a fragment so the JS re-opens that
-    // setup's inline panel (it's collapsed by default after a full reload).
-    private IActionResult RedirectBack(int setupId)
+    // Default: return to the ToD Tracker with a fragment so the JS re-opens
+    // that setup's inline panel (it's collapsed by default after a full
+    // reload). When the form supplies a same-origin returnUrl (e.g. an inline
+    // signup posted from Event/Index), honor it verbatim — the caller bakes
+    // its own re-open fragment (e.g. "#event-ps-panel-42") into the URL.
+    private IActionResult RedirectBack(int setupId, string? returnUrl = null)
     {
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
         return Redirect($"{Url.Action("Index", "Tod")}#tod-setup-{setupId}");
     }
 

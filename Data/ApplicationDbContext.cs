@@ -188,7 +188,6 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<Bid> Bids => Set<Bid>();
         public DbSet<AuctionHistory> AuctionHistories => Set<AuctionHistory>();
         public DbSet<Event> Events => Set<Event>();
-        public DbSet<Job> Jobs => Set<Job>();
         public DbSet<AppUserEvent> AppUserEvents => Set<AppUserEvent>();
         public DbSet<AppUserEventStatusLedger> AppUserEventStatusLedgers => Set<AppUserEventStatusLedger>();
         public DbSet<DkpLedgerEntry> DkpLedgerEntries => Set<DkpLedgerEntry>();
@@ -246,9 +245,16 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
-            builder.Entity<Job>(entity =>
+            builder.Entity<Event>(entity =>
             {
-                entity.Property(job => job.Enlisted).HasColumnType("text[]");
+                // Event.PartySetupId nullable FK. SetNull on PartySetup delete
+                // keeps the Event intact (with a null FK) when an officer
+                // removes the linked setup.
+                entity.HasOne(item => item.PartySetup)
+                    .WithMany()
+                    .HasForeignKey(item => item.PartySetupId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => item.PartySetupId);
             });
 
             builder.Entity<Invite>(entity =>

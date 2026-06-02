@@ -14,6 +14,8 @@ import {
 import { ActivityEvent } from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
+import { PartySetupPanelComponent } from './party-setup-panel.component';
+import { PartySetupService } from '../../discord/party-setup.service';
 import {
   EVENT_JOB_TYPE_OPTIONS,
   EVENT_MAIN_JOB_OPTIONS,
@@ -29,13 +31,14 @@ import {
 
 @Component({
   selector: 'app-events-tab',
-  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, ActivitySidebarPanelComponent],
+  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, ActivitySidebarPanelComponent, PartySetupPanelComponent],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly partySetups = inject(PartySetupService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
   private readonly queuePanel = viewChild.required(ActivityQueuePanelComponent);
@@ -52,6 +55,29 @@ export class EventsTabComponent {
 
   // Live-event collapse state (session-only).
   protected readonly expandedLiveEventIds = signal<Set<number>>(new Set());
+
+  // Live-event "View Party Setup" inline read-only panel: per-event toggle so
+  // leaders can recap the planned roster mid-run without leaving the page.
+  protected readonly expandedLiveEventPartySetupIds = signal<Set<number>>(new Set());
+
+  protected toggleLiveEventPartySetupExpanded(eventId: number, partySetupId: number | null | undefined, linkshellId: number): void {
+    const next = new Set(this.expandedLiveEventPartySetupIds());
+    if (next.has(eventId)) {
+      next.delete(eventId);
+    } else {
+      next.add(eventId);
+      // The embedded panel reads role/main/sub options from the linkshell's
+      // party-setup list cache. Read-only mode doesn't render the dropdowns,
+      // but loading the list here is cheap and keeps parity with the queue
+      // panel toggle behavior.
+      if (linkshellId) void this.partySetups.loadList(linkshellId);
+    }
+    this.expandedLiveEventPartySetupIds.set(next);
+  }
+
+  protected isLiveEventPartySetupExpanded(eventId: number): boolean {
+    return this.expandedLiveEventPartySetupIds().has(eventId);
+  }
 
   public constructor() {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);

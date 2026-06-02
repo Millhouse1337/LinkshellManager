@@ -29,8 +29,8 @@ public partial class EventController
         int? selectedLinkshellId = user.PrimaryLinkshellId ?? linkshellIds.Cast<int?>().FirstOrDefault();
 
         var events = await _context.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
+            .Include(evt => evt.PartySetup)
             .Where(evt => !selectedLinkshellId.HasValue || evt.LinkshellId == selectedLinkshellId.Value)
             .OrderBy(evt => evt.StartTime)
             .ToListAsync();
@@ -45,30 +45,108 @@ public partial class EventController
             .Where(appUser => creatorIds.Contains(appUser.Id))
             .ToDictionaryAsync(appUser => appUser.Id, appUser => appUser.CharacterName ?? appUser.UserName ?? appUser.Id);
 
-        var viewModels = events.Select(evt => new EventViewModel
+        // Eager-load the full alliance/party/slot tree for every linked Party
+        // Setup so the inline "View & Sign Up" panel renders without a second
+        // round-trip. Batch by id to avoid N+1.
+        var linkedSetupIds = events
+            .Where(evt => evt.PartySetupId.HasValue)
+            .Select(evt => evt.PartySetupId!.Value)
+            .Distinct()
+            .ToList();
+
+        Dictionary<int, PartySetupBoardViewModel> partySetupBoards;
+        if (linkedSetupIds.Count > 0)
         {
-            Event = new Event
+            var linkedSetups = await _context.PartySetups
+                .AsNoTracking()
+                .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
+                .Where(ps => linkedSetupIds.Contains(ps.Id))
+                .ToListAsync();
+
+            partySetupBoards = linkedSetups.ToDictionary(ps => ps.Id, ps => new PartySetupBoardViewModel
             {
-                Id = evt.Id,
-                LinkshellId = evt.LinkshellId,
-                EventName = evt.EventName,
-                EventType = evt.EventType,
-                EventLocation = evt.EventLocation,
-                CreatorUserId = evt.CreatorUserId,
-                StartTime = ConvertUtcToUserTimeZone(evt.StartTime, user.TimeZone),
-                EndTime = ConvertUtcToUserTimeZone(evt.EndTime, user.TimeZone),
-                CommencementStartTime = ConvertUtcToUserTimeZone(evt.CommencementStartTime, user.TimeZone),
-                Duration = evt.Duration,
-                DkpPerHour = evt.DkpPerHour,
-                EventDkp = evt.EventDkp,
-                Details = evt.Details,
-                TimeStamp = evt.TimeStamp
-            },
-            Jobs = evt.Jobs.ToList(),
-            AppUserEvents = evt.AppUserEvents.ToList(),
-            CreatorCharacterName = evt.CreatorUserId is not null && creators.TryGetValue(evt.CreatorUserId, out var creatorName)
-                ? creatorName
-                : "Unknown"
+                Id = ps.Id,
+                Name = ps.Name,
+                Alliances = ps.Alliances.OrderBy(a => a.SortOrder).Select(a => new PartySetupAllianceView
+                {
+                    Name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
+                    Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
+                    {
+                        Name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
+                        Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s => new PartySetupSlotView
+                        {
+                            SlotId = s.Id,
+                            Position = s.SortOrder + 1,
+                            RequirementType = s.RequirementType,
+                            Role = s.Role,
+                            MainJob = s.MainJob,
+                            SubJob = s.SubJob,
+                            Label = s.Label,
+                            IsPartyLeader = s.IsPartyLeader,
+                            SignedUpAppUserId = s.SignedUpAppUserId,
+                            SignedUpCharacterName = s.SignedUpCharacterName,
+                            SignedUpRole = s.SignedUpRole,
+                            SignedUpMainJob = s.SignedUpMainJob,
+                            SignedUpSubJob = s.SignedUpSubJob
+                        }).ToList()
+                    }).ToList()
+                }).ToList()
+            });
+        }
+        else
+        {
+            partySetupBoards = new Dictionary<int, PartySetupBoardViewModel>();
+        }
+
+        // Drive the manage badge + slot dropdown options on the inline panel.
+        ViewBag.CurrentAppUserId = user.Id;
+        ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
+        ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
+        ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
+
+        var viewModels = events.Select(evt =>
+        {
+            PartySetupBoardViewModel? board = null;
+            var userOwnsSlot = false;
+            if (evt.PartySetupId.HasValue && partySetupBoards.TryGetValue(evt.PartySetupId.Value, out var loaded))
+            {
+                board = loaded;
+                userOwnsSlot = loaded.Alliances
+                    .SelectMany(a => a.Parties)
+                    .SelectMany(p => p.Slots)
+                    .Any(s => s.SignedUpAppUserId == user.Id);
+            }
+
+            return new EventViewModel
+            {
+                Event = new Event
+                {
+                    Id = evt.Id,
+                    LinkshellId = evt.LinkshellId,
+                    EventName = evt.EventName,
+                    EventType = evt.EventType,
+                    EventLocation = evt.EventLocation,
+                    CreatorUserId = evt.CreatorUserId,
+                    StartTime = ConvertUtcToUserTimeZone(evt.StartTime, user.TimeZone),
+                    EndTime = ConvertUtcToUserTimeZone(evt.EndTime, user.TimeZone),
+                    CommencementStartTime = ConvertUtcToUserTimeZone(evt.CommencementStartTime, user.TimeZone),
+                    Duration = evt.Duration,
+                    DkpPerHour = evt.DkpPerHour,
+                    EventDkp = evt.EventDkp,
+                    Details = evt.Details,
+                    TimeStamp = evt.TimeStamp,
+                    PartySetupId = evt.PartySetupId
+                },
+                PartySetupId = evt.PartySetupId,
+                LinkedPartySetupName = evt.PartySetup?.Name,
+                LinkedPartySetupMonsterName = evt.PartySetup?.AssignedMonsterName,
+                LinkedPartySetupBoard = board,
+                CurrentUserOwnsLinkedPartySetupSlot = userOwnsSlot,
+                AppUserEvents = evt.AppUserEvents.ToList(),
+                CreatorCharacterName = evt.CreatorUserId is not null && creators.TryGetValue(evt.CreatorUserId, out var creatorName)
+                    ? creatorName
+                    : "Unknown"
+            };
         }).ToList();
 
         return View(viewModels);
@@ -113,6 +191,15 @@ public partial class EventController
             return View(retryModel);
         }
 
+        // Cross-linkshell defense: only allow attaching a PartySetup that
+        // belongs to this event's linkshell.
+        var requestedPartySetupId = eventViewModel.PartySetupId;
+        if (requestedPartySetupId.HasValue &&
+            !await PartySetupBelongsToLinkshellAsync(requestedPartySetupId.Value, eventViewModel.Event.LinkshellId))
+        {
+            requestedPartySetupId = null;
+        }
+
         var newEvent = new Event
         {
             LinkshellId = eventViewModel.Event.LinkshellId,
@@ -125,6 +212,7 @@ public partial class EventController
             DkpPerHour = eventViewModel.Event.DkpPerHour,
             Details = eventViewModel.Event.Details,
             AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim(),
+            PartySetupId = requestedPartySetupId,
             CreatorUserId = user.Id,
             TimeStamp = DateTime.UtcNow
         };
@@ -132,16 +220,13 @@ public partial class EventController
         _context.Events.Add(newEvent);
         await _context.SaveChangesAsync();
 
-        foreach (var job in eventViewModel.Jobs.Where(job => !string.IsNullOrWhiteSpace(job.JobName)))
-        {
-            job.EventId = newEvent.Id;
-            job.SignedUp = 0;
-            job.Enlisted ??= new List<string>();
-            _context.Jobs.Add(job);
-        }
-
-        await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<bool> PartySetupBelongsToLinkshellAsync(int partySetupId, int linkshellId)
+    {
+        return await _context.PartySetups
+            .AnyAsync(setup => setup.Id == partySetupId && setup.LinkshellId == linkshellId);
     }
 
     public async Task<IActionResult> Edit(int id)
@@ -153,7 +238,6 @@ public partial class EventController
         }
 
         var eventToEdit = await _context.Events
-            .Include(evt => evt.Jobs)
             .FirstOrDefaultAsync(evt => evt.Id == id);
 
         if (eventToEdit is null)
@@ -179,9 +263,10 @@ public partial class EventController
             EndTime = ConvertUtcToUserTimeZone(eventToEdit.EndTime, user.TimeZone),
             Duration = eventToEdit.Duration,
             DkpPerHour = eventToEdit.DkpPerHour,
-            Details = eventToEdit.Details
+            Details = eventToEdit.Details,
+            PartySetupId = eventToEdit.PartySetupId
         };
-        model.Jobs = eventToEdit.Jobs.ToList();
+        model.PartySetupId = eventToEdit.PartySetupId;
         model.LinkshellId = eventToEdit.LinkshellId;
 
         return View(model);
@@ -204,7 +289,6 @@ public partial class EventController
         }
 
         var eventToUpdate = await _context.Events
-            .Include(evt => evt.Jobs)
             .FirstOrDefaultAsync(evt => evt.Id == id);
 
         if (eventToUpdate is null)
@@ -219,6 +303,13 @@ public partial class EventController
             return Forbid();
         }
 
+        var requestedPartySetupId = eventViewModel.PartySetupId;
+        if (requestedPartySetupId.HasValue &&
+            !await PartySetupBelongsToLinkshellAsync(requestedPartySetupId.Value, eventViewModel.Event.LinkshellId))
+        {
+            requestedPartySetupId = null;
+        }
+
         eventToUpdate.LinkshellId = eventViewModel.Event.LinkshellId;
         eventToUpdate.EventName = eventViewModel.Event.EventName;
         eventToUpdate.EventType = eventViewModel.Event.EventType;
@@ -229,18 +320,7 @@ public partial class EventController
         eventToUpdate.DkpPerHour = eventViewModel.Event.DkpPerHour;
         eventToUpdate.Details = eventViewModel.Event.Details;
         eventToUpdate.AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim();
-
-        _context.Jobs.RemoveRange(eventToUpdate.Jobs);
-        await _context.SaveChangesAsync();
-
-        foreach (var job in eventViewModel.Jobs.Where(job => !string.IsNullOrWhiteSpace(job.JobName)))
-        {
-            job.Id = 0;
-            job.EventId = eventToUpdate.Id;
-            job.SignedUp = job.Enlisted?.Count ?? 0;
-            job.Enlisted ??= new List<string>();
-            _context.Jobs.Add(job);
-        }
+        eventToUpdate.PartySetupId = requestedPartySetupId;
 
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
@@ -297,7 +377,6 @@ public partial class EventController
         }
 
         var eventToDelete = await _context.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
             .Include(evt => evt.EventLootDetails)
             .FirstOrDefaultAsync(evt => evt.Id == eventId);
@@ -318,7 +397,6 @@ public partial class EventController
             return BadRequest("Live events cannot be canceled. End the event instead.");
         }
 
-        _context.Jobs.RemoveRange(eventToDelete.Jobs);
         _context.AppUserEvents.RemoveRange(eventToDelete.AppUserEvents);
         _context.EventLootDetails.RemoveRange(eventToDelete.EventLootDetails);
         _context.Events.Remove(eventToDelete);
@@ -477,7 +555,7 @@ public partial class EventController
     // its AppUserEvents and EventLootDetails included, and for verifying auth
     // (linkshell membership / management permission) before calling. This
     // helper writes the EventHistory + DkpLedgerEntry rows, removes the
-    // related Jobs / AppUserEvents / EventLootDetails / Event, and saves.
+    // related AppUserEvents / EventLootDetails / Event, and saves.
     internal sealed record EndEventParticipantSummary(
         string? CharacterName,
         string? JobName,
@@ -675,9 +753,6 @@ public partial class EventController
             lootDetail.EventId = null;
         }
         dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
-
-        var eventJobs = await dbContext.Jobs.Where(job => job.EventId == eventEntity.Id).ToListAsync();
-        dbContext.Jobs.RemoveRange(eventJobs);
         dbContext.Events.Remove(eventEntity);
         await dbContext.SaveChangesAsync();
 

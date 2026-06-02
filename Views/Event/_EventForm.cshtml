@@ -1,9 +1,5 @@
 @model EventViewModel
 @{
-    var jobs = Model.Jobs.Count > 0 ? Model.Jobs : new List<Job> { new() };
-    var mainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions;
-    var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;
-    var typeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
     // Mirror the Discord Activity's eventTypeOptions list exactly so both UIs pick from
     // the same vocabulary. "Other" is appended in the markup and reveals a free-text input.
     var eventTypeOptions = new[] { "Sky", "Sea", "HNM", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
@@ -21,12 +17,7 @@
     var isEditMode             = Model.Event.Id > 0;
     var endTimeNotSpecified    = isEditMode && Model.Event.EndTime is null;
     var durationNotSpecified   = isEditMode && Model.Event.Duration is null;
-    var partyNotSpecified      = isEditMode && !Model.Jobs.Any(j =>
-        !string.IsNullOrWhiteSpace(j.JobType) ||
-        !string.IsNullOrWhiteSpace(j.JobName) ||
-        !string.IsNullOrWhiteSpace(j.SubJobName) ||
-        (j.Quantity ?? 0) > 0 ||
-        !string.IsNullOrWhiteSpace(j.Details));
+    var partySetupNotSpecified = isEditMode && !Model.PartySetupId.HasValue;
 }
 
 <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="margin-bottom:12px"></div>
@@ -264,112 +255,56 @@
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:12px;gap:12px;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:12px">
-        <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Minimal party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
+        <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
         <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:0">
-            <input type="checkbox" id="party_setup_not_specified" @(partyNotSpecified ? "checked" : null) />
+            <input type="checkbox" id="party_setup_not_specified" @(partySetupNotSpecified ? "checked" : null) />
             Not specified
         </label>
     </div>
-    <button class="btn ghost sm" type="button" id="add-job">+ Add job</button>
 </div>
 
-<div id="jobs-container" style="display:grid;gap:12px">
-    @for (var i = 0; i < jobs.Count; i++)
+<div id="party-setup-row" class="field" style="display:flex;flex-direction:column;max-width:520px">
+    <label for="PartySetupId">Linked party setup</label>
+    <select class="form-select" id="PartySetupId" name="PartySetupId">
+        <option value="">— Select party setup —</option>
+        @foreach (var option in Model.AvailablePartySetups)
+        {
+            var label = string.IsNullOrWhiteSpace(option.AssignedMonsterName)
+                ? option.Name
+                : $"{option.Name} — {option.AssignedMonsterName}";
+            if (Model.PartySetupId == option.Id)
+            {
+                <option value="@option.Id" selected>@label</option>
+            }
+            else
+            {
+                <option value="@option.Id">@label</option>
+            }
+        }
+    </select>
+    @if (Model.AvailablePartySetups.Count == 0)
     {
-        <div class="card job-row" style="padding:12px">
-            <div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));align-items:end">
-                <div class="field">
-                    <label>Role</label>
-                    <select class="form-select" name="Jobs[@i].JobType">
-                        <option value="">Select role</option>
-                        @foreach (var typeOption in typeOptions)
-                        {
-                            if (string.Equals(jobs[i].JobType, typeOption, StringComparison.OrdinalIgnoreCase))
-                            {
-                                <option value="@typeOption" selected>@typeOption</option>
-                            }
-                            else
-                            {
-                                <option value="@typeOption">@typeOption</option>
-                            }
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Main job</label>
-                    <select class="form-select" name="Jobs[@i].JobName">
-                        <option value="">Select main job</option>
-                        @foreach (var jobOption in mainJobOptions)
-                        {
-                            if (string.Equals(jobs[i].JobName, jobOption, StringComparison.OrdinalIgnoreCase))
-                            {
-                                <option value="@jobOption" selected>@jobOption</option>
-                            }
-                            else
-                            {
-                                <option value="@jobOption">@jobOption</option>
-                            }
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Sub job</label>
-                    <select class="form-select" name="Jobs[@i].SubJobName">
-                        <option value="">Select sub job</option>
-                        @foreach (var jobOption in subJobOptions)
-                        {
-                            if (string.Equals(jobs[i].SubJobName, jobOption, StringComparison.OrdinalIgnoreCase))
-                            {
-                                <option value="@jobOption" selected>@jobOption</option>
-                            }
-                            else
-                            {
-                                <option value="@jobOption">@jobOption</option>
-                            }
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Quantity</label>
-                    <input class="form-control" name="Jobs[@i].Quantity" type="number" value="@jobs[i].Quantity" />
-                </div>
-                <div class="field" style="grid-column:1/-1">
-                    <label>Details</label>
-                    <input class="form-control" name="Jobs[@i].Details" value="@jobs[i].Details" />
-                </div>
-                <div class="field" style="grid-column:1/-1;align-items:flex-end">
-                    <button class="btn ghost sm remove-job" type="button">Remove job</button>
-                </div>
-            </div>
-        </div>
+        <small style="color:var(--fg-4);font-size:11px;margin-top:4px">No party setups exist for this linkshell yet. Create one from the Party Setup page first.</small>
     }
 </div>
 
 <script nonce="@Html.CspNonce()">
-    // Minimal Party Setup "Not specified" toggle. When checked, the entire jobs
-    // container and "+ Add job" button are hidden AND every input within is
-    // disabled so it doesn't post (otherwise EF would still create empty Job rows).
-    // This <script nonce="@Html.CspNonce()"> sits AFTER the markup it targets so getElementById resolves.
+    // "Not specified" toggle: when checked, hide the dropdown, blank the value,
+    // and disable the select so it posts back as null PartySetupId.
     (function () {
         var notSpecified = document.getElementById('party_setup_not_specified');
-        var addJobBtn    = document.getElementById('add-job');
-        var jobsBox      = document.getElementById('jobs-container');
-        if (!notSpecified || !jobsBox) return;
+        var row          = document.getElementById('party-setup-row');
+        var select       = document.getElementById('PartySetupId');
+        if (!notSpecified || !row || !select) return;
 
-        function setJobInputsDisabled(disabled) {
-            jobsBox.querySelectorAll('input, select, textarea, button').forEach(function (el) {
-                el.disabled = disabled;
-            });
-        }
         function apply() {
             if (notSpecified.checked) {
-                jobsBox.style.display = 'none';
-                if (addJobBtn) addJobBtn.style.display = 'none';
-                setJobInputsDisabled(true);
+                row.style.display = 'none';
+                select.value = '';
+                select.disabled = true;
             } else {
-                jobsBox.style.display = '';
-                if (addJobBtn) addJobBtn.style.display = '';
-                setJobInputsDisabled(false);
+                row.style.display = '';
+                select.disabled = false;
             }
         }
         notSpecified.addEventListener('change', apply);

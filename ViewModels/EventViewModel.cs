@@ -9,11 +9,25 @@ public class EventViewModel
     public List<Linkshell> Linkshells { get; set; } = new();
     public List<string> LinkshellMembers { get; set; } = new();
     public Event Event { get; set; } = new();
-    public List<Job> Jobs { get; set; } = new();
     public DateTime? CommencementStartTime { get; set; }
     public string? CreatorCharacterName { get; set; }
     public List<AppUserEvent> AppUserEvents { get; set; } = new();
     public List<EventLootDetail> EventLootDetails { get; set; } = new();
+
+    // Optional Party Setup link. PartySetupId is bound from the dropdown on the
+    // create/edit form; AvailablePartySetups is server-loaded for the dropdown
+    // options and is keyed to the active linkshell.
+    public int? PartySetupId { get; set; }
+    public List<PartySetupOption> AvailablePartySetups { get; set; } = new();
+    public string? LinkedPartySetupName { get; set; }
+    public string? LinkedPartySetupMonsterName { get; set; }
+
+    // Loaded for events on the Index page that have a linked Party Setup —
+    // powers the inline "View & Sign Up" panel (alliance/parties/slots tree
+    // with self-service signup and "Sign Up Manually" fallback). Null on
+    // pages that don't render the panel.
+    public PartySetupBoardViewModel? LinkedPartySetupBoard { get; set; }
+    public bool CurrentUserOwnsLinkedPartySetupSlot { get; set; }
 
     // HNM-style multi-window attendance. Empty for single-window events.
     public int WindowCount { get; set; } = 1;
@@ -24,6 +38,13 @@ public class EventViewModel
 
     [DataType(DataType.DateTime)]
     public DateTime? EndTime { get; set; }
+}
+
+public class PartySetupOption
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? AssignedMonsterName { get; set; }
 }
 
 public class EventAttendanceWindowViewModel

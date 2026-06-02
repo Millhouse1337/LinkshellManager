@@ -191,7 +191,6 @@ public sealed partial class AddonApiController
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
 
         var eventToDelete = await _dbContext.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
             .Include(evt => evt.EventLootDetails)
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
@@ -213,7 +212,6 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
         }
 
-        _dbContext.Jobs.RemoveRange(eventToDelete.Jobs);
         _dbContext.AppUserEvents.RemoveRange(eventToDelete.AppUserEvents);
         _dbContext.EventLootDetails.RemoveRange(eventToDelete.EventLootDetails);
         _dbContext.Events.Remove(eventToDelete);

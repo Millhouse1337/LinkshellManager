@@ -65,10 +65,10 @@ public sealed partial class ActivityDataController
         // Pending Events queue in one fetch — splitting at 8 was clipping queued
         // rows whenever the linkshell had more than a couple of live events going.
         var activeEvents = await _dbContext.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
                 .ThenInclude(participation => participation.StatusLedgerEntries)
             .Include(evt => evt.EventLootDetails)
+            .Include(evt => evt.PartySetup)
             .Include(evt => evt.AttendanceWindows)
                 .ThenInclude(window => window.Attendees)
                     .ThenInclude(attendee => attendee.AppUserEvent)
@@ -347,7 +347,6 @@ public sealed partial class ActivityDataController
                 evt.DkpPerHour,
                 evt.Details,
                 evt.AppUserEvents.Count,
-                evt.Jobs.Sum(job => job.Quantity ?? 0),
                 evt.AppUserEvents
                     .Where(participation => participation.AppUserId == appUser.Id)
                     .Select(participation => new ActivityParticipationDto(
@@ -414,14 +413,9 @@ public sealed partial class ActivityDataController
                         loot.ItemWinner,
                         loot.WinningDkpSpent))
                     .ToList(),
-                evt.Jobs.Select(job => new ActivityJobDto(
-                    job.Id,
-                    job.JobName,
-                    job.SubJobName,
-                    job.JobType,
-                    job.Quantity,
-                    job.SignedUp,
-                    job.Enlisted)).ToList(),
+                evt.PartySetupId,
+                evt.PartySetup != null ? evt.PartySetup.Name : null,
+                evt.PartySetup != null ? evt.PartySetup.AssignedMonsterName : null,
                 evt.WindowCountOverride ?? HnmConfig.GetWindowCount(evt.EventName),
                 evt.AttendanceWindows
                     .OrderBy(window => window.SequenceNumber)

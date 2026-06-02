@@ -113,7 +113,7 @@
           }
         </button>
       }
-      @if (isFeatureEnabled('enableEvents')) {
+      @if (isFeatureEnabled('enableEvents') && !isSkySeaDynamis()) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('window-events')"
                 [attr.aria-controls]="panelId('window-events')"

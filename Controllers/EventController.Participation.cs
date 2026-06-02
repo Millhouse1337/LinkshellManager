@@ -20,13 +20,13 @@ public partial class EventController
         }
 
         var eventToStart = await _context.Events
-            .Include(evt => evt.Jobs)
             .Include(evt => evt.AppUserEvents)
                 .ThenInclude(participation => participation.StatusLedgerEntries)
             .Include(evt => evt.EventLootDetails)
             .Include(evt => evt.AttendanceWindows)
                 .ThenInclude(window => window.Attendees)
                     .ThenInclude(attendee => attendee.AppUserEvent)
+            .Include(evt => evt.PartySetup)
             .FirstOrDefaultAsync(evt => evt.Id == eventId);
 
         if (eventToStart is null)
@@ -56,9 +56,12 @@ public partial class EventController
                 Duration = eventToStart.Duration,
                 DkpPerHour = eventToStart.DkpPerHour,
                 EventDkp = eventToStart.EventDkp,
-                Details = eventToStart.Details
+                Details = eventToStart.Details,
+                PartySetupId = eventToStart.PartySetupId
             },
-            Jobs = eventToStart.Jobs.ToList(),
+            PartySetupId = eventToStart.PartySetupId,
+            LinkedPartySetupName = eventToStart.PartySetup?.Name,
+            LinkedPartySetupMonsterName = eventToStart.PartySetup?.AssignedMonsterName,
             AppUserEvents = eventToStart.AppUserEvents
                 .OrderBy(item => item.IsQuickJoin)
                 .ThenBy(item => item.CharacterName)
@@ -130,9 +133,12 @@ public partial class EventController
         return View(model);
     }
 
+    // Ad-hoc signup: user supplies their Main/Sub/Role on the event form. Slot-
+    // level claiming (officer-curated party plan) now lives on the linked
+    // PartySetup's own signup endpoint, not on events directly.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SignUp(int jobId, int eventId, string? jobName = null, string? subJobName = null, string? jobType = null)
+    public async Task<IActionResult> SignUp(int eventId, string? jobName = null, string? subJobName = null, string? jobType = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -140,101 +146,39 @@ public partial class EventController
             return Challenge();
         }
 
-        // Ad-hoc signup path: event has no pre-defined Jobs. The form supplies
-        // the user's Main/Sub/Role directly so they can still register their
-        // attendance intent + character info.
-        if (jobId <= 0)
-        {
-            var eventEntity = await _context.Events
-                .Include(item => item.Jobs)
-                .FirstOrDefaultAsync(item => item.Id == eventId);
+        var eventEntity = await _context.Events
+            .FirstOrDefaultAsync(item => item.Id == eventId);
 
-            if (eventEntity is null) return NotFound();
-            if (eventEntity.Jobs.Count > 0)
-            {
-                // Caller should have used the per-job button instead.
-                return BadRequest("This event already has predefined jobs; pick one of those.");
-            }
+        if (eventEntity is null) return NotFound();
 
-            var adHocMembership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-            if (adHocMembership is null) return Forbid();
+        var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
+        if (membership is null) return Forbid();
 
-            var existingAdHoc = await _context.AppUserEvents
-                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
-            if (existingAdHoc is not null)
-            {
-                _context.AppUserEvents.Remove(existingAdHoc);
-            }
-
-            static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-            _context.AppUserEvents.Add(new AppUserEvent
-            {
-                AppUserId = user.Id,
-                EventId = eventId,
-                CharacterName = user.CharacterName,
-                JobName = Clean(jobName),
-                SubJobName = Clean(subJobName),
-                JobType = Clean(jobType),
-                EventDkp = 0,
-            });
-            await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
-        }
-
-        var job = await _context.Jobs
-            .Include(item => item.Event)
-            .FirstOrDefaultAsync(item => item.Id == jobId && item.EventId == eventId);
-        if (job is null)
-        {
-            return NotFound();
-        }
-
-        var membership = await GetMembershipAsync(user.Id, job.Event!.LinkshellId);
-        if (membership is null)
-        {
-            return Forbid();
-        }
-
-        var existingEventSignup = await _context.AppUserEvents
+        var existing = await _context.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
-
-        if (existingEventSignup is not null)
+        if (existing is not null)
         {
-            var previousJob = await _context.Jobs.FirstOrDefaultAsync(item => item.EventId == eventId && item.JobName == existingEventSignup.JobName && item.SubJobName == existingEventSignup.SubJobName);
-            if (previousJob is not null)
-            {
-                previousJob.Enlisted.RemoveAll(name => name == user.CharacterName);
-                previousJob.SignedUp = previousJob.Enlisted.Count;
-            }
-
-            _context.AppUserEvents.Remove(existingEventSignup);
+            _context.AppUserEvents.Remove(existing);
         }
 
-        job.Enlisted ??= new List<string>();
-        if (!string.IsNullOrWhiteSpace(user.CharacterName) && !job.Enlisted.Contains(user.CharacterName))
-        {
-            job.Enlisted.Add(user.CharacterName);
-        }
-        job.SignedUp = job.Enlisted.Count;
-
+        static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
         _context.AppUserEvents.Add(new AppUserEvent
         {
             AppUserId = user.Id,
             EventId = eventId,
             CharacterName = user.CharacterName,
-            JobName = job.JobName,
-            SubJobName = job.SubJobName,
-            JobType = job.JobType,
-            EventDkp = 0
+            JobName = Clean(jobName),
+            SubJobName = Clean(subJobName),
+            JobType = Clean(jobType),
+            EventDkp = 0,
         });
-
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Unsign(int jobId, int eventId)
+    public async Task<IActionResult> Unsign(int eventId)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -254,15 +198,7 @@ public partial class EventController
             return Forbid();
         }
 
-        var job = await _context.Jobs.FirstOrDefaultAsync(item => item.Id == jobId && item.EventId == eventId);
         var participation = await _context.AppUserEvents.FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
-
-        if (job is not null && !string.IsNullOrWhiteSpace(user.CharacterName))
-        {
-            job.Enlisted.RemoveAll(name => name == user.CharacterName);
-            job.SignedUp = job.Enlisted.Count;
-        }
-
         if (participation is not null)
         {
             _context.AppUserEvents.Remove(participation);
@@ -284,7 +220,6 @@ public partial class EventController
 
         var eventToConfirm = await _context.Events
             .Include(evt => evt.AppUserEvents)
-            .Include(evt => evt.Jobs)
             .FirstOrDefaultAsync(evt => evt.Id == eventId);
 
         if (eventToConfirm is null)
@@ -302,13 +237,6 @@ public partial class EventController
         {
             if (attendance.TryGetValue($"attendance_{participation.CharacterName}", out var status) && status == "deny")
             {
-                var job = eventToConfirm.Jobs.FirstOrDefault(item => item.JobName == participation.JobName && item.SubJobName == participation.SubJobName);
-                if (job is not null && !string.IsNullOrWhiteSpace(participation.CharacterName))
-                {
-                    job.Enlisted.RemoveAll(name => name == participation.CharacterName);
-                    job.SignedUp = job.Enlisted.Count;
-                }
-
                 _context.AppUserEvents.Remove(participation);
             }
         }

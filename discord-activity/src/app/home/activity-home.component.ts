@@ -312,6 +312,12 @@ export class ActivityHomeComponent {
     return this.primaryLinkshellSettings()?.linkshellType === 'HnmOnly';
   }
 
+  // Sky/Sea/Dynamis linkshells run timed events only — no HNM snapshot
+  // sessions — so the Attendance System tab is irrelevant for them.
+  protected isSkySeaDynamis(): boolean {
+    return this.primaryLinkshellSettings()?.linkshellType === 'SkySeaDynamis';
+  }
+
   // ----- Tab badges -----
 
   protected openEventsCount(): number {

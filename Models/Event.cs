@@ -75,7 +75,14 @@ public class Event
     [ForeignKey(nameof(SourceTodId))]
     public Tod? SourceTod { get; set; }
 
-    public ICollection<Job> Jobs { get; set; } = new List<Job>();
+    // Optional link to a pre-built PartySetup (alliances → parties → slots,
+    // monster-tagged, per-linkshell). Replaces the old inline "Minimal Party
+    // Setup" job rows. SetNull on PartySetup delete so an event isn't
+    // cascade-removed when an officer cleans up old setups.
+    public int? PartySetupId { get; set; }
+
+    [ForeignKey(nameof(PartySetupId))]
+    public PartySetup? PartySetup { get; set; }
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();
 
