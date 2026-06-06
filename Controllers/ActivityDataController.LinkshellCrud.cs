@@ -87,10 +87,9 @@ public sealed partial class ActivityDataController
             });
         }
 
-        var hasAccess = await _dbContext.AppUserLinkshells
-            .AnyAsync(link => link.AppUserId == appUser.Id && link.LinkshellId == linkshellId, cancellationToken);
-
-        if (!hasAccess)
+        // GetMembershipAsync also enforces the per-linkshell Discord guild lock.
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null)
         {
             return Forbid();
         }
@@ -243,6 +242,25 @@ public sealed partial class ActivityDataController
         if (request.HiddenTodMonsters is not null)
         {
             linkshell.HiddenTodMonsters = SerializeHiddenTodMonsters(request.HiddenTodMonsters);
+        }
+        // null in the request = leave unchanged. Empty/whitespace clears the lock
+        // (any member may access). A non-empty value must be a Discord snowflake
+        // (digits only, <= 20 chars) and locks the linkshell to that server.
+        if (request.DiscordGuildId is not null)
+        {
+            var trimmedGuildId = request.DiscordGuildId.Trim();
+            if (trimmedGuildId.Length == 0)
+            {
+                linkshell.DiscordGuildId = null;
+            }
+            else if (trimmedGuildId.Length <= 20 && trimmedGuildId.All(char.IsDigit))
+            {
+                linkshell.DiscordGuildId = trimmedGuildId;
+            }
+            else
+            {
+                return BadRequest(new { error = "Discord Server ID must be the numeric server ID (digits only). Leave blank to unlock." });
+            }
         }
 
         var memberships = await _dbContext.AppUserLinkshells

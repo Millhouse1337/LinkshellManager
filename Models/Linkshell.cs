@@ -89,6 +89,14 @@ public class Linkshell
     // grows a mob name with a comma in it. Edited from the Customize panel.
     public string HiddenTodMonsters { get; set; } = string.Empty;
 
+    // Discord guild (server) this linkshell is locked to. NULL/empty = not
+    // locked: any linkshell member may access. When set, a user must be a
+    // member of THIS guild (verified server-side via
+    // GET /users/@me/guilds/{id}/member with the user's bearer token) to
+    // access the linkshell's Activity data. Discord snowflakes are <= 20 digits.
+    [MaxLength(20)]
+    public string? DiscordGuildId { get; set; }
+
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 

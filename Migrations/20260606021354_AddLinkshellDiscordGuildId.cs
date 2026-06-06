@@ -5,25 +5,25 @@
 namespace LinkshellManagerDiscordApp.Migrations
 {
     /// <inheritdoc />
-    public partial class AddPartySetupSlotLeader : Migration
+    public partial class AddLinkshellDiscordGuildId : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "IsPartyLeader",
-                table: "PartySetupSlots",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
+            migrationBuilder.AddColumn<string>(
+                name: "DiscordGuildId",
+                table: "Linkshells",
+                type: "character varying(20)",
+                maxLength: 20,
+                nullable: true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "IsPartyLeader",
-                table: "PartySetupSlots");
+                name: "DiscordGuildId",
+                table: "Linkshells");
         }
     }
 }

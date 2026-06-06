@@ -63,7 +63,10 @@
 
     /* ---------- Instructions ---------- */
     .attendance-page .instructions-card { border-left:3px solid var(--blue-main); box-shadow:0 0 0 1px rgba(79,124,255,.08), 0 12px 30px rgba(0,0,0,.4); }
-    .instructions-body { padding:14px 18px; display:flex; flex-direction:column; gap:11px; font-size:13px; color:var(--text-muted); }
+    /* The instruction lines live inline in the header, to the right of the
+       "Instructions" title. The header wraps them below on narrow screens. */
+    .attendance-page .instructions-card .card-head { flex-wrap:wrap; gap:10px 24px; }
+    .instructions-body { display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--text-muted); }
     .instruction-line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .instruction-line strong { color:var(--text-main); }
     .instruction-line .hl-gold { color:var(--gold-main); }
@@ -259,11 +262,11 @@
     <div class="card instructions-card fade d2" style="margin-bottom:14px">
         <div class="card-head">
             <div class="card-title"><span class="attendance-crystal"></span> Instructions</div>
-        </div>
-        <div class="instructions-body">
-            <div class="instruction-line"><code>/lsm now &lt;Monster Name&gt;</code> <span>creates new or updates existing <strong>Attendance Events</strong>.</span></div>
-            <div class="instruction-line"><code>/lsm now</code> <span>will land under <strong>Unlinked Snapshots</strong> until a leader or officer attaches it.</span></div>
-            <div class="instruction-line"><span>Closed events move to <strong class="hl-gold">Attendance History</strong>.</span></div>
+            <div class="instructions-body">
+                <div class="instruction-line"><code>/lsm now &lt;Monster Name&gt;</code> <span>creates new or updates existing <strong>Attendance Events</strong>.</span></div>
+                <div class="instruction-line"><code>/lsm now</code> <span>will land under <strong>Unlinked Snapshots</strong> until a leader or officer attaches it.</span></div>
+                <div class="instruction-line"><span>Closed events move to <strong class="hl-gold">Attendance History</strong>.</span></div>
+            </div>
         </div>
     </div>
 

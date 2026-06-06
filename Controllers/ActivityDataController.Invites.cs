@@ -13,6 +13,43 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
+    // Resolves which AppUser ids may appear in a guild-locked linkshell's invite
+    // search: those whose linked Discord account is a member of the locked
+    // server (via the bot roster lookup). Returns null when no filtering should
+    // apply — the linkshell isn't locked, or the bot roster is unavailable
+    // (fail open; the access-time lock still blocks non-members from any data).
+    private async Task<HashSet<string>?> TryGetGuildEligibleAppUserIdsAsync(
+        string? discordGuildId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(discordGuildId))
+        {
+            return null;
+        }
+
+        var memberDiscordIds = await _discordIdentityService
+            .TryGetGuildMemberDiscordIdsAsync(discordGuildId, cancellationToken);
+        if (memberDiscordIds is null)
+        {
+            return null;
+        }
+
+        if (memberDiscordIds.Count == 0)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var eligible = await _dbContext.DiscordActivityUsers
+            .Where(discordUser =>
+                discordUser.IdentityUserId != null &&
+                memberDiscordIds.Contains(discordUser.DiscordUserId))
+            .Select(discordUser => discordUser.IdentityUserId!)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return eligible.ToHashSet(StringComparer.Ordinal);
+    }
+
     [HttpGet("players/search")]
     public async Task<IActionResult> SearchPlayersAsync(
         [FromQuery] string? query,
@@ -57,7 +94,12 @@ public sealed partial class ActivityDataController
             .Select(invite => invite.AppUserId)
             .ToListAsync(cancellationToken);
 
-        var results = await _dbContext.Users
+        // When the linkshell is locked to a Discord server, only surface people
+        // who are actually in that server (null = unlocked or bot unavailable).
+        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(
+            membership?.Linkshell?.DiscordGuildId, cancellationToken);
+
+        var eligible = _dbContext.Users
             .Where(user =>
                 user.Id != appUser.Id &&
                 !existingMemberIds.Contains(user.Id) &&
@@ -65,7 +107,14 @@ public sealed partial class ActivityDataController
                 (
                     (user.CharacterName != null && EF.Functions.ILike(user.CharacterName, $"%{normalizedQuery}%")) ||
                     EF.Functions.ILike(user.UserName!, $"%{normalizedQuery}%")
-                ))
+                ));
+
+        if (guildEligibleIds is not null)
+        {
+            eligible = eligible.Where(user => guildEligibleIds.Contains(user.Id));
+        }
+
+        var results = await eligible
             .OrderBy(user => user.CharacterName ?? user.UserName)
             .Take(10)
             .Select(user => new ActivityUserSearchResultDto(
@@ -76,6 +125,104 @@ public sealed partial class ActivityDataController
             .ToListAsync(cancellationToken);
 
         return Ok(results);
+    }
+
+    // Paginated, searchable, filterable browse of every LSM user eligible to be
+    // invited to this linkshell (i.e. anyone who has used the app at least once),
+    // minus current members, pending invites/join-requests, and the caller.
+    // Lets leaders pick from a list instead of having to type a name. No Discord
+    // bot required — these are users already in our database.
+    [HttpGet("players/browse")]
+    public async Task<IActionResult> BrowsePlayersAsync(
+        [FromQuery] int linkshellId,
+        [FromQuery] string? query,
+        [FromQuery] string? filter,
+        [FromQuery] int page,
+        [FromQuery] int pageSize,
+        CancellationToken cancellationToken)
+    {
+        if (linkshellId <= 0)
+        {
+            return BadRequest(new { error = "A linkshell selection is required." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to browse players."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 50 ? 10 : pageSize;
+
+        var existingMemberIds = await _dbContext.AppUserLinkshells
+            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
+            .Select(link => link.AppUserId!)
+            .ToListAsync(cancellationToken);
+
+        var pendingInviteIds = await _dbContext.Invites
+            .Where(invite =>
+                invite.LinkshellId == linkshellId &&
+                (invite.Status == PendingInviteStatus || invite.Status == PendingJoinRequestStatus))
+            .Select(invite => invite.AppUserId)
+            .ToListAsync(cancellationToken);
+
+        var eligible = _dbContext.Users
+            .Where(user =>
+                user.Id != appUser.Id &&
+                !existingMemberIds.Contains(user.Id) &&
+                !pendingInviteIds.Contains(user.Id));
+
+        var normalizedQuery = query?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedQuery))
+        {
+            eligible = eligible.Where(user =>
+                (user.CharacterName != null && EF.Functions.ILike(user.CharacterName, $"%{normalizedQuery}%")) ||
+                EF.Functions.ILike(user.UserName!, $"%{normalizedQuery}%"));
+        }
+
+        var normalizedFilter = (filter ?? "all").Trim().ToLowerInvariant();
+        if (normalizedFilter == "unaffiliated")
+        {
+            eligible = eligible.Where(user => !_dbContext.AppUserLinkshells.Any(link => link.AppUserId == user.Id));
+        }
+        else if (normalizedFilter == "affiliated")
+        {
+            eligible = eligible.Where(user => _dbContext.AppUserLinkshells.Any(link => link.AppUserId == user.Id));
+        }
+
+        // When the linkshell is locked to a Discord server, only surface people
+        // who are actually in that server (null = unlocked or bot unavailable).
+        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(
+            membership?.Linkshell?.DiscordGuildId, cancellationToken);
+        if (guildEligibleIds is not null)
+        {
+            eligible = eligible.Where(user => guildEligibleIds.Contains(user.Id));
+        }
+
+        var total = await eligible.CountAsync(cancellationToken);
+
+        var items = await eligible
+            .OrderBy(user => user.CharacterName ?? user.UserName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(user => new ActivityUserSearchResultDto(
+                user.Id,
+                user.CharacterName ?? user.UserName ?? "Unknown member",
+                user.UserName,
+                user.PrimaryLinkshellName))
+            .ToListAsync(cancellationToken);
+
+        return Ok(new { items, total, page, pageSize });
     }
 
     [HttpPost("invites/participants")]
@@ -214,6 +361,211 @@ public sealed partial class ActivityDataController
             LinkshellId = linkshellId,
             Status = PendingInviteStatus
         });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Lists members of the linkshell's locked Discord server who can be invited
+    // straight from the roster — including people who have never used LSM. Those
+    // are sent a Discord-keyed invite and auto-join on first sign-in.
+    [HttpGet("linkshells/{linkshellId:int}/discord-roster")]
+    public async Task<IActionResult> GetDiscordRosterCandidatesAsync(
+        int linkshellId,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to load the Discord roster."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var guildId = membership?.Linkshell?.DiscordGuildId;
+        if (string.IsNullOrWhiteSpace(guildId))
+        {
+            // Not locked to a server — nothing to pull a roster from.
+            return Ok(Array.Empty<ActivityDiscordRosterCandidateDto>());
+        }
+
+        var members = await _discordIdentityService.TryGetGuildMembersAsync(guildId, cancellationToken);
+        if (members is null || members.Count == 0)
+        {
+            return Ok(Array.Empty<ActivityDiscordRosterCandidateDto>());
+        }
+
+        var rosterIds = members.Select(member => member.Id).ToList();
+
+        // Build the set of Discord IDs to hide: anyone already in the linkshell
+        // or already holding a pending invite/join request for it.
+        var memberAppUserIds = await _dbContext.AppUserLinkshells
+            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
+            .Select(link => link.AppUserId!)
+            .ToListAsync(cancellationToken);
+
+        var pendingInvites = await _dbContext.Invites
+            .Where(invite => invite.LinkshellId == linkshellId &&
+                             (invite.Status == PendingInviteStatus || invite.Status == PendingJoinRequestStatus))
+            .Select(invite => new { invite.AppUserId, invite.DiscordUserId })
+            .ToListAsync(cancellationToken);
+
+        var excludedAppUserIds = memberAppUserIds
+            .Concat(pendingInvites.Where(i => i.AppUserId != null).Select(i => i.AppUserId!))
+            .Distinct()
+            .ToList();
+
+        var excludedDiscordIds = await _dbContext.DiscordActivityUsers
+            .Where(discordUser => discordUser.IdentityUserId != null &&
+                                  excludedAppUserIds.Contains(discordUser.IdentityUserId))
+            .Select(discordUser => discordUser.DiscordUserId)
+            .ToListAsync(cancellationToken);
+
+        var excluded = new HashSet<string>(excludedDiscordIds, StringComparer.Ordinal);
+        foreach (var pending in pendingInvites)
+        {
+            if (!string.IsNullOrWhiteSpace(pending.DiscordUserId))
+            {
+                excluded.Add(pending.DiscordUserId);
+            }
+        }
+
+        // Which roster members already have an LSM account (drives a normal vs
+        // Discord-keyed invite, and a small badge in the UI).
+        var existingAccountIds = await _dbContext.DiscordActivityUsers
+            .Where(discordUser => discordUser.IdentityUserId != null && rosterIds.Contains(discordUser.DiscordUserId))
+            .Select(discordUser => discordUser.DiscordUserId)
+            .ToListAsync(cancellationToken);
+        var hasAccount = new HashSet<string>(existingAccountIds, StringComparer.Ordinal);
+
+        var candidates = members
+            .Where(member => !excluded.Contains(member.Id))
+            .OrderBy(member => member.GlobalName ?? member.Username)
+            .Take(500)
+            .Select(member => new ActivityDiscordRosterCandidateDto(
+                member.Id,
+                string.IsNullOrWhiteSpace(member.GlobalName) ? member.Username : member.GlobalName!,
+                DiscordIdentityService.BuildAvatarUrl(member.Id, member.Avatar),
+                hasAccount.Contains(member.Id)))
+            .ToList();
+
+        return Ok(candidates);
+    }
+
+    // Invites a member of the linkshell's locked Discord server. If they already
+    // have an LSM account, this is a normal pending invite they accept; if not,
+    // it's a Discord-keyed invite that auto-joins them on their first sign-in.
+    [HttpPost("linkshells/{linkshellId:int}/invites/discord")]
+    public async Task<IActionResult> SendDiscordInviteAsync(
+        int linkshellId,
+        [FromBody] ActivityDiscordInviteRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.DiscordUserId))
+        {
+            return BadRequest(new { error = "A Discord user is required." });
+        }
+        var discordUserId = request.DiscordUserId.Trim();
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to send invites."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var guildId = membership?.Linkshell?.DiscordGuildId;
+        if (string.IsNullOrWhiteSpace(guildId))
+        {
+            return BadRequest(new { error = "This linkshell isn't locked to a Discord server." });
+        }
+
+        // Verify the target is actually in the server (don't trust a raw ID from
+        // the client) and grab their display name for the invite snapshot.
+        var members = await _discordIdentityService.TryGetGuildMembersAsync(guildId, cancellationToken);
+        if (members is null)
+        {
+            return BadRequest(new { error = "Couldn't read the linkshell's Discord server. Make sure the bot is in it." });
+        }
+
+        var target = members.FirstOrDefault(member => member.Id == discordUserId);
+        if (target is null)
+        {
+            return BadRequest(new { error = "That person isn't a member of the linkshell's Discord server." });
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(target.GlobalName) ? target.Username : target.GlobalName!;
+
+        // Already an LSM user? Send a normal invite they accept.
+        var existingDiscordUser = await _dbContext.DiscordActivityUsers
+            .FirstOrDefaultAsync(
+                discordUser => discordUser.DiscordUserId == discordUserId && discordUser.IdentityUserId != null,
+                cancellationToken);
+
+        if (existingDiscordUser is not null)
+        {
+            var targetAppUserId = existingDiscordUser.IdentityUserId!;
+
+            var alreadyMember = await _dbContext.AppUserLinkshells
+                .AnyAsync(link => link.LinkshellId == linkshellId && link.AppUserId == targetAppUserId, cancellationToken);
+            if (alreadyMember)
+            {
+                return BadRequest(new { error = "That player is already a member of this linkshell." });
+            }
+
+            var existingInvite = await _dbContext.Invites
+                .AnyAsync(invite => invite.LinkshellId == linkshellId &&
+                                    invite.AppUserId == targetAppUserId &&
+                                    (invite.Status == PendingInviteStatus || invite.Status == PendingJoinRequestStatus),
+                    cancellationToken);
+            if (existingInvite)
+            {
+                return BadRequest(new { error = "A pending invite or join request already exists for that player." });
+            }
+
+            _dbContext.Invites.Add(new Invite
+            {
+                AppUserId = targetAppUserId,
+                LinkshellId = linkshellId,
+                Status = PendingInviteStatus
+            });
+        }
+        else
+        {
+            var existingDiscordInvite = await _dbContext.Invites
+                .AnyAsync(invite => invite.LinkshellId == linkshellId &&
+                                    invite.DiscordUserId == discordUserId &&
+                                    invite.Status == PendingInviteStatus,
+                    cancellationToken);
+            if (existingDiscordInvite)
+            {
+                return BadRequest(new { error = "That person has already been invited." });
+            }
+
+            _dbContext.Invites.Add(new Invite
+            {
+                AppUserId = null,
+                LinkshellId = linkshellId,
+                Status = PendingInviteStatus,
+                DiscordUserId = discordUserId,
+                DiscordDisplayName = displayName
+            });
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

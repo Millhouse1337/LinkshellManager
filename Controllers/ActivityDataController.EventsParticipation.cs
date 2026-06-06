@@ -97,10 +97,9 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Quick join is only available after the event has started." });
         }
 
-        var hasLinkshellMembership = await _dbContext.AppUserLinkshells
-            .AnyAsync(link => link.AppUserId == appUser.Id && link.LinkshellId == eventEntity.LinkshellId, cancellationToken);
-
-        if (!hasLinkshellMembership)
+        // GetMembershipAsync also enforces the per-linkshell Discord guild lock.
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (membership is null)
         {
             return Forbid();
         }

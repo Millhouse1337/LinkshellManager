@@ -29,7 +29,7 @@
     </div>
 </div>
 
-<div class="card fade d2" style="padding:20px;max-width:640px">
+<div class="card fade d2" style="padding:24px;max-width:760px;margin:0 auto">
     <form asp-action="Add" method="post">
         @Html.AntiForgeryToken()
         <input type="hidden" asp-for="LinkshellId" />
@@ -39,22 +39,44 @@
 
         <div class="form-grid">
             <div class="field">
-                <label asp-for="Context">Source / monster <span class="muted">(optional)</span></label>
-                @* Typeable filter (mirrors the Winner field below): the input
-                   itself accepts free text, the datalist offers known monsters
-                   as autocomplete suggestions. Replaces the old
-                   <select> + "Other -> Custom source" two-step. *@
-                <input asp-for="Context" class="form-control"
-                       list="loot-source-options" autocomplete="off" maxlength="256"
-                       placeholder="Type to filter known monsters, or enter your own…" />
-                <datalist id="loot-source-options">
-                    @foreach (var monster in TodManagerViewModel.SupportedMonsters)
-                    {
-                        <option value="@monster"></option>
-                    }
-                </datalist>
-                <span asp-validation-for="Context" class="text-danger"></span>
-                <span class="muted" style="font-size:11px">Start typing to filter, or enter a custom source (e.g. "Sky"). Shown as the loot's Context in history.</span>
+                <label asp-for="Context">Event <span class="muted">(optional)</span></label>
+                @if (string.Equals(Model.LinkshellType, LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis, StringComparison.OrdinalIgnoreCase))
+                {
+                    @* Sky/Sea/Dynamis linkshell: curated event dropdown. Picking
+                       "Other" reveals a free-text box (CustomContext) that the
+                       controller folds into Context on save. *@
+                    var eventOptions = new[] { "Sky", "Sea", "Dynamis", "HENM", "KSNM", "BCNM", "Other" };
+                    var isKnownEvent = eventOptions.Any(o => string.Equals(o, Model.Context, StringComparison.OrdinalIgnoreCase));
+                    var pickValue = string.IsNullOrEmpty(Model.Context) ? string.Empty : (isKnownEvent ? Model.Context! : "Other");
+                    var customValue = (!isKnownEvent && !string.IsNullOrEmpty(Model.Context)) ? Model.Context : Model.CustomContext;
+                    <select name="Context" id="Context" class="form-select">
+                        <option value="">Select event…</option>
+                        @foreach (var opt in eventOptions)
+                        {
+                            <option value="@opt" selected="@(string.Equals(opt, pickValue, StringComparison.OrdinalIgnoreCase))">@opt</option>
+                        }
+                    </select>
+                    <input name="CustomContext" id="loot-event-custom" class="form-control" maxlength="256"
+                           value="@customValue" autocomplete="off" placeholder="Name the source (e.g. Limbus)"
+                           style="margin-top:6px;@(pickValue == "Other" ? string.Empty : "display:none")" />
+                    <span asp-validation-for="Context" class="text-danger"></span>
+                    <span class="muted" style="font-size:11px">Pick the event, or choose "Other" to name a custom source.</span>
+                }
+                else
+                {
+                    @* HNM / Both: free-text filter over the known monster list. *@
+                    <input asp-for="Context" class="form-control"
+                           list="loot-source-options" autocomplete="off" maxlength="256"
+                           placeholder="Type to filter known monsters, or enter your own…" />
+                    <datalist id="loot-source-options">
+                        @foreach (var monster in TodManagerViewModel.SupportedMonsters)
+                        {
+                            <option value="@monster"></option>
+                        }
+                    </datalist>
+                    <span asp-validation-for="Context" class="text-danger"></span>
+                    <span class="muted" style="font-size:11px">Start typing to filter, or enter a custom source (e.g. "Sky"). Shown as the loot's Context in history.</span>
+                }
             </div>
 
             <div class="field">
@@ -87,7 +109,13 @@
 
             <div class="field">
                 <label asp-for="WinningDkpSpent">@dkpLabel</label>
-                <input asp-for="WinningDkpSpent" class="form-control" type="number" min="0" />
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input asp-for="WinningDkpSpent" class="form-control" type="number" min="0" style="flex:1;min-width:0" />
+                    <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text-muted);white-space:nowrap;margin:0">
+                        <input type="checkbox" id="loot-no-dkp" @(Model.WinningDkpSpent == 0 ? "checked" : null) />
+                        No DKP
+                    </label>
+                </div>
                 <span asp-validation-for="WinningDkpSpent" class="text-danger"></span>
                 <span class="muted" style="font-size:11px">@dkpHint</span>
             </div>
@@ -100,5 +128,34 @@
     </form>
 </div>
 
-@* Source filter is now a free-text input + datalist (no separate "Other"
-   branch to toggle), so the previous toggle script is gone. *@
+<script nonce="@Html.CspNonce()">
+    (function () {
+        // Sky/Sea/Dynamis dropdown: reveal the custom-name box only on "Other".
+        var sel = document.getElementById('Context');
+        var custom = document.getElementById('loot-event-custom');
+        if (sel && custom && sel.tagName === 'SELECT') {
+            var syncOther = function () { custom.style.display = (sel.value === 'Other') ? '' : 'none'; };
+            sel.addEventListener('change', syncOther);
+            syncOther();
+        }
+
+        // "No DKP": zero + lock the DKP spent field so the loot records 0 cost.
+        var noDkp = document.getElementById('loot-no-dkp');
+        var dkp = document.getElementById('WinningDkpSpent');
+        if (noDkp && dkp) {
+            var applyNoDkp = function () {
+                if (noDkp.checked) {
+                    dkp.value = '0';
+                    dkp.readOnly = true;
+                    dkp.style.opacity = '0.55';
+                } else {
+                    dkp.readOnly = false;
+                    dkp.style.opacity = '';
+                    if (dkp.value === '0') dkp.value = '';
+                }
+            };
+            noDkp.addEventListener('change', applyNoDkp);
+            applyNoDkp();
+        }
+    })();
+</script>

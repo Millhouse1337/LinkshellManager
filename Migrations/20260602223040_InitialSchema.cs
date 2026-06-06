@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -200,6 +199,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     LinkshellName = table.Column<string>(type: "text", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: true),
                     Details = table.Column<string>(type: "text", nullable: true),
+                    LinkshellType = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     LootStructure = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     DkpRoundingIncrement = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     EnableHnmSection = table.Column<bool>(type: "boolean", nullable: false),
@@ -211,7 +211,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                     EnableDkp = table.Column<bool>(type: "boolean", nullable: false),
                     EnableItems = table.Column<bool>(type: "boolean", nullable: false),
                     EnableRevenue = table.Column<bool>(type: "boolean", nullable: false),
-                    HiddenTodMonsters = table.Column<string>(type: "text", nullable: false)
+                    HiddenTodMonsters = table.Column<string>(type: "text", nullable: false),
+                    GoogleSpreadsheetId = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    GoogleSheetTabName = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    GoogleOAuthRefreshTokenEnc = table.Column<string>(type: "text", nullable: true),
+                    GoogleOAuthUserEmail = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    GoogleOAuthConnectedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    SheetSyncEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    AttInputTabName = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    AttInputDefaultEntryType = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    ManualPointsTabName = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -346,7 +355,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     Rank = table.Column<string>(type: "text", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: true),
                     LinkshellDkp = table.Column<double>(type: "double precision", nullable: true),
-                    DateJoined = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    DateJoined = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    JobLevels = table.Column<int[]>(type: "jsonb", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -377,7 +387,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ClosedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    ClosedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    DiscordChannelId = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -402,13 +413,42 @@ namespace LinkshellManagerDiscordApp.Migrations
                     CreatedBy = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    StartedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    DiscordChannelId = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Auctions", x => x.Id);
                     table.ForeignKey(
                         name: "FK_Auctions_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ClaimShieldCaptures",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    MonsterName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    Won = table.Column<bool>(type: "boolean", nullable: false),
+                    TotalPlayers = table.Column<int>(type: "integer", nullable: false),
+                    CapturedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CapturedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    CapturedMessage = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    MemberCount = table.Column<int>(type: "integer", nullable: false),
+                    MatchedCount = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ClaimShieldCaptures", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ClaimShieldCaptures_Linkshells_LinkshellId",
                         column: x => x.LinkshellId,
                         principalTable: "Linkshells",
                         principalColumn: "Id",
@@ -440,40 +480,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     table.PrimaryKey("PK_EventHistories", x => x.Id);
                     table.ForeignKey(
                         name: "FK_EventHistories_Linkshells_LinkshellId",
-                        column: x => x.LinkshellId,
-                        principalTable: "Linkshells",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Events",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
-                    EventName = table.Column<string>(type: "text", nullable: true),
-                    EventType = table.Column<string>(type: "text", nullable: true),
-                    EventLocation = table.Column<string>(type: "text", nullable: true),
-                    CreatorUserId = table.Column<string>(type: "text", nullable: true),
-                    StarterUserId = table.Column<string>(type: "text", nullable: true),
-                    StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    CommencementStartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Duration = table.Column<double>(type: "double precision", nullable: true),
-                    DkpPerHour = table.Column<int>(type: "integer", nullable: true),
-                    EventDkp = table.Column<double>(type: "double precision", nullable: true),
-                    Details = table.Column<string>(type: "text", nullable: true),
-                    CreationSource = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
-                    WindowCountOverride = table.Column<int>(type: "integer", nullable: true),
-                    TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Events", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Events_Linkshells_LinkshellId",
                         column: x => x.LinkshellId,
                         principalTable: "Linkshells",
                         principalColumn: "Id",
@@ -536,6 +542,33 @@ namespace LinkshellManagerDiscordApp.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "LinkshellDiscordWebhooks",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    Url = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PostTodBoard = table.Column<bool>(type: "boolean", nullable: false),
+                    TodBoardMessageId = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    PostDkpSpendLog = table.Column<bool>(type: "boolean", nullable: false),
+                    PostAttendanceSnapshot = table.Column<bool>(type: "boolean", nullable: false),
+                    PostAuctions = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_LinkshellDiscordWebhooks", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_LinkshellDiscordWebhooks_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "LinkshellRoles",
                 columns: table => new
                 {
@@ -557,13 +590,77 @@ namespace LinkshellManagerDiscordApp.Migrations
                     CanManageTods = table.Column<bool>(type: "boolean", nullable: false),
                     CanAuditDkp = table.Column<bool>(type: "boolean", nullable: false),
                     CanManageAuctions = table.Column<bool>(type: "boolean", nullable: false),
-                    CanCustomizeLinkshell = table.Column<bool>(type: "boolean", nullable: false)
+                    CanCustomizeLinkshell = table.Column<bool>(type: "boolean", nullable: false),
+                    CanSubmitTodForApproval = table.Column<bool>(type: "boolean", nullable: false),
+                    CanSubmitAttendanceForApproval = table.Column<bool>(type: "boolean", nullable: false),
+                    CanManageParties = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_LinkshellRoles", x => x.Id);
                     table.ForeignKey(
                         name: "FK_LinkshellRoles_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PartySetups",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    AssignedMonsterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    Notes = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
+                    CreatedByAppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    CreatedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PartySetups", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PartySetups_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingTodSubmissions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    SubmittedByAppUserId = table.Column<string>(type: "text", nullable: true),
+                    SubmittedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ReviewNotes = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    MonsterName = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    DayNumber = table.Column<int>(type: "integer", nullable: true),
+                    Claim = table.Column<bool>(type: "boolean", nullable: true),
+                    Time = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Cooldown = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    Interval = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    RepopTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ImagePath = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingTodSubmissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PendingTodSubmissions_AspNetUsers_SubmittedByAppUserId",
+                        column: x => x.SubmittedByAppUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_PendingTodSubmissions_Linkshells_LinkshellId",
                         column: x => x.LinkshellId,
                         principalTable: "Linkshells",
                         principalColumn: "Id",
@@ -654,6 +751,61 @@ namespace LinkshellManagerDiscordApp.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "WindowEvents",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    NormalizedName = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    Status = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false, defaultValue: "Open"),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    FirstCapturedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastCapturedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ClosedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CreatedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    Notes = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
+                    DkpAmount = table.Column<double>(type: "double precision", nullable: true),
+                    EntryType = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    PostedToSheetAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    FirstAttInputRowNumber = table.Column<int>(type: "integer", nullable: true),
+                    AttInputRowCount = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_WindowEvents", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_WindowEvents_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ClaimShieldCaptureMembers",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    CaptureId = table.Column<int>(type: "integer", nullable: false),
+                    CharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    AppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    Matched = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ClaimShieldCaptureMembers", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ClaimShieldCaptureMembers_ClaimShieldCaptures_CaptureId",
+                        column: x => x.CaptureId,
+                        principalTable: "ClaimShieldCaptures",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "AppUserEventHistories",
                 columns: table => new
                 {
@@ -711,7 +863,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                     Details = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
                     EditReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
                     SourceTodLootDetailId = table.Column<int>(type: "integer", nullable: true),
-                    SourceEventLootDetailId = table.Column<int>(type: "integer", nullable: true)
+                    SourceEventLootDetailId = table.Column<int>(type: "integer", nullable: true),
+                    SourceAuctionHistoryId = table.Column<int>(type: "integer", nullable: true),
+                    SourceWindowEventId = table.Column<int>(type: "integer", nullable: true),
+                    AuditRelatedLedgerEntryId = table.Column<int>(type: "integer", nullable: true),
+                    AttInputRowNumber = table.Column<int>(type: "integer", nullable: true),
+                    SheetAppendedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -720,6 +877,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                         name: "FK_DkpLedgerEntries_AspNetUsers_AppUserId",
                         column: x => x.AppUserId,
                         principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_DkpLedgerEntries_AuctionHistories_SourceAuctionHistoryId",
+                        column: x => x.SourceAuctionHistoryId,
+                        principalTable: "AuctionHistories",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
@@ -732,129 +895,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         name: "FK_DkpLedgerEntries_Linkshells_LinkshellId",
                         column: x => x.LinkshellId,
                         principalTable: "Linkshells",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "AppUserEvents",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AppUserId = table.Column<string>(type: "text", nullable: true),
-                    EventId = table.Column<int>(type: "integer", nullable: false),
-                    CharacterName = table.Column<string>(type: "text", nullable: true),
-                    JobName = table.Column<string>(type: "text", nullable: true),
-                    SubJobName = table.Column<string>(type: "text", nullable: true),
-                    JobType = table.Column<string>(type: "text", nullable: true),
-                    StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Duration = table.Column<double>(type: "double precision", nullable: true),
-                    EventDkp = table.Column<double>(type: "double precision", nullable: true),
-                    IsQuickJoin = table.Column<bool>(type: "boolean", nullable: false),
-                    IsVerified = table.Column<bool>(type: "boolean", nullable: true),
-                    Proctor = table.Column<string>(type: "text", nullable: true),
-                    IsOnBreak = table.Column<bool>(type: "boolean", nullable: true),
-                    PauseTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ResumeTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_AppUserEvents", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_AppUserEvents_AspNetUsers_AppUserId",
-                        column: x => x.AppUserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id");
-                    table.ForeignKey(
-                        name: "FK_AppUserEvents_Events_EventId",
-                        column: x => x.EventId,
-                        principalTable: "Events",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "EventAttendanceWindows",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    EventId = table.Column<int>(type: "integer", nullable: false),
-                    SequenceNumber = table.Column<int>(type: "integer", nullable: false),
-                    Label = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
-                    PostedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    PostedBySource = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
-                    DkpAmount = table.Column<double>(type: "double precision", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_EventAttendanceWindows", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_EventAttendanceWindows_Events_EventId",
-                        column: x => x.EventId,
-                        principalTable: "Events",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "EventLootDetails",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    EventId = table.Column<int>(type: "integer", nullable: true),
-                    EventHistoryId = table.Column<int>(type: "integer", nullable: true),
-                    ItemName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    ItemWinner = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    WinningDkpSpent = table.Column<int>(type: "integer", nullable: true),
-                    ActualDeductedDkp = table.Column<double>(type: "double precision", nullable: true),
-                    EditedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    EditedByAppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
-                    EditedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    LastEditReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_EventLootDetails", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_EventLootDetails_EventHistories_EventHistoryId",
-                        column: x => x.EventHistoryId,
-                        principalTable: "EventHistories",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                    table.ForeignKey(
-                        name: "FK_EventLootDetails_Events_EventId",
-                        column: x => x.EventId,
-                        principalTable: "Events",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Jobs",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    EventId = table.Column<int>(type: "integer", nullable: false),
-                    JobName = table.Column<string>(type: "text", nullable: true),
-                    SubJobName = table.Column<string>(type: "text", nullable: true),
-                    JobType = table.Column<string>(type: "text", nullable: true),
-                    Quantity = table.Column<int>(type: "integer", nullable: true),
-                    SignedUp = table.Column<int>(type: "integer", nullable: true),
-                    Enlisted = table.Column<List<string>>(type: "text[]", nullable: false),
-                    Details = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Jobs", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Jobs_Events_EventId",
-                        column: x => x.EventId,
-                        principalTable: "Events",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -903,6 +943,98 @@ namespace LinkshellManagerDiscordApp.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "PartySetupAlliances",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    PartySetupId = table.Column<int>(type: "integer", nullable: false),
+                    SortOrder = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PartySetupAlliances", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PartySetupAlliances_PartySetups_PartySetupId",
+                        column: x => x.PartySetupId,
+                        principalTable: "PartySetups",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingTodLootSubmissions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    PendingTodSubmissionId = table.Column<int>(type: "integer", nullable: false),
+                    ItemName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    ItemWinner = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    WinningDkpSpent = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingTodLootSubmissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PendingTodLootSubmissions_PendingTodSubmissions_PendingTodS~",
+                        column: x => x.PendingTodSubmissionId,
+                        principalTable: "PendingTodSubmissions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Events",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    EventName = table.Column<string>(type: "text", nullable: true),
+                    EventType = table.Column<string>(type: "text", nullable: true),
+                    EventLocation = table.Column<string>(type: "text", nullable: true),
+                    CreatorUserId = table.Column<string>(type: "text", nullable: true),
+                    StarterUserId = table.Column<string>(type: "text", nullable: true),
+                    StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CommencementStartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Duration = table.Column<double>(type: "double precision", nullable: true),
+                    DkpPerHour = table.Column<int>(type: "integer", nullable: true),
+                    EventDkp = table.Column<double>(type: "double precision", nullable: true),
+                    Details = table.Column<string>(type: "text", nullable: true),
+                    CreationSource = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    WindowCountOverride = table.Column<int>(type: "integer", nullable: true),
+                    AttInputEntryType = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    AttInputAppendedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    SourceTodId = table.Column<int>(type: "integer", nullable: true),
+                    PartySetupId = table.Column<int>(type: "integer", nullable: true),
+                    TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Events", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Events_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Events_PartySetups_PartySetupId",
+                        column: x => x.PartySetupId,
+                        principalTable: "PartySetups",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Events_Tods_SourceTodId",
+                        column: x => x.SourceTodId,
+                        principalTable: "Tods",
+                        principalColumn: "Id");
+                });
+
+            migrationBuilder.CreateTable(
                 name: "TodLootDetails",
                 columns: table => new
                 {
@@ -925,6 +1057,354 @@ namespace LinkshellManagerDiscordApp.Migrations
                         name: "FK_TodLootDetails_Tods_TodId",
                         column: x => x.TodId,
                         principalTable: "Tods",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "WindowEventMemberDkps",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    WindowEventId = table.Column<int>(type: "integer", nullable: false),
+                    CharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    DkpAmount = table.Column<double>(type: "double precision", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_WindowEventMemberDkps", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_WindowEventMemberDkps_WindowEvents_WindowEventId",
+                        column: x => x.WindowEventId,
+                        principalTable: "WindowEvents",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Bids",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AuctionItemId = table.Column<int>(type: "integer", nullable: false),
+                    AppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    CharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    BidAmount = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Bids", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Bids_AspNetUsers_AppUserId",
+                        column: x => x.AppUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Bids_AuctionItems_AuctionItemId",
+                        column: x => x.AuctionItemId,
+                        principalTable: "AuctionItems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PartySetupParties",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    PartySetupAllianceId = table.Column<int>(type: "integer", nullable: false),
+                    SortOrder = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PartySetupParties", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PartySetupParties_PartySetupAlliances_PartySetupAllianceId",
+                        column: x => x.PartySetupAllianceId,
+                        principalTable: "PartySetupAlliances",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AppUserEvents",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AppUserId = table.Column<string>(type: "text", nullable: true),
+                    EventId = table.Column<int>(type: "integer", nullable: false),
+                    CharacterName = table.Column<string>(type: "text", nullable: true),
+                    JobName = table.Column<string>(type: "text", nullable: true),
+                    SubJobName = table.Column<string>(type: "text", nullable: true),
+                    JobType = table.Column<string>(type: "text", nullable: true),
+                    StartTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EndTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Duration = table.Column<double>(type: "double precision", nullable: true),
+                    EventDkp = table.Column<double>(type: "double precision", nullable: true),
+                    IsQuickJoin = table.Column<bool>(type: "boolean", nullable: false),
+                    IsVerified = table.Column<bool>(type: "boolean", nullable: true),
+                    Proctor = table.Column<string>(type: "text", nullable: true),
+                    IsOnBreak = table.Column<bool>(type: "boolean", nullable: true),
+                    PauseTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ResumeTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AppUserEvents", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AppUserEvents_AspNetUsers_AppUserId",
+                        column: x => x.AppUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_AppUserEvents_Events_EventId",
+                        column: x => x.EventId,
+                        principalTable: "Events",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AttendanceSnapshots",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    CapturedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CapturedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    UtcOffset = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    EntryCount = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    LinkedEventId = table.Column<int>(type: "integer", nullable: true),
+                    WindowEventId = table.Column<int>(type: "integer", nullable: true),
+                    SnapshotStatus = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false, defaultValue: "Active"),
+                    DuplicateOfSnapshotId = table.Column<int>(type: "integer", nullable: true),
+                    AttInputAppendedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AttendanceSnapshots", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AttendanceSnapshots_AttendanceSnapshots_DuplicateOfSnapshot~",
+                        column: x => x.DuplicateOfSnapshotId,
+                        principalTable: "AttendanceSnapshots",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_AttendanceSnapshots_Events_LinkedEventId",
+                        column: x => x.LinkedEventId,
+                        principalTable: "Events",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_AttendanceSnapshots_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_AttendanceSnapshots_WindowEvents_WindowEventId",
+                        column: x => x.WindowEventId,
+                        principalTable: "WindowEvents",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "EventAttendanceWindows",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    EventId = table.Column<int>(type: "integer", nullable: false),
+                    SequenceNumber = table.Column<int>(type: "integer", nullable: false),
+                    Label = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    PostedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PostedBySource = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    DkpAmount = table.Column<double>(type: "double precision", nullable: true),
+                    AttInputAppendedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_EventAttendanceWindows", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_EventAttendanceWindows_Events_EventId",
+                        column: x => x.EventId,
+                        principalTable: "Events",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "EventLootDetails",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    EventId = table.Column<int>(type: "integer", nullable: true),
+                    EventHistoryId = table.Column<int>(type: "integer", nullable: true),
+                    ItemName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    ItemWinner = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    WinningDkpSpent = table.Column<int>(type: "integer", nullable: true),
+                    ActualDeductedDkp = table.Column<double>(type: "double precision", nullable: true),
+                    EditedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EditedByAppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    EditedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    LastEditReason = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_EventLootDetails", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_EventLootDetails_EventHistories_EventHistoryId",
+                        column: x => x.EventHistoryId,
+                        principalTable: "EventHistories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_EventLootDetails_Events_EventId",
+                        column: x => x.EventId,
+                        principalTable: "Events",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingAttendanceSnapshotSubmissions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    SubmittedByAppUserId = table.Column<string>(type: "text", nullable: true),
+                    SubmittedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ReviewNotes = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    CapturedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CapturedByCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    UtcOffset = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    EntryCount = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    LinkedEventId = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingAttendanceSnapshotSubmissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PendingAttendanceSnapshotSubmissions_AspNetUsers_SubmittedB~",
+                        column: x => x.SubmittedByAppUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_PendingAttendanceSnapshotSubmissions_Events_LinkedEventId",
+                        column: x => x.LinkedEventId,
+                        principalTable: "Events",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_PendingAttendanceSnapshotSubmissions_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingAttendanceWindowSubmissions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    LinkshellId = table.Column<int>(type: "integer", nullable: false),
+                    SubmittedByAppUserId = table.Column<string>(type: "text", nullable: true),
+                    SubmittedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ReviewNotes = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    EventId = table.Column<int>(type: "integer", nullable: false),
+                    WindowIndex = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingAttendanceWindowSubmissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PendingAttendanceWindowSubmissions_AspNetUsers_SubmittedByA~",
+                        column: x => x.SubmittedByAppUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_PendingAttendanceWindowSubmissions_Events_EventId",
+                        column: x => x.EventId,
+                        principalTable: "Events",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_PendingAttendanceWindowSubmissions_Linkshells_LinkshellId",
+                        column: x => x.LinkshellId,
+                        principalTable: "Linkshells",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PartySetupSlots",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    PartySetupPartyId = table.Column<int>(type: "integer", nullable: false),
+                    SortOrder = table.Column<int>(type: "integer", nullable: false),
+                    RequirementType = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    Role = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    MainJob = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    SubJob = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    Label = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    IsPartyLeader = table.Column<bool>(type: "boolean", nullable: false),
+                    SignedUpAppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    SignedUpCharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    SignedUpAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    SignedUpRole = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    SignedUpMainJob = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    SignedUpSubJob = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PartySetupSlots", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PartySetupSlots_PartySetupParties_PartySetupPartyId",
+                        column: x => x.PartySetupPartyId,
+                        principalTable: "PartySetupParties",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AttendanceSnapshotEntries",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SnapshotId = table.Column<int>(type: "integer", nullable: false),
+                    CharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    MainJob = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    MainJobLevel = table.Column<int>(type: "integer", nullable: true),
+                    SubJob = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: true),
+                    SubJobLevel = table.Column<int>(type: "integer", nullable: true),
+                    Zone = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AttendanceSnapshotEntries", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AttendanceSnapshotEntries_AttendanceSnapshots_SnapshotId",
+                        column: x => x.SnapshotId,
+                        principalTable: "AttendanceSnapshots",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -1007,30 +1487,50 @@ namespace LinkshellManagerDiscordApp.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Bids",
+                name: "PendingAttendanceSnapshotEntries",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AuctionItemId = table.Column<int>(type: "integer", nullable: false),
-                    AppUserId = table.Column<string>(type: "character varying(450)", maxLength: 450, nullable: true),
+                    PendingAttendanceSnapshotSubmissionId = table.Column<int>(type: "integer", nullable: false),
                     CharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    BidAmount = table.Column<int>(type: "integer", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    MainJob = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    MainJobLevel = table.Column<int>(type: "integer", nullable: true),
+                    SubJob = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    SubJobLevel = table.Column<int>(type: "integer", nullable: true),
+                    Zone = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Bids", x => x.Id);
+                    table.PrimaryKey("PK_PendingAttendanceSnapshotEntries", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Bids_AspNetUsers_AppUserId",
-                        column: x => x.AppUserId,
-                        principalTable: "AspNetUsers",
+                        name: "FK_PendingAttendanceSnapshotEntries_PendingAttendanceSnapshotS~",
+                        column: x => x.PendingAttendanceSnapshotSubmissionId,
+                        principalTable: "PendingAttendanceSnapshotSubmissions",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PendingAttendanceWindowMemberSubmissions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    PendingAttendanceWindowSubmissionId = table.Column<int>(type: "integer", nullable: false),
+                    CharacterName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    MainJob = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    MainJobLevel = table.Column<int>(type: "integer", nullable: true),
+                    SubJob = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    SubJobLevel = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PendingAttendanceWindowMemberSubmissions", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Bids_AuctionItems_AuctionItemId",
-                        column: x => x.AuctionItemId,
-                        principalTable: "AuctionItems",
+                        name: "FK_PendingAttendanceWindowMemberSubmissions_PendingAttendanceW~",
+                        column: x => x.PendingAttendanceWindowSubmissionId,
+                        principalTable: "PendingAttendanceWindowSubmissions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -1176,6 +1676,31 @@ namespace LinkshellManagerDiscordApp.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_AttendanceSnapshotEntries_SnapshotId",
+                table: "AttendanceSnapshotEntries",
+                column: "SnapshotId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceSnapshots_DuplicateOfSnapshotId",
+                table: "AttendanceSnapshots",
+                column: "DuplicateOfSnapshotId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceSnapshots_LinkedEventId",
+                table: "AttendanceSnapshots",
+                column: "LinkedEventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceSnapshots_LinkshellId_CapturedAtUtc",
+                table: "AttendanceSnapshots",
+                columns: new[] { "LinkshellId", "CapturedAtUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceSnapshots_WindowEventId",
+                table: "AttendanceSnapshots",
+                column: "WindowEventId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_AuctionHistories_LinkshellId",
                 table: "AuctionHistories",
                 column: "LinkshellId");
@@ -1211,6 +1736,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                 columns: new[] { "AuctionItemId", "CreatedAt" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_ClaimShieldCaptureMembers_CaptureId",
+                table: "ClaimShieldCaptureMembers",
+                column: "CaptureId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ClaimShieldCaptures_LinkshellId_CapturedAtUtc",
+                table: "ClaimShieldCaptures",
+                columns: new[] { "LinkshellId", "CapturedAtUtc" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_DiscordActivityUsers_DiscordUserId",
                 table: "DiscordActivityUsers",
                 column: "DiscordUserId",
@@ -1227,6 +1762,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                 column: "AppUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_DkpLedgerEntries_AttInputRowNumber",
+                table: "DkpLedgerEntries",
+                column: "AttInputRowNumber");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DkpLedgerEntries_AuditRelatedLedgerEntryId",
+                table: "DkpLedgerEntries",
+                column: "AuditRelatedLedgerEntryId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_DkpLedgerEntries_EventHistoryId",
                 table: "DkpLedgerEntries",
                 column: "EventHistoryId");
@@ -1237,6 +1782,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                 columns: new[] { "LinkshellId", "AppUserId", "OccurredAt", "Sequence" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_DkpLedgerEntries_SourceAuctionHistoryId",
+                table: "DkpLedgerEntries",
+                column: "SourceAuctionHistoryId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_DkpLedgerEntries_SourceEventLootDetailId",
                 table: "DkpLedgerEntries",
                 column: "SourceEventLootDetailId");
@@ -1245,6 +1795,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "IX_DkpLedgerEntries_SourceTodLootDetailId",
                 table: "DkpLedgerEntries",
                 column: "SourceTodLootDetailId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DkpLedgerEntries_SourceWindowEventId",
+                table: "DkpLedgerEntries",
+                column: "SourceWindowEventId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventAttendanceWindows_EventId_SequenceNumber",
@@ -1273,6 +1828,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                 column: "LinkshellId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Events_PartySetupId",
+                table: "Events",
+                column: "PartySetupId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_SourceTodId",
+                table: "Events",
+                column: "SourceTodId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Invites_AppUserId",
                 table: "Invites",
                 column: "AppUserId");
@@ -1288,9 +1853,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                 columns: new[] { "LinkshellId", "ItemName" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Jobs_EventId",
-                table: "Jobs",
-                column: "EventId");
+                name: "IX_LinkshellDiscordWebhooks_LinkshellId",
+                table: "LinkshellDiscordWebhooks",
+                column: "LinkshellId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_LinkshellRoles_LinkshellId_Name",
@@ -1307,6 +1872,86 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "IX_Notifications_AppUserId",
                 table: "Notifications",
                 column: "AppUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PartySetupAlliances_PartySetupId_SortOrder",
+                table: "PartySetupAlliances",
+                columns: new[] { "PartySetupId", "SortOrder" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PartySetupParties_PartySetupAllianceId_SortOrder",
+                table: "PartySetupParties",
+                columns: new[] { "PartySetupAllianceId", "SortOrder" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PartySetups_LinkshellId_AssignedMonsterName",
+                table: "PartySetups",
+                columns: new[] { "LinkshellId", "AssignedMonsterName" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PartySetups_LinkshellId_Name",
+                table: "PartySetups",
+                columns: new[] { "LinkshellId", "Name" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PartySetupSlots_PartySetupPartyId_SortOrder",
+                table: "PartySetupSlots",
+                columns: new[] { "PartySetupPartyId", "SortOrder" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceSnapshotEntries_PendingAttendanceSnapshotS~",
+                table: "PendingAttendanceSnapshotEntries",
+                column: "PendingAttendanceSnapshotSubmissionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceSnapshotSubmissions_LinkedEventId",
+                table: "PendingAttendanceSnapshotSubmissions",
+                column: "LinkedEventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceSnapshotSubmissions_LinkshellId",
+                table: "PendingAttendanceSnapshotSubmissions",
+                column: "LinkshellId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceSnapshotSubmissions_SubmittedByAppUserId",
+                table: "PendingAttendanceSnapshotSubmissions",
+                column: "SubmittedByAppUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceWindowMemberSubmissions_PendingAttendanceW~",
+                table: "PendingAttendanceWindowMemberSubmissions",
+                column: "PendingAttendanceWindowSubmissionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceWindowSubmissions_EventId",
+                table: "PendingAttendanceWindowSubmissions",
+                column: "EventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceWindowSubmissions_LinkshellId",
+                table: "PendingAttendanceWindowSubmissions",
+                column: "LinkshellId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingAttendanceWindowSubmissions_SubmittedByAppUserId",
+                table: "PendingAttendanceWindowSubmissions",
+                column: "SubmittedByAppUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingTodLootSubmissions_PendingTodSubmissionId",
+                table: "PendingTodLootSubmissions",
+                column: "PendingTodSubmissionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingTodSubmissions_LinkshellId",
+                table: "PendingTodSubmissions",
+                column: "LinkshellId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingTodSubmissions_SubmittedByAppUserId",
+                table: "PendingTodSubmissions",
+                column: "SubmittedByAppUserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_RevenueEntries_LinkshellId_OccurredAt",
@@ -1332,6 +1977,22 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "IX_Tods_LinkshellId_Time",
                 table: "Tods",
                 columns: new[] { "LinkshellId", "Time" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WindowEventMemberDkps_WindowEventId_CharacterName",
+                table: "WindowEventMemberDkps",
+                columns: new[] { "WindowEventId", "CharacterName" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WindowEvents_LinkshellId_LastCapturedAtUtc",
+                table: "WindowEvents",
+                columns: new[] { "LinkshellId", "LastCapturedAtUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WindowEvents_LinkshellId_Status_NormalizedName",
+                table: "WindowEvents",
+                columns: new[] { "LinkshellId", "Status", "NormalizedName" });
         }
 
         /// <inheritdoc />
@@ -1374,7 +2035,13 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "AttendanceSnapshotEntries");
+
+            migrationBuilder.DropTable(
                 name: "Bids");
+
+            migrationBuilder.DropTable(
+                name: "ClaimShieldCaptureMembers");
 
             migrationBuilder.DropTable(
                 name: "DiscordActivityUsers");
@@ -1389,13 +2056,25 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "Invites");
 
             migrationBuilder.DropTable(
-                name: "Jobs");
+                name: "LinkshellDiscordWebhooks");
 
             migrationBuilder.DropTable(
                 name: "LinkshellRoles");
 
             migrationBuilder.DropTable(
                 name: "Notifications");
+
+            migrationBuilder.DropTable(
+                name: "PartySetupSlots");
+
+            migrationBuilder.DropTable(
+                name: "PendingAttendanceSnapshotEntries");
+
+            migrationBuilder.DropTable(
+                name: "PendingAttendanceWindowMemberSubmissions");
+
+            migrationBuilder.DropTable(
+                name: "PendingTodLootSubmissions");
 
             migrationBuilder.DropTable(
                 name: "RevenueEntries");
@@ -1407,6 +2086,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "TodLootDetails");
 
             migrationBuilder.DropTable(
+                name: "WindowEventMemberDkps");
+
+            migrationBuilder.DropTable(
                 name: "AppUserEvents");
 
             migrationBuilder.DropTable(
@@ -1416,16 +2098,31 @@ namespace LinkshellManagerDiscordApp.Migrations
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
+                name: "AttendanceSnapshots");
+
+            migrationBuilder.DropTable(
                 name: "AuctionItems");
+
+            migrationBuilder.DropTable(
+                name: "ClaimShieldCaptures");
 
             migrationBuilder.DropTable(
                 name: "EventHistories");
 
             migrationBuilder.DropTable(
-                name: "Tods");
+                name: "PartySetupParties");
 
             migrationBuilder.DropTable(
-                name: "Events");
+                name: "PendingAttendanceSnapshotSubmissions");
+
+            migrationBuilder.DropTable(
+                name: "PendingAttendanceWindowSubmissions");
+
+            migrationBuilder.DropTable(
+                name: "PendingTodSubmissions");
+
+            migrationBuilder.DropTable(
+                name: "WindowEvents");
 
             migrationBuilder.DropTable(
                 name: "AuctionHistories");
@@ -1435,6 +2132,18 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             migrationBuilder.DropTable(
                 name: "Items");
+
+            migrationBuilder.DropTable(
+                name: "PartySetupAlliances");
+
+            migrationBuilder.DropTable(
+                name: "Events");
+
+            migrationBuilder.DropTable(
+                name: "PartySetups");
+
+            migrationBuilder.DropTable(
+                name: "Tods");
 
             migrationBuilder.DropTable(
                 name: "Linkshells");

@@ -259,7 +259,9 @@ namespace LinkshellManagerDiscordApp.Data
 
             builder.Entity<Invite>(entity =>
             {
-                entity.Property(invite => invite.AppUserId).HasMaxLength(450).IsRequired();
+                // Optional now: a Discord-roster invite has no AppUserId until the
+                // invited Discord account first signs into LSM.
+                entity.Property(invite => invite.AppUserId).HasMaxLength(450);
                 entity.Property(invite => invite.Status).HasMaxLength(32).IsRequired();
                 entity.HasOne(invite => invite.AppUser)
                     .WithMany()

@@ -12,8 +12,17 @@
     .auction-item-row .create-form__grid > label > span {
         text-align: center;
     }
-    .auction-item-row .create-form__grid > label.create-form__field--full > span {
-        text-align: left; /* Notes spans the row -- keep its label flush left */
+    /* Centre the inputs/select themselves so their content lines up under the
+       centered column labels. */
+    .auction-item-row .create-form__grid > label > input,
+    .auction-item-row .create-form__grid > label > select {
+        text-align: center;
+        text-align-last: center; /* centers the selected option text in <select> */
+    }
+    .auction-item-row .create-form__grid > label.create-form__field--full > span,
+    .auction-item-row .create-form__grid > label.create-form__field--full > input {
+        text-align: left; /* Notes spans the row -- keep it flush left */
+        text-align-last: left;
     }
 </style>
 

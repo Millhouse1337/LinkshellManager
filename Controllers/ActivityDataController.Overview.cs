@@ -32,11 +32,28 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        // Drop any linkshell locked to a Discord guild the user can't prove
+        // membership in, so a non-member never even sees it on the dashboard.
+        // Unlocked linkshells pass through without any Discord call.
+        var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
+            linkshellMemberships
+                .Select(link => (link.LinkshellId, link.Linkshell?.DiscordGuildId))
+                .ToList(),
+            cancellationToken);
+        linkshellMemberships = linkshellMemberships
+            .Where(link => accessibleLinkshellIds.Contains(link.LinkshellId))
+            .ToList();
+
         var linkshellIds = linkshellMemberships
             .Select(link => link.LinkshellId)
             .Distinct()
             .ToList();
-        var primaryLinkshellId = appUser.PrimaryLinkshellId ?? linkshellMemberships.FirstOrDefault()?.LinkshellId;
+        // Only surface a primary linkshell the user is actually allowed to see —
+        // never fall back to (or keep) one that was just filtered out above.
+        var primaryLinkshellId = appUser.PrimaryLinkshellId.HasValue
+            && linkshellMemberships.Any(link => link.LinkshellId == appUser.PrimaryLinkshellId.Value)
+                ? appUser.PrimaryLinkshellId
+                : linkshellMemberships.FirstOrDefault()?.LinkshellId;
 
         var memberCounts = await _dbContext.AppUserLinkshells
             .Where(link => linkshellIds.Contains(link.LinkshellId))
@@ -449,7 +466,7 @@ public sealed partial class ActivityDataController
                 invite.Id,
                 invite.AppUserId,
                 invite.LinkshellId,
-                invite.AppUser?.CharacterName ?? invite.AppUser?.UserName ?? "Unknown member",
+                invite.AppUser?.CharacterName ?? invite.AppUser?.UserName ?? invite.DiscordDisplayName ?? "Unknown member",
                 invite.Linkshell?.LinkshellName ?? "Unknown linkshell",
                 invite.Status)).ToList(),
             incomingJoinRequests.Select(invite => new ActivityInviteDto(
@@ -496,11 +513,16 @@ public sealed partial class ActivityDataController
             });
         }
 
-        var linkshellIds = await _dbContext.AppUserLinkshells
+        var linkshellCandidates = await _dbContext.AppUserLinkshells
             .Where(link => link.AppUserId == appUser.Id)
-            .Select(link => link.LinkshellId)
+            .Select(link => new { link.LinkshellId, link.Linkshell!.DiscordGuildId })
             .Distinct()
             .ToListAsync(cancellationToken);
+
+        var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
+            linkshellCandidates.Select(c => (c.LinkshellId, c.DiscordGuildId)).ToList(),
+            cancellationToken);
+        var linkshellIds = accessibleLinkshellIds.ToList();
 
         if (linkshellIds.Count == 0)
         {
@@ -555,10 +577,9 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The requested history entry was not found." });
         }
 
-        var hasAccess = await _dbContext.AppUserLinkshells
-            .AnyAsync(link => link.AppUserId == appUser.Id && link.LinkshellId == history.LinkshellId, cancellationToken);
-
-        if (!hasAccess)
+        // GetMembershipAsync also enforces the per-linkshell Discord guild lock.
+        var membership = await GetMembershipAsync(appUser.Id, history.LinkshellId, cancellationToken);
+        if (membership is null)
         {
             return Forbid();
         }

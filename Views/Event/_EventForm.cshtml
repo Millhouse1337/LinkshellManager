@@ -2,8 +2,15 @@
 @{
     // Mirror the Discord Activity's eventTypeOptions list exactly so both UIs pick from
     // the same vocabulary. "Other" is appended in the markup and reveals a free-text input.
-    var eventTypeOptions = new[] { "Sky", "Sea", "HNM", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
     var currentEventType = Model.Event.EventType ?? string.Empty;
+    // "HNM" events are created automatically by the in-game addon (never by hand), so
+    // it's not offered as a manual create option. Keep it selectable only when editing
+    // an existing HNM event so its type still displays and round-trips on save.
+    var eventTypeOptions = new List<string> { "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
+    if (string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase))
+    {
+        eventTypeOptions.Insert(2, "HNM");
+    }
     var isKnownEventType = eventTypeOptions.Any(option =>
         string.Equals(option, currentEventType, StringComparison.OrdinalIgnoreCase));
     var initialPickerValue = string.IsNullOrEmpty(currentEventType) ? string.Empty
@@ -18,6 +25,9 @@
     var endTimeNotSpecified    = isEditMode && Model.Event.EndTime is null;
     var durationNotSpecified   = isEditMode && Model.Event.Duration is null;
     var partySetupNotSpecified = isEditMode && !Model.PartySetupId.HasValue;
+    // "No DKP" runs award nothing -- modelled as DkpPerHour == 0. Pre-tick the
+    // toggle when editing such an event so it round-trips.
+    var noDkp                  = Model.Event.DkpPerHour == 0;
 }
 
 <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="margin-bottom:12px"></div>
@@ -102,7 +112,11 @@
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_Duration">Duration (hours)</label>
         <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" id="Event_Duration" name="Event.Duration" type="number" step="0.25" value="@Model.Event.Duration" style="flex:1;min-width:0" />
+            <div class="num-stepper" style="flex:1;min-width:0">
+                <input class="form-control num-stepper__input" id="Event_Duration" name="Event.Duration" type="number" step="0.25" min="0" value="@Model.Event.Duration" />
+                <button type="button" class="num-stepper__btn" data-stepper-dec aria-label="Decrease duration">&minus;</button>
+                <button type="button" class="num-stepper__btn" data-stepper-inc aria-label="Increase duration">+</button>
+            </div>
             <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
                 <input type="checkbox" id="Event_Duration_NotSpecified" @(durationNotSpecified ? "checked" : null) />
                 Not specified
@@ -111,7 +125,17 @@
     </div>
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_DkpPerHour">DKP/hour</label>
-        <input class="form-control" id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" value="@Model.Event.DkpPerHour" />
+        <div style="display:flex;gap:8px;align-items:center">
+            <div class="num-stepper" style="flex:1;min-width:0">
+                <input class="form-control num-stepper__input" id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" min="0" step="1" value="@Model.Event.DkpPerHour" />
+                <button type="button" class="num-stepper__btn" data-stepper-dec aria-label="Decrease DKP per hour">&minus;</button>
+                <button type="button" class="num-stepper__btn" data-stepper-inc aria-label="Increase DKP per hour">+</button>
+            </div>
+            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
+                <input type="checkbox" id="Event_NoDkp" @(noDkp ? "checked" : null) />
+                No DKP
+            </label>
+        </div>
     </div>
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_AttInputEntryType">AttInput Entry Type</label>
@@ -141,7 +165,7 @@
 
 <script nonce="@Html.CspNonce()">
     (function () {
-        var known = ['Sky','Sea','HNM','HENM','Limbus','Dynamis','BCNM','KSNM'];
+        var known = ['Sky','Sea','HENM','Limbus','Dynamis','BCNM','KSNM'];
         var picker = document.getElementById('event-type-picker');
         var other  = document.getElementById('event-type-other');
         var hidden = document.getElementById('event-type-hidden');
@@ -247,9 +271,61 @@
         endNs.addEventListener('change', applyEndNotSpecified);
         durNs.addEventListener('change', applyDurationNotSpecified);
 
-        // Apply initial disabled state on page load (matches the pre-checked state).
-        applyEndNotSpecified();
-        applyDurationNotSpecified();
+        // Initial load: only reflect the "Not specified" checkboxes' disabled
+        // state. Do NOT auto-fill Duration or recompute End -- End starts blank
+        // by default; the Start/End/Duration sync only kicks in once the user
+        // edits one of the fields.
+        if (endNs.checked) { endEl.value = ''; endEl.disabled = true; }
+        if (durNs.checked) { durationEl.value = ''; durationEl.disabled = true; }
+    })();
+</script>
+
+<script nonce="@Html.CspNonce()">
+    // Custom +/- steppers (native number-input arrows are hidden site-wide
+    // because they can't be themed on the dark UI) plus the "No DKP" toggle.
+    (function () {
+        document.querySelectorAll('.num-stepper').forEach(function (wrap) {
+            var input = wrap.querySelector('.num-stepper__input');
+            if (!input) return;
+            var step = parseFloat(input.getAttribute('step')) || 1;
+            var min  = input.hasAttribute('min') ? parseFloat(input.getAttribute('min')) : null;
+            function bump(dir) {
+                if (input.disabled || input.readOnly) return;
+                var cur = parseFloat(input.value);
+                if (isNaN(cur)) cur = (min !== null ? min : 0);
+                var next = Math.round((cur + dir * step) * 100) / 100;
+                if (min !== null && next < min) next = min;
+                input.value = next;
+                // Re-run the Start/End/Duration sync wired on these inputs.
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            var dec = wrap.querySelector('[data-stepper-dec]');
+            var inc = wrap.querySelector('[data-stepper-inc]');
+            if (dec) dec.addEventListener('click', function () { bump(-1); });
+            if (inc) inc.addEventListener('click', function () { bump(1); });
+        });
+
+        // "No DKP": zero + lock DKP/hour so the event posts DkpPerHour = 0
+        // (a no-dkp run). Unchecking restores an editable value.
+        var noDkp = document.getElementById('Event_NoDkp');
+        var dkp   = document.getElementById('Event_DkpPerHour');
+        if (noDkp && dkp) {
+            var dkpWrap = dkp.closest('.num-stepper');
+            function applyNoDkp() {
+                if (noDkp.checked) {
+                    dkp.value = '0';
+                    dkp.readOnly = true;
+                    if (dkpWrap) dkpWrap.classList.add('is-disabled');
+                } else {
+                    dkp.readOnly = false;
+                    if (dkpWrap) dkpWrap.classList.remove('is-disabled');
+                    if (dkp.value === '' || dkp.value === '0') dkp.value = '1';
+                }
+            }
+            noDkp.addEventListener('change', applyNoDkp);
+            applyNoDkp();
+        }
     })();
 </script>
 
@@ -258,7 +334,7 @@
         <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
         <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:0">
             <input type="checkbox" id="party_setup_not_specified" @(partySetupNotSpecified ? "checked" : null) />
-            Not specified
+            Do Not Include
         </label>
     </div>
 </div>
@@ -288,26 +364,113 @@
     }
 </div>
 
+@* Live preview of the selected party setup, rendered to match the View Party
+   Setup page (alliance card -> party columns -> requirement rows). Populated by
+   JS from /PartySetup/Preview when a setup is picked; hidden otherwise. *@
+<div id="ps-preview" class="ps-preview" style="display:none;margin-top:14px"></div>
+
 <script nonce="@Html.CspNonce()">
-    // "Not specified" toggle: when checked, hide the dropdown, blank the value,
-    // and disable the select so it posts back as null PartySetupId.
+    // "Do Not Include" toggle: when checked, hide the dropdown, blank the value,
+    // and disable the select so it posts back as null PartySetupId. Also renders
+    // a live preview of the selected setup matching the View Party Setup page.
     (function () {
         var notSpecified = document.getElementById('party_setup_not_specified');
         var row          = document.getElementById('party-setup-row');
         var select       = document.getElementById('PartySetupId');
+        var preview      = document.getElementById('ps-preview');
         if (!notSpecified || !row || !select) return;
+
+        var leaderSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5l4.6 3.2L12 3.5l4.9 7.2 4.6-3.2-1.9 11.5H4.4L2.5 7.5z"/></svg>';
+
+        function clearPreview() {
+            if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+        }
+        function el(tag, cls, text) {
+            var e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text != null) e.textContent = text;
+            return e;
+        }
+
+        function renderPreview(data) {
+            if (!preview) return;
+            preview.innerHTML = '';
+            if (!data || !data.alliances || !data.alliances.length) { clearPreview(); return; }
+            data.alliances.forEach(function (alliance) {
+                var card = el('div', 'card ps-preview__card');
+                var head = el('div', 'card-head');
+                head.appendChild(el('div', 'card-title', alliance.name));
+                head.appendChild(el('span', 'card-link', (alliance.parties ? alliance.parties.length : 0) + ' parties'));
+                card.appendChild(head);
+
+                var cols = el('div', 'ps-preview__parties');
+                (alliance.parties || []).forEach(function (party) {
+                    var col = el('div', 'ps-preview__party');
+                    var title = el('div', 'ps-preview__party-name');
+                    title.appendChild(document.createTextNode(party.name + ' '));
+                    title.appendChild(el('span', 'tag', String((party.slots || []).length)));
+                    col.appendChild(title);
+
+                    var table = el('table', 'table');
+                    var thead = document.createElement('thead');
+                    var hr = document.createElement('tr');
+                    var thNum = el('th', null, '#'); thNum.style.width = '32px';
+                    hr.appendChild(thNum);
+                    hr.appendChild(el('th', null, 'Requirement'));
+                    thead.appendChild(hr);
+                    table.appendChild(thead);
+
+                    var tbody = document.createElement('tbody');
+                    (party.slots || []).forEach(function (slot) {
+                        var tr = document.createElement('tr');
+                        if (slot.isLeader) tr.className = 'ps-leader-row';
+                        tr.appendChild(el('td', 'num', String(slot.position)));
+                        var tdReq = el('td', null);
+                        tdReq.appendChild(document.createTextNode(slot.display));
+                        if (slot.isLeader) {
+                            var ltag = el('span', 'ps-leader-tag');
+                            ltag.title = 'Party leader';
+                            ltag.innerHTML = leaderSvg + ' Leader';
+                            tdReq.appendChild(ltag);
+                        }
+                        tr.appendChild(tdReq);
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    col.appendChild(table);
+                    cols.appendChild(col);
+                });
+                card.appendChild(cols);
+                preview.appendChild(card);
+            });
+            preview.style.display = '';
+        }
+
+        function loadPreview() {
+            if (!preview) return;
+            var id = select.value;
+            if (!id || notSpecified.checked) { clearPreview(); return; }
+            fetch('/PartySetup/Preview?id=' + encodeURIComponent(id),
+                  { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+                .then(renderPreview)
+                .catch(clearPreview);
+        }
 
         function apply() {
             if (notSpecified.checked) {
                 row.style.display = 'none';
                 select.value = '';
                 select.disabled = true;
+                clearPreview();
             } else {
                 row.style.display = '';
                 select.disabled = false;
+                loadPreview();
             }
         }
         notSpecified.addEventListener('change', apply);
+        select.addEventListener('change', loadPreview);
         apply();
     })();
 </script>

@@ -1276,9 +1276,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AppUserId")
-                        .IsRequired()
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
+
+                    b.Property<string>("DiscordDisplayName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DiscordUserId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
@@ -1291,6 +1298,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AppUserId");
+
+                    b.HasIndex("DiscordUserId");
 
                     b.HasIndex("LinkshellId");
 
@@ -1370,6 +1379,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("Details")
                         .HasColumnType("text");
+
+                    b.Property<string>("DiscordGuildId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("DkpRoundingIncrement")
                         .IsRequired()
@@ -2852,8 +2865,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", "AppUser")
                         .WithMany()
                         .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
                         .WithMany()

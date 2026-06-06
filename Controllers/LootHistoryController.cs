@@ -56,6 +56,7 @@ public class LootHistoryController : Controller
             LinkshellId = linkshellId.Value,
             LinkshellName = linkshellName,
             LinkshellLootStructure = membership.Linkshell?.LootStructure,
+            LinkshellType = membership.Linkshell?.LinkshellType,
             RosterCharacterNames = await LoadRosterCharacterNamesAsync(linkshellId.Value)
         });
     }
@@ -107,6 +108,7 @@ public class LootHistoryController : Controller
             model.LinkshellId = linkshellId.Value;
             model.LinkshellName = linkshellName;
             model.LinkshellLootStructure = membership.Linkshell?.LootStructure;
+            model.LinkshellType = membership.Linkshell?.LinkshellType;
             model.RosterCharacterNames = roster;
             return View(model);
         }

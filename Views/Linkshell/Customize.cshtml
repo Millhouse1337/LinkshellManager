@@ -6,6 +6,12 @@
     var savedMessage = TempData["CustomizeSaved"] as string;
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
     var canManageRolesValue = Model.CanManageRoles.ToString().ToLowerInvariant();
+    // Only greet a fresh arrival with the "Which linkshell?" modal. Suppress it
+    // on reloads we caused ourselves: after a save (saved message / POST
+    // re-render) or a linkshell switch (?switched=1).
+    var skipEntryModal = !string.IsNullOrEmpty(savedMessage)
+        || string.Equals(Context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase)
+        || Context.Request.Query.ContainsKey("switched");
 }
 
 <div class="page-head fade d1">
@@ -62,11 +68,14 @@
                 }
             }
         </select>
+        @* Tells the reloaded page this was a deliberate switch, so the
+           "Which linkshell?" modal stays closed. *@
+        <input type="hidden" name="switched" value="1" />
         <button class="btn primary sm" type="submit" style="white-space:nowrap">Switch Linkshell</button>
     </form>
 </div>
 
-<form asp-action="Customize" method="post" class="fade d2">
+<form asp-action="Customize" method="post" class="fade d2" id="customizeForm">
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="LinkshellId" />
 
@@ -471,7 +480,130 @@
     </div>
 </div>
 
+<!-- Entry modal: confirm/choose which linkshell the leader is about to edit. -->
+<div class="mt-modal" id="customizeTargetModal" role="dialog" aria-modal="true">
+    <div class="mt-modal__backdrop"></div>
+    <div class="mt-modal__dialog">
+        <div class="mt-modal__content">
+            <div class="mt-modal__header">
+                <h5 class="mt-modal__title">Which linkshell do you wish to make changes to?</h5>
+            </div>
+            <div class="mt-modal__body">
+                <div class="field">
+                    <select id="customizeTargetSelect" class="form-select" style="width:100%">
+                        @foreach (var linkshell in Model.ManageableLinkshells)
+                        {
+                            <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId)">@linkshell.LinkshellName</option>
+                        }
+                    </select>
+                    <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
+                        You're editing settings for the linkshell selected here. Choosing a different one reloads this page for it.
+                    </div>
+                </div>
+            </div>
+            <div class="mt-modal__footer">
+                <button type="button" class="btn primary" id="customizeTargetContinue">Continue</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm modal: reused by every save action on this page. -->
+<div class="mt-modal" id="customizeConfirmModal" role="dialog" aria-modal="true">
+    <div class="mt-modal__backdrop"></div>
+    <div class="mt-modal__dialog">
+        <div class="mt-modal__content">
+            <div class="mt-modal__header">
+                <h5 class="mt-modal__title">Confirm changes</h5>
+            </div>
+            <div class="mt-modal__body">
+                <p style="margin:0;font-size:14px;color:var(--fg-1)">
+                    You are about to make changes to
+                    <strong id="customizeConfirmName">@Model.LinkshellName</strong>. Are you sure?
+                </p>
+            </div>
+            <div class="mt-modal__footer">
+                <button type="button" class="btn ghost" id="customizeConfirmNo">No</button>
+                <button type="button" class="btn primary" id="customizeConfirmYes">Yes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
+    <script nonce="@Html.CspNonce()">
+        // Entry "which linkshell" modal + a promise-based confirm gate reused by
+        // every save action on this page (window.lsmConfirmChange). Defined first
+        // so the permissions/addon scripts below can call it.
+        (function () {
+            var CUR_ID = @Model.LinkshellId;
+
+            function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('mt-modal--open'); }
+            function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('mt-modal--open'); }
+
+            var pendingResolve = null;
+            window.lsmConfirmChange = function () {
+                return new Promise(function (resolve) {
+                    pendingResolve = resolve;
+                    openModal('customizeConfirmModal');
+                });
+            };
+            function settle(result) {
+                closeModal('customizeConfirmModal');
+                var r = pendingResolve; pendingResolve = null;
+                if (r) r(result);
+            }
+            var yes = document.getElementById('customizeConfirmYes');
+            var no = document.getElementById('customizeConfirmNo');
+            if (yes) yes.addEventListener('click', function () { settle(true); });
+            if (no) no.addEventListener('click', function () { settle(false); });
+
+            // Suppress the entry modal on self-caused reloads (save / switch);
+            // only a fresh arrival should be greeted.
+            var SKIP_ENTRY = @(skipEntryModal ? "true" : "false");
+            // Drop the one-shot ?switched flag so a later manual reload behaves
+            // normally (and the URL stays clean).
+            if (window.history && window.history.replaceState) {
+                try {
+                    var cleanUrl = new URL(window.location.href);
+                    if (cleanUrl.searchParams.has('switched')) {
+                        cleanUrl.searchParams.delete('switched');
+                        window.history.replaceState({}, '', cleanUrl.toString());
+                    }
+                } catch (e) { /* no-op */ }
+            }
+
+            // Entry modal — establishes/confirms the target linkshell on open.
+            var entrySelect = document.getElementById('customizeTargetSelect');
+            var entryContinue = document.getElementById('customizeTargetContinue');
+            if (entrySelect && entryContinue) {
+                if (!SKIP_ENTRY) { openModal('customizeTargetModal'); }
+                entryContinue.addEventListener('click', function () {
+                    var chosen = parseInt(entrySelect.value, 10);
+                    if (chosen && chosen !== CUR_ID) {
+                        window.location.href = '?id=' + chosen + '&switched=1';
+                    } else {
+                        closeModal('customizeTargetModal');
+                    }
+                });
+            }
+
+            // Gate the main customize form (loot structure, linkshell type,
+            // feature toggles, hide ToD mobs, Discord webhooks) behind confirm.
+            var form = document.getElementById('customizeForm');
+            if (form) {
+                var confirmed = false;
+                form.addEventListener('submit', function (e) {
+                    if (confirmed) return;
+                    e.preventDefault();
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (ok) { confirmed = true; form.submit(); }
+                    });
+                });
+            }
+        })();
+    </script>
+
     <script nonce="@Html.CspNonce()">
         (function () {
             // Hide the DKP rounding row when the loot structure is Loot Council,
@@ -674,6 +806,14 @@
                     nameInput.focus();
                     return;
                 }
+                if (window.lsmConfirmChange && !saveRole._confirmed) {
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (!ok) return;
+                        saveRole._confirmed = true;
+                        try { saveRole(); } finally { saveRole._confirmed = false; }
+                    });
+                    return;
+                }
 
                 var path = editingRoleId == null
                     ? '/api/activity/linkshells/' + linkshellId + '/roles'
@@ -703,7 +843,14 @@
 
             function deleteRole(role) {
                 if (!role || role.isSystem) return;
-                if (!window.confirm('Delete the "' + role.name + '" role?')) return;
+                if (window.lsmConfirmChange && !deleteRole._confirmed) {
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (!ok) return;
+                        deleteRole._confirmed = true;
+                        try { deleteRole(role); } finally { deleteRole._confirmed = false; }
+                    });
+                    return;
+                }
 
                 setBusy(true);
                 setError('');
@@ -853,16 +1000,23 @@
                 tbody.querySelectorAll('button[data-revoke]').forEach(function (btn) {
                     btn.addEventListener('click', function () {
                         var id = parseInt(btn.dataset.revoke, 10);
-                        if (!id || !window.confirm('Revoke this addon token? The addon will lose access immediately.')) return;
-                        btn.disabled = true;
-                        fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
-                            method: 'POST',
-                            credentials: 'same-origin',
-                            headers: withCsrf()
-                        }).then(function (res) {
-                            if (!res.ok) { btn.disabled = false; return; }
-                            loadTokens();
-                        }).catch(function () { btn.disabled = false; });
+                        if (!id) return;
+                        var doRevoke = function () {
+                            btn.disabled = true;
+                            fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: withCsrf()
+                            }).then(function (res) {
+                                if (!res.ok) { btn.disabled = false; return; }
+                                loadTokens();
+                            }).catch(function () { btn.disabled = false; });
+                        };
+                        if (window.lsmConfirmChange) {
+                            window.lsmConfirmChange().then(function (ok) { if (ok) doRevoke(); });
+                        } else {
+                            doRevoke();
+                        }
                     });
                 });
             }

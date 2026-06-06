@@ -75,6 +75,10 @@ public class LootAddViewModel
     public int? WinningDkpSpent { get; set; }
 
     public string? LinkshellLootStructure { get; set; }
+    // SkySeaDynamis / HnmOnly / Both (LinkshellTypes). Drives whether the Event
+    // field is a curated dropdown (Sky/Sea/Dynamis...) or the free-text monster
+    // filter.
+    public string? LinkshellType { get; set; }
     public List<string> RosterCharacterNames { get; set; } = new();
 }
 

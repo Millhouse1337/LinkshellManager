@@ -962,6 +962,68 @@ input[type="number"] {
   appearance: textfield;
 }
 
+/* Custom number stepper: themed - / + buttons flanking a number input, used
+   where native spinner arrows are wanted but the browser's unthemeable ones
+   are hidden (see above). The input loses its side borders so the trio reads
+   as one control. */
+.num-stepper { display: inline-flex; align-items: stretch; }
+/* Input on the left (rounded left only); both - / + buttons grouped on the
+   right. Each button drops its left border so the input's right border / the
+   previous button's right border serves as the single divider. */
+.num-stepper__input.form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+}
+.num-stepper__btn {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--fg-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-left: none;
+  border-radius: 0;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.num-stepper__btn:last-child  { border-radius: 0 var(--r-md) var(--r-md) 0; }
+.num-stepper__btn:hover { background: var(--accent-weak); color: var(--fg); border-color: var(--border-hot); }
+.num-stepper__btn:active { background: var(--accent); color: #fff; }
+.num-stepper.is-disabled { opacity: .5; }
+.num-stepper.is-disabled .num-stepper__btn { pointer-events: none; }
+
+/* Linked party-setup preview on the event form. Mirrors the View Party Setup
+   page (alliance card -> party columns -> requirement rows) so the two read
+   identically; the leader-tag styles below match Details.cshtml. */
+.ps-preview { display: grid; gap: 12px; }
+.ps-preview__parties { display: flex; flex-wrap: wrap; gap: 12px; }
+.ps-preview__party {
+  flex: 1 1 220px;
+  min-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px;
+}
+.ps-preview__party-name { font-weight: 600; color: var(--fg); margin-bottom: 8px; }
+.ps-leader-row td { background: rgba(245, 197, 24, .08); }
+.ps-leader-tag {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: 8px;
+  padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  color: #1a1300; background: linear-gradient(180deg, #ffe27a, #f5b800);
+  box-shadow: 0 0 8px rgba(245, 197, 24, .45); vertical-align: middle;
+}
+.ps-leader-tag svg { width: 12px; height: 12px; fill: currentColor; }
+
 /* On/off slider — a checkbox restyled as a pill toggle. Keeps the native
    <input type="checkbox"> (so model binding / asp-for is unchanged); only
    its appearance changes. Add class="switch" to opt in. */

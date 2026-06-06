@@ -160,7 +160,11 @@ public partial class EventController
             return Challenge();
         }
 
-        return View(await BuildEventViewModelAsync(user));
+        var model = await BuildEventViewModelAsync(user);
+        // Fresh create form starts at DKP/hour = 1 (officers can zero it via the
+        // "No DKP" toggle for social / no-dkp runs).
+        model.Event.DkpPerHour ??= 1;
+        return View(model);
     }
 
     [HttpPost]
@@ -183,6 +187,14 @@ public partial class EventController
         if (!CanManageLinkshell(createMembership))
         {
             ModelState.AddModelError(string.Empty, "Leader or officer access is required to create events for this linkshell.");
+        }
+
+        // HNM events are created automatically by the in-game addon (from member
+        // ToD captures), never by hand -- so reject manual creation of the "HNM"
+        // type. This also closes the "Other" free-text loophole in the picker.
+        if (string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError("Event.EventType", "HNM events are created automatically by the in-game addon and can't be added manually.");
         }
 
         if (!ModelState.IsValid)

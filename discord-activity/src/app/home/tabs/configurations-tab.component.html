@@ -179,6 +179,31 @@
                 </div>
               }
 
+              <div class="customize-form__section" style="flex:0 0 260px">
+                <strong>Discord server lock</strong>
+                <p class="muted">
+                  Restrict this linkshell to one Discord server. Only members of
+                  that server can access it. Leave blank to allow any linkshell
+                  member.
+                </p>
+                <label class="customize-form__field">
+                  <input type="text" name="discordGuildIdDraft" inputmode="numeric"
+                    placeholder="Discord Server ID (digits)"
+                    [ngModel]="customizeDraft.discordGuildId"
+                    (ngModelChange)="customizeDraft.discordGuildId = $event; onCustomizeFieldChange()" />
+                </label>
+                <p class="muted">
+                  Right-click your server → Copy Server ID (Developer Mode
+                  required).
+                </p>
+                <p class="muted">
+                  To also limit the invite player search to members of this
+                  server, add the LSM bot to it. Without the bot, the lock still
+                  blocks non-members from opening the linkshell — the invite list
+                  just isn't pre-filtered.
+                </p>
+              </div>
+
               <div class="customize-form__section" style="flex:0 1 auto;min-width:280px">
                 <strong>Feature toggles</strong>
                 <p class="muted">Hide sections your linkshell doesn't use.</p>
@@ -516,6 +541,58 @@
             {{ activity.busyAddonTokens() ? 'Generating…' : 'Generate' }}
           </button>
         }
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Entry modal: confirm/choose which linkshell is about to be edited. -->
+@if (entryModalOpen() && dashboardLinkshells().length > 0) {
+  <div class="addon-modal-backdrop">
+    <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
+      <div class="addon-modal-header">
+        <strong>Which linkshell do you wish to make changes to?</strong>
+      </div>
+      <div class="addon-modal-body">
+        <div class="addon-modal-field">
+          <span>Linkshell</span>
+          <select name="entryLinkshellSelect"
+            [ngModel]="entryEffectiveId()"
+            (ngModelChange)="onEntrySelectChange($event)">
+            @for (linkshell of dashboardLinkshells(); track linkshell.id) {
+              <option [ngValue]="linkshell.id">
+                {{ linkshell.name }}{{ linkshell.id === selectedDashboardLinkshellId() ? ' (current)' : '' }}
+              </option>
+            }
+          </select>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:8px">
+          You're editing settings for the linkshell selected here. Choosing a different one switches to it.
+        </p>
+      </div>
+      <div class="addon-modal-footer">
+        <button type="button" class="btn primary" (click)="confirmEntryTarget()">Continue</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Confirm modal: reused by every save action on this tab. -->
+@if (confirmModalOpen()) {
+  <div class="addon-modal-backdrop" (click)="resolveConfirm(false)">
+    <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
+      <div class="addon-modal-header">
+        <strong>Confirm changes</strong>
+      </div>
+      <div class="addon-modal-body">
+        <p style="margin:0">
+          You are about to make changes to
+          <strong>{{ activeLinkshellName() || 'this linkshell' }}</strong>. Are you sure?
+        </p>
+      </div>
+      <div class="addon-modal-footer">
+        <button type="button" class="btn ghost" (click)="resolveConfirm(false)">No</button>
+        <button type="button" class="btn primary" (click)="resolveConfirm(true)">Yes</button>
       </div>
     </div>
   </div>

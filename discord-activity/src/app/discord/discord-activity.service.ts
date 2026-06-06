@@ -110,7 +110,11 @@ declare const NG_APP_DISCORD_CLIENT_ID: string;
 export class DiscordActivityService {
   private readonly clientId = NG_APP_DISCORD_CLIENT_ID ?? '';
   private readonly exchangePath = '/auth/discord/exchange';
-  private readonly authorizeScopes = ['identify', 'guilds', 'applications.commands'] as const;
+  // `guilds.members.read` lets the backend verify, with the user's own token,
+  // that they're a member of a linkshell's locked Discord server
+  // (GET /users/@me/guilds/{id}/member). Required for the per-linkshell guild
+  // lock. Must also be enabled in the Discord Developer Portal OAuth2 settings.
+  private readonly authorizeScopes = ['identify', 'guilds', 'guilds.members.read', 'applications.commands'] as const;
   private readonly browserTimeZone = resolveBrowserTimeZone();
   private initializationPromise: Promise<void> | null = null;
   private sdk: DiscordSdkContextSource | null = null;
@@ -161,11 +165,17 @@ export class DiscordActivityService {
   readonly linkshellDetailBusy = this.linkshellService.linkshellDetailBusy;
   readonly inviteSearchResults = this.inviteService.inviteSearchResults;
   readonly inviteSearchBusy = this.inviteService.inviteSearchBusy;
+  readonly inviteBrowseResults = this.inviteService.inviteBrowseResults;
+  readonly inviteBrowseTotal = this.inviteService.inviteBrowseTotal;
+  readonly inviteBrowseBusy = this.inviteService.inviteBrowseBusy;
   readonly busyInviteId = this.inviteService.busyInviteId;
   readonly participantInviteCandidates = this.inviteService.participantInviteCandidates;
   readonly participantInviteBusy = this.inviteService.participantInviteBusy;
   readonly linkshellSearchResults = this.inviteService.linkshellSearchResults;
   readonly linkshellSearchBusy = this.inviteService.linkshellSearchBusy;
+  readonly discordRosterCandidates = this.inviteService.discordRosterCandidates;
+  readonly discordRosterBusy = this.inviteService.discordRosterBusy;
+  readonly busyDiscordUserId = this.inviteService.busyDiscordUserId;
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
   readonly busyDkpAudit = this.dkpService.busyDkpAudit;
@@ -724,11 +734,15 @@ export class DiscordActivityService {
 
   // --- InviteService ---
   searchPlayers(query: string, linkshellId: number): Promise<void> { return this.inviteService.searchPlayers(query, linkshellId); }
+  browsePlayers(linkshellId: number, options: { query?: string; filter?: string; page?: number; pageSize?: number }): Promise<void> { return this.inviteService.browsePlayers(linkshellId, options); }
   clearInviteSearch(): void { this.inviteService.clearInviteSearch(); }
   clearParticipantInviteCandidates(): void { this.inviteService.clearParticipantInviteCandidates(); }
   clearLinkshellSearch(): void { this.inviteService.clearLinkshellSearch(); }
   loadParticipantInviteCandidates(linkshellId: number, discordUserIds: string[]): Promise<void> { return this.inviteService.loadParticipantInviteCandidates(linkshellId, discordUserIds); }
   sendInvite(linkshellId: number, appUserId: string): Promise<void> { return this.inviteService.sendInvite(linkshellId, appUserId); }
+  loadDiscordRoster(linkshellId: number): Promise<void> { return this.inviteService.loadDiscordRoster(linkshellId); }
+  inviteDiscordUser(linkshellId: number, discordUserId: string): Promise<void> { return this.inviteService.inviteDiscordUser(linkshellId, discordUserId); }
+  clearDiscordRoster(): void { this.inviteService.clearDiscordRoster(); }
   searchLinkshells(query: string): Promise<void> { return this.inviteService.searchLinkshells(query); }
   requestJoinLinkshell(linkshellId: number): Promise<void> { return this.inviteService.requestJoinLinkshell(linkshellId); }
   approveJoinRequest(inviteId: number): Promise<void> { return this.inviteService.approveJoinRequest(inviteId); }
@@ -741,7 +755,7 @@ export class DiscordActivityService {
   loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
   clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
-  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
+  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
   deleteLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.deleteLinkshell(linkshellId); }
   leaveLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.leaveLinkshell(linkshellId); }

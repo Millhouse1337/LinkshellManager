@@ -245,10 +245,13 @@
         .ps-party-head .ps-party-name { max-width: 150px; font-weight: 600; }
         .ps-slots { display: grid; gap: 6px; }
         .ps-slot {
-            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
             border-radius: 6px; transition: background .15s ease, box-shadow .15s ease;
         }
-        .ps-slot__sel { flex: 1 1 96px; min-width: 84px; }
+        /* Selects shrink down to 64px so the crown + 3 selects + duplicate +
+           "×" remove button all fit on one row inside a multi-column party card.
+           flex-wrap stays as a graceful fallback on very narrow viewports. */
+        .ps-slot__sel { flex: 1 1 80px; min-width: 64px; }
         /* Full-width "anything goes" indicator shown in place of the Main/Sub
            selects when the row has no specific role (Any Role / unpicked). */
         .ps-slot__any {
@@ -260,9 +263,9 @@
             letter-spacing: .04em; user-select: none;
         }
         .ps-slot .d-none { display: none !important; }
-        .ps-slot__remove { flex: 0 0 auto; padding: 0 9px; }
+        .ps-slot__remove { flex: 0 0 auto; padding: 0 7px; }
         .ps-slot__dup {
-            flex: 0 0 auto; padding: 0 8px;
+            flex: 0 0 auto; padding: 0 7px;
             display: inline-flex; align-items: center; justify-content: center;
         }
         .ps-slot__dup svg { width: 14px; height: 14px; display: block; }

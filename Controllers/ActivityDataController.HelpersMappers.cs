@@ -19,7 +19,7 @@ public sealed partial class ActivityDataController
         {
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
-                Array.Empty<string>(), LinkshellTypes.Both);
+                Array.Empty<string>(), LinkshellTypes.Both, null);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -35,7 +35,8 @@ public sealed partial class ActivityDataController
             linkshell.EnableRevenue,
             NormalizeDkpRounding(linkshell.DkpRoundingIncrement),
             ParseHiddenTodMonsters(linkshell.HiddenTodMonsters),
-            LinkshellTypes.Normalize(linkshell.LinkshellType));
+            LinkshellTypes.Normalize(linkshell.LinkshellType),
+            linkshell.DiscordGuildId);
     }
 
     // Splits the pipe-separated storage form into a clean list of names

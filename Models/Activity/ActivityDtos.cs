@@ -58,7 +58,10 @@ public sealed record ActivityLinkshellSettingsDto(
     // surfaces them as a list to keep the client side ergonomic.
     IReadOnlyList<string> HiddenTodMonsters,
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
-    string LinkshellType);
+    string LinkshellType,
+    // Discord server (guild) ID this linkshell is locked to, or null when
+    // unlocked. When set, only members of this server can access the linkshell.
+    string? DiscordGuildId);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -425,11 +428,22 @@ public sealed record ActivityAuctionHistoryDto(
 
 public sealed record ActivityInviteDto(
     int Id,
-    string AppUserId,
+    // Null for a Discord-roster invite whose target hasn't signed into LSM yet.
+    string? AppUserId,
     int LinkshellId,
     string AppUserDisplayName,
     string LinkshellName,
     string Status);
+
+// A member of a locked linkshell's Discord server, offered as an invite target
+// in the "From your Discord server" roster. HasLsmAccount is true when this
+// person already has an LSM account (a normal invite is sent); false means a
+// Discord-keyed invite is sent and they auto-join on first sign-in.
+public sealed record ActivityDiscordRosterCandidateDto(
+    string DiscordUserId,
+    string DisplayName,
+    string AvatarUrl,
+    bool HasLsmAccount);
 
 public sealed record ActivityUserSearchResultDto(
     string Id,
@@ -529,9 +543,13 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null = leave unchanged, [] = clear, [...names] = replace.
     IReadOnlyList<string>? HiddenTodMonsters,
     // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
-    string? LinkshellType);
+    string? LinkshellType,
+    // null = leave unchanged, "" = unlock, digits = lock to that Discord server.
+    string? DiscordGuildId);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
+
+public sealed record ActivityDiscordInviteRequest(string DiscordUserId);
 
 public sealed record ActivityParticipantInviteCandidatesRequest(int LinkshellId, IReadOnlyList<string> DiscordUserIds);
 

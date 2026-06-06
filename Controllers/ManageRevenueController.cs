@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,11 +14,16 @@ public class ManageRevenueController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly TimeZoneConversionService _timeZones;
 
-    public ManageRevenueController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public ManageRevenueController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        TimeZoneConversionService timeZones)
     {
         _context = context;
         _userManager = userManager;
+        _timeZones = timeZones;
     }
 
     public async Task<IActionResult> Index()
@@ -51,6 +57,13 @@ public class ManageRevenueController : Controller
                 })
                 .ToListAsync();
 
+            // Stored UTC -> the viewer's wall-clock for display.
+            foreach (var entry in entries)
+            {
+                entry.OccurredAt = _timeZones.ToUserTime(entry.OccurredAt, user.TimeZone) ?? entry.OccurredAt;
+                entry.CreatedAt = _timeZones.ToUserTime(entry.CreatedAt, user.TimeZone) ?? entry.CreatedAt;
+            }
+
             totalValue = entries.Sum(e => e.Value);
         }
 
@@ -77,7 +90,9 @@ public class ManageRevenueController : Controller
             Linkshells = manageableLinkshells,
             LinkshellId = defaultLinkshellId,
             LinkshellName = manageableLinkshells.First(l => l.Id == defaultLinkshellId).LinkshellName,
-            OccurredAt = DateTime.UtcNow
+            // Default the picker to the user's local "now" (the datetime-local
+            // input is naive wall-clock; we convert back to UTC on POST).
+            OccurredAt = _timeZones.ToUserTime(DateTime.UtcNow, user.TimeZone) ?? DateTime.UtcNow
         });
     }
 
@@ -117,7 +132,12 @@ public class ManageRevenueController : Controller
             Category = model.Category?.Trim(),
             Value = model.Value,
             Details = model.Details?.Trim(),
-            OccurredAt = model.OccurredAt == default ? DateTime.UtcNow : model.OccurredAt,
+            // datetime-local posts naive wall-clock (Kind=Unspecified); convert
+            // through the user's zone so it's a UTC instant for the timestamptz
+            // column (Npgsql rejects non-UTC Kinds otherwise).
+            OccurredAt = model.OccurredAt == default
+                ? DateTime.UtcNow
+                : _timeZones.ToUtc(model.OccurredAt, user.TimeZone) ?? DateTime.UtcNow,
             CreatedByAppUserId = user.Id,
             CreatedByCharacterName = membership?.CharacterName ?? user.CharacterName,
             CreatedAt = DateTime.UtcNow
@@ -146,7 +166,7 @@ public class ManageRevenueController : Controller
             Category = entry.Category,
             Value = entry.Value,
             Details = entry.Details,
-            OccurredAt = entry.OccurredAt,
+            OccurredAt = _timeZones.ToUserTime(entry.OccurredAt, user.TimeZone) ?? entry.OccurredAt,
             CreatedByCharacterName = entry.CreatedByCharacterName,
             CreatedAt = entry.CreatedAt,
             CanManage = true,
@@ -179,7 +199,9 @@ public class ManageRevenueController : Controller
         entry.Category = model.Category?.Trim();
         entry.Value = model.Value;
         entry.Details = model.Details?.Trim();
-        entry.OccurredAt = model.OccurredAt == default ? entry.OccurredAt : model.OccurredAt;
+        entry.OccurredAt = model.OccurredAt == default
+            ? entry.OccurredAt
+            : _timeZones.ToUtc(model.OccurredAt, user.TimeZone) ?? entry.OccurredAt;
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }

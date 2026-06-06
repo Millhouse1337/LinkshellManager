@@ -101,3 +101,86 @@ window.escapeHtml = function (s) {
 
     maybeAutoDetectAndSave();
 })();
+
+// Thousands separators for whole-number inputs marked with `data-thousands`.
+// Shows "1,000,000" while typing and strips the commas right before the owning
+// form submits, so the server still receives a plain integer (model binders
+// reject the grouped value). Non-negative integers only.
+(function () {
+    function group(digits) {
+        return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    function format(raw) {
+        var digits = String(raw).replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '');
+        return digits === '' ? '' : group(digits);
+    }
+    function digitsBeforeCaret(str, pos) {
+        var n = 0;
+        for (var i = 0; i < pos && i < str.length; i++) {
+            var c = str.charCodeAt(i);
+            if (c >= 48 && c <= 57) n++;
+        }
+        return n;
+    }
+    function caretAfterNthDigit(str, count) {
+        if (count <= 0) return 0;
+        var n = 0;
+        for (var i = 0; i < str.length; i++) {
+            var c = str.charCodeAt(i);
+            if (c >= 48 && c <= 57) {
+                n++;
+                if (n === count) return i + 1;
+            }
+        }
+        return str.length;
+    }
+    function onInput(e) {
+        var el = e.target;
+        var before = el.value;
+        var caret = el.selectionStart || 0;
+        var wanted = digitsBeforeCaret(before, caret);
+        var formatted = format(before);
+        if (formatted !== before) {
+            el.value = formatted;
+            var pos = caretAfterNthDigit(formatted, wanted);
+            try { el.setSelectionRange(pos, pos); } catch (err) { /* unsupported on some inputs */ }
+        }
+    }
+    function init() {
+        var inputs = document.querySelectorAll('input[data-thousands]');
+        if (!inputs.length) return;
+        // jQuery validate (loaded after site.js) is present by DOMContentLoaded.
+        // Teach its numeric checks to ignore the grouping commas so ASP.NET
+        // unobtrusive number/range validation passes on data-thousands fields.
+        if (window.jQuery && window.jQuery.validator) {
+            ['number', 'range'].forEach(function (m) {
+                var orig = window.jQuery.validator.methods[m];
+                if (!orig) return;
+                window.jQuery.validator.methods[m] = function (value, element, param) {
+                    if (element && element.getAttribute && element.getAttribute('data-thousands') !== null) {
+                        value = String(value).replace(/,/g, '');
+                    }
+                    return orig.call(this, value, element, param);
+                };
+            });
+        }
+        inputs.forEach(function (el) {
+            el.value = format(el.value);
+            el.addEventListener('input', onInput);
+            var form = el.form;
+            if (form && !form.dataset.thousandsHooked) {
+                form.dataset.thousandsHooked = '1';
+                form.addEventListener('submit', function () {
+                    form.querySelectorAll('input[data-thousands]').forEach(function (i) {
+                        i.value = i.value.replace(/,/g, '');
+                    });
+                });
+            }
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();

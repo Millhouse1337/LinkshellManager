@@ -46,7 +46,7 @@
 
             <div class="field">
                 <label asp-for="Value"></label>
-                <input asp-for="Value" class="form-control" type="number" min="0" />
+                <input asp-for="Value" class="form-control" type="text" inputmode="numeric" data-thousands autocomplete="off" />
                 <span asp-validation-for="Value" class="text-danger"></span>
             </div>
 

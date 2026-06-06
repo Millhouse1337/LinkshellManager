@@ -52,7 +52,10 @@ export class ActivityQueuePanelComponent {
     partySetupId: null
   };
 
-  protected readonly eventTypeOptions = ['Sky', 'Sea', 'HNM', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
+  // "HNM" is intentionally omitted: HNM events are created automatically by the
+  // in-game addon (from member ToD captures), never by hand. The server rejects
+  // manual creation of the "HNM" type as well.
+  protected readonly eventTypeOptions = ['Sky', 'Sea', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
   protected eventTypeSelection = '';
   protected eventTypeError = false;
 
@@ -85,14 +88,6 @@ export class ActivityQueuePanelComponent {
       this.createModel.eventType = value;
     }
     this.eventTypeError = false;
-    // HNM events are addon-driven — End time and Duration aren't known
-    // up front (the kill happens whenever the mob pops). Auto-flip both
-    // toggles to "Not specified" the first time the user selects HNM,
-    // and re-derive end-from-duration if they switch away.
-    if (value === 'HNM') {
-      this.onEndTimeNotSpecifiedChange(true);
-      this.onDurationNotSpecifiedChange(true);
-    }
   }
 
   protected onPartySetupNotSpecifiedChange(checked: boolean): void {

@@ -114,6 +114,7 @@ export class ConfigurationsTabComponent {
     if (!link) return;
     const name = this.linkshellEditDraft.name.trim();
     if (!name) return;
+    if (!(await this.confirmChange())) return;
 
     try {
       // Pass through existing settings so the rename doesn't reset feature flags.
@@ -298,6 +299,7 @@ export class ConfigurationsTabComponent {
   protected async saveRoleDraft(): Promise<void> {
     const linkshellId = this.permissionsTargetLinkshellId();
     if (!linkshellId) return;
+    if (!(await this.confirmChange())) return;
 
     const input: ActivityLinkshellRolePermissionsInput = {
       name: this.roleDraft.name?.trim() || null,
@@ -356,6 +358,54 @@ export class ConfigurationsTabComponent {
     }
   }
 
+  // ----- "Which linkshell?" entry modal + per-save confirm gate -----
+  // Discord Activities run in an iframe without `allow-modals`, so native
+  // confirm()/alert() are suppressed — these in-DOM modals are the only way
+  // to gate saves. The entry modal opens on tab mount; the confirm modal is a
+  // promise-based gate every save action awaits.
+  protected readonly entryModalOpen = signal(true);
+  protected readonly entryTargetLinkshellId = signal<number | null>(null);
+
+  protected entryEffectiveId(): number {
+    const explicit = this.entryTargetLinkshellId();
+    if (explicit && this.dashboardLinkshells().some(l => l.id === explicit)) {
+      return explicit;
+    }
+    return this.selectedDashboardLinkshellId();
+  }
+
+  protected onEntrySelectChange(id: number): void {
+    this.entryTargetLinkshellId.set(id);
+  }
+
+  protected async confirmEntryTarget(): Promise<void> {
+    const id = this.entryEffectiveId();
+    this.entryModalOpen.set(false);
+    this.entryTargetLinkshellId.set(null);
+    if (id && id !== this.selectedDashboardLinkshellId()) {
+      await this.activity.setPrimaryLinkshell(id);
+    }
+  }
+
+  protected readonly confirmModalOpen = signal(false);
+  private confirmResolver: ((ok: boolean) => void) | null = null;
+
+  // Returns a promise that resolves true (Yes) / false (No). Every save action
+  // awaits this so the user re-confirms which linkshell they're changing.
+  protected confirmChange(): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      this.confirmResolver = resolve;
+      this.confirmModalOpen.set(true);
+    });
+  }
+
+  protected resolveConfirm(ok: boolean): void {
+    this.confirmModalOpen.set(false);
+    const resolve = this.confirmResolver;
+    this.confirmResolver = null;
+    if (resolve) resolve(ok);
+  }
+
   // --- Customize Linkshell state ---
   protected readonly customizeDraft: {
     lootStructure: ActivityLootStructure;
@@ -371,6 +421,9 @@ export class ConfigurationsTabComponent {
     dkpRoundingIncrement: ActivityDkpRoundingIncrement;
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     linkshellType: string;
+    // Discord server ID this linkshell is locked to. Empty string = unlocked
+    // (any member may access). Bound as text in the Customize form.
+    discordGuildId: string;
     // Lower-cased names of monsters the linkshell wants hidden from the
     // ToD Tracker. Lower-case for comparison stability — re-cased to the
     // canonical built-in label on save.
@@ -388,6 +441,7 @@ export class ConfigurationsTabComponent {
     enableRevenue: true,
     dkpRoundingIncrement: 'Quarter',
     linkshellType: 'Both',
+    discordGuildId: '',
     hiddenTodMonsters: new Set<string>()
   };
 
@@ -432,6 +486,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableRevenue = settings.enableRevenue;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
     this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
+    this.customizeDraft.discordGuildId = settings.discordGuildId ?? '';
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
     this.customizeDraft.hiddenTodMonsters = new Set(
@@ -480,6 +535,7 @@ export class ConfigurationsTabComponent {
     if (!id) return;
     const link = this.dashboardLinkshells().find(l => l.id === id);
     if (!link) return;
+    if (!(await this.confirmChange())) return;
 
     try {
       await this.activity.updateLinkshell(id, {
@@ -497,7 +553,9 @@ export class ConfigurationsTabComponent {
         enableRevenue: this.customizeDraft.enableRevenue,
         dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement,
         hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
-        linkshellType: this.customizeDraft.linkshellType
+        linkshellType: this.customizeDraft.linkshellType,
+        // Trim before sending so a blank field unlocks (server treats "" as unlock).
+        discordGuildId: this.customizeDraft.discordGuildId.trim()
       });
       this.customizeDirty = false;
       this.syncCustomizeDraft();
@@ -563,6 +621,7 @@ export class ConfigurationsTabComponent {
   protected async submitAddonPairingCode(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;
+    if (!(await this.confirmChange())) return;
     this.addonModalError = null;
     // Persist the chosen slot as the token label ("Slot 1" / "Slot 2")
     // so the listing's Slot column has a value to display and an officer

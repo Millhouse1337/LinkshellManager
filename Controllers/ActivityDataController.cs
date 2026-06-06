@@ -30,6 +30,7 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
     private readonly SnapshotAttInputAuditService _snapshotAttInputAudit;
     private readonly GoogleSheetsSyncService _sheets;
+    private readonly ILogger<ActivityDataController> _logger;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -42,7 +43,8 @@ public sealed partial class ActivityDataController : ControllerBase
         SheetSyncQueue sheetSync,
         WindowEventDkpLedgerService windowEventDkpLedger,
         SnapshotAttInputAuditService snapshotAttInputAudit,
-        GoogleSheetsSyncService sheets)
+        GoogleSheetsSyncService sheets,
+        ILogger<ActivityDataController> logger)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -55,6 +57,7 @@ public sealed partial class ActivityDataController : ControllerBase
         _windowEventDkpLedger = windowEventDkpLedger;
         _snapshotAttInputAudit = snapshotAttInputAudit;
         _sheets = sheets;
+        _logger = logger;
     }
 
     [HttpGet("antiforgery")]

@@ -112,6 +112,9 @@ export interface ActivityLinkshellSettings {
   hiddenTodMonsters: string[];
   // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
   linkshellType: string;
+  // Discord server (guild) ID this linkshell is locked to, or null when
+  // unlocked. When set, only members of that server can access the linkshell.
+  discordGuildId: string | null;
 }
 
 export interface ActivityLinkshellPermissions {
@@ -676,11 +679,21 @@ export interface ActivityAuctionHistory {
 
 export interface ActivityInvite {
   id: number;
-  appUserId: string;
+  // Null for a Discord-roster invite whose target hasn't signed into LSM yet.
+  appUserId: string | null;
   linkshellId: number;
   appUserDisplayName: string;
   linkshellName: string;
   status: string;
+}
+
+// A member of a locked linkshell's Discord server, offered in the
+// "From your Discord server" invite roster.
+export interface ActivityDiscordRosterCandidate {
+  discordUserId: string;
+  displayName: string;
+  avatarUrl: string;
+  hasLsmAccount: boolean;
 }
 
 export interface ActivityUserSearchResult {

@@ -41,6 +41,16 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // HNM events are created automatically by the in-game addon (from member
+        // ToD captures), never by hand -- reject manual creation of the "HNM" type.
+        if (string.Equals((request.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                error = "HNM events are created automatically by the in-game addon and can't be added manually."
+            });
+        }
+
         if (!TryConvertUserTimeZoneToUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
             !TryConvertUserTimeZoneToUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
         {

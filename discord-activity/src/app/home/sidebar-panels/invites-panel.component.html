@@ -76,14 +76,24 @@
         <div class="card-title">Invite players</div>
       </div>
       <div class="card-body">
-      @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteLinkshellId || activity.overview()?.primaryLinkshell?.id || activity.overview()?.linkshells?.[0]?.id || 0)) {
+      @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteTargetLinkshellId())) {
         <div class="invite-search">
           <input
-            [(ngModel)]="inviteSearchTerm"
-            name="inviteSearchTerm"
-            placeholder="Search by character or username" />
-          <button type="button" class="action-button" (click)="runInviteSearch()">
-            {{ activity.inviteSearchBusy() ? 'Searching...' : 'Search' }}
+            [(ngModel)]="browseTerm"
+            name="browseTerm"
+            placeholder="Search by character or username"
+            (keyup.enter)="onBrowseSearch()" />
+          <select
+            [(ngModel)]="browseFilter"
+            name="browseFilter"
+            aria-label="Filter members"
+            (ngModelChange)="onBrowseFilterChange($event)">
+            <option value="all">All members</option>
+            <option value="unaffiliated">Not in a linkshell</option>
+            <option value="affiliated">In a linkshell</option>
+          </select>
+          <button type="button" class="action-button" (click)="onBrowseSearch()">
+            {{ activity.inviteBrowseBusy() ? 'Loading...' : 'Search' }}
           </button>
         </div>
 
@@ -114,24 +124,75 @@
           </div>
         }
 
-        @if (filteredInviteSearchResults().length > 0) {
-          <ul class="compact-list compact-list--dense">
-            @for (result of filteredInviteSearchResults(); track result.id) {
-              <li>
-                <div>
-                  <strong>{{ result.displayName }}</strong>
-                  @if (result.primaryLinkshellName) {
-                    <span>Primary: {{ result.primaryLinkshellName }}</span>
-                  }
-                </div>
-                <div class="button-cluster">
-                  <button type="button" class="action-button" (click)="sendInvite(result.id)">Invite</button>
-                </div>
-              </li>
+        <div class="invite-section">
+          <h3>All members</h3>
+          @if (activity.inviteBrowseBusy()) {
+            <p class="notice">Loading members...</p>
+          } @else if (filteredBrowseResults().length > 0) {
+            <ul class="compact-list compact-list--dense">
+              @for (result of filteredBrowseResults(); track result.id) {
+                <li>
+                  <div>
+                    <strong>{{ result.displayName }}</strong>
+                    @if (result.primaryLinkshellName) {
+                      <span>Primary: {{ result.primaryLinkshellName }}</span>
+                    }
+                  </div>
+                  <div class="button-cluster">
+                    <button type="button" class="action-button" (click)="sendInvite(result.id)">Invite</button>
+                  </div>
+                </li>
+              }
+            </ul>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">
+              <button type="button" class="action-button action-button--secondary"
+                [disabled]="browsePage <= 1" (click)="browsePrev()">Prev</button>
+              <span class="notice" style="margin:0">
+                Page {{ browsePage }} of {{ browseTotalPages() }} · {{ activity.inviteBrowseTotal() }} total
+              </span>
+              <button type="button" class="action-button action-button--secondary"
+                [disabled]="browsePage >= browseTotalPages()" (click)="browseNext()">Next</button>
+            </div>
+          } @else {
+            <p class="notice">No eligible members found.</p>
+          }
+        </div>
+
+        @if (targetLinkshellLocked()) {
+          <div class="invite-section">
+            <h3>From your Discord server</h3>
+            @if (activity.discordRosterBusy()) {
+              <p class="notice">Loading your Discord server roster...</p>
+            } @else if (activity.discordRosterCandidates().length > 0) {
+              <ul class="compact-list compact-list--dense">
+                @for (candidate of activity.discordRosterCandidates(); track candidate.discordUserId) {
+                  <li>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <img [src]="candidate.avatarUrl" alt="" width="24" height="24"
+                        style="border-radius:50%;flex:0 0 auto" />
+                      <div>
+                        <strong>{{ candidate.displayName }}</strong>
+                        @if (!candidate.hasLsmAccount) {
+                          <span>New to LSM — auto-joins on first sign-in</span>
+                        }
+                      </div>
+                    </div>
+                    <div class="button-cluster">
+                      <button
+                        type="button"
+                        class="action-button"
+                        [disabled]="activity.busyDiscordUserId() === candidate.discordUserId"
+                        (click)="inviteFromDiscord(candidate.discordUserId)">
+                        {{ activity.busyDiscordUserId() === candidate.discordUserId ? 'Inviting...' : 'Invite' }}
+                      </button>
+                    </div>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="notice">No one left to add from your Discord server, or the bot can't read it yet.</p>
             }
-          </ul>
-        } @else if (inviteSearchTerm.trim().length >= 2 && !activity.inviteSearchBusy()) {
-          <p class="notice">No eligible players matched this search.</p>
+          </div>
         }
       } @else if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
         <p class="notice">

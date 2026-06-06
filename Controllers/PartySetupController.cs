@@ -120,6 +120,54 @@ public class PartySetupController : Controller
         });
     }
 
+    // Lightweight JSON view of a setup's alliance/party/slot tree, used by the
+    // Create/Edit Event form to render a live read-only preview of the linked
+    // setup. Reuses PartySetupSlotView.Display so the wording matches the
+    // Details page exactly. Same access checks as Details.
+    [HttpGet]
+    public async Task<IActionResult> Preview(int id)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null) return Challenge();
+
+        var partySetup = await LoadTreeAsync(id);
+        if (partySetup is null) return NotFound();
+        if (!await HasLinkshellAccessAsync(user.Id, partySetup.LinkshellId)) return Forbid();
+
+        return Json(new
+        {
+            name = partySetup.Name,
+            monster = partySetup.AssignedMonsterName,
+            alliances = partySetup.Alliances
+                .OrderBy(a => a.SortOrder)
+                .Select(a => new
+                {
+                    name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
+                    parties = a.Parties
+                        .OrderBy(p => p.SortOrder)
+                        .Select(p => new
+                        {
+                            name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
+                            slots = p.Slots
+                                .OrderBy(s => s.SortOrder)
+                                .Select(s => new
+                                {
+                                    position = s.SortOrder + 1,
+                                    display = new PartySetupSlotView
+                                    {
+                                        RequirementType = s.RequirementType,
+                                        Role = s.Role,
+                                        MainJob = s.MainJob,
+                                        SubJob = s.SubJob,
+                                        Label = s.Label
+                                    }.Display,
+                                    isLeader = s.IsPartyLeader
+                                })
+                        })
+                })
+        });
+    }
+
     // Member self-service: claim an open slot in an assigned setup from the
     // ToD Tracker's inline panel. Any linkshell member may sign up; you hold
     // at most one slot per setup (signing up moves you off any other slot in

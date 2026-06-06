@@ -86,6 +86,8 @@ export class LinkshellService {
       hiddenTodMonsters?: string[] | null;
       // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
       linkshellType?: string | null;
+      // null = leave unchanged; "" = unlock; digits = lock to that Discord server.
+      discordGuildId?: string | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -108,7 +110,8 @@ export class LinkshellService {
         enableRevenue: input.enableRevenue ?? null,
         dkpRoundingIncrement: input.dkpRoundingIncrement ?? null,
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
-        linkshellType: input.linkshellType ?? null
+        linkshellType: input.linkshellType ?? null,
+        discordGuildId: input.discordGuildId ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');

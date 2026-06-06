@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -26,6 +27,13 @@ public sealed class DiscordIdentityService
     // token stops working quickly; long enough to spare the per-request round
     // trip + LastSeen write during normal Activity polling.
     private static readonly TimeSpan TokenValidationTtl = TimeSpan.FromSeconds(90);
+
+    // How long a guild-membership verdict (member / not-member) is trusted
+    // before we re-check against discord.com. Short, because the Activity
+    // read path can ask about several locked linkshells per poll — caching
+    // both the positive and negative result keeps us well clear of Discord's
+    // rate limits while a freshly joined member only waits up to a minute.
+    private static readonly TimeSpan GuildMembershipTtl = TimeSpan.FromSeconds(60);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ApplicationDbContext _dbContext;
@@ -210,6 +218,257 @@ public sealed class DiscordIdentityService
         return profile;
     }
 
+    // Authoritative guild-lock gate. The SDK-provided guildId from the Activity
+    // client is untrusted (it's just a value the browser hands us), so we verify
+    // membership server-side with the user's OWN bearer token:
+    //   GET /users/@me/guilds/{guildId}/member  ->  200 = member, 404 = not.
+    // Requires the OAuth `guilds.members.read` scope on the token. Both verdicts
+    // are cached (see GuildMembershipTtl); transient/other failures throw so the
+    // caller can fail closed without poisoning the cache.
+    public async Task<bool> VerifyGuildMembershipAsync(
+        string accessToken,
+        string guildId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken) || string.IsNullOrWhiteSpace(guildId))
+        {
+            return false;
+        }
+
+        var cacheKey = BuildGuildMembershipCacheKey(accessToken, guildId);
+        if (_cache.TryGetValue<bool>(cacheKey, out var cachedVerdict))
+        {
+            return cachedVerdict;
+        }
+
+        var client = _httpClientFactory.CreateClient();
+        var uri = new Uri($"https://discord.com/api/users/@me/guilds/{Uri.EscapeDataString(guildId)}/member");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Accept.ParseAdd("application/json");
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            _cache.Set(cacheKey, false, GuildMembershipTtl);
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // Don't cache transient failures — re-check on the next request.
+            _logger.LogWarning("Discord guild-member lookup failed with status {Status}.", response.StatusCode);
+            throw new DiscordApiException((int)response.StatusCode, "Discord guild membership check failed.");
+        }
+
+        _cache.Set(cacheKey, true, GuildMembershipTtl);
+        return true;
+    }
+
+    private static string BuildGuildMembershipCacheKey(string accessToken, string guildId)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(accessToken));
+        return $"discord-guild-member:{guildId}:{Convert.ToHexString(hash)}";
+    }
+
+    // How long a successful guild-member roster is reused before we re-fetch,
+    // and a much shorter window for a failed fetch (bot not in the server,
+    // missing intent, transient error) so a misconfigured server doesn't get
+    // hammered yet recovers quickly once fixed.
+    private static readonly TimeSpan GuildRosterTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan GuildRosterFailureTtl = TimeSpan.FromSeconds(60);
+
+    // Bot-token roster lookup used by the invite flows to know who is in a
+    // linkshell's locked Discord server. Returns the guild's (non-bot) members
+    // with display info, or null when the roster can't be determined (no bot
+    // token configured, bot not in the server, missing Server Members intent, or
+    // an API error) — callers fail open. The authoritative access-time lock
+    // (VerifyGuildMembershipAsync) still blocks non-members from seeing data.
+    public async Task<IReadOnlyList<DiscordGuildMemberInfo>?> TryGetGuildMembersAsync(
+        string guildId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(guildId) || string.IsNullOrWhiteSpace(_options.BotToken))
+        {
+            return null;
+        }
+
+        var cacheKey = $"discord-guild-roster:{guildId}";
+        if (_cache.TryGetValue<GuildRoster>(cacheKey, out var cached) && cached is not null)
+        {
+            return cached.Available ? cached.Members : null;
+        }
+
+        try
+        {
+            var members = await FetchGuildMembersAsync(guildId, _options.BotToken!, cancellationToken);
+            _cache.Set(cacheKey, new GuildRoster(true, members), GuildRosterTtl);
+            return members;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Unable to read the member roster for guild {GuildId}; invite search will not be guild-filtered.",
+                guildId);
+            _cache.Set(cacheKey, new GuildRoster(false, EmptyRoster), GuildRosterFailureTtl);
+            return null;
+        }
+    }
+
+    // Convenience wrapper for callers that only need the set of member IDs
+    // (e.g. filtering the existing-LSM-user invite search).
+    public async Task<IReadOnlySet<string>?> TryGetGuildMemberDiscordIdsAsync(
+        string guildId,
+        CancellationToken cancellationToken)
+    {
+        var members = await TryGetGuildMembersAsync(guildId, cancellationToken);
+        return members?.Select(member => member.Id).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static readonly IReadOnlyList<DiscordGuildMemberInfo> EmptyRoster = Array.Empty<DiscordGuildMemberInfo>();
+
+    private async Task<IReadOnlyList<DiscordGuildMemberInfo>> FetchGuildMembersAsync(
+        string guildId,
+        string botToken,
+        CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient();
+        var members = new List<DiscordGuildMemberInfo>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var after = "0";
+        const int pageSize = 1000;
+
+        // Discord returns members ordered by user id ascending; page with the
+        // highest id seen so far until a short page signals the end.
+        while (true)
+        {
+            var uri = new Uri(
+                $"https://discord.com/api/guilds/{Uri.EscapeDataString(guildId)}/members?limit={pageSize}&after={after}");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bot", botToken);
+            request.Headers.Accept.ParseAdd("application/json");
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new DiscordApiException((int)response.StatusCode, "Discord guild member listing failed.");
+            }
+
+            var page = await response.Content.ReadFromJsonAsync<List<DiscordGuildMemberPayload>>(
+                cancellationToken: cancellationToken);
+            if (page is null || page.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var member in page)
+            {
+                var user = member.User;
+                if (user is null || string.IsNullOrWhiteSpace(user.Id) || user.Bot == true)
+                {
+                    continue;
+                }
+                if (!seen.Add(user.Id))
+                {
+                    continue;
+                }
+                members.Add(new DiscordGuildMemberInfo(
+                    user.Id,
+                    user.Username ?? user.Id,
+                    user.GlobalName,
+                    user.Avatar));
+            }
+
+            if (page.Count < pageSize)
+            {
+                break;
+            }
+
+            // Advance the cursor to the highest id on this page.
+            after = page[^1].User?.Id ?? after;
+        }
+
+        return members;
+    }
+
+    // Builds the CDN URL for a Discord member's avatar (or their default avatar
+    // when they have none), so the invite roster UI can render a thumbnail.
+    public static string BuildAvatarUrl(string discordUserId, string? avatarHash)
+    {
+        if (!string.IsNullOrWhiteSpace(avatarHash))
+        {
+            return new Uri(DiscordCdnBaseUri, $"avatars/{discordUserId}/{avatarHash}.png?size=64").ToString();
+        }
+
+        var index = ulong.TryParse(discordUserId, out var id) ? (int)((id >> 22) % 6) : 0;
+        return new Uri(DiscordCdnBaseUri, $"embed/avatars/{index}.png").ToString();
+    }
+
+    private sealed record GuildRoster(bool Available, IReadOnlyList<DiscordGuildMemberInfo> Members);
+
+    // First-login resolver for Discord-roster invites: when a Discord account
+    // that was invited (before it had an LSM account) signs in, attach it to the
+    // pending invite(s) and auto-join the linkshell(s). Mirrors the membership
+    // creation in AcceptInviteAsync, then removes the resolved invite. Runs on
+    // the authenticated path; the lookup is indexed and returns nothing in the
+    // common case, so it's cheap.
+    private async Task AutoJoinPendingDiscordInvitesAsync(
+        AppUser appUser,
+        string discordUserId,
+        CancellationToken cancellationToken)
+    {
+        const string pendingInviteStatus = "PendingInvite";
+
+        var pending = await _dbContext.Invites
+            .Include(invite => invite.Linkshell)
+            .Where(invite =>
+                invite.DiscordUserId == discordUserId &&
+                invite.AppUserId == null &&
+                invite.Status == pendingInviteStatus)
+            .ToListAsync(cancellationToken);
+
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        var changed = false;
+        foreach (var invite in pending)
+        {
+            var alreadyMember = await _dbContext.AppUserLinkshells
+                .AnyAsync(link => link.LinkshellId == invite.LinkshellId && link.AppUserId == appUser.Id, cancellationToken);
+
+            if (!alreadyMember)
+            {
+                _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
+                {
+                    AppUserId = appUser.Id,
+                    LinkshellId = invite.LinkshellId,
+                    LinkshellDkp = 0,
+                    DateJoined = DateTime.UtcNow,
+                    CharacterName = appUser.CharacterName ?? appUser.UserName,
+                    Rank = LinkshellRanks.Member,
+                    Status = "Active"
+                });
+            }
+
+            appUser.PrimaryLinkshellId ??= invite.LinkshellId;
+            appUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
+
+            _dbContext.Invites.Remove(invite);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _userManager.UpdateAsync(appUser);
+        }
+    }
+
     private async Task<DiscordActivityUserDto> UpsertLocalUserAsync(
         DiscordIdentityProfile discordUser,
         AppUser? preferredAppUser,
@@ -218,6 +477,10 @@ public sealed class DiscordIdentityService
         var resolution = await ResolveOrLinkAppUserAsync(discordUser, preferredAppUser, cancellationToken);
         var appUser = resolution.AppUser;
         var localDiscordUser = resolution.LocalDiscordUser;
+
+        // Convert any Discord-roster invites awaiting this account into actual
+        // memberships now that we know who they are.
+        await AutoJoinPendingDiscordInvitesAsync(appUser, discordUser.Id, cancellationToken);
 
         return new DiscordActivityUserDto(
             localDiscordUser.Id,
@@ -470,6 +733,16 @@ public sealed class DiscordIdentityService
         [property: JsonPropertyName("global_name")] string? GlobalName,
         [property: JsonPropertyName("avatar")] string? Avatar);
 
+    private sealed record DiscordGuildMemberPayload(
+        [property: JsonPropertyName("user")] DiscordGuildMemberUserPayload? User);
+
+    private sealed record DiscordGuildMemberUserPayload(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("username")] string? Username,
+        [property: JsonPropertyName("global_name")] string? GlobalName,
+        [property: JsonPropertyName("avatar")] string? Avatar,
+        [property: JsonPropertyName("bot")] bool? Bot);
+
     private sealed record DiscordOAuth2MeApplication(
         [property: JsonPropertyName("id")] string Id);
 
@@ -484,6 +757,13 @@ public sealed record DiscordIdentityProfile(
     string Id,
     string Username,
     string Discriminator,
+    string? GlobalName,
+    string? Avatar);
+
+// A non-bot member of a Discord guild, as read via the bot roster lookup.
+public sealed record DiscordGuildMemberInfo(
+    string Id,
+    string Username,
     string? GlobalName,
     string? Avatar);
 
