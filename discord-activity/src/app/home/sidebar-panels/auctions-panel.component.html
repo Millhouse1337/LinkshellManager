@@ -434,33 +434,41 @@
               <div class="create-form__grid">
                 <label>
                   <span>Source</span>
-                  <select [ngModel]="auctionItemFromInventory[$index] ? 'inventory' : 'external'"
+                  <select [ngModel]="auctionItemSourceMode[$index]"
                     (ngModelChange)="onAuctionItemSourceModeChange($index, $event)"
                     [name]="'auctionItemSource' + $index">
                     <option value="inventory">From Inventory</option>
                     <option value="external">Not From Inventory</option>
+                    <option value="gil">Gil (sell for DKP)</option>
                   </select>
                 </label>
-                <label>
-                  <span>Item name</span>
-                  @if (auctionItemFromInventory[$index]) {
-                    <select [ngModel]="item.sourceItemId"
-                      (ngModelChange)="onAuctionItemInventoryPick($index, $event)"
-                      [name]="'auctionItemInv' + $index" required>
-                      <option [ngValue]="null">Select item...</option>
-                      @for (inv of inventoryItemsForAuctionForm(); track inv.id) {
-                        <option [ngValue]="inv.id">{{ inv.itemName }} ({{ inv.quantity }} on hand)</option>
-                      }
-                    </select>
-                  } @else {
-                    <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
-                  }
-                </label>
-                <label>
-                  <span>Item type</span>
-                  <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index"
-                    [readonly]="auctionItemFromInventory[$index]" />
-                </label>
+                @if (isGilItem($index)) {
+                  <label>
+                    <span>Gil amount</span>
+                    <input [(ngModel)]="item.gilAmount" [name]="'auctionItemGil' + $index" type="number" min="1" required />
+                  </label>
+                } @else {
+                  <label>
+                    <span>Item name</span>
+                    @if (isInventoryItem($index)) {
+                      <select [ngModel]="item.sourceItemId"
+                        (ngModelChange)="onAuctionItemInventoryPick($index, $event)"
+                        [name]="'auctionItemInv' + $index" required>
+                        <option [ngValue]="null">Select item...</option>
+                        @for (inv of inventoryItemsForAuctionForm(); track inv.id) {
+                          <option [ngValue]="inv.id">{{ inv.itemName }} ({{ inv.quantity }} on hand)</option>
+                        }
+                      </select>
+                    } @else {
+                      <input [(ngModel)]="item.itemName" [name]="'auctionItemName' + $index" required />
+                    }
+                  </label>
+                  <label>
+                    <span>Item type</span>
+                    <input [(ngModel)]="item.itemType" [name]="'auctionItemType' + $index"
+                      [readonly]="isInventoryItem($index)" />
+                  </label>
+                }
                 <label>
                   <span>Starting DKP</span>
                   <input [(ngModel)]="item.startingBidDkp" [name]="'auctionItemBid' + $index" type="number" min="0" />

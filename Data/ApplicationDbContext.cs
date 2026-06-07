@@ -12,17 +12,23 @@ namespace LinkshellManagerDiscordApp.Data
         private readonly DiscordTodBoardQueue? _todBoardQueue;
         private readonly DiscordDkpSpendQueue? _dkpSpendQueue;
         private readonly DiscordAuctionChannelQueue? _auctionChannelQueue;
+        private readonly DiscordEventChannelQueue? _eventChannelQueue;
+        private readonly DiscordLootChannelQueue? _lootChannelQueue;
 
         public ApplicationDbContext(
             DbContextOptions<ApplicationDbContext> options,
             DiscordTodBoardQueue? todBoardQueue = null,
             DiscordDkpSpendQueue? dkpSpendQueue = null,
-            DiscordAuctionChannelQueue? auctionChannelQueue = null)
+            DiscordAuctionChannelQueue? auctionChannelQueue = null,
+            DiscordEventChannelQueue? eventChannelQueue = null,
+            DiscordLootChannelQueue? lootChannelQueue = null)
             : base(options)
         {
             _todBoardQueue = todBoardQueue;
             _dkpSpendQueue = dkpSpendQueue;
             _auctionChannelQueue = auctionChannelQueue;
+            _eventChannelQueue = eventChannelQueue;
+            _lootChannelQueue = lootChannelQueue;
         }
 
         // Distinct linkshell ids of Tod rows changed in the current
@@ -129,6 +135,95 @@ namespace LinkshellManagerDiscordApp.Data
             return (created, closed);
         }
 
+        // Newly-created events (→ announce to the linkshell's Discord channel for
+        // the event's type, with an inline job-signup component). Captured as
+        // entity references pre-save because the db-generated Id isn't known
+        // until after commit. The publisher no-ops when no matching channel is
+        // configured (or the bot/token is unavailable).
+        private List<Event> CollectAddedEvents()
+        {
+            if (_eventChannelQueue is null)
+            {
+                return new List<Event>();
+            }
+            var created = new List<Event>();
+            foreach (var entry in ChangeTracker.Entries<Event>())
+            {
+                if (entry.State == EntityState.Added && entry.Entity.LinkshellId > 0)
+                {
+                    created.Add(entry.Entity);
+                }
+            }
+            return created;
+        }
+
+        private void EnqueueEventPosts(IReadOnlyList<Event> created)
+        {
+            if (_eventChannelQueue is null)
+            {
+                return;
+            }
+            foreach (var eventEntity in created)
+            {
+                if (eventEntity.Id > 0)
+                {
+                    _eventChannelQueue.Enqueue(eventEntity.Id);
+                }
+            }
+        }
+
+        // Newly-awarded loot rows (ToD or event loot with a winner) → announce to
+        // the linkshell's Loot channel. Captured as entity references pre-save
+        // because the db-generated Id isn't known until after commit. Only
+        // *Added* rows with a winner; edits (Modified) and close-out reattaches
+        // are ignored. The publisher no-ops when no Loot channel is configured.
+        private (List<TodLootDetail> tod, List<EventLootDetail> evt) CollectAddedLoot()
+        {
+            if (_lootChannelQueue is null)
+            {
+                return (new List<TodLootDetail>(), new List<EventLootDetail>());
+            }
+            var tod = new List<TodLootDetail>();
+            foreach (var entry in ChangeTracker.Entries<TodLootDetail>())
+            {
+                if (entry.State == EntityState.Added && !string.IsNullOrWhiteSpace(entry.Entity.ItemWinner))
+                {
+                    tod.Add(entry.Entity);
+                }
+            }
+            var evt = new List<EventLootDetail>();
+            foreach (var entry in ChangeTracker.Entries<EventLootDetail>())
+            {
+                if (entry.State == EntityState.Added && !string.IsNullOrWhiteSpace(entry.Entity.ItemWinner))
+                {
+                    evt.Add(entry.Entity);
+                }
+            }
+            return (tod, evt);
+        }
+
+        private void EnqueueLootPosts(IReadOnlyList<TodLootDetail> tod, IReadOnlyList<EventLootDetail> evt)
+        {
+            if (_lootChannelQueue is null)
+            {
+                return;
+            }
+            foreach (var detail in tod)
+            {
+                if (detail.Id > 0)
+                {
+                    _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Tod, detail.Id));
+                }
+            }
+            foreach (var detail in evt)
+            {
+                if (detail.Id > 0)
+                {
+                    _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Event, detail.Id));
+                }
+            }
+        }
+
         private void EnqueueAuctionChannelWork(
             IReadOnlyList<Auction> created, IReadOnlyList<AuctionHistory> closed)
         {
@@ -160,10 +255,14 @@ namespace LinkshellManagerDiscordApp.Data
             var affected = CollectChangedTodLinkshellIds();
             var dkpSpends = CollectAddedDkpSpends();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
+            var createdEvents = CollectAddedEvents();
+            var (todLoot, eventLoot) = CollectAddedLoot();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             EnqueueTodBoardRefreshes(affected);
             EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
+            EnqueueEventPosts(createdEvents);
+            EnqueueLootPosts(todLoot, eventLoot);
             return result;
         }
 
@@ -172,10 +271,14 @@ namespace LinkshellManagerDiscordApp.Data
             var affected = CollectChangedTodLinkshellIds();
             var dkpSpends = CollectAddedDkpSpends();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
+            var createdEvents = CollectAddedEvents();
+            var (todLoot, eventLoot) = CollectAddedLoot();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
+            EnqueueEventPosts(createdEvents);
+            EnqueueLootPosts(todLoot, eventLoot);
             return result;
         }
 
@@ -223,6 +326,8 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
+        public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
+        public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -255,6 +360,14 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.PartySetupId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.PartySetupId);
+            });
+
+            builder.Entity<AppSetting>(entity =>
+            {
+                entity.ToTable("AppSettings");
+                entity.HasKey(setting => setting.Key);
+                entity.Property(setting => setting.Key).HasMaxLength(128);
+                entity.Property(setting => setting.Value).HasMaxLength(512);
             });
 
             builder.Entity<Invite>(entity =>

@@ -165,6 +165,21 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("Announcements", (string)null);
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AppSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("AppSettings", (string)null);
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AppUser", b =>
                 {
                     b.Property<string>("Id")
@@ -193,6 +208,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("LockoutEnabled")
@@ -733,6 +751,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int?>("EndingBidDkp")
                         .HasColumnType("integer");
 
+                    b.Property<long?>("GilAmount")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("ItemName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -1068,6 +1089,14 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("Details")
                         .HasColumnType("text");
+
+                    b.Property<string>("DiscordChannelId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("DiscordMessageId")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<int?>("DkpPerHour")
                         .HasColumnType("integer");
@@ -1446,6 +1475,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<string>("LockedToDiscordGuildId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("LockedToDiscordGuildName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("LootStructure")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1466,6 +1503,41 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("AppUserId");
 
                     b.ToTable("Linkshells");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellDiscordChannel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChannelId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ChannelName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId");
+
+                    b.ToTable("LinkshellDiscordChannels");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellDiscordWebhook", b =>
@@ -1541,6 +1613,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageInventory")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageInvites")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMembers")
@@ -2896,6 +2971,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasForeignKey("AppUserId");
 
                     b.Navigation("AppUser");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellDiscordChannel", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Linkshell");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellDiscordWebhook", b =>

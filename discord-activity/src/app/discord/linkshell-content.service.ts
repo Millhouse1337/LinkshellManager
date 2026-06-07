@@ -235,6 +235,29 @@ export class LinkshellContentService {
     }
   }
 
+  async updateRevenueEntry(entryId: number, input: ActivityRevenueInput): Promise<void> {
+    this.busyRevenueId.set(entryId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/revenue/${entryId}/update`, {
+        entryType: input.entryType,
+        category: input.category ?? null,
+        value: input.value,
+        details: input.details ?? null,
+        occurredAt: input.occurredAt ?? null
+      });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Revenue entry updated.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the revenue entry failed.'));
+      throw error;
+    } finally {
+      this.busyRevenueId.set(null);
+    }
+  }
+
   async deleteRevenueEntry(entryId: number): Promise<void> {
     this.busyRevenueId.set(entryId);
     this.auth.setActionError(null);

@@ -29,35 +29,37 @@
 .addon-modal-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .addon-modal-field input { padding: 6px 10px; }
 
-// Radio group for the Slot 1 / Slot 2 picker that replaced the
-// free-text label. Two pill-style options laid out side-by-side; the
-// .addon-modal-field wrapper above provides the column label spacing.
-.addon-modal-slot-options {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-.addon-modal-slot-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
-  border-radius: var(--r-sm, 6px);
-  cursor: pointer;
-  user-select: none;
+// Modern themed select inside modals — mirrors the app's form-select look
+// (custom chevron, dark options, accent focus ring) instead of the bare OS widget.
+.addon-modal-field select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font: inherit;
   font-size: 13px;
-  color: var(--fg-1, #e4e4e7);
-  transition: border-color 120ms, background 120ms;
-}
-.addon-modal-slot-option:has(input:checked) {
-  border-color: var(--accent, #7c5cff);
-  background: rgba(124, 92, 255, 0.12);
-  color: var(--fg, #fafafa);
-}
-.addon-modal-slot-option input[type="radio"] {
-  margin: 0;
+  padding: 8px 32px 8px 10px;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.addon-modal-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
+}
+.addon-modal-field select option {
+  background: var(--surface, #1f1f23);
+  color: var(--fg, #e4e4e7);
 }
 
 .addon-modal-code { text-align: center; padding: 8px 0; }

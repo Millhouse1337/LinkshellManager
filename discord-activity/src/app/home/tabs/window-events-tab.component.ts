@@ -170,7 +170,45 @@ export class WindowEventsTabComponent {
     this.addPersonDrafts[snapshotId] = value;
   }
 
+  // Custom roster typeahead state. Replaces the native <datalist>, which the
+  // browser renders as an uncontrollable full-height popup (no way to cap its
+  // height or scroll it). Holds the snapshot id whose dropdown is open.
+  protected readonly openAddTypeahead = signal<number | null>(null);
+  // Cap the rendered suggestions so a 195-member roster doesn't build a huge
+  // DOM list; the input filters it down quickly anyway.
+  private static readonly MAX_TYPEAHEAD_RESULTS = 50;
+
+  protected openTypeahead(snapshotId: number): void {
+    this.openAddTypeahead.set(snapshotId);
+  }
+
+  protected closeTypeahead(): void {
+    this.openAddTypeahead.set(null);
+  }
+
+  // Roster names matching the current draft (case-insensitive substring),
+  // capped. Empty query shows the head of the roster so focusing the field
+  // still reveals the list.
+  protected filteredRoster(snapshot: ActivityWindowSnapshot): string[] {
+    const query = (this.addPersonDrafts[snapshot.id] ?? '').trim().toLowerCase();
+    const names = this.rosterNames();
+    const matches = query
+      ? names.filter(name => name.toLowerCase().includes(query))
+      : names;
+    return matches.slice(0, WindowEventsTabComponent.MAX_TYPEAHEAD_RESULTS);
+  }
+
+  // Click a suggestion -> fill the draft and add immediately (fewer clicks than
+  // select-then-confirm). Free-typed names not in the roster still work via the
+  // "+ Add person" button / Enter key.
+  protected chooseRosterName(snapshot: ActivityWindowSnapshot, name: string): void {
+    this.addPersonDrafts[snapshot.id] = name;
+    this.openAddTypeahead.set(null);
+    void this.addPerson(snapshot);
+  }
+
   protected async addPerson(snapshot: ActivityWindowSnapshot): Promise<void> {
+    this.openAddTypeahead.set(null);
     const id = this.primaryLinkshellId();
     const name = (this.addPersonDrafts[snapshot.id] ?? '').trim();
     if (!id || !name) return;

@@ -23,4 +23,14 @@ public sealed class DiscordOAuthOptions
     /// committed to appsettings.
     /// </summary>
     public string? BotToken { get; init; }
+
+    /// <summary>
+    /// Discord application public key (hex), from the Developer Portal →
+    /// General Information. Required to verify the Ed25519 signature on inbound
+    /// interaction requests (button/select clicks) at POST /api/discord/interactions.
+    /// When unset, the interactions endpoint rejects every request (the inline
+    /// Discord sign-up feature is effectively off). Supplied as a secret
+    /// (env var Discord__PublicKey / user-secrets).
+    /// </summary>
+    public string? PublicKey { get; init; }
 }

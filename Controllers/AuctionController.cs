@@ -156,13 +156,24 @@ public partial class AuctionController : Controller
     private void NormalizeAuctionItems(AuctionViewModel model)
     {
         model.AuctionItems = model.AuctionItems
-            .Where(item => !string.IsNullOrWhiteSpace(item.ItemName) || item.StartingBidDkp.HasValue)
+            .Where(item => !string.IsNullOrWhiteSpace(item.ItemName) || item.StartingBidDkp.HasValue || item.GilAmount.HasValue)
             .ToList();
 
         if (model.AuctionItems.Count == 0)
         {
             model.AuctionItems.Add(new AuctionItem());
         }
+    }
+
+    // Gil items display as "<amount> gil"; everything else uses the typed name.
+    internal static string? ResolveAuctionItemName(AuctionItem item)
+    {
+        if (item.GilAmount.HasValue && item.GilAmount.Value > 0)
+        {
+            return $"{item.GilAmount.Value:N0} gil";
+        }
+
+        return item.ItemName?.Trim();
     }
 
     private void ValidateAuction(AuctionViewModel model)
@@ -196,9 +207,17 @@ public partial class AuctionController : Controller
         for (var index = 0; index < model.AuctionItems.Count; index++)
         {
             var item = model.AuctionItems[index];
-            if (string.IsNullOrWhiteSpace(item.ItemName))
+            var isGil = item.GilAmount.HasValue;
+
+            // Gil items are auto-named "<amount> gil"; a typed name isn't required.
+            if (!isGil && string.IsNullOrWhiteSpace(item.ItemName))
             {
                 ModelState.AddModelError($"AuctionItems[{index}].ItemName", "Item name is required.");
+            }
+
+            if (isGil && item.GilAmount!.Value <= 0)
+            {
+                ModelState.AddModelError($"AuctionItems[{index}].GilAmount", "Gil amount must be greater than 0.");
             }
 
             if (!item.StartingBidDkp.HasValue || item.StartingBidDkp < 0)
@@ -206,7 +225,8 @@ public partial class AuctionController : Controller
                 ModelState.AddModelError($"AuctionItems[{index}].StartingBidDkp", "Starting bid must be 0 or higher.");
             }
 
-            if (item.SourceItemId.HasValue && !allowedSourceIds.Contains(item.SourceItemId.Value))
+            // Gil items never draw from inventory, so ignore any posted source.
+            if (!isGil && item.SourceItemId.HasValue && !allowedSourceIds.Contains(item.SourceItemId.Value))
             {
                 ModelState.AddModelError($"AuctionItems[{index}].SourceItemId", "Selected inventory item is not available for this linkshell.");
             }

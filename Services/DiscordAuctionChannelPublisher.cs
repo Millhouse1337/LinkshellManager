@@ -28,17 +28,20 @@ public sealed class DiscordAuctionChannelPublisher
     private readonly ApplicationDbContext _db;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly DiscordBotClient _bot;
     private readonly ILogger<DiscordAuctionChannelPublisher> _logger;
 
     public DiscordAuctionChannelPublisher(
         ApplicationDbContext db,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
+        DiscordBotClient bot,
         ILogger<DiscordAuctionChannelPublisher> logger)
     {
         _db = db;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _bot = bot;
         _logger = logger;
     }
 
@@ -77,7 +80,7 @@ public sealed class DiscordAuctionChannelPublisher
         {
             return;
         }
-        await PostToWebhooksAsync(auction.LinkshellId, BuildCreateEmbed(auction), ct);
+        await DispatchAsync(auction.LinkshellId, BuildCreateEmbed(auction), BuildCreateComponents(auction), ct);
     }
 
     private async Task CloseAsync(int auctionHistoryId, CancellationToken ct)
@@ -90,7 +93,92 @@ public sealed class DiscordAuctionChannelPublisher
         {
             return;
         }
-        await PostToWebhooksAsync(history.LinkshellId, BuildClosedEmbed(history), ct);
+        await DispatchAsync(history.LinkshellId, BuildClosedEmbed(history), BuildLinkButton("View results in app"), ct);
+    }
+
+    // Prefer the bot-posted Auctions channel (so the embed can carry a "Bid in
+    // app" / "View results" link button); fall back to the legacy PostAuctions
+    // webhooks when no Auctions channel is configured. One or the other, never
+    // both, so an officer who sets up the new channel doesn't get double posts.
+    private async Task DispatchAsync(int linkshellId, object embed, object[]? components, CancellationToken ct)
+    {
+        var channelId = await _db.LinkshellDiscordChannels
+            .AsNoTracking()
+            .Where(channel => channel.LinkshellId == linkshellId
+                && channel.Purpose == DiscordChannelPurposes.Auctions
+                && channel.ChannelId != "")
+            .Select(channel => channel.ChannelId)
+            .FirstOrDefaultAsync(ct);
+
+        if (!string.IsNullOrEmpty(channelId) && _bot.IsConfigured)
+        {
+            object payload = components is null || components.Length == 0
+                ? new { embeds = new[] { embed }, allowed_mentions = new { parse = Array.Empty<string>() } }
+                : new { embeds = new[] { embed }, components, allowed_mentions = new { parse = Array.Empty<string>() } };
+            await _bot.PostMessageAsync(channelId, payload, ct);
+            return;
+        }
+
+        // Webhook fallback can't carry components (Discord strips them); post the
+        // embed only.
+        await PostToWebhooksAsync(linkshellId, embed, ct);
+    }
+
+    // The "auction opened" components: a "Bid: {item}" button per item (each
+    // opens the inline bid modal), plus a "Bid in app" link button. Capped so we
+    // stay within Discord's 5-action-row limit (4 rows of item buttons + 1 link).
+    private object[] BuildCreateComponents(Auction auction)
+    {
+        var rows = new List<object>();
+        var current = new List<object>();
+        foreach (var item in auction.AuctionItems.OrderBy(i => i.Id).Take(20))
+        {
+            current.Add(new
+            {
+                type = 2,   // button
+                style = 1,  // primary
+                label = Truncate($"Bid: {item.ItemName ?? "item"}", 80),
+                custom_id = $"{AuctionBidService.BidButtonPrefix}{item.Id}",
+            });
+            if (current.Count == 5)
+            {
+                rows.Add(new { type = 1, components = current.ToArray() });
+                current = new List<object>();
+            }
+        }
+        if (current.Count > 0)
+        {
+            rows.Add(new { type = 1, components = current.ToArray() });
+        }
+
+        var link = BuildLinkButton("Bid in app");
+        if (link is not null && rows.Count < 5)
+        {
+            rows.Add(link[0]);
+        }
+        return rows.ToArray();
+    }
+
+    // A single-row "open in app" link button (style 5 = URL; no interaction).
+    // Null when no public base URL is configured.
+    private object[]? BuildLinkButton(string label)
+    {
+        var appLink = BuildAppLink();
+        if (appLink is null)
+        {
+            return null;
+        }
+        return new object[]
+        {
+            new
+            {
+                type = 1,
+                components = new object[]
+                {
+                    new { type = 2, style = 5, label, url = appLink },
+                },
+            },
+        };
     }
 
     // Loads every Auctions-flagged webhook for the linkshell and posts the

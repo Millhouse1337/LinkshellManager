@@ -49,6 +49,14 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Linkshell is required." });
         }
 
+        // Global kill-switch: don't hand out new pairing codes while the addon
+        // is disabled. The redeem path (/pair) is blocked too, so a code issued
+        // just before a shutdown still can't be used.
+        if (await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken))
+        {
+            return BadRequest(new { error = "The addon is currently disabled by the server administrator." });
+        }
+
         var appUser = await ResolveManagementUserAsync(cancellationToken);
         if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 

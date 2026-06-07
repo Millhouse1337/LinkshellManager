@@ -15,6 +15,12 @@ public class ProfileViewModel
     public string? TimeZone { get; set; }
     public byte[]? ProfileImageData { get; set; }
 
+    // Per-job levels for the 15 classic jobs, in EventJobCatalog.MainJobOptions
+    // order (index 0 = WAR ... 14 = SMN). Round-trips through the form; persisted
+    // to the user's linkshell memberships in the addon's FFXI-job-id format via
+    // ProfileJobLevels. Empty when the user has no linkshell (nothing to store).
+    public List<int> JobLevels { get; set; } = new();
+
     // Populated by the controller from IDateTimeZoneProvider so the Profile view
     // can render a dropdown instead of a free-form input. Not posted back: the
     // server validates the submitted TimeZone against the provider directly.

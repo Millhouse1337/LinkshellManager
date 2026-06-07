@@ -18,6 +18,8 @@ public class DashboardViewModel
     public int UpcomingTodsCount { get; set; }
     public bool EnableItems { get; set; } = true;
     public bool EnableRevenue { get; set; } = true;
+    public bool EnableToDs { get; set; } = true;
+    public bool EnableHnmSection { get; set; } = true;
 
     public List<TodTrackerEntry> TodTracker { get; set; } = new();
     public List<HnmClaimEntry> HnmClaims { get; set; } = new();

@@ -13,43 +13,6 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
-    // Resolves which AppUser ids may appear in a guild-locked linkshell's invite
-    // search: those whose linked Discord account is a member of the locked
-    // server (via the bot roster lookup). Returns null when no filtering should
-    // apply — the linkshell isn't locked, or the bot roster is unavailable
-    // (fail open; the access-time lock still blocks non-members from any data).
-    private async Task<HashSet<string>?> TryGetGuildEligibleAppUserIdsAsync(
-        string? discordGuildId,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(discordGuildId))
-        {
-            return null;
-        }
-
-        var memberDiscordIds = await _discordIdentityService
-            .TryGetGuildMemberDiscordIdsAsync(discordGuildId, cancellationToken);
-        if (memberDiscordIds is null)
-        {
-            return null;
-        }
-
-        if (memberDiscordIds.Count == 0)
-        {
-            return new HashSet<string>(StringComparer.Ordinal);
-        }
-
-        var eligible = await _dbContext.DiscordActivityUsers
-            .Where(discordUser =>
-                discordUser.IdentityUserId != null &&
-                memberDiscordIds.Contains(discordUser.DiscordUserId))
-            .Select(discordUser => discordUser.IdentityUserId!)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        return eligible.ToHashSet(StringComparer.Ordinal);
-    }
-
     [HttpGet("players/search")]
     public async Task<IActionResult> SearchPlayersAsync(
         [FromQuery] string? query,
@@ -76,7 +39,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -96,7 +59,7 @@ public sealed partial class ActivityDataController
 
         // When the linkshell is locked to a Discord server, only surface people
         // who are actually in that server (null = unlocked or bot unavailable).
-        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(
+        var guildEligibleIds = await _inviteCandidates.TryGetGuildEligibleAppUserIdsAsync(
             membership?.Linkshell?.DiscordGuildId, cancellationToken);
 
         var eligible = _dbContext.Users
@@ -161,68 +124,27 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        page = page < 1 ? 1 : page;
-        pageSize = pageSize is < 1 or > 50 ? 10 : pageSize;
+        var result = await _inviteCandidates.BrowseAsync(
+            linkshellId,
+            appUser.Id,
+            membership?.Linkshell?.DiscordGuildId,
+            query,
+            filter,
+            page,
+            pageSize,
+            cancellationToken);
 
-        var existingMemberIds = await _dbContext.AppUserLinkshells
-            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
-            .Select(link => link.AppUserId!)
-            .ToListAsync(cancellationToken);
+        // Map to the Activity's DTO so the JSON contract the Angular client reads
+        // (id / displayName / userName / primaryLinkshellName) is unchanged.
+        var items = result.Items
+            .Select(candidate => new ActivityUserSearchResultDto(
+                candidate.Id,
+                candidate.DisplayName,
+                candidate.UserName,
+                candidate.PrimaryLinkshellName))
+            .ToList();
 
-        var pendingInviteIds = await _dbContext.Invites
-            .Where(invite =>
-                invite.LinkshellId == linkshellId &&
-                (invite.Status == PendingInviteStatus || invite.Status == PendingJoinRequestStatus))
-            .Select(invite => invite.AppUserId)
-            .ToListAsync(cancellationToken);
-
-        var eligible = _dbContext.Users
-            .Where(user =>
-                user.Id != appUser.Id &&
-                !existingMemberIds.Contains(user.Id) &&
-                !pendingInviteIds.Contains(user.Id));
-
-        var normalizedQuery = query?.Trim();
-        if (!string.IsNullOrWhiteSpace(normalizedQuery))
-        {
-            eligible = eligible.Where(user =>
-                (user.CharacterName != null && EF.Functions.ILike(user.CharacterName, $"%{normalizedQuery}%")) ||
-                EF.Functions.ILike(user.UserName!, $"%{normalizedQuery}%"));
-        }
-
-        var normalizedFilter = (filter ?? "all").Trim().ToLowerInvariant();
-        if (normalizedFilter == "unaffiliated")
-        {
-            eligible = eligible.Where(user => !_dbContext.AppUserLinkshells.Any(link => link.AppUserId == user.Id));
-        }
-        else if (normalizedFilter == "affiliated")
-        {
-            eligible = eligible.Where(user => _dbContext.AppUserLinkshells.Any(link => link.AppUserId == user.Id));
-        }
-
-        // When the linkshell is locked to a Discord server, only surface people
-        // who are actually in that server (null = unlocked or bot unavailable).
-        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(
-            membership?.Linkshell?.DiscordGuildId, cancellationToken);
-        if (guildEligibleIds is not null)
-        {
-            eligible = eligible.Where(user => guildEligibleIds.Contains(user.Id));
-        }
-
-        var total = await eligible.CountAsync(cancellationToken);
-
-        var items = await eligible
-            .OrderBy(user => user.CharacterName ?? user.UserName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(user => new ActivityUserSearchResultDto(
-                user.Id,
-                user.CharacterName ?? user.UserName ?? "Unknown member",
-                user.UserName,
-                user.PrimaryLinkshellName))
-            .ToListAsync(cancellationToken);
-
-        return Ok(new { items, total, page, pageSize });
+        return Ok(new { items, total = result.Total, page = result.Page, pageSize = result.PageSize });
     }
 
     [HttpPost("invites/participants")]
@@ -245,7 +167,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -324,7 +246,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -696,7 +618,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -803,7 +725,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
@@ -858,7 +780,7 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }

@@ -27,7 +27,8 @@ public static class LinkshellRoleDefaults
             CanCustomizeLinkshell = true,
             CanSubmitTodForApproval = true,
             CanSubmitAttendanceForApproval = true,
-            CanManageParties = true
+            CanManageParties = true,
+            CanManageInvites = true
         };
 
         yield return new LinkshellRole
@@ -51,7 +52,8 @@ public static class LinkshellRoleDefaults
             CanCustomizeLinkshell = false,
             CanSubmitTodForApproval = true,
             CanSubmitAttendanceForApproval = true,
-            CanManageParties = true
+            CanManageParties = true,
+            CanManageInvites = true
         };
 
         yield return new LinkshellRole

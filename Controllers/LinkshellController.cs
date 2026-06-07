@@ -15,15 +15,24 @@ public class LinkshellController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly Services.DiscordTodBoardQueue _todBoardQueue;
+    private readonly GlobalSettingsService _globalSettings;
+    private readonly DiscordIdentityService _discordIdentity;
+    private readonly DiscordBotClient _discordBot;
 
     public LinkshellController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        Services.DiscordTodBoardQueue todBoardQueue)
+        Services.DiscordTodBoardQueue todBoardQueue,
+        GlobalSettingsService globalSettings,
+        DiscordIdentityService discordIdentity,
+        DiscordBotClient discordBot)
     {
         _context = context;
         _userManager = userManager;
         _todBoardQueue = todBoardQueue;
+        _globalSettings = globalSettings;
+        _discordIdentity = discordIdentity;
+        _discordBot = discordBot;
     }
     public async Task<IActionResult> Index()
     {
@@ -351,6 +360,13 @@ public class LinkshellController : Controller
             })
             .ToListAsync();
         EnsureWebhookRow(vm);
+        vm.LockedToDiscordGuildId = target.LockedToDiscordGuildId;
+        vm.LockedToDiscordGuildName = target.LockedToDiscordGuildName;
+        vm.EligibleGuilds = await BuildEligibleGuildsAsync(user.Id, HttpContext.RequestAborted);
+        await PopulateDiscordChannelsAsync(vm, target, HttpContext.RequestAborted);
+        // Hide the Game Addon pairing card while a super admin has globally
+        // disabled the addon (the pairing-code endpoints reject requests anyway).
+        vm.AddonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
         return View(vm);
     }
 
@@ -513,6 +529,266 @@ public class LinkshellController : Controller
         _todBoardQueue.Enqueue(linkshell.Id);
         TempData["CustomizeSaved"] = "Customization saved.";
         return RedirectToAction(nameof(Customize), new { id = linkshell.Id });
+    }
+
+    // --- Discord server lock (web parity with the Activity's "Lock to this
+    // server"). Sets Linkshell.LockedToDiscordGuildId so only members of that
+    // Discord server can open the linkshell in the Activity. The web has no
+    // iframe guild context, so the target guild is verified via the bot token:
+    // a leader can only lock to a server they (and the bot) are both in. ---
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> LockGuild(int linkshellId, string? guildId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        var trimmed = guildId?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0 || trimmed.Length > 20 || !trimmed.All(char.IsDigit))
+        {
+            TempData["CustomizeError"] = "Enter the numeric Discord server ID (digits only).";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        var discordUserId = await ResolveDiscordUserIdAsync(user.Id);
+        if (string.IsNullOrWhiteSpace(discordUserId))
+        {
+            TempData["CustomizeError"] = "Sign in with Discord before locking this linkshell to a server.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        // A successful check also proves the bot is in that guild (the bot token
+        // can't read members of a guild it isn't in), so the name we read back
+        // from the bot's guild list below is trustworthy.
+        if (!await _discordIdentity.IsUserInGuildAsync(trimmed, discordUserId, HttpContext.RequestAborted))
+        {
+            TempData["CustomizeError"] =
+                "Couldn't verify that server. Make sure both you and the LSM bot are members of it, then try again.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        var botGuilds = await _discordIdentity.ListBotGuildsAsync(HttpContext.RequestAborted);
+        var resolvedName = botGuilds?.FirstOrDefault(guild => guild.Id == trimmed)?.Name;
+
+        linkshell.LockedToDiscordGuildId = trimmed;
+        linkshell.LockedToDiscordGuildName = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName;
+        // Keep DiscordGuildId aligned so the invite guild-eligibility filter and
+        // Discord-roster invites target the same server the linkshell is locked to.
+        linkshell.DiscordGuildId = trimmed;
+        await _context.SaveChangesAsync();
+
+        TempData["CustomizeSaved"] = "Discord server lock updated.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UnlockGuild(int linkshellId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        linkshell.LockedToDiscordGuildId = null;
+        linkshell.LockedToDiscordGuildName = null;
+        // Clear the aligned invite-filter guild too (we set it together on lock).
+        linkshell.DiscordGuildId = null;
+        await _context.SaveChangesAsync();
+
+        TempData["CustomizeSaved"] = "Discord server lock removed.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    // The caller's Discord user id, resolved from the Discord<->LSM link row
+    // created at sign-in. Null if the account was never linked to Discord.
+    private async Task<string?> ResolveDiscordUserIdAsync(string appUserId) =>
+        await _context.DiscordActivityUsers
+            .Where(link => link.IdentityUserId == appUserId)
+            .Select(link => link.DiscordUserId)
+            .FirstOrDefaultAsync();
+
+    // Servers the lock pick-list offers: those where BOTH the LSM bot and the
+    // caller are members. Empty when the bot token isn't configured, the bot is
+    // in no servers, or the caller isn't linked to Discord — the view then falls
+    // back to a manual numeric-ID field.
+    private async Task<List<DiscordGuildOption>> BuildEligibleGuildsAsync(
+        string appUserId, CancellationToken cancellationToken)
+    {
+        var discordUserId = await ResolveDiscordUserIdAsync(appUserId);
+        if (string.IsNullOrWhiteSpace(discordUserId))
+        {
+            return new List<DiscordGuildOption>();
+        }
+
+        var botGuilds = await _discordIdentity.ListBotGuildsAsync(cancellationToken);
+        if (botGuilds is null || botGuilds.Count == 0)
+        {
+            return new List<DiscordGuildOption>();
+        }
+
+        // Cap the per-guild membership checks so a bot that's in many servers
+        // doesn't fan out into dozens of Discord calls on a page load. The
+        // common case (a handful of servers) yields the exact "servers you're
+        // in" list; beyond the cap the manual-ID field remains available.
+        const int maxChecks = 25;
+        var eligible = new List<DiscordGuildOption>();
+        foreach (var guild in botGuilds.Take(maxChecks))
+        {
+            if (await _discordIdentity.IsUserInGuildAsync(guild.Id, discordUserId, cancellationToken))
+            {
+                eligible.Add(new DiscordGuildOption(guild.Id, guild.Name));
+            }
+        }
+        return eligible;
+    }
+
+    // --- Discord channel posting config (Phase 2). The bot posts event/auction/
+    // loot announcements DIRECTLY to channels (so they can carry interactive
+    // components), addressed by channel id per purpose. ---
+
+    private async Task PopulateDiscordChannelsAsync(
+        LinkshellCustomizeViewModel vm, Linkshell target, CancellationToken cancellationToken)
+    {
+        var guildForChannels = !string.IsNullOrWhiteSpace(target.DiscordGuildId)
+            ? target.DiscordGuildId
+            : target.LockedToDiscordGuildId;
+        vm.DiscordChannelGuildId = guildForChannels;
+
+        var existing = await _context.LinkshellDiscordChannels
+            .Where(channel => channel.LinkshellId == target.Id)
+            .ToListAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(guildForChannels))
+        {
+            var available = await _discordBot.ListTextChannelsAsync(guildForChannels, cancellationToken);
+            if (available is not null)
+            {
+                vm.AvailableChannels = available
+                    .Select(channel => new DiscordChannelOption(channel.Id, channel.Name))
+                    .ToList();
+            }
+        }
+
+        vm.DiscordChannels = DiscordChannelPurposes.All
+            .Select(purpose =>
+            {
+                var row = existing.FirstOrDefault(channel => channel.Purpose == purpose);
+                return new DiscordChannelConfigRow
+                {
+                    Purpose = purpose,
+                    Label = DiscordChannelPurposes.Label(purpose),
+                    ChannelId = row?.ChannelId,
+                    ChannelName = row?.ChannelName
+                };
+            })
+            .ToList();
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveDiscordChannels(
+        int linkshellId, [FromForm] Dictionary<string, string>? channelIds)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        channelIds ??= new Dictionary<string, string>();
+
+        var guildForChannels = !string.IsNullOrWhiteSpace(linkshell.DiscordGuildId)
+            ? linkshell.DiscordGuildId
+            : linkshell.LockedToDiscordGuildId;
+        var available = string.IsNullOrWhiteSpace(guildForChannels)
+            ? null
+            : await _discordBot.ListTextChannelsAsync(guildForChannels, HttpContext.RequestAborted);
+
+        var existing = await _context.LinkshellDiscordChannels
+            .Where(channel => channel.LinkshellId == linkshellId)
+            .ToListAsync();
+
+        foreach (var purpose in DiscordChannelPurposes.All)
+        {
+            channelIds.TryGetValue(purpose, out var raw);
+            var chosen = raw?.Trim();
+            var row = existing.FirstOrDefault(channel => channel.Purpose == purpose);
+
+            // Empty / non-snowflake clears the binding for that purpose.
+            var valid = !string.IsNullOrEmpty(chosen) && chosen!.Length <= 20 && chosen.All(char.IsDigit);
+            if (!valid)
+            {
+                if (row is not null)
+                {
+                    _context.LinkshellDiscordChannels.Remove(row);
+                }
+                continue;
+            }
+
+            var name = available?.FirstOrDefault(channel => channel.Id == chosen)?.Name;
+            if (row is not null)
+            {
+                row.ChannelId = chosen!;
+                row.ChannelName = name;
+            }
+            else
+            {
+                _context.LinkshellDiscordChannels.Add(new LinkshellDiscordChannel
+                {
+                    LinkshellId = linkshellId,
+                    Purpose = purpose,
+                    ChannelId = chosen!,
+                    ChannelName = name,
+                    CreatedAtUtc = DateTime.UtcNow
+                });
+            }
+        }
+
+        await _context.SaveChangesAsync();
+        TempData["CustomizeSaved"] = "Discord channels updated.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 
     private static LinkshellCustomizeViewModel BuildCustomizeViewModel(

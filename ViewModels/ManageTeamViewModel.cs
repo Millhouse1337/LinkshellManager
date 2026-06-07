@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 
 namespace LinkshellManagerDiscordApp.ViewModels;
 
@@ -41,9 +42,20 @@ public class ManageTeamViewModel
 
     public List<AppUser> Players { get; set; } = new();
 
+    // Add-members browse: paginated invite candidates (shared with the Discord
+    // Activity via InviteCandidateService) and the affiliation filter applied.
+    public List<InviteCandidate> Candidates { get; set; } = new();
+
+    // "all" (default), "unaffiliated" (no linkshell), or "affiliated".
+    public string? Filter { get; set; }
+
     public List<Invite> PendingInvites { get; set; } = new();
 
     public List<Invite> SentInvites { get; set; } = new();
+
+    // User-initiated "request to join" submissions for linkshells the caller
+    // manages (created via the Discord Activity); approved/declined on the web.
+    public List<Invite> JoinRequests { get; set; } = new();
 
     public static readonly IReadOnlyList<string> RankOptions = new[]
     {

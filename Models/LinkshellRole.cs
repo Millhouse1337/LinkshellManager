@@ -51,4 +51,6 @@ public class LinkshellRole
     public bool CanSubmitAttendanceForApproval { get; set; }
 
     public bool CanManageParties { get; set; }
+
+    public bool CanManageInvites { get; set; }
 }

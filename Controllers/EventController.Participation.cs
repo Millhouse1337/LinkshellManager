@@ -553,4 +553,179 @@ public partial class EventController
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Start), new { eventId });
     }
+
+    // Officer forces a participant into the break room (mirrors the Activity's
+    // /break/force). The participant doesn't have to act themselves.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForceBreak(int eventId, int participantId)
+    {
+        var currentUser = await RequireCurrentUserAsync();
+        if (currentUser is null)
+        {
+            return Challenge();
+        }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(evt => evt.Id == eventId);
+        if (eventEntity is null)
+        {
+            return NotFound();
+        }
+
+        var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest("Break status is only available after the event has started.");
+        }
+
+        var participation = await _context.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == participantId && item.EventId == eventId);
+        if (participation is null)
+        {
+            return NotFound();
+        }
+        if (participation.IsOnBreak == true)
+        {
+            return RedirectToAction(nameof(Start), new { eventId });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.IsOnBreak = true;
+        participation.PauseTime = nowUtc;
+        participation.ResumeTime = null;
+        _context.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEventId = participation.Id,
+            EventId = eventId,
+            AppUserId = participation.AppUserId,
+            ActionType = "BreakStart",
+            OccurredAt = nowUtc,
+            RequiresVerification = false
+        });
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Start), new { eventId });
+    }
+
+    // Officer resumes a participant from break (mirrors /break/resume/force).
+    // Any pending break-return verification for them is auto-resolved.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForceResume(int eventId, int participantId)
+    {
+        var currentUser = await RequireCurrentUserAsync();
+        if (currentUser is null)
+        {
+            return Challenge();
+        }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(evt => evt.Id == eventId);
+        if (eventEntity is null)
+        {
+            return NotFound();
+        }
+
+        var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest("Break status is only available after the event has started.");
+        }
+
+        var participation = await _context.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == participantId && item.EventId == eventId);
+        if (participation is null)
+        {
+            return NotFound();
+        }
+        if (participation.IsOnBreak != true)
+        {
+            return RedirectToAction(nameof(Start), new { eventId });
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var verifier = currentUser.CharacterName ?? currentUser.UserName;
+        participation.IsOnBreak = false;
+        participation.PauseTime = null;
+        participation.ResumeTime = nowUtc;
+
+        var pendingReturns = await _context.AppUserEventStatusLedgers
+            .Where(entry => entry.AppUserEventId == participation.Id
+                && entry.ActionType == "BreakReturn"
+                && entry.RequiresVerification
+                && entry.VerifiedAt == null
+                && entry.DeniedAt == null)
+            .ToListAsync();
+        foreach (var pending in pendingReturns)
+        {
+            pending.VerifiedAt = nowUtc;
+            pending.VerifiedBy = verifier;
+            pending.RequiresVerification = false;
+        }
+
+        _context.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEventId = participation.Id,
+            EventId = eventId,
+            AppUserId = participation.AppUserId,
+            ActionType = "BreakReturn",
+            OccurredAt = nowUtc,
+            RequiresVerification = false,
+            VerifiedAt = nowUtc,
+            VerifiedBy = verifier
+        });
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Start), new { eventId });
+    }
+
+    // Officer denies a participant's break-return claim (mirrors /deny-return).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DenyReturn(int eventId, int ledgerEntryId)
+    {
+        var currentUser = await RequireCurrentUserAsync();
+        if (currentUser is null)
+        {
+            return Challenge();
+        }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(evt => evt.Id == eventId);
+        if (eventEntity is null)
+        {
+            return NotFound();
+        }
+
+        var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var ledgerEntry = await _context.AppUserEventStatusLedgers
+            .FirstOrDefaultAsync(item => item.Id == ledgerEntryId && item.EventId == eventId && item.ActionType == "BreakReturn");
+        if (ledgerEntry is null)
+        {
+            return NotFound();
+        }
+
+        if (!ledgerEntry.RequiresVerification || ledgerEntry.VerifiedAt.HasValue || ledgerEntry.DeniedAt.HasValue)
+        {
+            return RedirectToAction(nameof(Start), new { eventId });
+        }
+
+        ledgerEntry.DeniedAt = DateTime.UtcNow;
+        ledgerEntry.DeniedBy = currentUser.CharacterName ?? currentUser.UserName;
+        ledgerEntry.RequiresVerification = false;
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Start), new { eventId });
+    }
 }

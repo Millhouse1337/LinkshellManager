@@ -84,6 +84,16 @@ public class Event
     [ForeignKey(nameof(PartySetupId))]
     public PartySetup? PartySetup { get; set; }
 
+    // Set once the event has been announced to a Discord channel by the bot.
+    // ChannelId + MessageId let the interactions endpoint edit that same message
+    // in place (refresh the signup roster) when someone clicks a job/withdraw.
+    // Null until posted (or when no channel is configured for the event's type).
+    [MaxLength(20)]
+    public string? DiscordChannelId { get; set; }
+
+    [MaxLength(20)]
+    public string? DiscordMessageId { get; set; }
+
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();
 
     public ICollection<AppUserEventStatusLedger> StatusLedgerEntries { get; set; } = new List<AppUserEventStatusLedger>();

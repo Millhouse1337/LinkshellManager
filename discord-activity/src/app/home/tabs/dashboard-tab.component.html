@@ -322,9 +322,13 @@
         </div>
       }
 
-      <!-- ToD Tracker + HNM Claims (dashboard view) -->
+      <!-- ToD Tracker + HNM Claims (dashboard view). Each card respects its
+           linkshell feature toggle (ToDs / HNM section); the row only renders
+           when at least one is enabled. -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+        @if (dashboardLinkshell.settings?.enableToDs || dashboardLinkshell.settings?.enableHnmSection) {
         <div class="dash-row dash-row--equal">
+        @if (dashboardLinkshell.settings?.enableToDs) {
         <div class="card card--tod-fixed">
           <div class="card-head">
             <div class="card-title">ToD Tracker</div>
@@ -437,8 +441,10 @@
           }
           </div>
         </div>
+        }
 
         <!-- HNM Claims donut -->
+        @if (dashboardLinkshell.settings?.enableHnmSection) {
         <div class="card">
           <div class="card-head">
             <div class="card-title">HNM Claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>
@@ -481,7 +487,9 @@
             </div>
           }
         </div>
+        }
         </div>
+        }
       }
 
       <!-- Recent activity -->

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -32,16 +33,20 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Drop any linkshell locked to a Discord guild the user can't prove
-        // membership in, so a non-member never even sees it on the dashboard.
-        // Unlocked linkshells pass through without any Discord call.
+        // Two complementary guild locks are enforced together:
+        //  1. DiscordGuildId — drop any linkshell locked to a guild the user
+        //     can't prove membership in (membership-verified; unlocked = no call).
+        //  2. LockedToDiscordGuildId — hide linkshells locked to a different
+        //     Discord server than the one the Activity is launched in (the web,
+        //     with no guild header, is never filtered by this one).
         var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
             linkshellMemberships
                 .Select(link => (link.LinkshellId, link.Linkshell?.DiscordGuildId))
                 .ToList(),
             cancellationToken);
         linkshellMemberships = linkshellMemberships
-            .Where(link => accessibleLinkshellIds.Contains(link.LinkshellId))
+            .Where(link => accessibleLinkshellIds.Contains(link.LinkshellId)
+                && !IsBlockedByGuildLock(link.Linkshell))
             .ToList();
 
         var linkshellIds = linkshellMemberships
@@ -67,10 +72,14 @@ public sealed partial class ActivityDataController
             .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
 
+        // Net treasury (income minus expense), not the raw sum — an Expense entry
+        // subtracts. Mirrors the Manage Revenue panel's "Net". EntryType is the
+        // normalized "Income"/"Expense" the Activity writes; legacy/web source
+        // strings aren't "Expense", so they count as income.
         var revenueTotals = await _dbContext.RevenueEntries
             .Where(entry => linkshellIds.Contains(entry.LinkshellId))
             .GroupBy(entry => entry.LinkshellId)
-            .Select(group => new { LinkshellId = group.Key, Total = group.Sum(entry => entry.Value) })
+            .Select(group => new { LinkshellId = group.Key, Total = group.Sum(entry => entry.EntryType == "Expense" ? -entry.Value : entry.Value) })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Total, cancellationToken);
 
         var rolesByLinkshell = await EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
@@ -254,8 +263,17 @@ public sealed partial class ActivityDataController
         var addonConfigured = await _dbContext.AddonApiTokens
             .AnyAsync(token => token.IssuedToAppUserId == appUser.Id && token.RevokedAt == null, cancellationToken);
 
+        var addonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken);
+
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
+
+        // Job levels live per-membership; surface the primary linkshell's (or any
+        // membership's) so the profile "My Jobs" editor can pre-fill. Catalog-
+        // aligned (index 0 = WAR ... 14 = SMN) — same shape the web profile uses.
+        var profileJobLevels = ProfileJobLevels.ToCatalogLevels(
+            linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.JobLevels
+            ?? linkshellMemberships.FirstOrDefault(link => link.JobLevels != null)?.JobLevels);
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -266,7 +284,8 @@ public sealed partial class ActivityDataController
                 appUser.AltCharacterName2,
                 appUser.TimeZone,
                 appUser.PrimaryLinkshellId,
-                appUser.PrimaryLinkshellName),
+                appUser.PrimaryLinkshellName,
+                profileJobLevels),
             linkshellMemberships.Select(link => new ActivityLinkshellDto(
                 link.LinkshellId,
                 link.Linkshell?.LinkshellName ?? "Unknown linkshell",
@@ -498,7 +517,8 @@ public sealed partial class ActivityDataController
                 activeEvents.Count,
                 recentHistory.Count,
                 activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
-            addonConfigured));
+            addonConfigured,
+            addonGloballyDisabled));
     }
 
     [HttpGet("history")]

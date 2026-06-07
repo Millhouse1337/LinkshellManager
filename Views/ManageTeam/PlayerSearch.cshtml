@@ -1,27 +1,48 @@
 @model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
 @{
     ViewData["Title"] = "Add members";
+    var filter = string.IsNullOrWhiteSpace(Model.Filter) ? "all" : Model.Filter!.Trim().ToLowerInvariant();
 }
 
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Add members</h1>
-        <div class="page-sub"><span>Search players and send linkshell invites</span></div>
+        <div class="page-sub"><span>Browse players and send linkshell invites</span></div>
     </div>
     <div class="page-actions">
         <a class="btn ghost" asp-action="Index">Back to team</a>
     </div>
 </div>
 
-<div class="card fade d2" style="padding:20px">
-    <form asp-action="SearchPlayers" method="post" class="form-grid">
-        @Html.AntiForgeryToken()
-        <div class="field" style="grid-column:1/-1">
-            <label for="searchTerm">Search players</label>
-            <div style="display:flex;gap:8px">
-                <input id="searchTerm" name="searchTerm" class="form-control" value="@Model.SearchTerm" placeholder="Character name" />
-                <button type="submit" class="btn primary">Search</button>
-            </div>
+<div class="card fade d2" style="padding:16px">
+    @* GET so search/filter/linkshell are shareable + bookmarkable and paginate
+       cleanly. Resets to page 1 on every new search. *@
+    <form asp-action="SearchPlayers" method="get" class="form-grid"
+          style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="flex:1 1 220px">
+            <label for="selectedLinkshellId">Linkshell</label>
+            <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select">
+                @foreach (var linkshell in Model.Linkshells)
+                {
+                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.SelectedLinkshellId)">@linkshell.LinkshellName</option>
+                }
+            </select>
+        </div>
+        <div class="field" style="flex:2 1 240px">
+            <label for="search">Search players</label>
+            <input id="search" name="search" class="form-control" value="@Model.SearchTerm"
+                   placeholder="Character name or username" autocomplete="off" />
+        </div>
+        <div class="field" style="flex:1 1 160px">
+            <label for="filter">Show</label>
+            <select id="filter" name="filter" class="form-select">
+                <option value="all" selected="@(filter == "all")">Everyone</option>
+                <option value="unaffiliated" selected="@(filter == "unaffiliated")">No linkshell</option>
+                <option value="affiliated" selected="@(filter == "affiliated")">Has a linkshell</option>
+            </select>
+        </div>
+        <div class="field">
+            <button type="submit" class="btn primary">Search</button>
         </div>
     </form>
 </div>
@@ -29,22 +50,12 @@
 <div class="card fade d3" style="margin-top:16px">
     <div class="card-head">
         <div class="card-title">Results</div>
-        @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
-        {
-            <div class="card-sub"><span class="num">@Model.Players.Count</span> found</div>
-        }
+        <div class="card-sub"><span class="num">@Model.TotalCount</span> eligible</div>
     </div>
-    @if (Model.Players.Count == 0)
+    @if (Model.Candidates.Count == 0)
     {
         <div class="empty">
-            @if (string.IsNullOrWhiteSpace(Model.SearchTerm))
-            {
-                <span>Enter a character name to begin searching.</span>
-            }
-            else
-            {
-                <span>No players match "@Model.SearchTerm".</span>
-            }
+            <span>No eligible players match the current filters. Members, already-invited players, and (for a server-locked linkshell) non-members of that server are hidden.</span>
         </div>
     }
     else
@@ -53,24 +64,39 @@
             <thead>
                 <tr>
                     <th>Character</th>
+                    <th>Current linkshell</th>
                     <th style="text-align:right">Invite</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var player in Model.Players)
+                @foreach (var candidate in Model.Candidates)
                 {
                     <tr>
-                        <td>@player.CharacterName</td>
+                        <td>
+                            @candidate.DisplayName
+                            @if (!string.IsNullOrWhiteSpace(candidate.UserName) && candidate.UserName != candidate.DisplayName)
+                            {
+                                <span class="muted" style="color:var(--fg-3);font-size:12px"> · @candidate.UserName</span>
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(candidate.PrimaryLinkshellName))
+                            {
+                                <span class="tag">Unaffiliated</span>
+                            }
+                            else
+                            {
+                                <span>@candidate.PrimaryLinkshellName</span>
+                            }
+                        </td>
                         <td style="text-align:right">
-                            <form asp-action="SendInvite" method="post" style="display:inline-flex;gap:6px;align-items:center;justify-content:flex-end">
+                            <form asp-action="SendInvite" method="post" style="display:inline">
                                 @Html.AntiForgeryToken()
-                                <input type="hidden" name="UserId" value="@player.Id" />
-                                <select name="LinkshellId" class="form-select" style="max-width:220px">
-                                    @foreach (var linkshell in Model.Linkshells)
-                                    {
-                                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                                    }
-                                </select>
+                                <input type="hidden" name="UserId" value="@candidate.Id" />
+                                <input type="hidden" name="LinkshellId" value="@Model.SelectedLinkshellId" />
+                                <input type="hidden" name="search" value="@Model.SearchTerm" />
+                                <input type="hidden" name="filter" value="@filter" />
+                                <input type="hidden" name="page" value="@Model.PageNumber" />
                                 <button type="submit" class="btn primary sm">Send invite</button>
                             </form>
                         </td>
@@ -78,5 +104,40 @@
                 }
             </tbody>
         </table>
+
+        @if (Model.TotalPages > 1)
+        {
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px">
+                @if (Model.PageNumber > 1)
+                {
+                    <a class="btn ghost sm"
+                       asp-action="SearchPlayers"
+                       asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
+                       asp-route-search="@Model.SearchTerm"
+                       asp-route-filter="@filter"
+                       asp-route-page="@(Model.PageNumber - 1)">Prev</a>
+                }
+                else
+                {
+                    <span></span>
+                }
+                <span class="muted" style="color:var(--fg-3);font-size:12px">
+                    Page @Model.PageNumber of @Model.TotalPages · @Model.TotalCount eligible
+                </span>
+                @if (Model.PageNumber < Model.TotalPages)
+                {
+                    <a class="btn ghost sm"
+                       asp-action="SearchPlayers"
+                       asp-route-selectedLinkshellId="@Model.SelectedLinkshellId"
+                       asp-route-search="@Model.SearchTerm"
+                       asp-route-filter="@filter"
+                       asp-route-page="@(Model.PageNumber + 1)">Next</a>
+                }
+                else
+                {
+                    <span></span>
+                }
+            </div>
+        }
     }
 </div>

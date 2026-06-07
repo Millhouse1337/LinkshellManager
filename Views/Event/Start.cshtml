@@ -281,6 +281,28 @@
                                                 </form>
                                             }
                                         }
+                                        else
+                                        {
+                                            @* Officer moderation: force another member on/off break. *@
+                                            @if (participant.IsOnBreak == true)
+                                            {
+                                                <form asp-action="ForceResume" method="post" style="display:inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                    <input type="hidden" name="participantId" value="@participant.Id" />
+                                                    <button class="btn ghost sm" type="submit" title="Resume this member from break">Resume</button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <form asp-action="ForceBreak" method="post" style="display:inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                    <input type="hidden" name="participantId" value="@participant.Id" />
+                                                    <button class="btn ghost sm" type="submit" title="Send this member to the break room">Break</button>
+                                                </form>
+                                            }
+                                        }
                                         @if (participant.IsVerified is null)
                                         {
                                             <form asp-action="VerifyUser" method="post" style="display:inline">
@@ -317,6 +339,10 @@
                                                         {
                                                             <div>Verified by @(entry.VerifiedBy ?? "Officer")</div>
                                                         }
+                                                        else if (entry.DeniedAt.HasValue)
+                                                        {
+                                                            <div style="color:var(--danger)">Denied by @(entry.DeniedBy ?? "Officer")</div>
+                                                        }
                                                         else if (entry.RequiresVerification)
                                                         {
                                                             <div>Awaiting verify</div>
@@ -329,6 +355,12 @@
                                                             <input type="hidden" name="eventId" value="@Model.Event.Id" />
                                                             <input type="hidden" name="ledgerEntryId" value="@entry.Id" />
                                                             <button class="btn ghost sm" type="submit">Verify</button>
+                                                        </form>
+                                                        <form asp-action="DenyReturn" method="post" style="display:inline">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                            <input type="hidden" name="ledgerEntryId" value="@entry.Id" />
+                                                            <button class="btn ghost sm" type="submit" style="color:var(--danger)">Deny</button>
                                                         </form>
                                                     }
                                                 </div>

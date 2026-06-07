@@ -12,6 +12,8 @@
             {
                 <span class="dot"> · </span>
                 <span><span class="num">@Model.SentInvites.Count</span> sent</span>
+                <span class="dot"> · </span>
+                <span><span class="num">@Model.JoinRequests.Count</span> request@(Model.JoinRequests.Count == 1 ? "" : "s")</span>
             }
         </div>
     </div>
@@ -72,6 +74,57 @@
         <div>
             <div class="card">
                 <div class="card-head">
+                    <div class="card-title">Join requests</div>
+                </div>
+                @if (Model.JoinRequests.Count == 0)
+                {
+                    <div class="empty">No pending join requests.</div>
+                }
+                else
+                {
+                    <table class="table themed">
+                        <thead>
+                            <tr>
+                                <th>Character</th>
+                                <th>Linkshell</th>
+                                <th style="text-align:right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var request in Model.JoinRequests)
+                            {
+                                <tr>
+                                    <td>@(request.AppUser?.CharacterName ?? request.AppUser?.UserName ?? "—")</td>
+                                    <td>@(request.Linkshell?.LinkshellName ?? "—")</td>
+                                    <td style="text-align:right">
+                                        <div style="display:inline-flex;gap:6px;flex-wrap:wrap">
+                                            <form asp-action="ApproveJoinRequest" method="post" style="display:inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="inviteId" value="@request.Id" />
+                                                <button type="submit" class="btn primary sm">Approve</button>
+                                            </form>
+                                            <form asp-action="DeclineJoinRequest" method="post" style="display:inline"
+                                                  onsubmit="return confirm('Decline this join request?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="inviteId" value="@request.Id" />
+                                                <button type="submit" class="btn ghost sm" style="color:var(--danger)">Decline</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+
+    @if (Model.CanManage)
+    {
+        <div>
+            <div class="card">
+                <div class="card-head">
                     <div class="card-title">Sent invites</div>
                 </div>
                 @if (Model.SentInvites.Count == 0)
@@ -93,7 +146,7 @@
                             @foreach (var invite in Model.SentInvites)
                             {
                                 <tr>
-                                    <td>@(invite.AppUser?.CharacterName ?? "—")</td>
+                                    <td>@(invite.AppUser?.CharacterName ?? invite.DiscordDisplayName ?? "—")</td>
                                     <td>@(invite.Linkshell?.LinkshellName ?? "—")</td>
                                     <td><span class="tag">@invite.Status</span></td>
                                     <td style="text-align:right">

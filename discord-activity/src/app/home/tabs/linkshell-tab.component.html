@@ -299,7 +299,9 @@
               <textarea name="revenueDetails" [(ngModel)]="revenueDetails" rows="2"></textarea>
             </label>
             <div class="inline-form__actions">
-              <button type="submit" class="btn primary sm" [disabled]="activity.busyRevenueSave()">Save entry</button>
+              <button type="submit" class="btn primary sm" [disabled]="activity.busyRevenueSave() || activity.busyRevenueId() !== null">
+                {{ editingRevenueId() !== null ? 'Update entry' : 'Save entry' }}
+              </button>
               <button type="button" class="btn ghost sm" (click)="toggleRevenueForm()">Cancel</button>
             </div>
           </form>
@@ -320,6 +322,7 @@
                 </div>
                 @if (canManageConfigLinkshell()) {
                   <div class="entry-item__actions">
+                    <button type="button" class="btn ghost sm" (click)="beginEditRevenue(entry)" [disabled]="activity.busyRevenueId() === entry.id">Edit</button>
                     <button type="button" class="btn ghost sm" (click)="deleteRevenue(entry.id)" [disabled]="activity.busyRevenueId() === entry.id">Delete</button>
                   </div>
                 }

@@ -454,6 +454,56 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true, id = entry.Id });
     }
 
+    [HttpPost("revenue/{entryId:int}/update")]
+    public async Task<IActionResult> UpdateRevenueEntryAsync(
+        int entryId,
+        [FromBody] ActivityCreateRevenueRequest request,
+        CancellationToken cancellationToken)
+    {
+        var entryType = request.EntryType?.Trim() ?? string.Empty;
+        if (!string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(entryType, "Expense", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { error = "Entry type must be Income or Expense." });
+        }
+        if (request.Value < 0)
+        {
+            return BadRequest(new { error = "Value cannot be negative." });
+        }
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage revenue."
+            });
+        }
+
+        var entry = await _dbContext.RevenueEntries.FirstOrDefaultAsync(item => item.Id == entryId, cancellationToken);
+        if (entry is null)
+        {
+            return NotFound(new { error = "The revenue entry was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, entry.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageTreasury, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        entry.EntryType = string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase) ? "Income" : "Expense";
+        entry.Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
+        entry.Value = request.Value;
+        entry.Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim();
+        if (request.OccurredAt.HasValue)
+        {
+            entry.OccurredAt = request.OccurredAt.Value.ToUniversalTime();
+        }
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     [HttpPost("revenue/{entryId:int}/delete")]
     public async Task<IActionResult> DeleteRevenueEntryAsync(int entryId, CancellationToken cancellationToken)
     {

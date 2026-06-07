@@ -112,10 +112,13 @@ public class DashboardController : Controller
             ? await _context.Items.CountAsync(item => item.LinkshellId == selectedLinkshellId.Value)
             : 0;
 
+        // Net treasury (income minus expense): an Expense entry subtracts.
+        // EntryType is the normalized "Income"/"Expense" the Activity writes;
+        // legacy/web source strings aren't "Expense", so they count as income.
         var revenueTotal = selectedLinkshellId.HasValue
             ? await _context.RevenueEntries
                 .Where(entry => entry.LinkshellId == selectedLinkshellId.Value)
-                .SumAsync(entry => (long?)entry.Value) ?? 0L
+                .SumAsync(entry => (long?)(entry.EntryType == "Expense" ? -entry.Value : entry.Value)) ?? 0L
             : 0L;
 
         var nowUtc = DateTime.UtcNow;
@@ -188,6 +191,8 @@ public class DashboardController : Controller
             UpcomingTodsCount = upcomingTodsCount,
             EnableItems = selectedLinkshell?.EnableItems ?? true,
             EnableRevenue = selectedLinkshell?.EnableRevenue ?? true,
+            EnableToDs = selectedLinkshell?.EnableToDs ?? true,
+            EnableHnmSection = selectedLinkshell?.EnableHnmSection ?? true,
             TodTracker = todTracker,
             HnmClaims = hnmClaims,
             HnmClaimsTotal = hnmTotal,

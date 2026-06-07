@@ -5,6 +5,8 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityCreateLinkshellInput,
+  ActivityDiscordChannelBindingInput,
+  ActivityDiscordChannelsResponse,
   ActivityDkpRoundingIncrement,
   ActivityLinkshellDetail,
   ActivityLinkshellRolePermissionsInput,
@@ -22,6 +24,7 @@ export class LinkshellService {
   readonly busyLinkshellId = signal<number | null>(null);
   readonly busyMemberId = signal<number | null>(null);
   readonly busyRoles = signal(false);
+  readonly busyDiscordChannels = signal(false);
 
   async loadLinkshellDetail(linkshellId: number): Promise<void> {
     if (linkshellId <= 0) {
@@ -120,6 +123,84 @@ export class LinkshellService {
       throw error;
     } finally {
       this.busyLinkshellId.set(null);
+    }
+  }
+
+  // Lock this linkshell to the Discord server the Activity is launched in. The
+  // server reads the guild id from the X-Discord-Guild-Id header (sent on every
+  // request); we only pass the human-entered server name for display.
+  async lockLinkshellToGuild(linkshellId: number, guildName: string | null): Promise<boolean> {
+    this.busyLinkshellId.set(linkshellId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/lock-guild`, {
+        guildName: guildName?.trim() || null
+      });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Linkshell locked to this Discord server.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Locking the linkshell to this server failed.'));
+      return false;
+    } finally {
+      this.busyLinkshellId.set(null);
+    }
+  }
+
+  async unlockLinkshellGuild(linkshellId: number): Promise<boolean> {
+    this.busyLinkshellId.set(linkshellId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/unlock-guild`);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Linkshell unlocked — accessible from any server.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Unlocking the linkshell failed.'));
+      return false;
+    } finally {
+      this.busyLinkshellId.set(null);
+    }
+  }
+
+  // Phase 2 channel config: load the linkshell's channel bindings + the bot's
+  // available channels (mirrors the web Customize "Discord Channels" card).
+  async loadDiscordChannels(linkshellId: number): Promise<ActivityDiscordChannelsResponse | null> {
+    this.busyDiscordChannels.set(true);
+    this.auth.setActionError(null);
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      return await this.http.fetchActivityJson<ActivityDiscordChannelsResponse>(
+        `/api/activity/linkshells/${linkshellId}/discord-channels`,
+        accessToken
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading Discord channels failed.'));
+      return null;
+    } finally {
+      this.busyDiscordChannels.set(false);
+    }
+  }
+
+  async saveDiscordChannels(
+    linkshellId: number, channels: ActivityDiscordChannelBindingInput[]): Promise<boolean> {
+    this.busyDiscordChannels.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(
+        `/api/activity/linkshells/${linkshellId}/discord-channels`, { channels });
+      this.auth.setActionMessage('Discord channels updated.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Saving Discord channels failed.'));
+      return false;
+    } finally {
+      this.busyDiscordChannels.set(false);
     }
   }
 

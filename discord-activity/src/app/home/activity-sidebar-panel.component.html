@@ -69,6 +69,32 @@
         </label>
       </div>
 
+      @if (hasLinkshell()) {
+        <div style="margin-top:4px">
+          <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px">
+            <span style="font-weight:600;font-size:13px">My Jobs</span>
+            <span style="font-size:12px;opacity:.7">
+              Level of each job you have (0–{{ profileJobMaxLevel }}). Shared with your linkshells and the addon's loot filter.
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px">
+            @for (job of profileJobOptions; track job; let i = $index) {
+              <label style="display:flex;flex-direction:column;gap:2px;font-size:12px">
+                <span>{{ job }}</span>
+                <input
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  [max]="profileJobMaxLevel"
+                  step="1"
+                  [(ngModel)]="profileModel.jobLevels[i]"
+                  [name]="'profileJob' + i" />
+              </label>
+            }
+          </div>
+        </div>
+      }
+
       <div class="create-form__actions create-form__actions--end">
         <button type="submit" class="action-button" [disabled]="activity.busyProfileSave()">
           {{ activity.busyProfileSave() ? 'Saving...' : 'Save profile' }}

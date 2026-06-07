@@ -21,6 +21,8 @@ public sealed partial class ActivityDataController : ControllerBase
 
     private readonly ApplicationDbContext _dbContext;
     private readonly DiscordIdentityService _discordIdentityService;
+    private readonly InviteCandidateService _inviteCandidates;
+    private readonly DiscordBotClient _discordBot;
     private readonly AppUserProfileService _appUserProfileService;
     private readonly UserManager<AppUser> _userManager;
     private readonly IHostEnvironment _environment;
@@ -31,10 +33,13 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly SnapshotAttInputAuditService _snapshotAttInputAudit;
     private readonly GoogleSheetsSyncService _sheets;
     private readonly ILogger<ActivityDataController> _logger;
+    private readonly GlobalSettingsService _globalSettings;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
         DiscordIdentityService discordIdentityService,
+        InviteCandidateService inviteCandidates,
+        DiscordBotClient discordBot,
         AppUserProfileService appUserProfileService,
         UserManager<AppUser> userManager,
         IHostEnvironment environment,
@@ -44,10 +49,13 @@ public sealed partial class ActivityDataController : ControllerBase
         WindowEventDkpLedgerService windowEventDkpLedger,
         SnapshotAttInputAuditService snapshotAttInputAudit,
         GoogleSheetsSyncService sheets,
-        ILogger<ActivityDataController> logger)
+        ILogger<ActivityDataController> logger,
+        GlobalSettingsService globalSettings)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
+        _inviteCandidates = inviteCandidates;
+        _discordBot = discordBot;
         _appUserProfileService = appUserProfileService;
         _userManager = userManager;
         _environment = environment;
@@ -58,6 +66,7 @@ public sealed partial class ActivityDataController : ControllerBase
         _snapshotAttInputAudit = snapshotAttInputAudit;
         _sheets = sheets;
         _logger = logger;
+        _globalSettings = globalSettings;
     }
 
     [HttpGet("antiforgery")]

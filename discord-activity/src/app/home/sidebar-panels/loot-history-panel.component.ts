@@ -17,6 +17,14 @@ interface LootEditFormModel {
   reason: string;
 }
 
+interface LootAddFormModel {
+  context: string;
+  itemName: string;
+  itemWinner: string;
+  winningDkpSpent: number | null;
+  noDkp: boolean;
+}
+
 @Component({
   selector: 'app-loot-history-panel',
   imports: [CommonModule, FormsModule],
@@ -39,6 +47,68 @@ export class LootHistoryPanelComponent implements OnInit {
   protected readonly editingItem = signal<ActivityLootHistoryItem | null>(null);
   protected editFormModel: LootEditFormModel = this.emptyForm();
   protected editError = signal<string | null>(null);
+
+  protected readonly addingLoot = signal(false);
+  protected addFormModel: LootAddFormModel = this.emptyAddForm();
+  protected addError = signal<string | null>(null);
+
+  // Whether the current user may add loot to the selected linkshell (drives the
+  // "+ Add loot" button). The server re-checks CanAddLoot regardless.
+  protected canAddLoot(): boolean {
+    const link = this.activity.overview()?.linkshells?.find(l => l.id === this.selectedLinkshellId);
+    return !!link?.permissions?.canAddLoot;
+  }
+
+  protected openAdd(): void {
+    this.addFormModel = this.emptyAddForm();
+    this.addError.set(null);
+    this.addingLoot.set(true);
+  }
+
+  protected closeAdd(): void {
+    this.addingLoot.set(false);
+    this.addFormModel = this.emptyAddForm();
+    this.addError.set(null);
+  }
+
+  protected onNoDkpChange(checked: boolean): void {
+    this.addFormModel.noDkp = checked;
+    if (checked) this.addFormModel.winningDkpSpent = 0;
+  }
+
+  protected async submitAdd(): Promise<void> {
+    const itemName = (this.addFormModel.itemName ?? '').trim();
+    const itemWinner = (this.addFormModel.itemWinner ?? '').trim();
+    if (!itemName) {
+      this.addError.set('Item name is required.');
+      return;
+    }
+    if (!itemWinner) {
+      this.addError.set('A winner is required.');
+      return;
+    }
+    const dkp = this.addFormModel.noDkp ? 0 : (this.addFormModel.winningDkpSpent ?? 0);
+    if (dkp < 0) {
+      this.addError.set('DKP spent must be 0 or greater.');
+      return;
+    }
+
+    this.addError.set(null);
+    const ok = await this.activity.addManualLoot({
+      context: (this.addFormModel.context ?? '').trim() || null,
+      itemName,
+      itemWinner,
+      winningDkpSpent: dkp
+    });
+
+    if (ok) {
+      this.closeAdd();
+      this.pageIndex.set(0);
+      await this.refresh();
+    } else {
+      this.addError.set(this.activity.actionError() ?? 'Adding loot failed.');
+    }
+  }
 
   ngOnInit(): void {
     void this.refresh();
@@ -160,5 +230,9 @@ export class LootHistoryPanelComponent implements OnInit {
 
   private emptyForm(): LootEditFormModel {
     return { itemName: '', itemWinner: '', winningDkpSpent: 0, reason: '' };
+  }
+
+  private emptyAddForm(): LootAddFormModel {
+    return { context: '', itemName: '', itemWinner: '', winningDkpSpent: 0, noDkp: false };
   }
 }

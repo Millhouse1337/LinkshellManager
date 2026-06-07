@@ -272,6 +272,107 @@ public sealed class DiscordIdentityService
         return $"discord-guild-member:{guildId}:{Convert.ToHexString(hash)}";
     }
 
+    private static readonly TimeSpan BotGuildsTtl = TimeSpan.FromMinutes(5);
+
+    // Lists the guilds the LSM bot itself is in (GET /users/@me/guilds with the
+    // bot token). Used by the website's server-lock UI to offer a pick-list of
+    // servers the bot can actually gate. Returns null when no bot token is
+    // configured or the call fails; cached briefly so an officer page load
+    // doesn't hit Discord every time.
+    public async Task<IReadOnlyList<DiscordGuildSummary>?> ListBotGuildsAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.BotToken))
+        {
+            return null;
+        }
+
+        const string cacheKey = "discord-bot-guilds";
+        if (_cache.TryGetValue<IReadOnlyList<DiscordGuildSummary>>(cacheKey, out var cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("https://discord.com/api/users/@me/guilds"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bot", _options.BotToken);
+            request.Headers.Accept.ParseAdd("application/json");
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Discord bot-guild listing failed with status {Status}.", response.StatusCode);
+                return null;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<List<DiscordGuildSummaryPayload>>(
+                cancellationToken: cancellationToken);
+            var guilds = (payload ?? new List<DiscordGuildSummaryPayload>())
+                .Where(guild => !string.IsNullOrWhiteSpace(guild.Id))
+                .Select(guild => new DiscordGuildSummary(guild.Id, guild.Name ?? guild.Id))
+                .ToList();
+            _cache.Set(cacheKey, (IReadOnlyList<DiscordGuildSummary>)guilds, BotGuildsTtl);
+            return guilds;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Unable to list the bot's Discord guilds.");
+            return null;
+        }
+    }
+
+    // Verifies via the BOT token whether a given Discord user is a member of a
+    // guild: GET /guilds/{guildId}/members/{userId} -> 200 member, 404 not.
+    // The website lock flow uses this so a leader can only lock to a server they
+    // are actually in (a successful check also proves the bot is in that guild,
+    // since the bot token can't read members of a guild it isn't in). Returns
+    // false when unverifiable (no bot token, bot not in guild, transient error).
+    public async Task<bool> IsUserInGuildAsync(string guildId, string discordUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(guildId)
+            || string.IsNullOrWhiteSpace(discordUserId)
+            || string.IsNullOrWhiteSpace(_options.BotToken))
+        {
+            return false;
+        }
+
+        var cacheKey = $"discord-bot-guild-member:{guildId}:{discordUserId}";
+        if (_cache.TryGetValue<bool>(cacheKey, out var cachedVerdict))
+        {
+            return cachedVerdict;
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var uri = new Uri(
+                $"https://discord.com/api/guilds/{Uri.EscapeDataString(guildId)}/members/{Uri.EscapeDataString(discordUserId)}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bot", _options.BotToken);
+            request.Headers.Accept.ParseAdd("application/json");
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _cache.Set(cacheKey, false, GuildMembershipTtl);
+                return false;
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Discord bot guild-member lookup failed with status {Status}.", response.StatusCode);
+                return false;
+            }
+            _cache.Set(cacheKey, true, GuildMembershipTtl);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Unable to verify guild membership for the website lock flow.");
+            return false;
+        }
+    }
+
     // How long a successful guild-member roster is reused before we re-fetch,
     // and a much shorter window for a failed fetch (bot not in the server,
     // missing intent, transient error) so a misconfigured server doesn't get
@@ -743,6 +844,10 @@ public sealed class DiscordIdentityService
         [property: JsonPropertyName("avatar")] string? Avatar,
         [property: JsonPropertyName("bot")] bool? Bot);
 
+    private sealed record DiscordGuildSummaryPayload(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("name")] string? Name);
+
     private sealed record DiscordOAuth2MeApplication(
         [property: JsonPropertyName("id")] string Id);
 
@@ -766,6 +871,12 @@ public sealed record DiscordGuildMemberInfo(
     string Username,
     string? GlobalName,
     string? Avatar);
+
+// A Discord guild the bot is in (id + name), as read via the bot-token guild
+// listing. Used by the website server-lock pick-list.
+public sealed record DiscordGuildSummary(
+    string Id,
+    string Name);
 
 public sealed record DiscordExchangeResult(
     string AccessToken,

@@ -51,8 +51,8 @@ public partial class AuctionController
             StartedAt = null,
             AuctionItems = model.AuctionItems.Select(item => new AuctionItem
             {
-                ItemName = item.ItemName?.Trim(),
-                ItemType = item.ItemType?.Trim(),
+                ItemName = ResolveAuctionItemName(item),
+                ItemType = item.GilAmount.HasValue ? "Gil" : item.ItemType?.Trim(),
                 StartingBidDkp = item.StartingBidDkp,
                 CurrentHighestBid = null,
                 CurrentHighestBidder = null,
@@ -62,7 +62,9 @@ public partial class AuctionController
                 EndTime = ConvertUserTimeZoneToUtc(model.Auction.EndTime, user.TimeZone),
                 Status = "Pending",
                 Notes = item.Notes?.Trim(),
-                SourceItemId = item.SourceItemId
+                // Gil items sell from the treasury, never from inventory.
+                SourceItemId = item.GilAmount.HasValue ? null : item.SourceItemId,
+                GilAmount = item.GilAmount
             }).ToList()
         };
 
@@ -114,27 +116,29 @@ public partial class AuctionController
         {
             if (itemModel.Id > 0 && remainingItemsById.TryGetValue(itemModel.Id, out var existingItem))
             {
-                existingItem.ItemName = itemModel.ItemName?.Trim();
-                existingItem.ItemType = itemModel.ItemType?.Trim();
+                existingItem.ItemName = ResolveAuctionItemName(itemModel);
+                existingItem.ItemType = itemModel.GilAmount.HasValue ? "Gil" : itemModel.ItemType?.Trim();
                 existingItem.StartingBidDkp = itemModel.StartingBidDkp;
                 existingItem.StartTime = auction.StartTime;
                 existingItem.EndTime = auction.EndTime;
                 existingItem.Notes = itemModel.Notes?.Trim();
-                existingItem.SourceItemId = itemModel.SourceItemId;
+                existingItem.SourceItemId = itemModel.GilAmount.HasValue ? null : itemModel.SourceItemId;
+                existingItem.GilAmount = itemModel.GilAmount;
                 remainingItemsById.Remove(itemModel.Id);
             }
             else
             {
                 auction.AuctionItems.Add(new AuctionItem
                 {
-                    ItemName = itemModel.ItemName?.Trim(),
-                    ItemType = itemModel.ItemType?.Trim(),
+                    ItemName = ResolveAuctionItemName(itemModel),
+                    ItemType = itemModel.GilAmount.HasValue ? "Gil" : itemModel.ItemType?.Trim(),
                     StartingBidDkp = itemModel.StartingBidDkp,
                     StartTime = auction.StartTime,
                     EndTime = auction.EndTime,
                     Status = "Pending",
                     Notes = itemModel.Notes?.Trim(),
-                    SourceItemId = itemModel.SourceItemId
+                    SourceItemId = itemModel.GilAmount.HasValue ? null : itemModel.SourceItemId,
+                    GilAmount = itemModel.GilAmount
                 });
             }
         }
@@ -415,6 +419,7 @@ public partial class AuctionController
         }
 
         var auction = await _context.Auctions
+            .Include(item => item.Linkshell)
             .Include(item => item.AuctionItems)
                 .ThenInclude(item => item.Bids)
             .FirstOrDefaultAsync(item => item.Id == auctionId);
@@ -434,7 +439,10 @@ public partial class AuctionController
             return RedirectToAction(nameof(Index));
         }
 
-        var deliveredIds = (deliveredItemIds ?? new List<int>()).ToHashSet();
+        // Inventory now auto-draws down on close for any item that was sourced
+        // from the stockpile and has a winner — no separate "delivered" tick.
+        // `deliveredItemIds` is accepted for backward compatibility but ignored.
+        var closedAt = DateTime.UtcNow;
 
         var auctionHistory = new AuctionHistory
         {
@@ -445,7 +453,7 @@ public partial class AuctionController
             StartTime = auction.StartTime,
             EndTime = auction.EndTime,
             StartedAt = auction.StartedAt,
-            ClosedAt = DateTime.UtcNow,
+            ClosedAt = closedAt,
             // Carry the per-auction Discord channel id forward so the channel
             // can have its results posted and then be deleted on close.
             DiscordChannelId = auction.DiscordChannelId,
@@ -454,7 +462,12 @@ public partial class AuctionController
                 .Select(item =>
                 {
                     var hasWinner = !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId);
-                    var delivered = hasWinner && deliveredIds.Contains(item.Id);
+                    // Inventory-sourced winners are auto-delivered, so mark them
+                    // Received up front; the inventory decrement below transitions
+                    // through AuctionInventoryService to keep the math consistent
+                    // with the post-close Received/Undo toggle (prevents a second
+                    // decrement if an officer re-toggles the row later).
+                    var autoReceived = hasWinner && item.SourceItemId.HasValue;
                     return new AuctionItem
                     {
                         ItemName = item.ItemName,
@@ -466,9 +479,10 @@ public partial class AuctionController
                         EndingBidDkp = item.CurrentHighestBid,
                         StartTime = item.StartTime,
                         EndTime = item.EndTime,
-                        Status = !hasWinner ? "NoBids" : delivered ? "Received" : "Closed",
+                        Status = !hasWinner ? "NoBids" : autoReceived ? "Received" : "Closed",
                         Notes = item.Notes,
-                        SourceItemId = item.SourceItemId
+                        SourceItemId = item.SourceItemId,
+                        GilAmount = item.GilAmount
                     };
                 })
                 .ToList()
@@ -493,7 +507,7 @@ public partial class AuctionController
                 EntryType = "AuctionSpent",
                 Amount = -item.CurrentHighestBid.GetValueOrDefault(),
                 Sequence = 1,
-                OccurredAt = DateTime.UtcNow,
+                OccurredAt = closedAt,
                 CharacterName = winner.CharacterName,
                 ItemName = item.ItemName,
                 Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
@@ -503,33 +517,40 @@ public partial class AuctionController
                 // in one column on the sheet.
                 SourceAuctionHistory = auctionHistory
             });
+
+            // Gil auctions pay out of the treasury: the winner spent DKP, and
+            // the linkshell hands over the listed gil. Record that as a negative
+            // RevenueEntry so it shows in Manage Revenue and lowers the total.
+            if (item.GilAmount.HasValue && item.GilAmount.Value > 0)
+            {
+                _context.RevenueEntries.Add(new RevenueEntry
+                {
+                    LinkshellId = auction.LinkshellId,
+                    LinkshellName = auction.Linkshell?.LinkshellName,
+                    EntryType = "Auction Payout",
+                    Category = "Gil",
+                    Value = -item.GilAmount.Value,
+                    Details = $"Gil auction: {item.ItemName} won by {winner.CharacterName} for {item.CurrentHighestBid.GetValueOrDefault()} DKP.",
+                    OccurredAt = closedAt,
+                    CreatedByAppUserId = user.Id,
+                    CreatedByCharacterName = winner.CharacterName,
+                    CreatedAt = closedAt
+                });
+            }
         }
 
-        // Drawdown the linkshell stockpile for any auction items that were
-        // sourced from inventory and that the creator confirmed delivered.
-        var sourceItemIds = auction.AuctionItems
-            .Where(item => item.SourceItemId.HasValue && deliveredIds.Contains(item.Id) && !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId))
-            .Select(item => item.SourceItemId!.Value)
-            .Distinct()
-            .ToList();
-        var inventoryItems = sourceItemIds.Count == 0
-            ? new List<Item>()
-            : await _context.Items
-                .Where(inv => sourceItemIds.Contains(inv.Id) && inv.LinkshellId == auction.LinkshellId)
-                .ToListAsync();
-        foreach (var auctionItem in auction.AuctionItems.Where(item =>
+        // Auto-drawdown the linkshell stockpile for every inventory-sourced item
+        // that has a winner. Routed through AuctionInventoryService (transition
+        // into "Received") so the close-time decrement and the post-close
+        // Received/Undo toggle share one idempotent code path. The history items
+        // were created with Status="Received" above to match.
+        foreach (var item in auction.AuctionItems.Where(item =>
                      item.SourceItemId.HasValue &&
-                     deliveredIds.Contains(item.Id) &&
                      !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId)))
         {
-            var inv = inventoryItems.FirstOrDefault(candidate => candidate.Id == auctionItem.SourceItemId!.Value);
-            if (inv is null) continue;
-            inv.Quantity = Math.Max(0, inv.Quantity - 1);
-            inv.UpdatedAt = DateTime.UtcNow;
-            if (inv.Quantity == 0)
-            {
-                _context.Items.Remove(inv);
-            }
+            await AuctionInventoryService.AdjustForStatusChangeAsync(
+                _context, item, previousStatus: "Closed", newStatus: AuctionInventoryService.ReceivedStatus,
+                auction.LinkshellId, closedAt);
         }
 
         _context.Bids.RemoveRange(auction.AuctionItems.SelectMany(item => item.Bids));

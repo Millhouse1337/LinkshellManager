@@ -140,6 +140,97 @@ public sealed partial class ActivityDataController
         return Ok(new ActivityLootHistoryListDto(page, pageSize, totalCount, pageItems));
     }
 
+    // POST /api/activity/loot-history
+    //
+    // Manual loot entry for the caller's primary linkshell. Mirrors the web
+    // LootHistoryController.Add flow exactly: a lightweight backing ToD carries
+    // the loot through the shared ToD-loot DKP deduction + ManualPoints sheet
+    // pipeline, so it shows in history (Source = ToD) with full edit support.
+    [HttpPost("loot-history")]
+    public async Task<IActionResult> AddLootHistoryAsync(
+        [FromBody] ActivityLootAddRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to add loot." });
+        }
+
+        if (!appUser.PrimaryLinkshellId.HasValue || appUser.PrimaryLinkshellId.Value == 0)
+        {
+            return BadRequest(new { error = "Select a primary linkshell before adding loot." });
+        }
+
+        var linkshellId = appUser.PrimaryLinkshellId.Value;
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+        if (!await CanAsync(membership, role => role.CanAddLoot, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var itemName = request.ItemName?.Trim();
+        var itemWinner = request.ItemWinner?.Trim();
+        if (string.IsNullOrWhiteSpace(itemName))
+        {
+            return BadRequest(new { error = "Item name is required." });
+        }
+        if (string.IsNullOrWhiteSpace(itemWinner))
+        {
+            return BadRequest(new { error = "A winner is required." });
+        }
+
+        var dkpSpent = request.WinningDkpSpent.GetValueOrDefault();
+        if (dkpSpent < 0)
+        {
+            return BadRequest(new { error = "DKP spent can't be negative." });
+        }
+
+        // Winner must be a current roster member (mirrors the web add-loot guard).
+        var roster = await _dbContext.AppUserLinkshells
+            .AsNoTracking()
+            .Where(link => link.LinkshellId == linkshellId
+                           && link.CharacterName != null && link.CharacterName != "")
+            .Select(link => link.CharacterName!)
+            .ToListAsync(cancellationToken);
+        if (!roster.Any(name => string.Equals(name, itemWinner, StringComparison.OrdinalIgnoreCase)))
+        {
+            return BadRequest(new { error = "Winner must be a current linkshell member." });
+        }
+
+        var context = string.IsNullOrWhiteSpace(request.Context) ? null : request.Context!.Trim();
+        var nowUtc = DateTime.UtcNow;
+
+        var tod = new Tod
+        {
+            LinkshellId = linkshellId,
+            MonsterName = context ?? "Manual Loot",
+            Claim = true,
+            Time = nowUtc,
+            TimeStamp = nowUtc,
+            TotalClaims = 1
+        };
+        var detail = new TodLootDetail
+        {
+            Tod = tod,
+            ItemName = itemName,
+            ItemWinner = itemWinner,
+            WinningDkpSpent = dkpSpent
+        };
+        _dbContext.Tods.Add(tod);
+        _dbContext.TodLootDetails.Add(detail);
+        await AdjustTodLootDkpAsync(_dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        // Recompute this day's ManualPoints column (idempotent; edits/deletes self-correct).
+        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
+
+        return Ok(new { success = true, lootDetailId = detail.Id });
+    }
+
     [HttpPost("loot-history/tod/{lootDetailId:int}/edit")]
     public async Task<IActionResult> EditTodLootHistoryAsync(
         int lootDetailId,

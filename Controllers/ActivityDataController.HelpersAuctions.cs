@@ -16,8 +16,19 @@ public sealed partial class ActivityDataController
     private static List<ActivityAuctionItemInput> NormalizeAuctionItems(IReadOnlyList<ActivityAuctionItemInput>? items)
     {
         return (items ?? Array.Empty<ActivityAuctionItemInput>())
-            .Where(item => !string.IsNullOrWhiteSpace(item.ItemName) || item.StartingBidDkp.HasValue)
+            .Where(item => !string.IsNullOrWhiteSpace(item.ItemName) || item.StartingBidDkp.HasValue || (item.GilAmount.HasValue && item.GilAmount.Value > 0))
             .ToList();
+    }
+
+    // Gil items display as "<amount> gil"; everything else uses the typed name.
+    private static string? ResolveAuctionItemName(ActivityAuctionItemInput item)
+    {
+        if (item.GilAmount.HasValue && item.GilAmount.Value > 0)
+        {
+            return $"{item.GilAmount.Value:N0} gil";
+        }
+
+        return item.ItemName?.Trim();
     }
 
     private static string? ValidateAuctionRequest(
@@ -53,9 +64,17 @@ public sealed partial class ActivityDataController
 
         foreach (var item in items)
         {
-            if (string.IsNullOrWhiteSpace(item.ItemName))
+            var isGil = item.GilAmount.HasValue && item.GilAmount.Value > 0;
+
+            // Gil items are auto-named "<amount> gil"; no typed name needed.
+            if (!isGil && string.IsNullOrWhiteSpace(item.ItemName))
             {
                 return "Each auction item needs a name.";
+            }
+
+            if (item.GilAmount.HasValue && item.GilAmount.Value <= 0)
+            {
+                return "Gil amount must be greater than 0.";
             }
 
             if (!item.StartingBidDkp.HasValue || item.StartingBidDkp < 0)

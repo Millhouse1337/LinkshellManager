@@ -13,11 +13,16 @@ public class ManageTeamController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly Services.InviteCandidateService _inviteCandidates;
 
-    public ManageTeamController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public ManageTeamController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        Services.InviteCandidateService inviteCandidates)
     {
         _context = context;
         _userManager = userManager;
+        _inviteCandidates = inviteCandidates;
     }
 
     public async Task<IActionResult> Index(int? selectedLinkshellId, string? search, int page = 1, bool appSync = true)
@@ -103,7 +108,15 @@ public class ManageTeamController : Controller
         });
     }
 
-    public async Task<IActionResult> SearchPlayers()
+    // Add-members browse. Paginated, searchable, and filterable via the shared
+    // InviteCandidateService (same query the Discord Activity's invite panel
+    // uses), so the web and Activity surface the same eligible players — minus
+    // current members, anyone already invited (from either front-end), and the
+    // caller — and honor the linkshell's Discord-server lock. Kept under the
+    // SearchPlayers action name so the sidebar/"Add members" links + active
+    // state are unchanged.
+    public async Task<IActionResult> SearchPlayers(
+        int? selectedLinkshellId, string? search, string? filter, int page = 1)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -111,47 +124,38 @@ public class ManageTeamController : Controller
         var manageable = await GetManageableLinkshellsAsync(user.Id);
         if (manageable.Count == 0) return Forbid();
 
+        var targetId = selectedLinkshellId.HasValue && manageable.Any(l => l.Id == selectedLinkshellId.Value)
+            ? selectedLinkshellId.Value
+            : manageable[0].Id;
+        var targetLinkshell = manageable.First(l => l.Id == targetId);
+
+        var result = await _inviteCandidates.BrowseAsync(
+            targetId,
+            user.Id,
+            targetLinkshell.DiscordGuildId,
+            search,
+            filter,
+            page,
+            ManageTeamViewModel.MembersPageSize,
+            HttpContext.RequestAborted);
+
         return View("PlayerSearch", new ManageTeamViewModel
         {
             Linkshells = manageable,
-            CanManage = true
+            SelectedLinkshellId = targetId,
+            CanManage = true,
+            SearchTerm = search,
+            Filter = filter,
+            Candidates = result.Items.ToList(),
+            PageNumber = result.Page,
+            PageSize = result.PageSize,
+            TotalCount = result.Total
         });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SearchPlayers(string? searchTerm)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-
-        var manageable = await GetManageableLinkshellsAsync(user.Id);
-        if (manageable.Count == 0) return Forbid();
-
-        var players = new List<AppUser>();
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
-            var term = searchTerm.Trim();
-            players = await _context.Users
-                .Where(u => u.CharacterName != null
-                            && u.CharacterName.Contains(term)
-                            && u.Id != user.Id)
-                .OrderBy(u => u.CharacterName)
-                .ToListAsync();
-        }
-
-        return View("PlayerSearch", new ManageTeamViewModel
-        {
-            Linkshells = manageable,
-            Players = players,
-            SearchTerm = searchTerm,
-            CanManage = true
-        });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SendInvite(SendInviteInput input)
+    public async Task<IActionResult> SendInvite(SendInviteInput input, string? search, string? filter, int page = 1)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -177,7 +181,10 @@ public class ManageTeamController : Controller
             await _context.SaveChangesAsync();
         }
 
-        return RedirectToAction(nameof(Index));
+        // Return to the browse (same linkshell + search/filter/page) so officers
+        // can keep inviting without losing their place.
+        return RedirectToAction(nameof(SearchPlayers),
+            new { selectedLinkshellId = input.LinkshellId, search, filter, page });
     }
 
     [HttpPost]
@@ -237,10 +244,17 @@ public class ManageTeamController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
 
+        // Actual linkshell->user invites can carry the web's "Pending" or the
+        // Activity's "PendingInvite" status; recognize both so an invite shows
+        // here no matter which front-end sent it. (Join requests —
+        // "PendingJoinRequest" is the user-initiated request-to-join, handled in
+        // its own section below with Approve/Decline.)
+        var inviteStatuses = new[] { "Pending", "PendingInvite" };
+
         var pendingInvites = await _context.Invites
             .Include(i => i.Linkshell)
             .Include(i => i.AppUser)
-            .Where(i => i.AppUserId == user.Id && i.Status == "Pending")
+            .Where(i => i.AppUserId == user.Id && inviteStatuses.Contains(i.Status))
             .ToListAsync();
 
         var manageableIds = await _context.AppUserLinkshells
@@ -252,15 +266,85 @@ public class ManageTeamController : Controller
         var sentInvites = await _context.Invites
             .Include(i => i.Linkshell)
             .Include(i => i.AppUser)
-            .Where(i => manageableIds.Contains(i.LinkshellId) && i.Status == "Pending")
+            .Where(i => manageableIds.Contains(i.LinkshellId) && inviteStatuses.Contains(i.Status))
+            .ToListAsync();
+
+        // User-initiated requests to join a linkshell the caller manages (created
+        // via the Discord Activity); officers approve/decline them here.
+        var joinRequests = await _context.Invites
+            .Include(i => i.Linkshell)
+            .Include(i => i.AppUser)
+            .Where(i => manageableIds.Contains(i.LinkshellId) && i.Status == "PendingJoinRequest")
             .ToListAsync();
 
         return View(new ManageTeamViewModel
         {
             PendingInvites = pendingInvites,
             SentInvites = sentInvites,
+            JoinRequests = joinRequests,
             CanManage = manageableIds.Count > 0
         });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveJoinRequest(int inviteId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var invite = await _context.Invites
+            .Include(i => i.Linkshell)
+            .Include(i => i.AppUser)
+            .FirstOrDefaultAsync(i => i.Id == inviteId && i.Status == "PendingJoinRequest");
+        if (invite is null) return NotFound();
+
+        if (!await CanManageAsync(user.Id, invite.LinkshellId)) return Forbid();
+
+        var alreadyMember = await _context.AppUserLinkshells
+            .AnyAsync(ul => ul.LinkshellId == invite.LinkshellId && ul.AppUserId == invite.AppUserId);
+        if (!alreadyMember)
+        {
+            _context.AppUserLinkshells.Add(new AppUserLinkshell
+            {
+                AppUserId = invite.AppUserId,
+                LinkshellId = invite.LinkshellId,
+                LinkshellDkp = 0,
+                DateJoined = DateTime.UtcNow,
+                CharacterName = invite.AppUser?.CharacterName ?? invite.AppUser?.UserName,
+                Rank = LinkshellRanks.Member,
+                Status = "Active"
+            });
+        }
+
+        if (invite.AppUser is not null)
+        {
+            invite.AppUser.PrimaryLinkshellId ??= invite.LinkshellId;
+            invite.AppUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
+            await _userManager.UpdateAsync(invite.AppUser);
+        }
+
+        _context.Invites.Remove(invite);
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(ViewInvites));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeclineJoinRequest(int inviteId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var invite = await _context.Invites
+            .FirstOrDefaultAsync(i => i.Id == inviteId && i.Status == "PendingJoinRequest");
+        if (invite is null) return NotFound();
+
+        if (!await CanManageAsync(user.Id, invite.LinkshellId)) return Forbid();
+
+        _context.Invites.Remove(invite);
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(ViewInvites));
     }
 
     [HttpPost]

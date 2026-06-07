@@ -4,12 +4,14 @@
     ViewData["Title"] = "Customize Linkshell";
     ViewData["BodyClass"] = "lsm-page";
     var savedMessage = TempData["CustomizeSaved"] as string;
+    var errorMessage = TempData["CustomizeError"] as string;
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
     var canManageRolesValue = Model.CanManageRoles.ToString().ToLowerInvariant();
     // Only greet a fresh arrival with the "Which linkshell?" modal. Suppress it
-    // on reloads we caused ourselves: after a save (saved message / POST
+    // on reloads we caused ourselves: after a save (saved/error message / POST
     // re-render) or a linkshell switch (?switched=1).
     var skipEntryModal = !string.IsNullOrEmpty(savedMessage)
+        || !string.IsNullOrEmpty(errorMessage)
         || string.Equals(Context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase)
         || Context.Request.Query.ContainsKey("switched");
 }
@@ -48,6 +50,11 @@
 @if (!string.IsNullOrEmpty(savedMessage))
 {
     <div class="alert alert-success fade d2" style="margin-bottom:16px">@savedMessage</div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger fade d2" style="margin-bottom:16px">@errorMessage</div>
 }
 
 <div class="card fade d2" style="margin-bottom:16px">
@@ -278,6 +285,144 @@
 
 </form>
 
+<!-- Discord Server Lock. Standalone card (its own POST forms) so it isn't tied
+     to the main customize save. Mirrors the Activity's "Lock to this server". -->
+<div class="card fade d2" id="discordLockCard" style="margin-bottom:16px">
+    <div class="card-head">
+        <div class="card-title">Discord Server Lock</div>
+    </div>
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:560px">
+        <div style="font-size:12px;color:var(--fg-3)">
+            Lock this linkshell to a single Discord server. While locked, only members of that
+            server can open the linkshell in the Discord Activity. This matches the Activity's
+            <strong>Lock to this server</strong> control.
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.LockedToDiscordGuildId))
+        {
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="tag success">Locked</span>
+                <span style="font-size:13px;color:var(--fg-2)">
+                    Currently locked to
+                    <strong>@(string.IsNullOrWhiteSpace(Model.LockedToDiscordGuildName) ? Model.LockedToDiscordGuildId : Model.LockedToDiscordGuildName)</strong>
+                </span>
+            </div>
+            <form method="post" asp-action="UnlockGuild" class="lsm-confirm-form">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+                <button class="btn warn sm" type="submit">Remove lock</button>
+            </form>
+        }
+        else
+        {
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="tag">Not locked</span>
+                <span style="font-size:13px;color:var(--fg-3)">Any member can open this linkshell from any server.</span>
+            </div>
+        }
+
+        <form method="post" asp-action="LockGuild" class="lsm-confirm-form"
+              style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:12px">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+            @if (Model.EligibleGuilds.Count > 0)
+            {
+                <div class="field">
+                    <label for="lockGuildSelect">Server</label>
+                    <select class="form-select" id="lockGuildSelect" name="guildId" style="width:100%">
+                        @foreach (var guild in Model.EligibleGuilds)
+                        {
+                            <option value="@guild.Id" selected="@(guild.Id == Model.LockedToDiscordGuildId)">@guild.Name</option>
+                        }
+                    </select>
+                </div>
+                <div style="font-size:12px;color:var(--fg-3)">Servers where you and the LSM bot are both members.</div>
+            }
+            else
+            {
+                <div class="field">
+                    <label for="lockGuildInput">Discord server ID</label>
+                    <input class="input" id="lockGuildInput" type="text" name="guildId"
+                           inputmode="numeric" pattern="[0-9]*" maxlength="20" autocomplete="off"
+                           placeholder="e.g. 123456789012345678" />
+                </div>
+                <div style="font-size:12px;color:var(--fg-3)">
+                    No servers found automatically. Make sure the LSM bot is in your server, then enter its
+                    numeric ID (in Discord, with Developer Mode on, right-click the server &rarr; Copy Server ID).
+                </div>
+            }
+            <div>
+                <button class="btn primary" type="submit">
+                    @(string.IsNullOrWhiteSpace(Model.LockedToDiscordGuildId) ? "Lock to this server" : "Change locked server")
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Discord Channels (Phase 2): the bot posts event/auction/loot announcements
+     DIRECTLY to these channels so they can carry interactive sign-up buttons
+     (unlike the webhook rows above, which Discord strips components from). -->
+<div class="card fade d2" id="discordChannelsCard" style="margin-bottom:16px">
+    <div class="card-head">
+        <div class="card-title">Discord Channels (bot posts here)</div>
+    </div>
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:640px">
+        <div style="font-size:12px;color:var(--fg-3)">
+            The LSM bot posts announcements here so members can sign up to a job right inside Discord.
+            <strong>HENM</strong> events post to the HENM channel, <strong>KSNM</strong> to the KSNM channel,
+            and everything else to <strong>Other events</strong>. Requires the bot to be in your server with
+            permission to send messages in the chosen channels.
+        </div>
+
+        @if (string.IsNullOrWhiteSpace(Model.DiscordChannelGuildId))
+        {
+            <div style="font-size:12px;color:var(--fg-3)">
+                Tip: lock this linkshell to a Discord server (above) so the bot can list your channels in a
+                dropdown. You can still paste channel IDs manually below.
+            </div>
+        }
+        else if (Model.AvailableChannels.Count == 0)
+        {
+            <div style="font-size:12px;color:var(--fg-3)">
+                Couldn't list channels automatically (make sure the LSM bot is in your server). Paste channel
+                IDs manually below — in Discord, with Developer Mode on, right-click a channel &rarr; Copy Channel ID.
+            </div>
+        }
+
+        <form method="post" asp-action="SaveDiscordChannels" class="lsm-confirm-form"
+              style="display:flex;flex-direction:column;gap:10px">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+            @foreach (var row in Model.DiscordChannels)
+            {
+                <div class="field">
+                    <label>@row.Label</label>
+                    @if (Model.AvailableChannels.Count > 0)
+                    {
+                        <select class="form-select" name="channelIds[@row.Purpose]">
+                            <option value="">— none —</option>
+                            @foreach (var channel in Model.AvailableChannels)
+                            {
+                                <option value="@channel.Id" selected="@(channel.Id == row.ChannelId)">#@channel.Name</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="input" type="text" name="channelIds[@row.Purpose]" value="@row.ChannelId"
+                               inputmode="numeric" pattern="[0-9]*" maxlength="20" autocomplete="off"
+                               placeholder="Channel ID (or leave blank)" />
+                    }
+                </div>
+            }
+            <div>
+                <button class="btn primary" type="submit">Save channels</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script nonce="@Html.CspNonce()">
     (function () {
         var rows = document.getElementById('discordWebhookRows');
@@ -374,7 +519,10 @@
 </div>
 
 <!-- Game Addon (att) pairing card. Lives outside the customize form because tokens
-     are managed via separate XHR endpoints (no full-form post). -->
+     are managed via separate XHR endpoints (no full-form post). Hidden entirely
+     while a super admin has globally disabled the addon. -->
+@if (!Model.AddonGloballyDisabled)
+{
 <div class="card fade d2" id="addonTokenCard" style="margin-top:16px"
      data-linkshellid="@Model.LinkshellId"
      data-csrf-header="@antiforgeryTokens.HeaderName"
@@ -398,7 +546,6 @@
             <thead>
                 <tr>
                     <th>Token</th>
-                    <th>Label</th>
                     <th>Created</th>
                     <th>Last used</th>
                     <th style="text-align:right">Actions</th>
@@ -418,10 +565,8 @@
                 <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
             </div>
             <div class="mt-modal__body">
-                @* Lets the leader pick which linkshell the code is for + which
-                   in-FFXI linkpearl slot it binds to, without leaving the
-                   Customize page. Generated token's label = "Slot N" so the
-                   token list shows the slot. *@
+                @* Lets the leader pick which linkshell the code is for without
+                   leaving the Customize page. *@
                 <div class="field" style="margin-bottom:14px">
                     <label for="addonPairLinkshell">Linkshell</label>
                     <select id="addonPairLinkshell" class="form-select" style="margin-top:6px;width:100%">
@@ -438,19 +583,6 @@
                         }
                     </select>
                 </div>
-                <div class="field" style="margin-bottom:14px">
-                    <label>Linkpearl slot</label>
-                    <div style="display:flex;gap:16px;margin-top:6px">
-                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="radio" name="addonPairSlot" value="1" checked />
-                            <span>Slot 1</span>
-                        </label>
-                        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="radio" name="addonPairSlot" value="2" />
-                            <span>Slot 2</span>
-                        </label>
-                    </div>
-                </div>
                 <div id="addonPairCodeWrapper" style="display:none">
                     <div style="text-align:center;margin:12px 0">
                         <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
@@ -463,11 +595,9 @@
                     </div>
                     <div style="color:var(--fg-2);font-size:13px;line-height:1.5;margin-top:10px">
                         Enter this code in your FFXI client as
-                        <code id="addonPairCmd1">/lsm link &lt;code&gt; 1</code> or
-                        <code id="addonPairCmd2">/lsm link &lt;code&gt; 2</code>
-                        to set <strong id="addonPairLsName">this linkshell</strong> as your first or
-                        second option in the LSM addon in-game. This window closes automatically
-                        once the code is linked.
+                        <code id="addonPairCmd1">/lsm link &lt;code&gt;</code>
+                        to connect the addon to <strong id="addonPairLsName">this linkshell</strong>.
+                        This window closes automatically once the code is linked.
                     </div>
                 </div>
                 <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
@@ -479,6 +609,7 @@
         </div>
     </div>
 </div>
+}
 
 <!-- Entry modal: confirm/choose which linkshell the leader is about to edit. -->
 <div class="mt-modal" id="customizeTargetModal" role="dialog" aria-modal="true">
@@ -601,6 +732,19 @@
                     });
                 });
             }
+
+            // Gate the standalone server-lock / unlock forms (and any future
+            // .lsm-confirm-form) through the same "Are you sure?" modal.
+            document.querySelectorAll('form.lsm-confirm-form').forEach(function (cf) {
+                var ok = false;
+                cf.addEventListener('submit', function (e) {
+                    if (ok) return;
+                    e.preventDefault();
+                    window.lsmConfirmChange().then(function (yes) {
+                        if (yes) { ok = true; cf.submit(); }
+                    });
+                });
+            });
         })();
     </script>
 
@@ -945,7 +1089,6 @@
             var addonPairStatusTag = document.getElementById('addonPairStatusTag');
             var addonPairStatusText = document.getElementById('addonPairStatusText');
             var addonPairCmd1 = document.getElementById('addonPairCmd1');
-            var addonPairCmd2 = document.getElementById('addonPairCmd2');
             var addonPairLsName = document.getElementById('addonPairLsName');
             var addonTokensTable = document.getElementById('addonTokensTable');
             var addonTokensEmpty = document.getElementById('addonTokensEmpty');
@@ -991,7 +1134,6 @@
                     var created = new Date(t.createdAt).toLocaleString();
                     tr.innerHTML =
                         '<td><code>' + escapeHtml(t.prefix) + '…</code></td>' +
-                        '<td>' + escapeHtml(t.label || '—') + '</td>' +
                         '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(created) + '</td>' +
                         '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(lastUsed) + '</td>' +
                         '<td style="text-align:right"><button type="button" class="btn warn sm" data-revoke="' + t.id + '">Revoke</button></td>';
@@ -1061,13 +1203,8 @@
                 // Fresh state every open: Generate button back, code +
                 // instructions hidden, any prior poll/countdown stopped.
                 resetPairModalUi();
-                // Default to Slot 1 on every open. Re-enable inputs the
-                // previous generation may have locked.
-                var slotRadios = document.querySelectorAll('input[name="addonPairSlot"]');
-                slotRadios.forEach(function (r) {
-                    r.checked = (r.value === '1');
-                    r.disabled = false;
-                });
+                // Re-enable the linkshell picker the previous generation may
+                // have locked.
                 var lsSelect = document.getElementById('addonPairLinkshell');
                 if (lsSelect) {
                     lsSelect.disabled = false;
@@ -1081,8 +1218,6 @@
             addonPairCreateBtn.addEventListener('click', function () {
                 setAddonPairError('');
                 addonPairCreateBtn.disabled = true;
-                var selectedSlot = document.querySelector('input[name="addonPairSlot"]:checked');
-                var slotValue = selectedSlot ? selectedSlot.value : '1';
                 // The picker lets leaders generate codes for any linkshell
                 // they manage without leaving this page; fall back to the page
                 // LS if the dropdown was somehow cleared.
@@ -1093,15 +1228,11 @@
                     addonPairCreateBtn.disabled = false;
                     return;
                 }
-                // Mirror the Discord Activity: persist the chosen slot as
-                // the token label ("Slot 1" / "Slot 2") so the listing's Slot
-                // column shows which pearl each code belongs to.
-                var label = 'Slot ' + slotValue;
                 fetch('/api/addon/management/pairing-code', {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: withCsrf({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ linkshellId: lsId, label: label })
+                    body: JSON.stringify({ linkshellId: lsId })
                 }).then(function (res) {
                     if (!res.ok) {
                         return res.text().then(function (txt) {
@@ -1123,8 +1254,7 @@
                         lsName = lsSelect.options[lsSelect.selectedIndex].text || lsName;
                     }
                     if (addonPairLsName) addonPairLsName.textContent = lsName;
-                    if (addonPairCmd1) addonPairCmd1.textContent = '/lsm link ' + data.code + ' 1';
-                    if (addonPairCmd2) addonPairCmd2.textContent = '/lsm link ' + data.code + ' 2';
+                    if (addonPairCmd1) addonPairCmd1.textContent = '/lsm link ' + data.code;
                     if (addonPairStatusTag) addonPairStatusTag.className = 'tag warning';
                     if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
 
@@ -1133,12 +1263,8 @@
                     // the live "waiting to be linked" state. It comes back
                     // via resetPairModalUi() on next open / close.
                     addonPairCreateBtn.style.display = 'none';
-                    // Lock the slot + linkshell selection once a code is
-                    // issued so the displayed code can't drift from the
-                    // label/LS saved on the token.
-                    document.querySelectorAll('input[name="addonPairSlot"]').forEach(function (r) {
-                        r.disabled = true;
-                    });
+                    // Lock the linkshell selection once a code is issued so the
+                    // displayed code can't drift from the LS saved on the token.
                     var lockedLs = document.getElementById('addonPairLinkshell');
                     if (lockedLs) lockedLs.disabled = true;
                     startCountdown((data.expiresInMinutes || 10) * 60);

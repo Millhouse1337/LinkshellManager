@@ -24,6 +24,8 @@ import type {
   ActivityCreateEventInput,
   ActivityCreateLinkshellInput,
   ActivityCreateTodInput,
+  ActivityDiscordChannelBindingInput,
+  ActivityDiscordChannelsResponse,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
   ActivityHistory,
@@ -161,6 +163,7 @@ export class DiscordActivityService {
   readonly busyLinkshellId = this.linkshellService.busyLinkshellId;
   readonly busyMemberId = this.linkshellService.busyMemberId;
   readonly busyRoles = this.linkshellService.busyRoles;
+  readonly busyDiscordChannels = this.linkshellService.busyDiscordChannels;
   readonly linkshellDetail = this.linkshellService.linkshellDetail;
   readonly linkshellDetailBusy = this.linkshellService.linkshellDetailBusy;
   readonly inviteSearchResults = this.inviteService.inviteSearchResults;
@@ -184,6 +187,7 @@ export class DiscordActivityService {
   readonly lootHistory = this.lootHistoryService.lootHistory;
   readonly lootHistoryBusy = this.lootHistoryService.lootHistoryBusy;
   readonly busyLootEdit = this.lootHistoryService.busyLootEdit;
+  readonly busyLootAdd = this.lootHistoryService.busyLootAdd;
   readonly auctions = this.auctionService.auctions;
   readonly auctionsBusy = this.auctionService.auctionsBusy;
   readonly auctionHistory = this.auctionService.auctionHistory;
@@ -254,6 +258,11 @@ export class DiscordActivityService {
         instanceId: sdk.instanceId ?? null,
         platform: sdk.platform ?? null
       });
+
+      // Publish the guild id to AuthService so every Activity request carries
+      // the X-Discord-Guild-Id header (used for per-linkshell guild locks).
+      // Set before the overview fetch below so that first request is tagged.
+      this.auth.discordGuildId.set(sdk.guildId ?? null);
 
       this.phase.set('Requesting Discord authorization');
       const { code } = await sdk.commands.authorize({
@@ -482,7 +491,8 @@ export class DiscordActivityService {
         characterName: input.characterName,
         timeZone: input.timeZone || null,
         altCharacterName1: input.altCharacterName1 || null,
-        altCharacterName2: input.altCharacterName2 || null
+        altCharacterName2: input.altCharacterName2 || null,
+        jobLevels: input.jobLevels ?? null
       });
       await this.auth.refreshOverview();
 
@@ -653,7 +663,7 @@ export class DiscordActivityService {
 
   // --- AddonTokenService ---
   loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> { return this.addonTokenService.loadAddonTokens(linkshellId); }
-  createAddonPairingCode(linkshellId: number, label: string | null): Promise<ActivityAddonPairingCodeResponse | null> { return this.addonTokenService.createAddonPairingCode(linkshellId, label); }
+  createAddonPairingCode(linkshellId: number): Promise<ActivityAddonPairingCodeResponse | null> { return this.addonTokenService.createAddonPairingCode(linkshellId); }
   revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> { return this.addonTokenService.revokeAddonToken(tokenId, linkshellId); }
 
   // --- DkpService ---
@@ -665,6 +675,7 @@ export class DiscordActivityService {
 
   // --- LootHistoryService ---
   loadLootHistory(source: 'all' | 'tod' | 'event' = 'all', page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(source, page, pageSize); }
+  addManualLoot(input: { context: string | null; itemName: string; itemWinner: string; winningDkpSpent: number }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
   async editTodLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
     const ok = await this.lootHistoryService.editTodLoot(lootDetailId, input);
     if (ok) { await this.auth.refreshOverview(); }
@@ -757,6 +768,13 @@ export class DiscordActivityService {
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
   updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
+  lockLinkshellToGuild(linkshellId: number, guildName: string | null): Promise<boolean> { return this.linkshellService.lockLinkshellToGuild(linkshellId, guildName); }
+  unlockLinkshellGuild(linkshellId: number): Promise<boolean> { return this.linkshellService.unlockLinkshellGuild(linkshellId); }
+  loadDiscordChannels(linkshellId: number): Promise<ActivityDiscordChannelsResponse | null> { return this.linkshellService.loadDiscordChannels(linkshellId); }
+  saveDiscordChannels(linkshellId: number, channels: ActivityDiscordChannelBindingInput[]): Promise<boolean> { return this.linkshellService.saveDiscordChannels(linkshellId, channels); }
+  // Discord guild id the Activity is launched in (null on web). Drives the
+  // "lock to this server" config card.
+  currentGuildId(): string | null { return this.auth.discordGuildId(); }
   deleteLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.deleteLinkshell(linkshellId); }
   leaveLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.leaveLinkshell(linkshellId); }
   removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> { return this.linkshellService.removeLinkshellMember(linkshellId, memberId); }
@@ -797,5 +815,6 @@ export class DiscordActivityService {
   updateItem(itemId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.updateItem(itemId, input); }
   deleteItem(itemId: number): Promise<void> { return this.linkshellContentService.deleteItem(itemId); }
   createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.createRevenueEntry(linkshellId, input); }
+  updateRevenueEntry(entryId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.updateRevenueEntry(entryId, input); }
   deleteRevenueEntry(entryId: number): Promise<void> { return this.linkshellContentService.deleteRevenueEntry(entryId); }
 }

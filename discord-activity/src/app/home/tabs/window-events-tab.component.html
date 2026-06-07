@@ -35,16 +35,6 @@
   </section>
 
   @if (data(); as model) {
-    <!-- Shared datalist powers the "Add a character by name…" typeahead on
-         every snapshot's add-person input below. -->
-    @if (model.canManage) {
-      <datalist id="we-roster-options">
-        @for (name of model.rosterCharacterNames; track name) {
-          <option [value]="name"></option>
-        }
-      </datalist>
-    }
-
     @if (model.unlinkedSnapshots.length > 0) {
       <section class="card">
         <div class="card-head">
@@ -427,11 +417,35 @@
         @if (!closed) {
           <tr class="we-add-row">
             <td [attr.colspan]="event ? 4 : 3">
-              <input type="text" class="input" placeholder="Add a character by name…" maxlength="256"
-                autocomplete="off" list="we-roster-options"
-                [ngModel]="addPersonDraft(snapshot)"
-                (ngModelChange)="setAddPersonDraft(snapshot.id, $event)"
-                (keydown.enter)="addPerson(snapshot)" />
+              <!-- Custom typeahead: a native <datalist> renders as an
+                   uncontrollable full-height popup, so we drive a compact,
+                   scrollable, filtered list ourselves. Blur is delayed so a
+                   suggestion click registers before the menu closes. -->
+              <div class="we-typeahead">
+                <input type="text" placeholder="Add a character by name…" maxlength="256"
+                  autocomplete="off"
+                  [ngModel]="addPersonDraft(snapshot)"
+                  (ngModelChange)="setAddPersonDraft(snapshot.id, $event)"
+                  (focus)="openTypeahead(snapshot.id)"
+                  (blur)="closeTypeahead()"
+                  (keydown.enter)="addPerson(snapshot)"
+                  (keydown.escape)="closeTypeahead()" />
+                @if (openAddTypeahead() === snapshot.id) {
+                  @if (filteredRoster(snapshot); as matches) {
+                    @if (matches.length > 0) {
+                      <ul class="we-typeahead-menu" role="listbox">
+                        @for (name of matches; track name) {
+                          <li role="option">
+                            <button type="button" class="we-typeahead-option"
+                              (mousedown)="$event.preventDefault()"
+                              (click)="chooseRosterName(snapshot, name)">{{ name }}</button>
+                          </li>
+                        }
+                      </ul>
+                    }
+                  }
+                }
+              </div>
             </td>
             <td class="num">
               <button type="button" class="btn sm primary" (click)="addPerson(snapshot)">+ Add person</button>

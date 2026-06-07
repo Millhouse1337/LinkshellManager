@@ -163,6 +163,71 @@
 
 .we-zone { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
 .we-zone svg { width: 14px; height: 14px; color: var(--accent); opacity: 0.85; }
+
+/* Custom roster typeahead replacing the native <datalist>. The wrapper is the
+   positioning context; the menu floats above the input (the add row sits at the
+   table's bottom edge) and is height-capped + scrollable so a large roster
+   stays a compact, searchable list. */
+.we-typeahead {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+}
+.we-typeahead input[type="text"] {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--fg);
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.we-typeahead input[type="text"]::placeholder { color: var(--muted); }
+.we-typeahead input[type="text"]:hover { border-color: rgba(255, 255, 255, 0.22); }
+.we-typeahead input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+}
+
+.we-typeahead-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface, #1f1f23);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.we-typeahead-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.we-typeahead-option:hover,
+.we-typeahead-option:focus {
+  background: var(--accent-weak);
+  color: var(--fg);
+  outline: none;
+}
+
 .we-muted { color: var(--muted); }
 
 /* Post / Update footer */

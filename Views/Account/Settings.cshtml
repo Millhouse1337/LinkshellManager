@@ -46,3 +46,47 @@
         </form>
     }
 </div>
+
+@if (Model.IsSuperAdmin)
+{
+    <div class="card fade d3" style="padding:20px;max-width:720px;margin-top:16px;border:1px solid var(--accent)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <h2 class="card-title" style="margin:0">Addon (server-wide)</h2>
+            <span class="tag accent">Super admin</span>
+        </div>
+        <div style="color:var(--fg-3);font-size:13px;margin-bottom:14px">
+            Global kill-switch for the in-game addon. When disabled, <strong>every</strong>
+            linkshell's addon stops working — existing tokens are rejected and no new
+            pairing codes can be generated or redeemed — until you turn it back on.
+        </div>
+
+        @if (TempData["AddonKillSwitchMessage"] is string killSwitchMessage)
+        {
+            <div class="alert alert-info" style="margin:0 0 14px">@killSwitchMessage</div>
+        }
+
+        <div style="display:flex;align-items:center;gap:12px">
+            @if (Model.AddonGloballyDisabled)
+            {
+                <span class="tag danger">Addon is DISABLED</span>
+            }
+            else
+            {
+                <span class="tag success">Addon is enabled</span>
+            }
+
+            <form asp-action="SetAddonKillSwitch" method="post" style="margin:0">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="disabled" value="@((!Model.AddonGloballyDisabled).ToString().ToLowerInvariant())" />
+                @if (Model.AddonGloballyDisabled)
+                {
+                    <button type="submit" class="btn primary">Re-enable addon</button>
+                }
+                else
+                {
+                    <button type="submit" class="btn danger">Disable addon globally</button>
+                }
+            </form>
+        </div>
+    </div>
+}

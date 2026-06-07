@@ -16,7 +16,10 @@ public sealed record ActivityOverviewDto(
     ActivityOverviewStatsDto Stats,
     // True when the user has at least one non-revoked AddonApiToken.
     // Drives the onboarding "Set up the addon" checklist item.
-    bool AddonConfigured);
+    bool AddonConfigured,
+    // True when a super admin has globally disabled the addon. Hides the
+    // Game Addon pairing card in the Configurations tab.
+    bool AddonGloballyDisabled);
 
 public sealed record ActivityAppUserDto(
     string Id,
@@ -26,7 +29,10 @@ public sealed record ActivityAppUserDto(
     string? AltCharacterName2,
     string? TimeZone,
     int? PrimaryLinkshellId,
-    string? PrimaryLinkshellName);
+    string? PrimaryLinkshellName,
+    // Per-job levels for the 15 classic jobs in EventJobCatalog.MainJobOptions
+    // order (index 0 = WAR ... 14 = SMN). Pre-fills the profile "My Jobs" editor.
+    IReadOnlyList<int> JobLevels);
 
 public sealed record ActivityLinkshellDto(
     int Id,
@@ -60,8 +66,14 @@ public sealed record ActivityLinkshellSettingsDto(
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     string LinkshellType,
     // Discord server (guild) ID this linkshell is locked to, or null when
-    // unlocked. When set, only members of this server can access the linkshell.
-    string? DiscordGuildId);
+    // unlocked. When set, only members of this server can access the linkshell
+    // (membership-verified via FilterAccessibleLinkshellIdsAsync).
+    string? DiscordGuildId,
+    // Discord guild this linkshell is locked to (null = not locked). When set,
+    // the Activity only exposes it when launched from this guild. The name is a
+    // display cache so the Configurations UI can show which server it's locked to.
+    string? LockedToDiscordGuildId,
+    string? LockedToDiscordGuildName);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -77,7 +89,8 @@ public sealed record ActivityPermissionsDto(
     bool CanAuditDkp,
     bool CanManageAuctions,
     bool CanCustomizeLinkshell,
-    bool CanManageParties);
+    bool CanManageParties,
+    bool CanManageInvites);
 
 public sealed record ActivityPrimaryLinkshellDto(
     int Id,
@@ -303,7 +316,8 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanAuditDkp,
     bool CanManageAuctions,
     bool CanCustomizeLinkshell,
-    bool CanManageParties);
+    bool CanManageParties,
+    bool CanManageInvites);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -323,7 +337,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanAuditDkp,
     bool CanManageAuctions,
     bool CanCustomizeLinkshell,
-    bool CanManageParties);
+    bool CanManageParties,
+    bool CanManageInvites);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,
@@ -407,7 +422,9 @@ public sealed record ActivityAuctionItemDto(
     string? Status,
     string? Notes,
     int BidCount,
-    int? SourceItemId);
+    int? SourceItemId,
+    // Set when this item is a gil sale (treasury gil sold for DKP).
+    long? GilAmount);
 
 public sealed record ActivityAuctionBidDto(
     int Id,
@@ -547,6 +564,12 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null = leave unchanged, "" = unlock, digits = lock to that Discord server.
     string? DiscordGuildId);
 
+// Lock a linkshell to the Discord server the Activity is currently launched in.
+// The guild id comes from the X-Discord-Guild-Id header (the server the caller
+// is actually in — not spoofable via the body); the body only carries the
+// human-entered server name for display.
+public sealed record ActivityLockLinkshellRequest(string? GuildName);
+
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
 public sealed record ActivityDiscordInviteRequest(string DiscordUserId);
@@ -603,7 +626,16 @@ public sealed record ActivityUpdateProfileRequest(
     string CharacterName,
     string? TimeZone,
     string? AltCharacterName1 = null,
-    string? AltCharacterName2 = null);
+    string? AltCharacterName2 = null,
+    // Per-job levels for the 15 classic jobs in EventJobCatalog.MainJobOptions
+    // order (index 0 = WAR ... 14 = SMN). Persisted to the user's memberships.
+    int[]? JobLevels = null);
+
+// One purpose's channel binding (e.g. "HenmEvents" -> channel id). ChannelId
+// null/empty clears the binding for that purpose.
+public sealed record ActivityDiscordChannelBinding(string Purpose, string? ChannelId);
+
+public sealed record ActivitySaveDiscordChannelsRequest(IReadOnlyList<ActivityDiscordChannelBinding>? Channels);
 
 public sealed record ActivityAuctionItemInput(
     int Id,
@@ -611,7 +643,9 @@ public sealed record ActivityAuctionItemInput(
     string? ItemType,
     int? StartingBidDkp,
     string? Notes,
-    int? SourceItemId);
+    int? SourceItemId,
+    // When > 0 this item is a gil sale: gil sold for DKP, paid from treasury.
+    long? GilAmount);
 
 public sealed record ActivityCreateAuctionRequest(
     int LinkshellId,
@@ -655,3 +689,9 @@ public sealed record ActivityLootEditRequest(
     string? ItemWinner,
     int? WinningDkpSpent,
     string? Reason);
+
+public sealed record ActivityLootAddRequest(
+    string? Context,
+    string? ItemName,
+    string? ItemWinner,
+    int? WinningDkpSpent);

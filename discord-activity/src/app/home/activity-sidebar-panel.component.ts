@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
+import { PROFILE_JOB_OPTIONS } from './event-job-options';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
@@ -25,8 +26,18 @@ export class ActivitySidebarPanelComponent {
     characterName: '',
     timeZone: '',
     altCharacterName1: '',
-    altCharacterName2: ''
+    altCharacterName2: '',
+    // Catalog-aligned per-job levels (index 0 = WAR ... 14 = SMN); seeded from
+    // the overview's appUser.jobLevels and bound to the "My Jobs" inputs. Starts
+    // as 15 zeros (the classic job count) so the inputs always have a value even
+    // before the overview seeds it.
+    jobLevels: Array.from({ length: 15 }, () => 0) as number[]
   };
+
+  // The 15 classic jobs, in the exact order the API's catalog-aligned jobLevels
+  // array uses, so profileModel.jobLevels[i] is the level of profileJobOptions[i].
+  protected readonly profileJobOptions = [...PROFILE_JOB_OPTIONS];
+  protected readonly profileJobMaxLevel = 75;
 
   protected selectedLinkshellId = 0;
   protected selectedDkpHistoryAppUserId = '';
@@ -88,7 +99,10 @@ export class ActivitySidebarPanelComponent {
       const nextTimeZone = appUser.timeZone ?? this.browserTimeZone;
       const nextAlt1 = appUser.altCharacterName1 ?? '';
       const nextAlt2 = appUser.altCharacterName2 ?? '';
-      const nextSeed = `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}`;
+      const sourceLevels = appUser.jobLevels ?? [];
+      const nextJobLevels = this.profileJobOptions.map((_, i) => sourceLevels[i] ?? 0);
+      const nextSeed =
+        `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}|${nextJobLevels.join(',')}`;
 
       if (nextSeed === this.profileSeed) {
         return;
@@ -99,6 +113,7 @@ export class ActivitySidebarPanelComponent {
       this.profileModel.timeZone = nextTimeZone;
       this.profileModel.altCharacterName1 = nextAlt1;
       this.profileModel.altCharacterName2 = nextAlt2;
+      this.profileModel.jobLevels = nextJobLevels;
     });
 
     effect(() => {
@@ -216,12 +231,26 @@ export class ActivitySidebarPanelComponent {
     return !appUser?.characterName?.trim() || !appUser?.timeZone?.trim();
   }
 
+  protected hasLinkshell(): boolean {
+    return this.linkshellMemberships().length > 0;
+  }
+
   protected async submitProfile(): Promise<void> {
+    // Only send job levels when the user is in a linkshell (they're stored
+    // per-membership); otherwise there's nothing to persist them onto.
+    const jobLevels = this.hasLinkshell()
+      ? this.profileModel.jobLevels.map(level => {
+          const value = Math.trunc(Number(level)) || 0;
+          return value < 0 ? 0 : value > this.profileJobMaxLevel ? this.profileJobMaxLevel : value;
+        })
+      : null;
+
     await this.activity.updateProfile({
       characterName: this.profileModel.characterName.trim(),
       timeZone: this.profileModel.timeZone.trim() || null,
       altCharacterName1: this.profileModel.altCharacterName1.trim() || null,
-      altCharacterName2: this.profileModel.altCharacterName2.trim() || null
+      altCharacterName2: this.profileModel.altCharacterName2.trim() || null,
+      jobLevels
     });
   }
 

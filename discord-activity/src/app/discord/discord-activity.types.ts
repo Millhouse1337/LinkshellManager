@@ -75,6 +75,9 @@ export interface ActivityAppUser {
   timeZone?: string | null;
   primaryLinkshellId?: number | null;
   primaryLinkshellName?: string | null;
+  // Per-job levels for the 15 classic jobs in PROFILE_JOB_OPTIONS order
+  // (index 0 = WAR ... 14 = SMN). Pre-fills the profile "My Jobs" editor.
+  jobLevels?: number[] | null;
 }
 
 export interface ActivityLinkshell {
@@ -115,6 +118,10 @@ export interface ActivityLinkshellSettings {
   // Discord server (guild) ID this linkshell is locked to, or null when
   // unlocked. When set, only members of that server can access the linkshell.
   discordGuildId: string | null;
+  // Discord guild this linkshell is locked to (null = not locked). When set,
+  // the Activity only exposes it when launched from this server.
+  lockedToDiscordGuildId?: string | null;
+  lockedToDiscordGuildName?: string | null;
 }
 
 export interface ActivityLinkshellPermissions {
@@ -132,6 +139,7 @@ export interface ActivityLinkshellPermissions {
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
+  canManageInvites: boolean;
 }
 
 export interface ActivityLinkshellRole {
@@ -153,6 +161,7 @@ export interface ActivityLinkshellRole {
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
+  canManageInvites: boolean;
 }
 
 export interface ActivityLinkshellRolesResponse {
@@ -176,6 +185,7 @@ export interface ActivityLinkshellRolePermissionsInput {
   canManageAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
+  canManageInvites: boolean;
 }
 
 export interface ActivityPrimaryLinkshell {
@@ -266,6 +276,30 @@ export interface ActivityRevenueInput {
   value: number;
   details?: string | null;
   occurredAt?: string | null;
+}
+
+// Phase 2 "bot posts to channel" config (mirrors the web Customize card).
+export interface ActivityDiscordChannelOption {
+  id: string;
+  name: string;
+}
+
+export interface ActivityDiscordChannelRow {
+  purpose: string;
+  label: string;
+  channelId?: string | null;
+  channelName?: string | null;
+}
+
+export interface ActivityDiscordChannelsResponse {
+  guildConfigured: boolean;
+  availableChannels: ActivityDiscordChannelOption[];
+  channels: ActivityDiscordChannelRow[];
+}
+
+export interface ActivityDiscordChannelBindingInput {
+  purpose: string;
+  channelId: string | null;
 }
 
 export interface ActivityLinkshellDetail {
@@ -637,6 +671,8 @@ export interface ActivityAuctionItem {
   notes?: string | null;
   bidCount: number;
   sourceItemId?: number | null;
+  // Set when this item is a gil sale (treasury gil sold for DKP).
+  gilAmount?: number | null;
 }
 
 export interface ActivityAuction {
@@ -739,6 +775,7 @@ export interface ActivityOverview {
   recentTods: ActivityTodEntry[];
   stats: ActivityOverviewStats;
   addonConfigured: boolean;
+  addonGloballyDisabled: boolean;
 }
 
 export interface ActivityCreateEventInput {
@@ -812,6 +849,8 @@ export interface ActivityAuctionItemInput {
   startingBidDkp?: number | null;
   notes?: string | null;
   sourceItemId?: number | null;
+  // When > 0 this item is a gil sale: gil sold for DKP, paid from treasury.
+  gilAmount?: number | null;
 }
 
 export interface ActivityCreateAuctionInput {
@@ -827,6 +866,9 @@ export interface ActivityUpdateProfileInput {
   timeZone?: string | null;
   altCharacterName1?: string | null;
   altCharacterName2?: string | null;
+  // Catalog-aligned per-job levels (index 0 = WAR ... 14 = SMN), or null to
+  // leave job levels unchanged.
+  jobLevels?: number[] | null;
 }
 
 export interface DiscordRpcErrorLike {

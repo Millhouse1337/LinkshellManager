@@ -415,6 +415,8 @@ else
         </div>
 
         <div class="col">
+            @if (Model.EnableToDs)
+            {
             <div class="card fade d3">
                 <div class="card-head">
                     <div class="card-title">ToD Tracker</div>
@@ -449,7 +451,10 @@ else
                     </div>
                 }
             </div>
+            }
 
+            @if (Model.EnableHnmSection)
+            {
             <div class="card fade d4">
                 <div class="card-head">
                     <div class="card-title">HNM Claims (last @Model.HnmClaimsWindowDays days)</div>
@@ -491,6 +496,7 @@ else
                     </div>
                 }
             </div>
+            }
 
             <div class="card fade d5">
                 <div class="card-head">

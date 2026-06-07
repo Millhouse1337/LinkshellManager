@@ -28,8 +28,22 @@ export class AuthService {
   readonly actionMessage = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
 
+  // Discord guild (server) the Activity is currently launched in. Captured by
+  // DiscordActivityService from the SDK and sent on every Activity request via
+  // the X-Discord-Guild-Id header so the server can enforce per-linkshell guild
+  // locks. Held here (not on DiscordActivityService) so ActivityHttpClient can
+  // read it without a circular dependency. Null on the web (non-Discord) host.
+  readonly discordGuildId = signal<string | null>(null);
+  readonly discordGuildName = signal<string | null>(null);
+
   currentAccessToken(): string | undefined {
     return this.session()?.access_token;
+  }
+
+  // Header sent on every Activity request to identify the launching guild.
+  guildHeaders(): Record<string, string> {
+    const guildId = this.discordGuildId();
+    return guildId ? { 'X-Discord-Guild-Id': guildId } : {};
   }
 
   setActionError(message: string | null): void {
@@ -57,7 +71,7 @@ export class AuthService {
   // Inlined fetch helper, kept private to avoid a circular dependency on
   // ActivityHttpClient (which itself depends on AuthService for the token).
   private async fetchActivityJson<T>(path: string, accessToken?: string): Promise<T> {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...this.guildHeaders() };
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }

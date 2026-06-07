@@ -20,6 +20,28 @@ export class LootHistoryService {
   readonly lootHistory = signal<ActivityLootHistoryList | null>(null);
   readonly lootHistoryBusy = signal(false);
   readonly busyLootEdit = signal(false);
+  readonly busyLootAdd = signal(false);
+
+  async addLoot(input: {
+    context: string | null;
+    itemName: string;
+    itemWinner: string;
+    winningDkpSpent: number;
+  }): Promise<boolean> {
+    this.busyLootAdd.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityJson('/api/activity/loot-history', input);
+      this.auth.setActionMessage('Loot added.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Adding loot failed.'));
+      return false;
+    } finally {
+      this.busyLootAdd.set(false);
+    }
+  }
 
   async loadLootHistory(
     source: 'all' | 'tod' | 'event' = 'all',

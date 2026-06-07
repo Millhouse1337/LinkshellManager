@@ -1,4 +1,5 @@
 @model ProfileViewModel
+@using LinkshellManagerDiscordApp.Utils
 @{
     ViewData["Title"] = "Profile";
     ViewData["BodyClass"] = "lsm-page";
@@ -73,6 +74,28 @@
                 </div>
             </div>
         </div>
+
+        @if (Model.HasLinkshell)
+        {
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+                <div style="font-weight:500;color:var(--fg);margin-bottom:6px">My Jobs</div>
+                <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
+                    Set the level of each job you have (0 = not leveled, max @ProfileJobLevels.MaxLevel). These are
+                    shared with your linkshells and the in-game addon's "can equip" loot filter.
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                    @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+                    {
+                        var level = i < Model.JobLevels.Count ? Model.JobLevels[i] : 0;
+                        <div class="field" style="margin:0">
+                            <label for="job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
+                            <input id="job-@i" type="number" class="form-control" name="JobLevels[@i]"
+                                   value="@level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                        </div>
+                    }
+                </div>
+            </div>
+        }
 
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <button type="submit" class="btn primary">Save profile</button>

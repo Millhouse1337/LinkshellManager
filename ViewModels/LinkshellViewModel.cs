@@ -48,6 +48,25 @@ public class LinkshellCustomizeViewModel
 
     public bool CanManageRoles { get; set; }
 
+    // True when a super admin has globally disabled the addon. The Game Addon
+    // pairing card is hidden when set.
+    public bool AddonGloballyDisabled { get; set; }
+
+    // Discord server lock (mirrors the Activity's "Lock to this server"). When
+    // set, only members of LockedToDiscordGuildId can open this linkshell in the
+    // Discord Activity. The web sets it from EligibleGuilds (servers where the
+    // caller and the bot are both members) or a manual numeric ID.
+    public string? LockedToDiscordGuildId { get; set; }
+    public string? LockedToDiscordGuildName { get; set; }
+    public List<DiscordGuildOption> EligibleGuilds { get; set; } = new();
+
+    // Phase 2 "bot posts to channel" config. The guild whose channels we list
+    // (the linkshell's Discord server), the channels the bot can post to in it,
+    // and one config row per purpose (HENM/KSNM/Other events, Auctions, Loot).
+    public string? DiscordChannelGuildId { get; set; }
+    public List<DiscordChannelOption> AvailableChannels { get; set; } = new();
+    public List<DiscordChannelConfigRow> DiscordChannels { get; set; } = new();
+
     public List<Linkshell> ManageableLinkshells { get; set; } = new();
 
     // Canonical names of monsters hidden from the ToD Tracker (Dashboard +
@@ -67,6 +86,23 @@ public class LinkshellCustomizeViewModel
         new TodMonsterGroup("HENMs", new[] { "Mammet-9999", "Overlord Arthro", "Ruinous Rocs", "Sacred Scorpions", "Tonberry Sovereign", "Ultimega" }),
         new TodMonsterGroup("Other NMs", new[] { "Bloodsucker", "King Arthro", "King Vinegarroon", "Serket", "Shikigami Weapon", "Simurgh", "Xolotl" }),
     };
+}
+
+// One selectable Discord server in the Customize page's server-lock pick-list:
+// a server where both the caller and the LSM bot are members.
+public sealed record DiscordGuildOption(string Id, string Name);
+
+// One selectable Discord channel (id + name) the bot can post to.
+public sealed record DiscordChannelOption(string Id, string Name);
+
+// One purpose's channel binding on the Customize page (e.g. "HENM events" ->
+// channel 123). ChannelId is empty when nothing is configured for the purpose.
+public sealed class DiscordChannelConfigRow
+{
+    public string Purpose { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string? ChannelId { get; set; }
+    public string? ChannelName { get; set; }
 }
 
 public class TodMonsterGroup

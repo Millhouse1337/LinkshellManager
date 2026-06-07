@@ -5,6 +5,9 @@
       <h2 id="loot-history-heading" class="section-title">Loot history</h2>
     </div>
     <div class="section-head-right">
+      @if (canAddLoot()) {
+        <button type="button" class="action-button" (click)="openAdd()">+ Add loot</button>
+      }
       <div class="view-tabs" role="tablist" aria-label="Loot source">
         <button type="button" class="view-tab" role="tab"
                 [class.active]="sourceFilter() === 'all'"
@@ -169,6 +172,72 @@
             <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Cancel</button>
             <button type="submit" class="action-button" [disabled]="activity.busyLootEdit()">
               {{ activity.busyLootEdit() ? 'Saving...' : 'Save loot edit' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
+
+  @if (addingLoot()) {
+    <div class="loot-edit-modal-backdrop" (click)="closeAdd()">
+      <div class="loot-edit-modal-dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+        <form class="loot-edit-form" (ngSubmit)="submitAdd()">
+          <div class="loot-edit-form__header">
+            <div>
+              <strong>Add loot</strong>
+              <p class="muted">Manual loot entry — deducts DKP from the winner and posts to the sheet.</p>
+            </div>
+            <button type="button" class="action-button action-button--secondary" (click)="closeAdd()">Close</button>
+          </div>
+
+          <div class="loot-edit-form__body">
+            <label>
+              <span>Event / source <span class="muted">(optional)</span></span>
+              <input class="bid-input" [(ngModel)]="addFormModel.context" name="addContext" maxlength="256"
+                     placeholder="e.g. Sky, Fafnir, Dynamis-Beaucedine" />
+            </label>
+
+            <label>
+              <span>Item name</span>
+              <input class="bid-input" [(ngModel)]="addFormModel.itemName" name="addItemName" maxlength="256" required />
+            </label>
+
+            <label>
+              <span>Winner</span>
+              @if (rosterCharacterNames.length > 0) {
+                <select class="form-select" [(ngModel)]="addFormModel.itemWinner" name="addItemWinner" required>
+                  <option value="" disabled>Select a member…</option>
+                  @for (name of rosterCharacterNames; track name) {
+                    <option [value]="name">{{ name }}</option>
+                  }
+                </select>
+              } @else {
+                <input class="bid-input" [(ngModel)]="addFormModel.itemWinner" name="addItemWinner" maxlength="256" required />
+              }
+            </label>
+
+            <label>
+              <span>DKP spent</span>
+              <input class="bid-input" type="number" min="0"
+                     [(ngModel)]="addFormModel.winningDkpSpent" name="addDkp"
+                     [disabled]="addFormModel.noDkp" />
+            </label>
+            <label class="loot-add-form__nodkp" style="display:flex;flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" [ngModel]="addFormModel.noDkp" name="addNoDkp"
+                     (ngModelChange)="onNoDkpChange($event)" />
+              <span style="margin:0">No DKP (free / unpriced loot)</span>
+            </label>
+
+            @if (addError(); as err) {
+              <div class="loot-edit-form__error">{{ err }}</div>
+            }
+          </div>
+
+          <div class="loot-edit-form__footer">
+            <button type="button" class="action-button action-button--secondary" (click)="closeAdd()">Cancel</button>
+            <button type="submit" class="action-button" [disabled]="activity.busyLootAdd()">
+              {{ activity.busyLootAdd() ? 'Adding...' : 'Add loot' }}
             </button>
           </div>
         </form>

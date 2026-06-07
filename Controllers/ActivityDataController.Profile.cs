@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -51,6 +52,25 @@ public sealed partial class ActivityDataController
         {
             var errorMessage = result.Errors.FirstOrDefault()?.Description ?? "Updating the activity profile failed.";
             return BadRequest(new { error = errorMessage });
+        }
+
+        // Persist per-job levels onto every membership (same as the web profile),
+        // so the character's jobs are consistent across linkshells and stored in
+        // the addon's FFXI-job-id format. The client sends a catalog-aligned
+        // array (index 0 = WAR ... 14 = SMN).
+        if (request.JobLevels is { Length: > 0 })
+        {
+            var memberships = await _dbContext.AppUserLinkshells
+                .Where(link => link.AppUserId == appUser.Id)
+                .ToListAsync(cancellationToken);
+            if (memberships.Count > 0)
+            {
+                foreach (var membership in memberships)
+                {
+                    membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, request.JobLevels);
+                }
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
         }
 
         return Ok(new { success = true });

@@ -1,6 +1,7 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -17,19 +18,22 @@ public class AccountController : Controller
     private readonly ApplicationDbContext _context;
     private readonly AppUserProfileService _appUserProfileService;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly GlobalSettingsService _globalSettings;
 
     public AccountController(
         UserManager<AppUser> userManager,
         SignInManager<AppUser> signInManager,
         ApplicationDbContext context,
         AppUserProfileService appUserProfileService,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        GlobalSettingsService globalSettings)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _context = context;
         _appUserProfileService = appUserProfileService;
         _timeZones = timeZones;
+        _globalSettings = globalSettings;
     }
 
     [AllowAnonymous]
@@ -53,10 +57,19 @@ public class AccountController : Controller
             return Challenge();
         }
 
-        var hasLinkshell = await _context.AppUserLinkshells
-            .AnyAsync(link => link.AppUserId == user.Id);
+        var jobLevelRows = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id)
+            .Select(link => new { link.LinkshellId, link.JobLevels })
+            .ToListAsync();
+        var hasLinkshell = jobLevelRows.Count > 0;
         var addonConfigured = await _context.AddonApiTokens
             .AnyAsync(token => token.IssuedToAppUserId == user.Id && token.RevokedAt == null);
+
+        // Prefer the primary linkshell's stored job levels; otherwise any
+        // membership that has them — it's the same character's jobs everywhere.
+        var storedJobLevels =
+            jobLevelRows.FirstOrDefault(row => row.LinkshellId == user.PrimaryLinkshellId)?.JobLevels
+            ?? jobLevelRows.FirstOrDefault(row => row.JobLevels != null)?.JobLevels;
 
         return View(new ProfileViewModel
         {
@@ -69,7 +82,8 @@ public class AccountController : Controller
             ProfileComplete = !string.IsNullOrWhiteSpace(user.CharacterName)
                 && !string.IsNullOrWhiteSpace(user.TimeZone),
             HasLinkshell = hasLinkshell,
-            AddonConfigured = addonConfigured
+            AddonConfigured = addonConfigured,
+            JobLevels = ProfileJobLevels.ToCatalogLevels(storedJobLevels)
         });
     }
 
@@ -89,6 +103,7 @@ public class AccountController : Controller
             ModelState.AddModelError(nameof(model.TimeZone), "Use a valid IANA time zone such as America/New_York.");
             model.ProfileImageData = user.ProfileImage;
             model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_timeZones.AvailableZoneIds);
+            model.HasLinkshell = await _context.AppUserLinkshells.AnyAsync(link => link.AppUserId == user.Id);
             return View(nameof(Profile), model);
         }
 
@@ -109,7 +124,27 @@ public class AccountController : Controller
 
             model.ProfileImageData = user.ProfileImage;
             model.AvailableTimeZones = CuratedTimeZones.BuildOrderedList(_timeZones.AvailableZoneIds);
+            model.HasLinkshell = await _context.AppUserLinkshells.AnyAsync(link => link.AppUserId == user.Id);
             return View(nameof(Profile), model);
+        }
+
+        // Persist the per-job levels onto every membership so the character's
+        // jobs are consistent across all linkshells and stored in the addon's
+        // FFXI-job-id format (preserving any higher job ids the addon may have
+        // set). No-op when the user has no linkshell or posted no job inputs.
+        if (model.JobLevels.Count > 0)
+        {
+            var memberships = await _context.AppUserLinkshells
+                .Where(link => link.AppUserId == user.Id)
+                .ToListAsync();
+            if (memberships.Count > 0)
+            {
+                foreach (var membership in memberships)
+                {
+                    membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, model.JobLevels);
+                }
+                await _context.SaveChangesAsync();
+            }
         }
 
         return RedirectToAction(nameof(Profile));
@@ -131,8 +166,35 @@ public class AccountController : Controller
         return View(new SettingsViewModel
         {
             Linkshells = linkshells,
-            SelectedLinkshellId = user.PrimaryLinkshellId
+            SelectedLinkshellId = user.PrimaryLinkshellId,
+            IsSuperAdmin = user.IsSuperAdmin,
+            AddonGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsAddonGloballyDisabledAsync()
         });
+    }
+
+    // Super-admin-only global kill-switch for the in-game addon. When disabled,
+    // every addon API call is rejected and no new pairing codes can be issued
+    // or redeemed (see GlobalSettingsService + AddonApiAuthService).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetAddonKillSwitch(bool disabled)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (!user.IsSuperAdmin)
+        {
+            return Forbid();
+        }
+
+        await _globalSettings.SetAddonGloballyDisabledAsync(disabled);
+        TempData["AddonKillSwitchMessage"] = disabled
+            ? "Addon disabled globally. No one can sync the addon until you re-enable it."
+            : "Addon re-enabled globally.";
+        return RedirectToAction(nameof(Settings));
     }
 
     [HttpPost]

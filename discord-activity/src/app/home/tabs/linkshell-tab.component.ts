@@ -429,6 +429,8 @@ export class LinkshellTabComponent {
   }
 
   protected showRevenueForm = signal(false);
+  // Set while editing an existing entry; null when the form is adding a new one.
+  protected readonly editingRevenueId = signal<number | null>(null);
   protected revenueType: 'Income' | 'Expense' = 'Income';
   protected revenueCategory = '';
   protected revenueValue = 0;
@@ -442,10 +444,21 @@ export class LinkshellTabComponent {
   }
 
   protected resetRevenueForm(): void {
+    this.editingRevenueId.set(null);
     this.revenueType = 'Income';
     this.revenueCategory = '';
     this.revenueValue = 0;
     this.revenueDetails = '';
+  }
+
+  // Loads an existing entry into the (shared) form for editing.
+  protected beginEditRevenue(entry: ActivityRevenueEntry): void {
+    this.editingRevenueId.set(entry.id);
+    this.revenueType = entry.entryType === 'Expense' ? 'Expense' : 'Income';
+    this.revenueCategory = entry.category ?? '';
+    this.revenueValue = entry.value ?? 0;
+    this.revenueDetails = entry.details ?? '';
+    this.showRevenueForm.set(true);
   }
 
   protected async submitRevenue(): Promise<void> {
@@ -461,7 +474,12 @@ export class LinkshellTabComponent {
       occurredAt: null
     };
     try {
-      await this.activity.createRevenueEntry(linkshellId, input);
+      const editingId = this.editingRevenueId();
+      if (editingId !== null) {
+        await this.activity.updateRevenueEntry(editingId, input);
+      } else {
+        await this.activity.createRevenueEntry(linkshellId, input);
+      }
       this.resetRevenueForm();
       this.showRevenueForm.set(false);
     } catch {
