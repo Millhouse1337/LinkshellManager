@@ -243,9 +243,13 @@ public sealed partial class ActivityDataController
         {
             linkshell.HiddenTodMonsters = SerializeHiddenTodMonsters(request.HiddenTodMonsters);
         }
-        // null in the request = leave unchanged. Empty/whitespace clears the lock
-        // (any member may access). A non-empty value must be a Discord snowflake
-        // (digits only, <= 20 chars) and locks the linkshell to that server.
+        // null in the request = leave unchanged. Empty/whitespace clears the
+        // server association (and, with it, the access lock). A non-empty value
+        // must be a Discord snowflake (digits only, <= 20 chars) and associates
+        // the linkshell with that server WITHOUT locking access (the separate
+        // set-guild-lock endpoint governs the lock). Server-setting normally goes
+        // through the dedicated set-guild/clear-guild endpoints now; this branch
+        // remains for clients that still send DiscordGuildId on the main update.
         if (request.DiscordGuildId is not null)
         {
             var trimmedGuildId = request.DiscordGuildId.Trim();
@@ -253,6 +257,7 @@ public sealed partial class ActivityDataController
             {
                 linkshell.DiscordGuildId = null;
                 linkshell.DiscordGuildName = null;
+                linkshell.LockToDiscordGuild = false;
             }
             else if (trimmedGuildId.Length <= 20 && trimmedGuildId.All(char.IsDigit))
             {
@@ -260,7 +265,7 @@ public sealed partial class ActivityDataController
             }
             else
             {
-                return BadRequest(new { error = "Discord Server ID must be the numeric server ID (digits only). Leave blank to unlock." });
+                return BadRequest(new { error = "Discord Server ID must be the numeric server ID (digits only). Leave blank to clear it." });
             }
         }
 
@@ -329,20 +334,21 @@ public sealed partial class ActivityDataController
         return Ok(eligible);
     }
 
-    // Lock this linkshell to a Discord server. Prefers a server chosen from the
+    // Associate this linkshell with a Discord server (does NOT lock access — that's
+    // the separate set-guild-lock endpoint). Prefers a server chosen from the
     // eligible-guilds dropdown (request.GuildId, verified the caller is in it);
     // falls back to the guild the Activity is launched in (header) when none is
     // chosen. Requires the CanCustomizeLinkshell permission.
-    [HttpPost("linkshells/{linkshellId:int}/lock-guild")]
-    public async Task<IActionResult> LockLinkshellToGuildAsync(
+    [HttpPost("linkshells/{linkshellId:int}/set-guild")]
+    public async Task<IActionResult> SetLinkshellGuildAsync(
         int linkshellId,
-        [FromBody] ActivityLockLinkshellRequest request,
+        [FromBody] ActivitySetGuildRequest request,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
         {
-            return Unauthorized(new { error = "Sign in to lock the linkshell to a server." });
+            return Unauthorized(new { error = "Sign in to set the linkshell's Discord server." });
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
@@ -358,7 +364,7 @@ public sealed partial class ActivityDataController
         if (!string.IsNullOrWhiteSpace(requestedGuildId))
         {
             // A server was picked from the dropdown — verify it's a real snowflake
-            // and that the caller is actually a member of it before locking.
+            // and that the caller is actually a member of it before setting it.
             if (requestedGuildId.Length > 20 || !requestedGuildId.All(char.IsDigit))
             {
                 return BadRequest(new { error = "Invalid Discord server selection." });
@@ -371,7 +377,7 @@ public sealed partial class ActivityDataController
             if (string.IsNullOrWhiteSpace(discordUserId) ||
                 !await _discordIdentityService.IsUserInGuildAsync(requestedGuildId, discordUserId, cancellationToken))
             {
-                return BadRequest(new { error = "You must be a member of the server you lock to." });
+                return BadRequest(new { error = "You must be a member of the server you set." });
             }
 
             guildId = requestedGuildId;
@@ -383,22 +389,22 @@ public sealed partial class ActivityDataController
         }
         else
         {
-            // No explicit pick — lock to the server the Activity is launched in.
+            // No explicit pick — use the server the Activity is launched in.
             guildId = GetRequestGuildId() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(guildId))
             {
-                return BadRequest(new { error = "Pick a server from the list, or open the Activity inside the server you want to lock to." });
+                return BadRequest(new { error = "Pick a server from the list, or open the Activity inside the server you want to set." });
             }
         }
 
-        // Reject if the linkshell is already locked to a different guild the
-        // caller isn't launched from (they'd be blocked from the overview anyway).
         var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
         if (linkshell is null)
         {
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
+        // If the linkshell is currently *locked*, only someone in the locked guild
+        // may change which server it's tied to (else they'd lock others out).
         if (IsBlockedByGuildLock(linkshell))
         {
             return Forbid();
@@ -410,14 +416,14 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Remove the guild lock so the linkshell is accessible from any server again.
-    [HttpPost("linkshells/{linkshellId:int}/unlock-guild")]
-    public async Task<IActionResult> UnlockLinkshellGuildAsync(int linkshellId, CancellationToken cancellationToken)
+    // Clear the linkshell's Discord server association (also turns off the lock).
+    [HttpPost("linkshells/{linkshellId:int}/clear-guild")]
+    public async Task<IActionResult> ClearLinkshellGuildAsync(int linkshellId, CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
         {
-            return Unauthorized(new { error = "Sign in to unlock the linkshell." });
+            return Unauthorized(new { error = "Sign in to clear the linkshell's Discord server." });
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
@@ -432,8 +438,8 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
-        // Only someone currently in the locked guild (or with no lock) can
-        // unlock — IsBlockedByGuildLock guards against unlocking from elsewhere.
+        // Only someone currently in the locked guild (or with no lock) can change
+        // it — IsBlockedByGuildLock guards against clearing from elsewhere.
         if (IsBlockedByGuildLock(linkshell))
         {
             return Forbid();
@@ -441,6 +447,64 @@ public sealed partial class ActivityDataController
 
         linkshell.DiscordGuildId = null;
         linkshell.DiscordGuildName = null;
+        linkshell.LockToDiscordGuild = false;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Toggle the optional access lock. Requires a server already set. When turning
+    // the lock ON, the caller must be launched in that server (or be on the website,
+    // which the lock doesn't govern) so they don't lock themselves out.
+    [HttpPost("linkshells/{linkshellId:int}/set-guild-lock")]
+    public async Task<IActionResult> SetLinkshellGuildLockAsync(
+        int linkshellId,
+        [FromBody] ActivitySetGuildLockRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to change the linkshell's access lock." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanCustomizeLinkshell, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        // While a lock is already in effect, only someone in the locked guild may
+        // change it (this is what lets an in-guild officer turn the lock OFF).
+        if (IsBlockedByGuildLock(linkshell))
+        {
+            return Forbid();
+        }
+
+        if (request.Locked)
+        {
+            if (string.IsNullOrWhiteSpace(linkshell.DiscordGuildId))
+            {
+                return BadRequest(new { error = "Set a Discord server before locking access to it." });
+            }
+
+            // Don't let the caller lock to a server they aren't in — they'd be
+            // blocked immediately. The website (no guild header) may lock since
+            // the lock only governs the Activity.
+            var requestGuildId = GetRequestGuildId();
+            if (requestGuildId is not null &&
+                !string.Equals(requestGuildId, linkshell.DiscordGuildId, StringComparison.Ordinal))
+            {
+                return BadRequest(new { error = "Open the Activity inside the server you want to lock to, then turn on the lock." });
+            }
+        }
+
+        linkshell.LockToDiscordGuild = request.Locked;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }

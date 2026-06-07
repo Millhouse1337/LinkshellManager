@@ -399,8 +399,9 @@ public class LinkshellController : Controller
             })
             .ToListAsync();
         EnsureWebhookRow(vm);
-        vm.LockedToDiscordGuildId = target.DiscordGuildId;
-        vm.LockedToDiscordGuildName = target.DiscordGuildName;
+        vm.DiscordGuildId = target.DiscordGuildId;
+        vm.DiscordGuildName = target.DiscordGuildName;
+        vm.GuildLocked = target.LockToDiscordGuild;
         vm.EligibleGuilds = await BuildEligibleGuildsAsync(user.Id, HttpContext.RequestAborted);
         await PopulateDiscordChannelsAsync(vm, target, HttpContext.RequestAborted);
         // Hide the Game Addon pairing card while a super admin has globally
@@ -570,15 +571,15 @@ public class LinkshellController : Controller
         return RedirectToAction(nameof(Customize), new { id = linkshell.Id });
     }
 
-    // --- Discord server lock (web parity with the Activity's "Lock to this
-    // server"). Sets Linkshell.LockedToDiscordGuildId so only members of that
-    // Discord server can open the linkshell in the Activity. The web has no
-    // iframe guild context, so the target guild is verified via the bot token:
-    // a leader can only lock to a server they (and the bot) are both in. ---
+    // --- Discord server association + optional access lock (two separate steps).
+    // SetGuild associates the linkshell with a server (powers roster/invite/
+    // channel features) WITHOUT restricting access. SetGuildLock then optionally
+    // restricts viewing to that server. The web verifies the target via the bot
+    // token: a leader can only set a server they (and the bot) are both in. ---
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> LockGuild(int linkshellId, string? guildId)
+    public async Task<IActionResult> SetGuild(int linkshellId, string? guildId)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
@@ -608,7 +609,7 @@ public class LinkshellController : Controller
         var discordUserId = await ResolveDiscordUserIdAsync(user.Id);
         if (string.IsNullOrWhiteSpace(discordUserId))
         {
-            TempData["CustomizeError"] = "Sign in with Discord before locking this linkshell to a server.";
+            TempData["CustomizeError"] = "Sign in with Discord before setting this linkshell's server.";
             return RedirectToAction(nameof(Customize), new { id = linkshellId });
         }
 
@@ -625,19 +626,17 @@ public class LinkshellController : Controller
         var botGuilds = await _discordIdentity.ListBotGuildsAsync(HttpContext.RequestAborted);
         var resolvedName = botGuilds?.FirstOrDefault(guild => guild.Id == trimmed)?.Name;
 
-        // One field governs everything: Activity access lock + invite/roster
-        // scoping + channel listing all read DiscordGuildId.
         linkshell.DiscordGuildId = trimmed;
         linkshell.DiscordGuildName = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName;
         await _context.SaveChangesAsync();
 
-        TempData["CustomizeSaved"] = "Discord server lock updated.";
+        TempData["CustomizeSaved"] = "Discord server set. It now powers roster, invites, and channel posting (access is not restricted unless you turn on the lock below).";
         return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UnlockGuild(int linkshellId)
+    public async Task<IActionResult> ClearGuild(int linkshellId)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
@@ -659,9 +658,47 @@ public class LinkshellController : Controller
 
         linkshell.DiscordGuildId = null;
         linkshell.DiscordGuildName = null;
+        linkshell.LockToDiscordGuild = false;
         await _context.SaveChangesAsync();
 
-        TempData["CustomizeSaved"] = "Discord server lock removed.";
+        TempData["CustomizeSaved"] = "Discord server cleared.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetGuildLock(int linkshellId, bool locked)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        if (locked && string.IsNullOrWhiteSpace(linkshell.DiscordGuildId))
+        {
+            TempData["CustomizeError"] = "Set a Discord server first, then turn on the lock.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        linkshell.LockToDiscordGuild = locked;
+        await _context.SaveChangesAsync();
+
+        TempData["CustomizeSaved"] = locked
+            ? "Access locked — members can only open this linkshell from the set Discord server."
+            : "Access unlocked — members can open this linkshell from anywhere.";
         return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 

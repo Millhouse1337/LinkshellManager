@@ -110,6 +110,14 @@ public class Linkshell
     [MaxLength(256)]
     public string? DiscordGuildName { get; set; }
 
+    // OPTIONAL access lock, separate from setting the server above. When false
+    // (default), the linkshell is merely *associated* with DiscordGuildId for
+    // roster/invite/channel features — anyone can still view it from anywhere.
+    // When true, viewing access is restricted to that server (the Activity can
+    // only open it when launched from DiscordGuildId, and overview membership is
+    // verified). Setting a server never implies locking.
+    public bool LockToDiscordGuild { get; set; } = false;
+
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 

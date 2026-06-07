@@ -430,9 +430,6 @@ export class ConfigurationsTabComponent {
     dkpRoundingIncrement: ActivityDkpRoundingIncrement;
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     linkshellType: string;
-    // Discord server ID this linkshell is locked to. Empty string = unlocked
-    // (any member may access). Bound as text in the Customize form.
-    discordGuildId: string;
     // Lower-cased names of monsters the linkshell wants hidden from the
     // ToD Tracker. Lower-case for comparison stability — re-cased to the
     // canonical built-in label on save.
@@ -450,7 +447,6 @@ export class ConfigurationsTabComponent {
     enableRevenue: true,
     dkpRoundingIncrement: 'Quarter',
     linkshellType: 'Both',
-    discordGuildId: '',
     hiddenTodMonsters: new Set<string>()
   };
 
@@ -478,12 +474,12 @@ export class ConfigurationsTabComponent {
     return !!link?.permissions?.canCustomizeLinkshell;
   }
 
-  // ----- Discord server lock -----
-  // Draft for the "server name" the user types when locking via the current
+  // ----- Discord server (associate) + separate access lock -----
+  // Draft for the "server name" the user types when setting via the current
   // server (fallback when no eligible-guild dropdown is available).
   protected guildLockNameDraft = '';
 
-  // Servers the caller can lock to (bot's servers they're also in) + the one
+  // Servers the caller can pick from (bot's servers they're also in) + the one
   // picked in the dropdown.
   protected readonly eligibleGuilds = signal<ActivityGuildOption[]>([]);
   protected guildLockSelection = '';
@@ -495,11 +491,11 @@ export class ConfigurationsTabComponent {
     }
     const guilds = await this.activity.loadEligibleGuilds();
     this.eligibleGuilds.set(guilds);
-    // Default the dropdown to the already-locked server (if it's in the list),
+    // Default the dropdown to the already-set server (if it's in the list),
     // else the first option.
-    const locked = this.lockedGuildId();
+    const current = this.setGuildId();
     this.guildLockSelection =
-      (locked && guilds.some(g => g.id === locked) ? locked : guilds[0]?.id) ?? '';
+      (current && guilds.some(g => g.id === current) ? current : guilds[0]?.id) ?? '';
   }
 
   // The guild id the Activity is currently launched in (null on the website).
@@ -507,43 +503,70 @@ export class ConfigurationsTabComponent {
     return this.activity.currentGuildId();
   }
 
-  protected lockedGuildId(): string | null {
+  // The Discord server this linkshell is associated with (set), or null.
+  protected setGuildId(): string | null {
     const id = this.customizeTargetLinkshellId();
     return this.dashboardLinkshells().find(l => l.id === id)?.settings?.discordGuildId ?? null;
   }
 
-  protected lockedGuildName(): string | null {
+  protected setGuildName(): string | null {
     const id = this.customizeTargetLinkshellId();
     return this.dashboardLinkshells().find(l => l.id === id)?.settings?.discordGuildName ?? null;
   }
 
-  protected isLockedToCurrentGuild(): boolean {
-    const locked = this.lockedGuildId();
-    return !!locked && locked === this.currentGuildId();
+  // Whether the optional access lock is on for the selected linkshell.
+  protected isGuildLocked(): boolean {
+    const id = this.customizeTargetLinkshellId();
+    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.lockToDiscordGuild === true;
   }
 
-  // Lock to the server chosen in the dropdown (the common path now).
-  protected async lockSelectedGuild(): Promise<void> {
+  protected isSetToCurrentGuild(): boolean {
+    const set = this.setGuildId();
+    return !!set && set === this.currentGuildId();
+  }
+
+  // Changing an *unlocked* server is allowed from anywhere; changing a *locked*
+  // one requires being in that server (or on the website, no guild context).
+  protected canChangeGuildHere(): boolean {
+    if (!this.isGuildLocked()) return true;
+    return this.isSetToCurrentGuild() || this.currentGuildId() === null;
+  }
+
+  // Toggling the lock requires a server set and being in it (server-side rejects
+  // locking to a server you're not in). The website (no guild context) may lock.
+  protected canToggleGuildLockHere(): boolean {
+    if (!this.setGuildId()) return false;
+    return this.isSetToCurrentGuild() || this.currentGuildId() === null;
+  }
+
+  // Set the server chosen in the dropdown (the common path).
+  protected async setSelectedGuild(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     const guildId = this.guildLockSelection;
     if (!id || !guildId) return;
     const name = this.eligibleGuilds().find(g => g.id === guildId)?.name ?? null;
-    await this.activity.lockLinkshellToGuild(id, guildId, name);
+    await this.activity.setLinkshellGuild(id, guildId, name);
   }
 
-  // Fallback when the dropdown can't be built (bot can't list servers): lock to
+  // Fallback when the dropdown can't be built (bot can't list servers): set to
   // the server the Activity is launched in, with a typed display name.
-  protected async lockToCurrentGuild(): Promise<void> {
+  protected async setToCurrentGuild(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id || !this.currentGuildId()) return;
-    const ok = await this.activity.lockLinkshellToGuild(id, null, this.guildLockNameDraft.trim() || null);
+    const ok = await this.activity.setLinkshellGuild(id, null, this.guildLockNameDraft.trim() || null);
     if (ok) this.guildLockNameDraft = '';
   }
 
-  protected async unlockGuild(): Promise<void> {
+  protected async clearGuild(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;
-    await this.activity.unlockLinkshellGuild(id);
+    await this.activity.clearLinkshellGuild(id);
+  }
+
+  protected async toggleGuildLock(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id) return;
+    await this.activity.setLinkshellGuildLock(id, !this.isGuildLocked());
   }
 
   // ----- Discord channels (bot posts events/auctions/loot here) -----
@@ -610,7 +633,6 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableRevenue = settings.enableRevenue;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
     this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
-    this.customizeDraft.discordGuildId = settings.discordGuildId ?? '';
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
     this.customizeDraft.hiddenTodMonsters = new Set(
@@ -677,9 +699,9 @@ export class ConfigurationsTabComponent {
         enableRevenue: this.customizeDraft.enableRevenue,
         dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement,
         hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
-        linkshellType: this.customizeDraft.linkshellType,
-        // Trim before sending so a blank field unlocks (server treats "" as unlock).
-        discordGuildId: this.customizeDraft.discordGuildId.trim()
+        linkshellType: this.customizeDraft.linkshellType
+        // The Discord server is set via the dedicated "Discord server" card
+        // (setLinkshellGuild / clearLinkshellGuild), not the main save.
       });
       this.customizeDirty = false;
       this.syncCustomizeDraft();

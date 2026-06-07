@@ -777,8 +777,9 @@ export class DiscordActivityService {
   updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
   loadEligibleGuilds(): Promise<ActivityGuildOption[]> { return this.linkshellService.loadEligibleGuilds(); }
-  lockLinkshellToGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.lockLinkshellToGuild(linkshellId, guildId, guildName); }
-  unlockLinkshellGuild(linkshellId: number): Promise<boolean> { return this.linkshellService.unlockLinkshellGuild(linkshellId); }
+  setLinkshellGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.setLinkshellGuild(linkshellId, guildId, guildName); }
+  clearLinkshellGuild(linkshellId: number): Promise<boolean> { return this.linkshellService.clearLinkshellGuild(linkshellId); }
+  setLinkshellGuildLock(linkshellId: number, locked: boolean): Promise<boolean> { return this.linkshellService.setLinkshellGuildLock(linkshellId, locked); }
   loadDiscordChannels(linkshellId: number): Promise<ActivityDiscordChannelsResponse | null> { return this.linkshellService.loadDiscordChannels(linkshellId); }
   saveDiscordChannels(linkshellId: number, channels: ActivityDiscordChannelBindingInput[]): Promise<boolean> { return this.linkshellService.saveDiscordChannels(linkshellId, channels); }
   // Discord guild id the Activity is launched in (null on web). Drives the

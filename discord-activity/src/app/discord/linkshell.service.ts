@@ -92,7 +92,8 @@ export class LinkshellService {
       hiddenTodMonsters?: string[] | null;
       // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
       linkshellType?: string | null;
-      // null = leave unchanged; "" = unlock; digits = lock to that Discord server.
+      // null = leave unchanged; "" = clear association; digits = associate with
+      // that Discord server (does NOT lock — use setLinkshellGuildLock for that).
       discordGuildId?: string | null;
     }
   ): Promise<void> {
@@ -145,10 +146,11 @@ export class LinkshellService {
     }
   }
 
-  // Lock this linkshell to a Discord server. guildId = a server chosen from the
-  // eligible-guilds dropdown; null = fall back to the server the Activity is
-  // launched in (X-Discord-Guild-Id header). guildName is the display label.
-  async lockLinkshellToGuild(
+  // Associate this linkshell with a Discord server (does NOT lock access).
+  // guildId = a server chosen from the eligible-guilds dropdown; null = fall back
+  // to the server the Activity is launched in (X-Discord-Guild-Id header).
+  // guildName is the display label.
+  async setLinkshellGuild(
     linkshellId: number,
     guildId: string | null,
     guildName: string | null
@@ -158,33 +160,60 @@ export class LinkshellService {
     this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/lock-guild`, {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/set-guild`, {
         guildId: guildId?.trim() || null,
         guildName: guildName?.trim() || null
       });
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell locked to that Discord server.');
+      this.auth.setActionMessage('Discord server set for this linkshell.');
       return true;
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Locking the linkshell to that server failed.'));
+      this.auth.setActionError(formatActionError(error, 'Setting the linkshell\'s Discord server failed.'));
       return false;
     } finally {
       this.busyLinkshellId.set(null);
     }
   }
 
-  async unlockLinkshellGuild(linkshellId: number): Promise<boolean> {
+  // Clear the linkshell's Discord server association (also turns off the lock).
+  async clearLinkshellGuild(linkshellId: number): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/unlock-guild`);
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/clear-guild`);
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell unlocked — accessible from any server.');
+      this.auth.setActionMessage('Discord server cleared for this linkshell.');
       return true;
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Unlocking the linkshell failed.'));
+      this.auth.setActionError(formatActionError(error, 'Clearing the linkshell\'s Discord server failed.'));
+      return false;
+    } finally {
+      this.busyLinkshellId.set(null);
+    }
+  }
+
+  // Toggle the optional access lock. Requires a server already set; when locking,
+  // the caller must be in that server (enforced server-side).
+  async setLinkshellGuildLock(linkshellId: number, locked: boolean): Promise<boolean> {
+    this.busyLinkshellId.set(linkshellId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/set-guild-lock`, { locked });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage(
+        locked
+          ? 'Linkshell locked — only accessible from its Discord server.'
+          : 'Linkshell unlocked — accessible from any server.'
+      );
+      return true;
+    } catch (error) {
+      this.auth.setActionError(
+        formatActionError(error, locked ? 'Locking the linkshell failed.' : 'Unlocking the linkshell failed.')
+      );
       return false;
     } finally {
       this.busyLinkshellId.set(null);

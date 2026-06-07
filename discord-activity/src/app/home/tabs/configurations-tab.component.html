@@ -179,31 +179,6 @@
                 </div>
               }
 
-              <div class="customize-form__section" style="flex:0 0 260px">
-                <strong>Discord server lock</strong>
-                <p class="muted">
-                  Restrict this linkshell to one Discord server. Only members of
-                  that server can access it. Leave blank to allow any linkshell
-                  member.
-                </p>
-                <label class="customize-form__field">
-                  <input type="text" name="discordGuildIdDraft" inputmode="numeric"
-                    placeholder="Discord Server ID (digits)"
-                    [ngModel]="customizeDraft.discordGuildId"
-                    (ngModelChange)="customizeDraft.discordGuildId = $event; onCustomizeFieldChange()" />
-                </label>
-                <p class="muted">
-                  Right-click your server → Copy Server ID (Developer Mode
-                  required).
-                </p>
-                <p class="muted">
-                  To also limit the invite player search to members of this
-                  server, add the LSM bot to it. Without the bot, the lock still
-                  blocks non-members from opening the linkshell — the invite list
-                  just isn't pre-filtered.
-                </p>
-              </div>
-
               <div class="customize-form__section" style="flex:0 1 auto;min-width:280px">
                 <strong>Feature toggles</strong>
                 <p class="muted">Hide sections your linkshell doesn't use.</p>
@@ -312,73 +287,118 @@
       @if (canCustomizeSelectedLinkshell()) {
         <div class="card">
           <div class="card-head">
-            <div class="card-title">Discord server lock</div>
+            <div class="card-title">Discord server</div>
             @if (activeLinkshellName(); as activeName) {
-              <span class="tag accent" title="Locking the currently active linkshell">{{ activeName }}</span>
+              <span class="tag accent" title="Configuring the currently active linkshell">{{ activeName }}</span>
             }
           </div>
           <div class="card-body">
             <p class="muted">
-              Lock this linkshell to a single Discord server so its data can only be opened
-              in the Activity from that server. Members can't access it from any other server.
+              Associate this linkshell with a Discord server to power the member roster, invites,
+              and channel posting. Setting a server does <strong>not</strong> restrict who can view
+              it — that's the separate lock below.
             </p>
 
-            @if (lockedGuildId()) {
+            <!-- Current server state -->
+            @if (setGuildId()) {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-                <span class="tag success">Locked</span>
-                <span>Locked to <strong>{{ lockedGuildName() || 'a Discord server' }}</strong></span>
+                <span class="tag success">Server set</span>
+                <span><strong>{{ setGuildName() || 'a Discord server' }}</strong></span>
               </div>
-              @if (isLockedToCurrentGuild()) {
-                <button type="button" class="btn ghost" (click)="unlockGuild()" [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                  Unlock (allow any server)
-                </button>
-              } @else {
-                <p class="muted" style="font-size:12px">
-                  This linkshell is locked to a different server. Open the Activity in that
-                  server to unlock or change it.
-                </p>
-              }
             } @else {
-              @if (eligibleGuilds().length > 0) {
-                <label class="customize-form__field" style="max-width:360px">
-                  <span>Discord server</span>
-                  <select name="guildLockSelect" [(ngModel)]="guildLockSelection">
-                    @for (guild of eligibleGuilds(); track guild.id) {
-                      <option [value]="guild.id">{{ guild.name }}</option>
-                    }
-                  </select>
-                </label>
-                <div style="margin-top:10px">
-                  <button type="button" class="btn primary" (click)="lockSelectedGuild()"
-                    [disabled]="!guildLockSelection || activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                    Lock to this server
-                  </button>
-                </div>
-                <p class="muted" style="font-size:12px;margin-top:8px">
-                  Only servers the LSM bot and you are both in are listed. Tip: lock to the server
-                  you're currently in so you keep access from here.
-                </p>
-              } @else if (currentGuildId()) {
-                <label class="customize-form__field" style="max-width:360px">
-                  <span>Discord server name</span>
-                  <input type="text" name="guildLockName" maxlength="256"
-                    placeholder="e.g. My Linkshell Server"
-                    [(ngModel)]="guildLockNameDraft" />
-                </label>
-                <div style="margin-top:10px">
-                  <button type="button" class="btn primary" (click)="lockToCurrentGuild()"
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <span class="tag">No server set</span>
+              </div>
+            }
+
+            <!-- Set / change / clear server -->
+            @if (!canChangeGuildHere()) {
+              <p class="muted" style="font-size:12px">
+                This linkshell is locked to a different server. Open the Activity in that server to
+                change or clear it.
+              </p>
+            } @else if (eligibleGuilds().length > 0) {
+              <label class="customize-form__field" style="max-width:360px">
+                <span>Discord server</span>
+                <select name="guildSetSelect" [(ngModel)]="guildLockSelection">
+                  @for (guild of eligibleGuilds(); track guild.id) {
+                    <option [value]="guild.id">{{ guild.name }}</option>
+                  }
+                </select>
+              </label>
+              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn primary" (click)="setSelectedGuild()"
+                  [disabled]="!guildLockSelection || activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                  {{ setGuildId() ? 'Change server' : 'Set server' }}
+                </button>
+                @if (setGuildId()) {
+                  <button type="button" class="btn ghost" (click)="clearGuild()"
                     [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                    Lock to this server
+                    Clear server
                   </button>
+                }
+              </div>
+              <p class="muted" style="font-size:12px;margin-top:8px">
+                Only servers the LSM bot and you are both in are listed.
+              </p>
+            } @else if (currentGuildId()) {
+              <label class="customize-form__field" style="max-width:360px">
+                <span>Discord server name</span>
+                <input type="text" name="guildSetName" maxlength="256"
+                  placeholder="e.g. My Linkshell Server"
+                  [(ngModel)]="guildLockNameDraft" />
+              </label>
+              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn primary" (click)="setToCurrentGuild()"
+                  [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                  Set to this server
+                </button>
+                @if (setGuildId()) {
+                  <button type="button" class="btn ghost" (click)="clearGuild()"
+                    [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                    Clear server
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="empty-state empty-state--compact">
+                <div class="empty-state-desc">
+                  No servers available — make sure the LSM bot is in your Discord server, then reopen this page.
                 </div>
+              </div>
+            }
+
+            <!-- Separate access lock -->
+            <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:14px;padding-top:12px">
+              <strong>Lock access to this server</strong>
+              <p class="muted" style="font-size:12px">
+                Optional. When on, members can only open this linkshell from the set Discord server.
+                Leave off to let members view it from anywhere (the default).
+              </p>
+              @if (!setGuildId()) {
+                <span class="tag">Set a server above to enable the lock.</span>
+              } @else if (!canToggleGuildLockHere()) {
+                <p class="muted" style="font-size:12px">
+                  Open the Activity in this linkshell's Discord server to change the lock.
+                </p>
               } @else {
-                <div class="empty-state empty-state--compact">
-                  <div class="empty-state-desc">
-                    No servers available — make sure the LSM bot is in your Discord server, then reopen this page.
-                  </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+                  @if (isGuildLocked()) {
+                    <span class="tag success">Locked</span>
+                    <button type="button" class="btn warn" (click)="toggleGuildLock()"
+                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                      Unlock (allow any server)
+                    </button>
+                  } @else {
+                    <span class="tag">Not locked</span>
+                    <button type="button" class="btn primary" (click)="toggleGuildLock()"
+                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                      Lock to this server
+                    </button>
+                  }
                 </div>
               }
-            }
+            </div>
           </div>
         </div>
       }
@@ -400,7 +420,7 @@
 
             @if (!discordGuildConfigured()) {
               <p class="muted" style="font-size:12px">
-                Lock this linkshell to a Discord server (above) so the bot can list your channels in a
+                Set this linkshell's Discord server (above) so the bot can list your channels in a
                 dropdown — or paste channel IDs manually below.
               </p>
             }

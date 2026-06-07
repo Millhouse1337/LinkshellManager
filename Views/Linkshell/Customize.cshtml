@@ -285,54 +285,54 @@
 
 </form>
 
-<!-- Discord Server Lock. Standalone card (its own POST forms) so it isn't tied
-     to the main customize save. Mirrors the Activity's "Lock to this server". -->
+<!-- Discord Server: associate the linkshell with a server (roster/invites/
+     channels) and, separately, optionally lock viewing access to it. Standalone
+     card with its own POST forms, not tied to the main customize save. -->
 <div class="card fade d2" id="discordLockCard" style="margin-bottom:16px">
     <div class="card-head">
-        <div class="card-title">Discord Server Lock</div>
+        <div class="card-title">Discord Server</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:560px">
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px">
         <div style="font-size:12px;color:var(--fg-3)">
-            Lock this linkshell to a single Discord server. While locked, only members of that
-            server can open the linkshell in the Discord Activity. This matches the Activity's
-            <strong>Lock to this server</strong> control.
+            Associate this linkshell with a Discord server to power the member roster, invites,
+            and channel posting. Setting a server does <strong>not</strong> restrict who can view
+            the linkshell — that's the separate lock below.
         </div>
 
-        @if (!string.IsNullOrWhiteSpace(Model.LockedToDiscordGuildId))
+        @if (!string.IsNullOrWhiteSpace(Model.DiscordGuildId))
         {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span class="tag success">Locked</span>
+                <span class="tag success">Server set</span>
                 <span style="font-size:13px;color:var(--fg-2)">
-                    Currently locked to
-                    <strong>@(string.IsNullOrWhiteSpace(Model.LockedToDiscordGuildName) ? Model.LockedToDiscordGuildId : Model.LockedToDiscordGuildName)</strong>
+                    <strong>@(string.IsNullOrWhiteSpace(Model.DiscordGuildName) ? Model.DiscordGuildId : Model.DiscordGuildName)</strong>
                 </span>
+                <form method="post" asp-action="ClearGuild" class="lsm-confirm-form" style="display:inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+                    <button class="btn ghost sm" type="submit" onclick="return confirm('Clear the Discord server? This also turns off the access lock.');">Clear server</button>
+                </form>
             </div>
-            <form method="post" asp-action="UnlockGuild" class="lsm-confirm-form">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
-                <button class="btn warn sm" type="submit">Remove lock</button>
-            </form>
         }
         else
         {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span class="tag">Not locked</span>
-                <span style="font-size:13px;color:var(--fg-3)">Any member can open this linkshell from any server.</span>
+                <span class="tag">No server set</span>
+                <span style="font-size:13px;color:var(--fg-3)">Not associated with a Discord server.</span>
             </div>
         }
 
-        <form method="post" asp-action="LockGuild" class="lsm-confirm-form"
+        <form method="post" asp-action="SetGuild" class="lsm-confirm-form"
               style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:12px">
             @Html.AntiForgeryToken()
             <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
             @if (Model.EligibleGuilds.Count > 0)
             {
                 <div class="field">
-                    <label for="lockGuildSelect">Server</label>
-                    <select class="form-select" id="lockGuildSelect" name="guildId" style="width:100%">
+                    <label for="setGuildSelect">Server</label>
+                    <select class="form-select" id="setGuildSelect" name="guildId" style="width:100%">
                         @foreach (var guild in Model.EligibleGuilds)
                         {
-                            <option value="@guild.Id" selected="@(guild.Id == Model.LockedToDiscordGuildId)">@guild.Name</option>
+                            <option value="@guild.Id" selected="@(guild.Id == Model.DiscordGuildId)">@guild.Name</option>
                         }
                     </select>
                 </div>
@@ -341,8 +341,8 @@
             else
             {
                 <div class="field">
-                    <label for="lockGuildInput">Discord server ID</label>
-                    <input class="input" id="lockGuildInput" type="text" name="guildId"
+                    <label for="setGuildInput">Discord server ID</label>
+                    <input class="input" id="setGuildInput" type="text" name="guildId"
                            inputmode="numeric" pattern="[0-9]*" maxlength="20" autocomplete="off"
                            placeholder="e.g. 123456789012345678" />
                 </div>
@@ -353,10 +353,40 @@
             }
             <div>
                 <button class="btn primary" type="submit">
-                    @(string.IsNullOrWhiteSpace(Model.LockedToDiscordGuildId) ? "Lock to this server" : "Change locked server")
+                    @(string.IsNullOrWhiteSpace(Model.DiscordGuildId) ? "Set server" : "Change server")
                 </button>
             </div>
         </form>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px">
+            <div style="font-weight:500;color:var(--fg)">Lock access to this server</div>
+            <div style="font-size:12px;color:var(--fg-3)">
+                Optional. When ON, members can only open this linkshell from the set Discord server.
+                Leave OFF to let members view it from anywhere (the default).
+            </div>
+            @if (string.IsNullOrWhiteSpace(Model.DiscordGuildId))
+            {
+                <span class="tag" style="margin-top:4px;width:fit-content">Set a server above to enable the lock.</span>
+            }
+            else
+            {
+                <form method="post" asp-action="SetGuildLock" class="lsm-confirm-form" style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+                    <input type="hidden" name="locked" value="@((!Model.GuildLocked).ToString().ToLowerInvariant())" />
+                    @if (Model.GuildLocked)
+                    {
+                        <span class="tag success">Locked</span>
+                        <button class="btn warn sm" type="submit">Unlock (allow any server)</button>
+                    }
+                    else
+                    {
+                        <span class="tag">Not locked</span>
+                        <button class="btn primary sm" type="submit">Lock to this server</button>
+                    }
+                </form>
+            }
+        </div>
     </div>
 </div>
 

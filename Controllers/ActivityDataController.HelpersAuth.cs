@@ -91,7 +91,9 @@ public sealed partial class ActivityDataController
     // governs the Discord Activity, so a request with no guild id passes.
     private bool IsBlockedByGuildLock(Linkshell? linkshell)
     {
-        if (linkshell is null || string.IsNullOrWhiteSpace(linkshell.DiscordGuildId))
+        // Only an explicitly *locked* linkshell restricts access. Merely having a
+        // server set (LockToDiscordGuild == false) never blocks anyone.
+        if (linkshell is null || !linkshell.LockToDiscordGuild || string.IsNullOrWhiteSpace(linkshell.DiscordGuildId))
         {
             return false;
         }
@@ -120,10 +122,11 @@ public sealed partial class ActivityDataController
         }
 
         // Enforce the per-linkshell Discord guild lock for every endpoint that
-        // resolves access through GetMembershipAsync. A locked linkshell the
-        // user can't prove membership in is treated as "no access" (the caller
-        // already maps a null membership to Forbid()/403).
-        var guildId = membership.Linkshell?.DiscordGuildId;
+        // resolves access through GetMembershipAsync. Only applies when the
+        // linkshell is *locked* (a set-but-unlocked server doesn't gate access).
+        // A locked linkshell the user can't prove membership in is treated as
+        // "no access" (the caller maps a null membership to Forbid()/403).
+        var guildId = membership.Linkshell?.LockToDiscordGuild == true ? membership.Linkshell?.DiscordGuildId : null;
         if (!string.IsNullOrWhiteSpace(guildId))
         {
             var allowed = await FilterAccessibleLinkshellIdsAsync(

@@ -69,12 +69,17 @@ public sealed record ActivityLinkshellSettingsDto(
     IReadOnlyList<string> HiddenTodMonsters,
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     string LinkshellType,
-    // The single Discord server (guild) this linkshell is tied to, or null when
-    // not tied to any server. When set it both locks Activity access to that
-    // guild and scopes member search / roster to its members. DiscordGuildName
-    // is a display cache so the Configurations UI can show which server it is.
+    // The single Discord server (guild) this linkshell is associated with, or
+    // null when not tied to any server. Setting it scopes member search / roster
+    // to that server's members and powers channel posting. It does NOT, by
+    // itself, restrict who can view the linkshell — that's LockToDiscordGuild.
+    // DiscordGuildName is a display cache so the Configurations UI can show which
+    // server it is.
     string? DiscordGuildId,
-    string? DiscordGuildName);
+    string? DiscordGuildName,
+    // Optional, separate access lock. When true, the Activity can only open this
+    // linkshell from DiscordGuildId. Off by default (associated but not locked).
+    bool LockToDiscordGuild);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -592,11 +597,16 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null = leave unchanged, "" = unlock, digits = lock to that Discord server.
     string? DiscordGuildId);
 
-// Lock a linkshell to a Discord server. GuildId is a server chosen from the
-// eligible-guilds dropdown (the bot's servers the caller is also in) — verified
-// server-side. When GuildId is omitted, the server falls back to the guild the
-// Activity is launched in (X-Discord-Guild-Id header). GuildName is a display cache.
-public sealed record ActivityLockLinkshellRequest(string? GuildId, string? GuildName);
+// Associate a linkshell with a Discord server (does NOT lock access). GuildId is
+// a server chosen from the eligible-guilds dropdown (the bot's servers the caller
+// is also in) — verified server-side. When GuildId is omitted, the server falls
+// back to the guild the Activity is launched in (X-Discord-Guild-Id header).
+// GuildName is a display cache.
+public sealed record ActivitySetGuildRequest(string? GuildId, string? GuildName);
+
+// Toggle the optional access lock on a linkshell that already has a server set.
+// When Locked is true, the Activity can only open the linkshell from its server.
+public sealed record ActivitySetGuildLockRequest(bool Locked);
 
 // One Discord server the caller can lock a linkshell to (the bot is in it and
 // so is the caller). Mirrors the web Customize page's eligible-guild dropdown.

@@ -118,12 +118,15 @@ export interface ActivityLinkshellSettings {
   hiddenTodMonsters: string[];
   // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
   linkshellType: string;
-  // The single Discord server (guild) this linkshell is tied to, or null when
-  // not tied to any server. When set it both locks Activity access to that
-  // guild and scopes member search / roster to its members. discordGuildName is
-  // a display cache for the Configurations UI.
+  // The single Discord server (guild) this linkshell is associated with, or null
+  // when not tied to any server. Setting it scopes member search / roster to that
+  // server and powers channel posting; it does NOT by itself restrict viewing —
+  // that's lockToDiscordGuild. discordGuildName is a display cache for the UI.
   discordGuildId: string | null;
   discordGuildName?: string | null;
+  // Optional, separate access lock. When true, the Activity can only open this
+  // linkshell from discordGuildId. False by default (associated but not locked).
+  lockToDiscordGuild: boolean;
 }
 
 // One Discord server the caller can lock a linkshell to (the bot is in it and so

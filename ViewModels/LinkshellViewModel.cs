@@ -52,13 +52,17 @@ public class LinkshellCustomizeViewModel
     // pairing card is hidden when set.
     public bool AddonGloballyDisabled { get; set; }
 
-    // Discord server lock (mirrors the Activity's "Lock to this server"). When
-    // set, only members of LockedToDiscordGuildId can open this linkshell in the
-    // Discord Activity. The web sets it from EligibleGuilds (servers where the
-    // caller and the bot are both members) or a manual numeric ID.
-    public string? LockedToDiscordGuildId { get; set; }
-    public string? LockedToDiscordGuildName { get; set; }
+    // The Discord server this linkshell is associated with (powers roster,
+    // invites, channel posting). Set from EligibleGuilds (servers where the
+    // caller and the bot are both members) or a manual numeric ID. Setting it
+    // does NOT restrict access.
+    public string? DiscordGuildId { get; set; }
+    public string? DiscordGuildName { get; set; }
     public List<DiscordGuildOption> EligibleGuilds { get; set; } = new();
+
+    // Optional, separate access lock: when true, members can only open this
+    // linkshell from DiscordGuildId. Off by default.
+    public bool GuildLocked { get; set; }
 
     // Phase 2 "bot posts to channel" config. The guild whose channels we list
     // (the linkshell's Discord server), the channels the bot can post to in it,

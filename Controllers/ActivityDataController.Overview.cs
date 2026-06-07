@@ -41,7 +41,10 @@ public sealed partial class ActivityDataController
         //     guild header, is never filtered by this one).
         var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
             linkshellMemberships
-                .Select(link => (link.LinkshellId, link.Linkshell?.DiscordGuildId))
+                // Only *locked* linkshells gate access; a set-but-unlocked server
+                // passes null so it's always allowed.
+                .Select(link => (link.LinkshellId,
+                    link.Linkshell?.LockToDiscordGuild == true ? link.Linkshell?.DiscordGuildId : null))
                 .ToList(),
             cancellationToken);
         linkshellMemberships = linkshellMemberships
