@@ -32,6 +32,12 @@ public class Event
 
     public DateTime? CommencementStartTime { get; set; }
 
+    // When true, a background service stamps CommencementStartTime (i.e. "starts"
+    // the event) automatically once StartTime is reached, instead of waiting for
+    // an officer to click Start. Opt-in per event; never applies to HNM events
+    // (those are driven by the in-game addon). Default false.
+    public bool AutoStart { get; set; }
+
     public double? Duration { get; set; }
 
     public int? DkpPerHour { get; set; }

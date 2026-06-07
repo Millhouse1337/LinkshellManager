@@ -38,6 +38,12 @@ export class PartySetupPanelComponent {
   // recap "who signed up before this event started" without letting anyone
   // change the roster mid-run.
   readonly readOnly = input<boolean>(false);
+  // When true, render the setup as a pure template: every slot shows only its
+  // requirement (Any Tank, RDM/WHM, …) with NO sign-up controls and NO occupant
+  // names — even for slots that have a stored signup. Used by the Party Setup tab
+  // (a setup is a reusable template; signing up happens on an event), so it never
+  // surfaces or invites roster changes.
+  readonly templateOnly = input<boolean>(false);
 
   private readonly drafts = signal<Record<number, SlotSignupDraft>>({});
 

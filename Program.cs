@@ -20,14 +20,23 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using NodaTime;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
+// Build a Npgsql data source with dynamic JSON enabled. CLR types mapped to
+// jsonb columns (notably AppUserLinkshell.JobLevels = int[]) only serialize when
+// this is on; Npgsql 8 disables it by default, so without it any write to
+// JobLevels throws "Writing values of 'System.Int32[]' ... is not supported".
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+dataSourceBuilder.EnableDynamicJson();
+var npgsqlDataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(npgsqlDataSource));
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
@@ -104,6 +113,33 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.SameSite = SameSiteMode.None;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.Cookie.IsEssential = true;
+
+    // API endpoints (the Discord Activity + addon) must get a status code on auth
+    // failure, NOT a 302 redirect to an HTML login / access-denied page. Without
+    // this, an ApiController returning Forbid()/Challenge() (e.g. a permission
+    // check) sends the cookie handler's HTML redirect, which fetch follows to a
+    // 200 HTML page — the client then chokes on "Unexpected token '<'" trying to
+    // JSON.parse it. MVC pages keep the normal redirect behavior.
+    options.Events.OnRedirectToLogin = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        }
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
 });
 
 builder.Services.ConfigureExternalCookie(options =>
@@ -224,9 +260,22 @@ builder.Services.AddSingleton<DiscordInteractionVerifier>();
 builder.Services.AddSingleton<DiscordEventChannelQueue>();
 builder.Services.AddScoped<DiscordEventChannelPublisher>();
 builder.Services.AddHostedService<DiscordEventChannelBackgroundService>();
+// Posts an "event ended" summary (duration + per-attendee DKP) to the event's
+// channel when an event closes. Fires off EventHistory being added.
+builder.Services.AddSingleton<DiscordEventEndedQueue>();
+builder.Services.AddScoped<DiscordEventEndedPublisher>();
+builder.Services.AddHostedService<DiscordEventEndedBackgroundService>();
 builder.Services.AddSingleton<DiscordLootChannelQueue>();
 builder.Services.AddScoped<DiscordLootChannelPublisher>();
 builder.Services.AddHostedService<DiscordLootChannelBackgroundService>();
+
+// In-memory per-linkshell change bus that powers the Activity's live long-poll
+// change feed (GET /api/activity/changes). Singleton so its state is shared
+// across requests; injected into ApplicationDbContext to fire on every commit.
+builder.Services.AddSingleton<LinkshellChangeNotifier>();
+
+// Starts events flagged "Auto start at start time" once their StartTime passes.
+builder.Services.AddHostedService<EventAutoStartBackgroundService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {

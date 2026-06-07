@@ -49,7 +49,8 @@ export class ActivityQueuePanelComponent {
     duration: 1,
     dkpPerHour: 1,
     details: '',
-    partySetupId: null
+    partySetupId: null,
+    autoStart: false
   };
 
   // "HNM" is intentionally omitted: HNM events are created automatically by the
@@ -337,6 +338,7 @@ export class ActivityQueuePanelComponent {
     dkpPerHour?: number | null;
     details?: string | null;
     partySetupId?: number | null;
+    autoStart?: boolean;
   }): void {
     this.activity.clearActionState();
     this.isCreateOpen = true;
@@ -363,6 +365,7 @@ export class ActivityQueuePanelComponent {
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
     this.createModel.partySetupId = event.partySetupId ?? null;
     this.partySetupNotSpecified = event.partySetupId == null;
+    this.createModel.autoStart = event.autoStart ?? false;
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
@@ -430,6 +433,7 @@ export class ActivityQueuePanelComponent {
     this.endTimeNotSpecified = false;
     this.partySetupNotSpecified = false;
     this.createModel.partySetupId = null;
+    this.createModel.autoStart = false;
     this.isEditingLiveEvent = false;
   }
 

@@ -339,22 +339,26 @@
                   <td class="num">{{ row.item.currentHighestBid ?? row.item.startingBidDkp ?? 0 }} DKP</td>
                   <td>
                     @if (row.item.currentHighestBidder) {
-                      @if ((row.item.status || 'Pending') === 'Pending' || (row.item.status || '') === 'Closed') {
-                        <button
-                          type="button"
-                          class="btn success-fill sm"
-                          [disabled]="activity.busyAuctionItemId() === row.item.id"
-                          (click)="markAuctionHistoryItemReceived(row.item.id)">
-                          {{ activity.busyAuctionItemId() === row.item.id ? 'Updating...' : 'Mark received' }}
-                        </button>
-                      } @else if ((row.item.status || '').toLowerCase() === 'received') {
-                        <button
-                          type="button"
-                          class="btn sm"
-                          [disabled]="activity.busyAuctionItemId() === row.item.id"
-                          (click)="undoAuctionHistoryItem(row.item.id)">
-                          {{ activity.busyAuctionItemId() === row.item.id ? 'Updating...' : 'Undo' }}
-                        </button>
+                      @* Winner-only: only the person who won the item confirms
+                         receipt of their own loot. Other viewers see no action. *@
+                      @if (isCurrentUserWinning(row.item)) {
+                        @if ((row.item.status || 'Pending') === 'Pending' || (row.item.status || '') === 'Closed') {
+                          <button
+                            type="button"
+                            class="btn success-fill sm"
+                            [disabled]="activity.busyAuctionItemId() === row.item.id"
+                            (click)="markAuctionHistoryItemReceived(row.item.id)">
+                            {{ activity.busyAuctionItemId() === row.item.id ? 'Updating...' : 'Mark received' }}
+                          </button>
+                        } @else if ((row.item.status || '').toLowerCase() === 'received') {
+                          <button
+                            type="button"
+                            class="btn sm"
+                            [disabled]="activity.busyAuctionItemId() === row.item.id"
+                            (click)="undoAuctionHistoryItem(row.item.id)">
+                            {{ activity.busyAuctionItemId() === row.item.id ? 'Updating...' : 'Undo' }}
+                          </button>
+                        }
                       }
                     } @else {
                       <span class="muted" style="font-size:11px">No bids placed</span>

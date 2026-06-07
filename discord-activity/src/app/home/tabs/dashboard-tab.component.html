@@ -326,7 +326,7 @@
            linkshell feature toggle (ToDs / HNM section); the row only renders
            when at least one is enabled. -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-        @if (dashboardLinkshell.settings?.enableToDs || dashboardLinkshell.settings?.enableHnmSection) {
+        @if (dashboardLinkshell.settings?.enableToDs || (dashboardLinkshell.settings?.enableHnmSection && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis')) {
         <div class="dash-row dash-row--equal">
         @if (dashboardLinkshell.settings?.enableToDs) {
         <div class="card card--tod-fixed">
@@ -443,8 +443,8 @@
         </div>
         }
 
-        <!-- HNM Claims donut -->
-        @if (dashboardLinkshell.settings?.enableHnmSection) {
+        <!-- HNM Claims donut (hidden for Sky/Sea/Dynamis linkshells — no HNM). -->
+        @if (dashboardLinkshell.settings?.enableHnmSection && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis') {
         <div class="card">
           <div class="card-head">
             <div class="card-title">HNM Claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>

@@ -83,7 +83,9 @@ public class AccountController : Controller
                 && !string.IsNullOrWhiteSpace(user.TimeZone),
             HasLinkshell = hasLinkshell,
             AddonConfigured = addonConfigured,
-            JobLevels = ProfileJobLevels.ToCatalogLevels(storedJobLevels)
+            JobLevels = ProfileJobLevels.ToCatalogLevels(storedJobLevels),
+            Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt1JobLevels),
+            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt2JobLevels)
         });
     }
 
@@ -128,24 +130,41 @@ public class AccountController : Controller
             return View(nameof(Profile), model);
         }
 
-        // Persist the per-job levels onto every membership so the character's
-        // jobs are consistent across all linkshells and stored in the addon's
-        // FFXI-job-id format (preserving any higher job ids the addon may have
-        // set). No-op when the user has no linkshell or posted no job inputs.
+        // Main-character job levels go on every membership (per-character, in the
+        // addon's FFXI-job-id format). Alt job levels live on the account (alts
+        // have no membership). One SaveChanges flushes both.
         if (model.JobLevels.Count > 0)
         {
             var memberships = await _context.AppUserLinkshells
                 .Where(link => link.AppUserId == user.Id)
                 .ToListAsync();
-            if (memberships.Count > 0)
+            foreach (var membership in memberships)
             {
-                foreach (var membership in memberships)
-                {
-                    membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, model.JobLevels);
-                }
-                await _context.SaveChangesAsync();
+                membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, model.JobLevels);
             }
         }
+
+        // Alt job levels: clear when the alt has no name, otherwise save what was
+        // posted (the grid only renders when the alt has a name).
+        if (string.IsNullOrWhiteSpace(user.AltCharacterName1))
+        {
+            user.Alt1JobLevels = null;
+        }
+        else if (model.Alt1JobLevels.Count > 0)
+        {
+            user.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(user.Alt1JobLevels, model.Alt1JobLevels);
+        }
+
+        if (string.IsNullOrWhiteSpace(user.AltCharacterName2))
+        {
+            user.Alt2JobLevels = null;
+        }
+        else if (model.Alt2JobLevels.Count > 0)
+        {
+            user.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(user.Alt2JobLevels, model.Alt2JobLevels);
+        }
+
+        await _context.SaveChangesAsync();
 
         return RedirectToAction(nameof(Profile));
     }

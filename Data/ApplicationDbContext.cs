@@ -13,7 +13,11 @@ namespace LinkshellManagerDiscordApp.Data
         private readonly DiscordDkpSpendQueue? _dkpSpendQueue;
         private readonly DiscordAuctionChannelQueue? _auctionChannelQueue;
         private readonly DiscordEventChannelQueue? _eventChannelQueue;
+        private readonly DiscordEventEndedQueue? _eventEndedQueue;
         private readonly DiscordLootChannelQueue? _lootChannelQueue;
+        // Live change-feed bus (long-poll). Nullable + defaulted like the queues
+        // so design-time / reflection construction never fails when it's absent.
+        private readonly LinkshellChangeNotifier? _changeNotifier;
 
         public ApplicationDbContext(
             DbContextOptions<ApplicationDbContext> options,
@@ -21,7 +25,9 @@ namespace LinkshellManagerDiscordApp.Data
             DiscordDkpSpendQueue? dkpSpendQueue = null,
             DiscordAuctionChannelQueue? auctionChannelQueue = null,
             DiscordEventChannelQueue? eventChannelQueue = null,
-            DiscordLootChannelQueue? lootChannelQueue = null)
+            DiscordLootChannelQueue? lootChannelQueue = null,
+            LinkshellChangeNotifier? changeNotifier = null,
+            DiscordEventEndedQueue? eventEndedQueue = null)
             : base(options)
         {
             _todBoardQueue = todBoardQueue;
@@ -29,6 +35,8 @@ namespace LinkshellManagerDiscordApp.Data
             _auctionChannelQueue = auctionChannelQueue;
             _eventChannelQueue = eventChannelQueue;
             _lootChannelQueue = lootChannelQueue;
+            _changeNotifier = changeNotifier;
+            _eventEndedQueue = eventEndedQueue;
         }
 
         // Distinct linkshell ids of Tod rows changed in the current
@@ -172,6 +180,44 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Newly-created EventHistory rows (an event closed → post an "event ended"
+        // summary to the linkshell's Discord channel). Captured as entity
+        // references pre-save because the db-generated Id isn't known until after
+        // commit. Both the web (EndEventCoreAsync) and Activity (EventsLifecycle)
+        // close paths add an EventHistory, so this fires for either without
+        // per-controller wiring.
+        private List<EventHistory> CollectAddedEventHistories()
+        {
+            if (_eventEndedQueue is null)
+            {
+                return new List<EventHistory>();
+            }
+            var created = new List<EventHistory>();
+            foreach (var entry in ChangeTracker.Entries<EventHistory>())
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    created.Add(entry.Entity);
+                }
+            }
+            return created;
+        }
+
+        private void EnqueueEventEndedSummaries(IReadOnlyList<EventHistory> created)
+        {
+            if (_eventEndedQueue is null)
+            {
+                return;
+            }
+            foreach (var history in created)
+            {
+                if (history.Id > 0)
+                {
+                    _eventEndedQueue.Enqueue(history.Id);
+                }
+            }
+        }
+
         // Newly-awarded loot rows (ToD or event loot with a winner) → announce to
         // the linkshell's Loot channel. Captured as entity references pre-save
         // because the db-generated Id isn't known until after commit. Only
@@ -249,6 +295,235 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Auction items that received a new Bid in this save → the auction's
+        // posted Discord message should be edited in place to show the new high
+        // bid. Only the item id is known pre-save; the auction id is resolved
+        // from it post-commit (in EnqueueAuctionBidUpdatesAsync).
+        private HashSet<int> CollectAddedBidAuctionItemIds()
+        {
+            var itemIds = new HashSet<int>();
+            if (_auctionChannelQueue is null)
+            {
+                return itemIds;
+            }
+            foreach (var entry in ChangeTracker.Entries<Bid>())
+            {
+                if (entry.State == EntityState.Added && entry.Entity.AuctionItemId > 0)
+                {
+                    itemIds.Add(entry.Entity.AuctionItemId);
+                }
+            }
+            return itemIds;
+        }
+
+        private async Task EnqueueAuctionBidUpdatesAsync(HashSet<int> bidItemIds)
+        {
+            if (_auctionChannelQueue is null || bidItemIds.Count == 0)
+            {
+                return;
+            }
+            try
+            {
+                var itemIds = bidItemIds.ToList();
+                var auctionIds = await AuctionItems
+                    .Where(item => itemIds.Contains(item.Id) && item.AuctionId != null)
+                    .Select(item => item.AuctionId!.Value)
+                    .Distinct()
+                    .ToListAsync(CancellationToken.None);
+                foreach (var auctionId in auctionIds)
+                {
+                    _auctionChannelQueue.Enqueue(new AuctionChannelJob(AuctionChannelJobKind.Update, auctionId));
+                }
+            }
+            catch
+            {
+                // Best-effort: a failed resolve must never break the committed bid.
+            }
+        }
+
+        // Per-save bucket of live-change work. Entities that carry LinkshellId
+        // directly resolve to a (linkshell, area) pair immediately; child rows
+        // (bids, sign-ups, loot) only know a parent FK pre-save, so we stash the
+        // FK and resolve the linkshell with a batched lookup after the commit.
+        private sealed class LiveChangeWork
+        {
+            public readonly HashSet<(int LinkshellId, string Area)> Direct = new();
+            public readonly HashSet<int> BidAuctionItemIds = new();
+            public readonly HashSet<int> ParticipationEventIds = new();
+            public readonly HashSet<int> LootTodIds = new();
+            public readonly HashSet<int> LootEventIds = new();
+
+            public bool HasWork =>
+                Direct.Count > 0 || BidAuctionItemIds.Count > 0 || ParticipationEventIds.Count > 0
+                || LootTodIds.Count > 0 || LootEventIds.Count > 0;
+        }
+
+        // Scans the change tracker once for entities that drive the live tabs and
+        // buckets them for post-commit notification. Captured pre-save (entry
+        // states reset afterwards). Broad on purpose: the client refreshes the
+        // active tab on ANY change to its linkshell, so coverage matters more
+        // than per-area precision.
+        private LiveChangeWork CollectLiveChanges()
+        {
+            var work = new LiveChangeWork();
+            if (_changeNotifier is null)
+            {
+                return work;
+            }
+
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                {
+                    continue;
+                }
+
+                switch (entry.Entity)
+                {
+                    case Event e when e.LinkshellId > 0:
+                        work.Direct.Add((e.LinkshellId, LinkshellChangeNotifier.Areas.Events));
+                        break;
+                    case Auction a when a.LinkshellId > 0:
+                        work.Direct.Add((a.LinkshellId, LinkshellChangeNotifier.Areas.Auctions));
+                        break;
+                    case AuctionHistory h when h.LinkshellId > 0:
+                        work.Direct.Add((h.LinkshellId, LinkshellChangeNotifier.Areas.Auctions));
+                        break;
+                    case Tod t when t.LinkshellId > 0:
+                        work.Direct.Add((t.LinkshellId, LinkshellChangeNotifier.Areas.Tods));
+                        break;
+                    case DkpLedgerEntry d when d.LinkshellId > 0:
+                        work.Direct.Add((d.LinkshellId, LinkshellChangeNotifier.Areas.Dkp));
+                        break;
+                    case Invite i when i.LinkshellId > 0:
+                        work.Direct.Add((i.LinkshellId, LinkshellChangeNotifier.Areas.Roster));
+                        break;
+                    case AppUserLinkshell m when m.LinkshellId > 0:
+                        work.Direct.Add((m.LinkshellId, LinkshellChangeNotifier.Areas.Roster));
+                        break;
+                    case WindowEvent w when w.LinkshellId > 0:
+                        work.Direct.Add((w.LinkshellId, LinkshellChangeNotifier.Areas.Windows));
+                        break;
+                    case PartySetup p when p.LinkshellId > 0:
+                        work.Direct.Add((p.LinkshellId, LinkshellChangeNotifier.Areas.Parties));
+                        break;
+                    // Child rows — only a parent FK is known pre-save.
+                    case Bid b when b.AuctionItemId > 0:
+                        work.BidAuctionItemIds.Add(b.AuctionItemId);
+                        break;
+                    case AppUserEvent aue when aue.EventId > 0:
+                        work.ParticipationEventIds.Add(aue.EventId);
+                        break;
+                    case TodLootDetail tl when tl.TodId is int todId && todId > 0:
+                        work.LootTodIds.Add(todId);
+                        break;
+                    case EventLootDetail el when el.EventId is int eventId && eventId > 0:
+                        work.LootEventIds.Add(eventId);
+                        break;
+                }
+            }
+
+            return work;
+        }
+
+        // Resolves child-row linkshells (batched) and fires every notification.
+        // Best-effort: runs after the commit, so a failure here must never bubble
+        // up and fail an already-successful save — the polling timer covers any
+        // missed push. Uses CancellationToken.None so a client that cancelled the
+        // originating request still gets its change broadcast to everyone else.
+        private async Task NotifyLiveChangesAsync(LiveChangeWork work)
+        {
+            if (_changeNotifier is null || !work.HasWork)
+            {
+                return;
+            }
+
+            try
+            {
+                var notifications = new HashSet<(int LinkshellId, string Area)>(work.Direct);
+
+                if (work.BidAuctionItemIds.Count > 0)
+                {
+                    var itemIds = work.BidAuctionItemIds.ToList();
+                    var linkshellIds = await AuctionItems
+                        .Where(item => itemIds.Contains(item.Id) && item.Auction != null)
+                        .Select(item => item.Auction!.LinkshellId)
+                        .Distinct()
+                        .ToListAsync(CancellationToken.None);
+                    AddResolved(notifications, linkshellIds, LinkshellChangeNotifier.Areas.Auctions);
+                }
+
+                if (work.ParticipationEventIds.Count > 0)
+                {
+                    var eventIds = work.ParticipationEventIds.ToList();
+                    var linkshellIds = await Events
+                        .Where(e => eventIds.Contains(e.Id))
+                        .Select(e => e.LinkshellId)
+                        .Distinct()
+                        .ToListAsync(CancellationToken.None);
+                    AddResolved(notifications, linkshellIds, LinkshellChangeNotifier.Areas.Events);
+                }
+
+                if (work.LootTodIds.Count > 0)
+                {
+                    var todIds = work.LootTodIds.ToList();
+                    var linkshellIds = await Tods
+                        .Where(t => todIds.Contains(t.Id))
+                        .Select(t => t.LinkshellId)
+                        .Distinct()
+                        .ToListAsync(CancellationToken.None);
+                    AddResolved(notifications, linkshellIds, LinkshellChangeNotifier.Areas.Loot);
+                }
+
+                if (work.LootEventIds.Count > 0)
+                {
+                    var eventIds = work.LootEventIds.ToList();
+                    var linkshellIds = await Events
+                        .Where(e => eventIds.Contains(e.Id))
+                        .Select(e => e.LinkshellId)
+                        .Distinct()
+                        .ToListAsync(CancellationToken.None);
+                    AddResolved(notifications, linkshellIds, LinkshellChangeNotifier.Areas.Loot);
+                }
+
+                foreach (var (linkshellId, area) in notifications)
+                {
+                    _changeNotifier.Notify(linkshellId, area);
+                }
+            }
+            catch
+            {
+                // Live push is an optimization; never let it fail a committed save.
+            }
+        }
+
+        private static void AddResolved(
+            HashSet<(int LinkshellId, string Area)> notifications, IEnumerable<int> linkshellIds, string area)
+        {
+            foreach (var linkshellId in linkshellIds)
+            {
+                if (linkshellId > 0)
+                {
+                    notifications.Add((linkshellId, area));
+                }
+            }
+        }
+
+        // Sync save path is rare (seeding/background) and never places bids or
+        // sign-ups, so it only fires the directly-resolved notifications and
+        // skips the async child lookups.
+        private void NotifyLiveChangesDirect(LiveChangeWork work)
+        {
+            if (_changeNotifier is null)
+            {
+                return;
+            }
+            foreach (var (linkshellId, area) in work.Direct)
+            {
+                _changeNotifier.Notify(linkshellId, area);
+            }
+        }
+
         public override async Task<int> SaveChangesAsync(
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
@@ -257,12 +532,18 @@ namespace LinkshellManagerDiscordApp.Data
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
+            var endedEvents = CollectAddedEventHistories();
+            var bidItemIds = CollectAddedBidAuctionItemIds();
+            var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             EnqueueTodBoardRefreshes(affected);
             EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueLootPosts(todLoot, eventLoot);
+            EnqueueEventEndedSummaries(endedEvents);
+            await EnqueueAuctionBidUpdatesAsync(bidItemIds);
+            await NotifyLiveChangesAsync(liveChanges);
             return result;
         }
 
@@ -273,12 +554,16 @@ namespace LinkshellManagerDiscordApp.Data
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
+            var endedEvents = CollectAddedEventHistories();
+            var liveChanges = CollectLiveChanges();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueLootPosts(todLoot, eventLoot);
+            EnqueueEventEndedSummaries(endedEvents);
+            NotifyLiveChangesDirect(liveChanges);
             return result;
         }
 

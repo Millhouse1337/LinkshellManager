@@ -385,6 +385,8 @@ export interface ActivityEvent {
   duration?: number | null;
   dkpPerHour?: number | null;
   details?: string | null;
+  // True when the event is flagged to auto-start at its start time.
+  autoStart?: boolean;
   participantCount: number;
   currentParticipation?: ActivityParticipation | null;
   participants: ActivityEventParticipant[];
@@ -791,6 +793,8 @@ export interface ActivityCreateEventInput {
   // Optional FK to a PartySetup in the same linkshell. Replaces the old
   // inline jobs/slots editor.
   partySetupId?: number | null;
+  // When true, the event auto-starts at its start time (no manual Start).
+  autoStart?: boolean;
 }
 
 export interface ActivityCreateLinkshellInput {

@@ -196,6 +196,7 @@ public sealed record ActivityEventDto(
     double? Duration,
     int? DkpPerHour,
     string? Details,
+    bool AutoStart,
     int ParticipantCount,
     ActivityParticipationDto? CurrentParticipation,
     IReadOnlyList<ActivityEventParticipantDto> Participants,
@@ -539,7 +540,10 @@ public sealed record ActivityCreateEventRequest(
     // Optional FK to a PartySetup in the same linkshell. Null means "no party
     // setup attached" (event becomes ad-hoc signup only). The old inline Jobs
     // editor was removed in favour of this dropdown.
-    int? PartySetupId);
+    int? PartySetupId,
+    // When true, the event auto-starts at its StartTime (background service)
+    // instead of waiting for a manual Start. Ignored for HNM events.
+    bool AutoStart = false);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 

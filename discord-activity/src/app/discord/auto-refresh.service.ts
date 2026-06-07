@@ -1,7 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 
 import { AuctionService } from './auction.service';
+import { AuthService } from './auth.service';
 import { DiscordActivityService } from './discord-activity.service';
+import { formatActionError } from './discord-activity.helpers';
 import { DkpSheetService } from './dkp-sheet.service';
 import { PartySetupService } from './party-setup.service';
 import { WindowEventService } from './window-event.service';
@@ -26,6 +28,7 @@ import type { TabName } from '../home/activity-home.types';
 @Injectable({ providedIn: 'root' })
 export class AutoRefreshService {
   private readonly activity = inject(DiscordActivityService);
+  private readonly auth = inject(AuthService);
   private readonly windows = inject(WindowEventService);
   private readonly partySetup = inject(PartySetupService);
   private readonly dkpSheet = inject(DkpSheetService);
@@ -33,10 +36,22 @@ export class AutoRefreshService {
 
   private readonly NORMAL_MS = 25_000;
   private readonly FAST_MS = 5_000;
+  // When the live change-feed is connected the timer is only a safety net, so
+  // it ticks slowly; if the feed drops we revert to NORMAL_MS / FAST_MS.
+  private readonly SAFETY_MS = 60_000;
 
   private readonly activeTab = signal<TabName | null>(null);
+  // Set by LiveUpdateService so the timer can back off while push is healthy.
+  private readonly liveConnected = signal(false);
+  // Dedupes overlapping refreshes (timer + manual button + change-feed) into a
+  // single in-flight fetch so a click during a tick never double-loads.
+  private refreshInFlight: Promise<void> | null = null;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private started = false;
+
+  setLiveConnected(connected: boolean): void {
+    this.liveConnected.set(connected);
+  }
 
   // Activity-home calls this once on mount + stop() on destroy. Idempotent so
   // hot-reload during dev doesn't stack listeners.
@@ -87,6 +102,8 @@ export class AutoRefreshService {
   }
 
   private intervalForCurrentState(): number {
+    // Live feed healthy → the timer is just a correctness backstop.
+    if (this.liveConnected()) return this.SAFETY_MS;
     return this.shouldUseFast() ? this.FAST_MS : this.NORMAL_MS;
   }
 
@@ -108,33 +125,66 @@ export class AutoRefreshService {
     return false;
   }
 
-  private async tick(): Promise<void> {
-    const linkshellId =
-      this.activity.overview()?.primaryLinkshell?.id ??
-      this.activity.overview()?.appUser?.primaryLinkshellId ??
-      0;
-    if (!linkshellId) return;
+  private tick(): Promise<void> {
+    // Background tick: no spinner, errors stay silent (next tick retries).
+    return this.refreshNow(this.activeTab());
+  }
 
-    // Overview backs the identity bar, sidebar, dashboard, ToDs tab, events
-    // tab, and a chunk of derived per-tab signals — refreshing it once per
-    // tick covers all of those without per-tab plumbing.
-    void this.activity.refreshOverview();
+  // The single refresh path used by the timer, the manual button, and the live
+  // change-feed. Refreshes the overview AND the active tab's own data, deduping
+  // overlapping calls. `showBusy` drives the header spinner + surfaces errors —
+  // used only by the manual button so background refreshes stay quiet.
+  async refreshNow(tab: TabName | null = this.activeTab(), showBusy = false): Promise<void> {
+    if (showBusy) {
+      this.activity.busyRefresh.set(true);
+      this.auth.setActionError(null);
+    }
+    try {
+      this.refreshInFlight ??= this.doRefresh(tab);
+      await this.refreshInFlight;
+    } catch (error) {
+      if (showBusy) {
+        this.auth.setActionError(formatActionError(error, 'Refresh failed — try again.'));
+      }
+    } finally {
+      if (showBusy) this.activity.busyRefresh.set(false);
+    }
+  }
 
-    // Tab-specific loaders that don't live on the overview payload. Skipped
-    // intentionally for dashboard/profile/linkshell/tods/dkp/loot/etc. —
-    // those are already powered by the overview refresh above.
-    switch (this.activeTab()) {
+  private async doRefresh(tab: TabName | null): Promise<void> {
+    try {
+      const linkshellId =
+        this.activity.overview()?.primaryLinkshell?.id ??
+        this.activity.overview()?.appUser?.primaryLinkshellId ??
+        0;
+      if (!linkshellId) return;
+
+      // Overview backs the identity bar, sidebar, dashboard, ToDs/events tabs,
+      // and a chunk of derived per-tab signals; refreshing it covers all of
+      // those. Then load the active tab's own data on top.
+      await this.activity.refreshOverview();
+      await this.loadForTab(tab, linkshellId);
+    } finally {
+      this.refreshInFlight = null;
+    }
+  }
+
+  // Tab-specific loaders that don't live on the overview payload. The other
+  // tabs (dashboard/profile/linkshell/tods/dkp/loot) are powered by the
+  // overview refresh, so they need nothing extra here.
+  private async loadForTab(tab: TabName | null, linkshellId: number): Promise<void> {
+    switch (tab) {
       case 'window-events':
-        void this.windows.load(linkshellId);
+        await this.windows.load(linkshellId);
         break;
       case 'party-setup':
-        void this.partySetup.loadList(linkshellId);
+        await this.partySetup.loadList(linkshellId);
         break;
       case 'dkp-sheet':
-        void this.dkpSheet.load(linkshellId);
+        await this.dkpSheet.load(linkshellId);
         break;
       case 'auctions':
-        void this.auction.loadAuctions(linkshellId);
+        await this.auction.loadAuctions(linkshellId);
         break;
       default:
         break;

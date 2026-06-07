@@ -93,6 +93,11 @@
             (ngModelChange)="onStartTimeChange()" />
         </label>
 
+        <label class="tod-toggle">
+          <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
+          <span>Auto start at start time</span>
+        </label>
+
         <label>
           <span>End</span>
           <div class="tod-day-number-row">

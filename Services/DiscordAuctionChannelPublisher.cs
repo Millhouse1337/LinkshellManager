@@ -57,6 +57,9 @@ public sealed class DiscordAuctionChannelPublisher
                 case AuctionChannelJobKind.Close:
                     await CloseAsync(job.EntityId, cancellationToken);
                     break;
+                case AuctionChannelJobKind.Update:
+                    await UpdateAsync(job.EntityId, cancellationToken);
+                    break;
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -72,15 +75,49 @@ public sealed class DiscordAuctionChannelPublisher
 
     private async Task CreateAsync(int auctionId, CancellationToken ct)
     {
+        // Tracked (not AsNoTracking) so we can persist the posted message id back
+        // onto the auction for later in-place bid edits.
         var auction = await _db.Auctions
-            .AsNoTracking()
             .Include(a => a.AuctionItems)
             .FirstOrDefaultAsync(a => a.Id == auctionId, ct);
         if (auction is null)
         {
             return;
         }
-        await DispatchAsync(auction.LinkshellId, BuildCreateEmbed(auction), BuildCreateComponents(auction), ct);
+        var (channelId, messageId) = await DispatchAsync(
+            auction.LinkshellId, BuildCreateEmbed(auction), BuildCreateComponents(auction), ct);
+        if (!string.IsNullOrEmpty(channelId) && !string.IsNullOrEmpty(messageId))
+        {
+            auction.DiscordChannelId = channelId;
+            auction.DiscordMessageId = messageId;
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    // A bid landed → edit the auction's "opened" message in place to reflect the
+    // current high bid per item (no new message). No-op when the auction wasn't
+    // bot-posted (webhook fallback can't be edited) or the bot isn't configured.
+    private async Task UpdateAsync(int auctionId, CancellationToken ct)
+    {
+        var auction = await _db.Auctions
+            .AsNoTracking()
+            .Include(a => a.AuctionItems)
+            .FirstOrDefaultAsync(a => a.Id == auctionId, ct);
+        if (auction is null
+            || string.IsNullOrEmpty(auction.DiscordChannelId)
+            || string.IsNullOrEmpty(auction.DiscordMessageId)
+            || !_bot.IsConfigured)
+        {
+            return;
+        }
+
+        var payload = new
+        {
+            embeds = new[] { BuildCreateEmbed(auction) },
+            components = BuildCreateComponents(auction),
+            allowed_mentions = new { parse = Array.Empty<string>() }
+        };
+        await _bot.EditMessageAsync(auction.DiscordChannelId, auction.DiscordMessageId, payload, ct);
     }
 
     private async Task CloseAsync(int auctionHistoryId, CancellationToken ct)
@@ -100,7 +137,10 @@ public sealed class DiscordAuctionChannelPublisher
     // app" / "View results" link button); fall back to the legacy PostAuctions
     // webhooks when no Auctions channel is configured. One or the other, never
     // both, so an officer who sets up the new channel doesn't get double posts.
-    private async Task DispatchAsync(int linkshellId, object embed, object[]? components, CancellationToken ct)
+    // Returns the (channelId, messageId) when posted via the bot so the caller can
+    // persist them for later edits; (null, null) when it fell back to webhooks.
+    private async Task<(string? ChannelId, string? MessageId)> DispatchAsync(
+        int linkshellId, object embed, object[]? components, CancellationToken ct)
     {
         var channelId = await _db.LinkshellDiscordChannels
             .AsNoTracking()
@@ -115,13 +155,14 @@ public sealed class DiscordAuctionChannelPublisher
             object payload = components is null || components.Length == 0
                 ? new { embeds = new[] { embed }, allowed_mentions = new { parse = Array.Empty<string>() } }
                 : new { embeds = new[] { embed }, components, allowed_mentions = new { parse = Array.Empty<string>() } };
-            await _bot.PostMessageAsync(channelId, payload, ct);
-            return;
+            var messageId = await _bot.PostMessageAsync(channelId, payload, ct);
+            return (channelId, messageId);
         }
 
         // Webhook fallback can't carry components (Discord strips them); post the
         // embed only.
         await PostToWebhooksAsync(linkshellId, embed, ct);
+        return (null, null);
     }
 
     // The "auction opened" components: a "Bid: {item}" button per item (each
@@ -255,8 +296,21 @@ public sealed class DiscordAuctionChannelPublisher
         {
             foreach (var i in items)
             {
-                var line = $"• **{Escape(i.ItemName ?? "(item)")}**"
+                // Show the current high bid once there is one (the message is
+                // edited in place on each bid), else the starting bid.
+                string line;
+                if (i.CurrentHighestBid.HasValue && i.CurrentHighestBid.Value > 0)
+                {
+                    line = $"• **{Escape(i.ItemName ?? "(item)")}** — current **{i.CurrentHighestBid.Value} DKP**"
+                         + (string.IsNullOrWhiteSpace(i.CurrentHighestBidder)
+                             ? string.Empty
+                             : $" ({Escape(i.CurrentHighestBidder!)})");
+                }
+                else
+                {
+                    line = $"• **{Escape(i.ItemName ?? "(item)")}**"
                          + (i.StartingBidDkp.HasValue ? $" — start {i.StartingBidDkp} DKP" : string.Empty);
+                }
                 if (sb.Length + line.Length + 1 > 3500) { break; }
                 if (sb.Length > 0) { sb.Append('\n'); }
                 sb.Append(line);

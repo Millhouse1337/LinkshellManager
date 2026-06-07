@@ -18,7 +18,7 @@ export class ActivityHttpClient {
   private readonly auth = inject(AuthService);
   private antiforgeryTokenPromise: Promise<ActivityAntiforgeryToken | null> | null = null;
 
-  async fetchActivityJson<T>(path: string, accessToken?: string): Promise<T> {
+  async fetchActivityJson<T>(path: string, accessToken?: string, signal?: AbortSignal): Promise<T> {
     const headers: Record<string, string> = { ...this.auth.guildHeaders() };
     const token = accessToken ?? this.auth.currentAccessToken();
     if (token) {
@@ -28,7 +28,8 @@ export class ActivityHttpClient {
     const response = await fetch(path, {
       headers,
       cache: 'no-store',
-      credentials: 'include'
+      credentials: 'include',
+      signal
     });
 
     const responseText = await response.text();
@@ -92,7 +93,14 @@ export class ActivityHttpClient {
         return undefined as T;
       }
 
-      return JSON.parse(responseText) as T;
+      try {
+        return JSON.parse(responseText) as T;
+      } catch {
+        // 2xx but not JSON — almost always an auth redirect followed to an HTML
+        // page, or the SPA fallback. Surface a clear message, never a raw
+        // "Unexpected token '<'".
+        throw new Error(this.nonJsonMessage(response, responseText));
+      }
     }
 
     const responseText = await response.text();
@@ -100,12 +108,27 @@ export class ActivityHttpClient {
       throw new Error(`Activity request failed with status ${response.status}.`);
     }
 
+    let parsed: { error?: string } | null = null;
     try {
-      const payload = JSON.parse(responseText) as { error?: string };
-      throw new Error(payload.error || `Activity request failed with status ${response.status}.`);
+      parsed = JSON.parse(responseText) as { error?: string };
     } catch {
-      throw new Error(responseText);
+      // not JSON — fall through to the friendly message below
     }
+    if (parsed?.error) {
+      throw new Error(parsed.error);
+    }
+    throw new Error(this.nonJsonMessage(response, responseText));
+  }
+
+  // Turns a non-JSON response (HTML login/access-denied page, SPA fallback, a
+  // followed redirect) into a clear, actionable message instead of letting a
+  // raw JSON.parse error or a dumped HTML page reach the UI.
+  private nonJsonMessage(response: Response, text: string): string {
+    const looksHtml = /^\s*</.test(text ?? '');
+    if (response.redirected || looksHtml) {
+      return 'Your session may have expired — reload the Activity and try again.';
+    }
+    return `The server returned an unexpected response (status ${response.status}).`;
   }
 
   private async getAntiforgeryToken(): Promise<ActivityAntiforgeryToken | null> {

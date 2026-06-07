@@ -382,6 +382,7 @@ public sealed partial class ActivityDataController
                 evt.Duration,
                 evt.DkpPerHour,
                 evt.Details,
+                evt.AutoStart,
                 evt.AppUserEvents.Count,
                 evt.AppUserEvents
                     .Where(participation => participation.AppUserId == appUser.Id)

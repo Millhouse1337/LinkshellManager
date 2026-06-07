@@ -641,9 +641,9 @@ public sealed partial class ActivityDataController
         {
             return Forbid();
         }
-        // Auction-history status changes are an officer-level action — only
-        // members with CanManageAuctions can flip "Closed" ↔ "Received".
-        if (!await CanAsync(membership, role => role.CanManageAuctions, cancellationToken))
+        // "Mark received" is the winner confirming they got their own loot, so
+        // only the item's winner may flip it — not officers, not other members.
+        if (!IsAuctionItemWinner(item, appUser.Id))
         {
             return Forbid();
         }
@@ -685,7 +685,9 @@ public sealed partial class ActivityDataController
         {
             return Forbid();
         }
-        if (!await CanAsync(membership, role => role.CanManageAuctions, cancellationToken))
+        // Winner-only, mirroring "Mark received" — only the winner can un-confirm
+        // receipt of their own loot.
+        if (!IsAuctionItemWinner(item, appUser.Id))
         {
             return Forbid();
         }
@@ -707,5 +709,14 @@ public sealed partial class ActivityDataController
             cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
+    }
+
+    // "Mark received" / "Undo" are winner-only: the person who won the item is
+    // the one who confirms (or unconfirms) receipt of their own loot — not
+    // officers, not other members.
+    private static bool IsAuctionItemWinner(AuctionItem item, string appUserId)
+    {
+        return !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId)
+            && string.Equals(item.CurrentHighestBidderAppUserId, appUserId, StringComparison.Ordinal);
     }
 }

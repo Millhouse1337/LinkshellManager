@@ -74,6 +74,7 @@ public class AuctionHistoryController : Controller
                 EndingBidDkp = item.EndingBidDkp,
                 CurrentHighestBid = item.CurrentHighestBid,
                 CurrentHighestBidder = item.CurrentHighestBidder,
+                CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
                 StartTime = ConvertUtcToUserTimeZone(item.StartTime, user.TimeZone),
                 EndTime = ConvertUtcToUserTimeZone(item.EndTime, user.TimeZone),
                 Status = item.Status,
@@ -83,6 +84,9 @@ public class AuctionHistoryController : Controller
             EndTime = ConvertUtcToUserTimeZone(history.EndTime, user.TimeZone)
         }).ToList();
 
+        // The view shows the winner-only "Mark received" / "Undo" actions, so it
+        // needs to know who the viewer is to compare against each item's winner.
+        ViewData["CurrentAppUserId"] = user.Id;
         return View(viewModel);
     }
 
@@ -105,6 +109,12 @@ public class AuctionHistoryController : Controller
         }
 
         if (!await HasLinkshellAccessAsync(user.Id, auctionItem.AuctionHistory.LinkshellId))
+        {
+            return Forbid();
+        }
+        // "Mark received" is the winner confirming receipt of their own loot, so
+        // only the item's winner may flip it.
+        if (!string.Equals(auctionItem.CurrentHighestBidderAppUserId, user.Id, StringComparison.Ordinal))
         {
             return Forbid();
         }
@@ -144,9 +154,16 @@ public class AuctionHistoryController : Controller
         {
             return Forbid();
         }
+        // Winner-only, mirroring "Mark received".
+        if (!string.Equals(auctionItem.CurrentHighestBidderAppUserId, user.Id, StringComparison.Ordinal))
+        {
+            return Forbid();
+        }
 
         var previousStatus = auctionItem.Status;
-        auctionItem.Status = "Pending";
+        // Back to "Closed" (a history item is never "Pending") so the
+        // Closed ↔ Received toggle round-trips correctly.
+        auctionItem.Status = "Closed";
         await AuctionInventoryService.AdjustForStatusChangeAsync(
             _context,
             auctionItem,

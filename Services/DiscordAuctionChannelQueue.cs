@@ -9,10 +9,14 @@ public enum AuctionChannelJobKind
 
     // An auction was closed → post final results then delete the channel.
     Close,
+
+    // A bid was placed → edit the auction's posted message in place to show the
+    // current high bid per item (no new message, no channel spam).
+    Update,
 }
 
-// Create: EntityId is the Auction id. Close: EntityId is the AuctionHistory
-// id (the live Auction row is gone by then).
+// Create / Update: EntityId is the Auction id. Close: EntityId is the
+// AuctionHistory id (the live Auction row is gone by then).
 public readonly record struct AuctionChannelJob(AuctionChannelJobKind Kind, int EntityId);
 
 // Fire-and-forget queue of per-auction Discord channel jobs. Enqueued from

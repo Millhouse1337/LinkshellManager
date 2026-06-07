@@ -224,6 +224,7 @@ public partial class EventController
             DkpPerHour = eventViewModel.Event.DkpPerHour,
             Details = eventViewModel.Event.Details,
             AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim(),
+            AutoStart = eventViewModel.Event.AutoStart,
             PartySetupId = requestedPartySetupId,
             CreatorUserId = user.Id,
             TimeStamp = DateTime.UtcNow
@@ -276,6 +277,7 @@ public partial class EventController
             Duration = eventToEdit.Duration,
             DkpPerHour = eventToEdit.DkpPerHour,
             Details = eventToEdit.Details,
+            AutoStart = eventToEdit.AutoStart,
             PartySetupId = eventToEdit.PartySetupId
         };
         model.PartySetupId = eventToEdit.PartySetupId;
@@ -332,6 +334,7 @@ public partial class EventController
         eventToUpdate.DkpPerHour = eventViewModel.Event.DkpPerHour;
         eventToUpdate.Details = eventViewModel.Event.Details;
         eventToUpdate.AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim();
+        eventToUpdate.AutoStart = eventViewModel.Event.AutoStart;
         eventToUpdate.PartySetupId = requestedPartySetupId;
 
         await _context.SaveChangesAsync();

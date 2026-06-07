@@ -46,6 +46,7 @@
                       <span class="ps-slot-req-label">{{ slotRequirement(slot) }}</span>
                     </div>
 
+                    @if (!templateOnly()) {
                     @if (isOpen(slot)) {
                       @if (readOnly()) {
                         <div class="ps-slot-open-readonly">Open</div>
@@ -87,6 +88,7 @@
                           }
                         }
                       </div>
+                    }
                     }
                   </div>
                 }

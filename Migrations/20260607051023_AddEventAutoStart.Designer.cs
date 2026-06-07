@@ -3,6 +3,7 @@ using System;
 using LinkshellManagerDiscordApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LinkshellManagerDiscordApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260607051023_AddEventAutoStart")]
+    partial class AddEventAutoStart
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -658,10 +661,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("character varying(450)");
 
                     b.Property<string>("DiscordChannelId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("DiscordMessageId")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 

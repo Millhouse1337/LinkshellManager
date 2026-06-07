@@ -193,6 +193,7 @@ public class DashboardController : Controller
             EnableRevenue = selectedLinkshell?.EnableRevenue ?? true,
             EnableToDs = selectedLinkshell?.EnableToDs ?? true,
             EnableHnmSection = selectedLinkshell?.EnableHnmSection ?? true,
+            LinkshellType = selectedLinkshell?.LinkshellType,
             TodTracker = todTracker,
             HnmClaims = hnmClaims,
             HnmClaimsTotal = hnmTotal,

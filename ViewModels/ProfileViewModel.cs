@@ -21,6 +21,11 @@ public class ProfileViewModel
     // ProfileJobLevels. Empty when the user has no linkshell (nothing to store).
     public List<int> JobLevels { get; set; } = new();
 
+    // Same per-job level lists for the two alt characters (catalog order).
+    // Persisted on the account (AppUser.Alt1JobLevels / Alt2JobLevels).
+    public List<int> Alt1JobLevels { get; set; } = new();
+    public List<int> Alt2JobLevels { get; set; } = new();
+
     // Populated by the controller from IDateTimeZoneProvider so the Profile view
     // can render a dropdown instead of a free-form input. Not posted back: the
     // server validates the submitted TimeZone against the provider directly.

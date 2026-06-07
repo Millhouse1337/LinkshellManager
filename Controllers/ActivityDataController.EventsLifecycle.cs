@@ -79,6 +79,7 @@ public sealed partial class ActivityDataController
             DkpPerHour = request.DkpPerHour,
             Details = request.Details?.Trim(),
             PartySetupId = request.PartySetupId,
+            AutoStart = request.AutoStart,
             TimeStamp = DateTime.UtcNow
         };
 
@@ -172,6 +173,7 @@ public sealed partial class ActivityDataController
         eventEntity.DkpPerHour = request.DkpPerHour;
         eventEntity.Details = request.Details?.Trim();
         eventEntity.PartySetupId = request.PartySetupId;
+        eventEntity.AutoStart = request.AutoStart;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

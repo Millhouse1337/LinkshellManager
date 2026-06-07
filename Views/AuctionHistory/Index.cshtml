@@ -2,6 +2,8 @@
 @{
     ViewData["Title"] = "Auction History";
     ViewData["BodyClass"] = "lsm-page";
+    // The winner of each item is the only one who can confirm receipt.
+    var currentAppUserId = ViewData["CurrentAppUserId"] as string;
 }
 
 <div class="page-head fade d1">
@@ -66,6 +68,8 @@ else
                         {
                             var status = item.Status ?? "Pending";
                             var statusClass = status.Equals("Received", StringComparison.OrdinalIgnoreCase) ? "success" : "warning";
+                            var isWinner = !string.IsNullOrEmpty(currentAppUserId)
+                                && string.Equals(item.CurrentHighestBidderAppUserId, currentAppUserId, StringComparison.Ordinal);
                             <tr>
                                 <td>
                                     <div style="font-weight:500">@item.ItemName</div>
@@ -80,7 +84,10 @@ else
                                 <td>@(string.IsNullOrWhiteSpace(item.CurrentHighestBidder) ? "—" : item.CurrentHighestBidder)</td>
                                 <td><span class="tag @statusClass">@status</span></td>
                                 <td style="text-align:right">
-                                    @if (status == "Pending")
+                                    @* Winner-only: the person who won the item confirms receipt of
+                                       their own loot. Closed items can be marked received; received
+                                       items can be undone back to closed. *@
+                                    @if (isWinner && status.Equals("Closed", StringComparison.OrdinalIgnoreCase))
                                     {
                                         <form asp-action="UpdateItemStatus" method="post" style="display:inline">
                                             @Html.AntiForgeryToken()
@@ -88,7 +95,7 @@ else
                                             <button type="submit" class="btn ghost sm">Mark received</button>
                                         </form>
                                     }
-                                    else if (status.Equals("Received", StringComparison.OrdinalIgnoreCase))
+                                    else if (isWinner && status.Equals("Received", StringComparison.OrdinalIgnoreCase))
                                     {
                                         <form asp-action="UndoItemStatus" method="post" style="display:inline">
                                             @Html.AntiForgeryToken()

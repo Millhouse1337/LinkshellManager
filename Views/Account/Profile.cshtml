@@ -95,6 +95,44 @@
                     }
                 </div>
             </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.AltCharacterName1))
+            {
+                <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+                    <div style="font-weight:500;color:var(--fg);margin-bottom:6px">Jobs — @Model.AltCharacterName1</div>
+                    <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">Job levels for your alt @Model.AltCharacterName1.</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                        @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+                        {
+                            var alt1Level = i < Model.Alt1JobLevels.Count ? Model.Alt1JobLevels[i] : 0;
+                            <div class="field" style="margin:0">
+                                <label for="alt1-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
+                                <input id="alt1-job-@i" type="number" class="form-control" name="Alt1JobLevels[@i]"
+                                       value="@alt1Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.AltCharacterName2))
+            {
+                <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+                    <div style="font-weight:500;color:var(--fg);margin-bottom:6px">Jobs — @Model.AltCharacterName2</div>
+                    <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">Job levels for your alt @Model.AltCharacterName2.</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                        @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+                        {
+                            var alt2Level = i < Model.Alt2JobLevels.Count ? Model.Alt2JobLevels[i] : 0;
+                            <div class="field" style="margin:0">
+                                <label for="alt2-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
+                                <input id="alt2-job-@i" type="number" class="form-control" name="Alt2JobLevels[@i]"
+                                       value="@alt2Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
         }
 
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">

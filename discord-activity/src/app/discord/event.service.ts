@@ -76,7 +76,8 @@ export class EventService {
         duration: input.duration ?? null,
         dkpPerHour: input.dkpPerHour ?? null,
         details: input.details || null,
-        partySetupId: input.partySetupId ?? null
+        partySetupId: input.partySetupId ?? null,
+        autoStart: input.autoStart ?? false
       });
 
       await this.auth.refreshOverview();
@@ -102,7 +103,8 @@ export class EventService {
         duration: input.duration ?? null,
         dkpPerHour: input.dkpPerHour ?? null,
         details: input.details || null,
-        partySetupId: input.partySetupId ?? null
+        partySetupId: input.partySetupId ?? null,
+        autoStart: input.autoStart ?? false
       });
 
       await this.auth.refreshOverview();

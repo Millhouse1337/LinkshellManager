@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AutoRefreshService } from '../discord/auto-refresh.service';
+import { LiveUpdateService } from '../discord/live-update.service';
 import {
   ActivityLinkshellSettings,
   ActivityLootStructure,
@@ -42,6 +43,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
 export class ActivityHomeComponent {
   protected readonly activity = inject(DiscordActivityService);
   private readonly autoRefresh = inject(AutoRefreshService);
+  private readonly liveUpdate = inject(LiveUpdateService);
   protected readonly activeTab = signal<TabName>('dashboard');
   protected readonly reconnecting = signal(false);
 
@@ -132,10 +134,16 @@ export class ActivityHomeComponent {
     this.autoRefresh.setActiveTab(this.activeTab());
     this.autoRefresh.start();
 
+    // Live change feed (long-poll). Primary path for freshness; when it's
+    // connected the auto-refresh timer relaxes to a safety-net cadence, and if
+    // it drops the timer takes back over — so updates never stop.
+    this.liveUpdate.start();
+
     destroyRef.onDestroy(() => {
       clearTimeout(timeoutId);
       if (intervalId !== null) clearInterval(intervalId);
       this.autoRefresh.stop();
+      this.liveUpdate.stop();
     });
   }
 
@@ -153,6 +161,13 @@ export class ActivityHomeComponent {
     this.activeTab.set(tab);
     this.autoRefresh.setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Manual refresh: refreshes the overview AND the active tab's own data through
+  // the single guarded path (spinner + error surface + in-flight dedupe), so it
+  // can't jam and always refreshes what you're looking at.
+  protected onRefreshClick(): void {
+    void this.autoRefresh.refreshNow(this.activeTab(), true);
   }
 
   // True once the first overview load has resolved. We use it to keep the tab

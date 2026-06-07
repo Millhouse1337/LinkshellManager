@@ -30,8 +30,16 @@ public sealed class DiscordEventChannelPublisher
 
     public async Task HandleAsync(int eventId, CancellationToken cancellationToken)
     {
+        // Events post via the bot ONLY (no webhook fallback) because the inline
+        // job-signup select + Withdraw button are components, which Discord
+        // strips from webhook messages. Each skip below is logged so an officer
+        // whose event "didn't post to any channel" can see exactly why.
         if (!_bot.IsConfigured)
         {
+            _logger.LogInformation(
+                "Event {EventId} not announced: the Discord bot token is not configured (DiscordOAuth:BotToken). " +
+                "Event channel posting requires the bot — webhooks can't carry the signup buttons.",
+                eventId);
             return;
         }
 
@@ -48,7 +56,12 @@ public sealed class DiscordEventChannelPublisher
             var channel = await ResolveChannelAsync(ev.LinkshellId, ev.EventType, cancellationToken);
             if (channel is null)
             {
-                return; // No channel configured for this event's type.
+                _logger.LogInformation(
+                    "Event {EventId} not announced: linkshell {LinkshellId} has no Discord channel configured for " +
+                    "event type \"{EventType}\" and no general \"Other events\" channel. Set one under " +
+                    "Linkshell → Configurations → Discord channels.",
+                    eventId, ev.LinkshellId, ev.EventType ?? "(none)");
+                return;
             }
 
             var signups = await LoadSignupsAsync(eventId, cancellationToken);
@@ -57,12 +70,19 @@ public sealed class DiscordEventChannelPublisher
             var messageId = await _bot.PostMessageAsync(channel.ChannelId, payload, cancellationToken);
             if (string.IsNullOrEmpty(messageId))
             {
+                _logger.LogWarning(
+                    "Event {EventId} announce: the bot failed to post to channel {ChannelId} (linkshell {LinkshellId}). " +
+                    "Check the bot is a member of the server and has the \"Send Messages\" permission in that channel.",
+                    eventId, channel.ChannelId, ev.LinkshellId);
                 return;
             }
 
             ev.DiscordChannelId = channel.ChannelId;
             ev.DiscordMessageId = messageId;
             await _db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation(
+                "Event {EventId} announced to channel {ChannelId} (message {MessageId}).",
+                eventId, channel.ChannelId, messageId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -162,7 +162,7 @@ else
        also drives the "Sign Up Manually" toggle. On page load, if the URL
        has a fragment matching a panel id (e.g. "#event-ps-panel-42"), open
        that panel — used after a PartySetup signup/withdraw round-trip. *@
-    <script>
+    <script nonce="@Html.CspNonce()">
         (function () {
             document.addEventListener('click', function (e) {
                 var t = e.target.closest('.event-ps-toggle, .event-manual__toggle');

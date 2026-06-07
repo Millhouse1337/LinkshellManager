@@ -21,6 +21,10 @@ public class DashboardViewModel
     public bool EnableToDs { get; set; } = true;
     public bool EnableHnmSection { get; set; } = true;
 
+    // SkySeaDynamis | HnmOnly | Both — drives HNM-content visibility (the HNM
+    // Claims card is hidden for SkySeaDynamis, which runs no HNM).
+    public string? LinkshellType { get; set; }
+
     public List<TodTrackerEntry> TodTracker { get; set; } = new();
     public List<HnmClaimEntry> HnmClaims { get; set; } = new();
     public int HnmClaimsTotal { get; set; }

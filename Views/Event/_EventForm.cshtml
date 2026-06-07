@@ -17,6 +17,11 @@
         : (isKnownEventType ? currentEventType : "Other");
     var initialOtherValue = isKnownEventType ? string.Empty : currentEventType;
 
+    // Linkshell style for this event's linkshell. The AttInput Entry Type field
+    // holds HNM-camp categories (Kings Camp, Wyrms Camp, …), so it's hidden for
+    // Sky/Sea/Dynamis linkshells, which run no HNM.
+    var formLinkshellType = Model.Linkshells.FirstOrDefault(l => l.Id == Model.LinkshellId)?.LinkshellType;
+
     // Edit-mode auto-tick: if we're editing a saved event (Id > 0) and the field is null,
     // pre-check the matching "Not specified" checkbox so addon-created HNM events (which
     // have null EndTime + Duration) display correctly. On Create (Id == 0) all boxes
@@ -98,6 +103,14 @@
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_StartTime">Start</label>
         <input class="form-control" id="Event_StartTime" name="Event.StartTime" type="datetime-local" value="@(Model.Event.StartTime?.ToString("yyyy-MM-ddTHH:mm"))" />
+        @* Auto-start: a background service stamps the event live at its Start time
+           so nobody has to click Start. HNM events ignore this (addon-driven).
+           Hidden "false" makes an unchecked box post false (MVC checkbox pattern). *@
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:6px 0 0">
+            <input type="checkbox" name="Event.AutoStart" value="true" @(Model.Event.AutoStart ? "checked" : null) />
+            <input type="hidden" name="Event.AutoStart" value="false" />
+            Auto start at start time
+        </label>
     </div>
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EndTime">End</label>
@@ -137,6 +150,8 @@
             </label>
         </div>
     </div>
+    @if (formLinkshellType != "SkySeaDynamis")
+    {
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_AttInputEntryType">AttInput Entry Type</label>
         <select class="form-control" id="Event_AttInputEntryType" name="Event.AttInputEntryType">
@@ -157,6 +172,7 @@
         </select>
         <small style="color:var(--fg-4);font-size:11px;margin-top:2px">Category written to the K column of the AttInput tab. Leave blank to skip sheet sync for this event.</small>
     </div>
+    }
     <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
         <label for="Event_Details">Details</label>
         <textarea class="form-control" id="Event_Details" name="Event.Details" rows="4">@Model.Event.Details</textarea>
