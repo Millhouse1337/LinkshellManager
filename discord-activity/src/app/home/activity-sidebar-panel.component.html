@@ -72,11 +72,41 @@
       @if (hasLinkshell()) {
         <div style="margin-top:4px">
           <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px">
-            <span style="font-weight:600;font-size:13px">My Jobs</span>
+            <span style="font-weight:600;font-size:13px">Jobs</span>
             <span style="font-size:12px;opacity:.7">
-              Level of each job you have (0–{{ profileJobMaxLevel }}). Shared with your linkshells and the addon's loot filter.
+              Level of each job (0–{{ profileJobMaxLevel }}). Shared with your linkshells and the addon's loot filter.
             </span>
           </div>
+
+          <!-- Character tabs: main always; an alt's tab appears once it's named. -->
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <button
+              type="button"
+              class="btn sm"
+              [class.primary]="selectedJobTab === 'main'"
+              (click)="selectJobTab('main')">
+              {{ profileModel.characterName.trim() || 'Main' }}
+            </button>
+            @if (profileModel.altCharacterName1.trim()) {
+              <button
+                type="button"
+                class="btn sm"
+                [class.primary]="selectedJobTab === 'alt1'"
+                (click)="selectJobTab('alt1')">
+                {{ profileModel.altCharacterName1.trim() }}
+              </button>
+            }
+            @if (profileModel.altCharacterName2.trim()) {
+              <button
+                type="button"
+                class="btn sm"
+                [class.primary]="selectedJobTab === 'alt2'"
+                (click)="selectJobTab('alt2')">
+                {{ profileModel.altCharacterName2.trim() }}
+              </button>
+            }
+          </div>
+
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px">
             @for (job of profileJobOptions; track job; let i = $index) {
               <label style="display:flex;flex-direction:column;gap:2px;font-size:12px">
@@ -87,7 +117,7 @@
                   min="0"
                   [max]="profileJobMaxLevel"
                   step="1"
-                  [(ngModel)]="profileModel.jobLevels[i]"
+                  [(ngModel)]="activeJobLevels[i]"
                   [name]="'profileJob' + i" />
               </label>
             }

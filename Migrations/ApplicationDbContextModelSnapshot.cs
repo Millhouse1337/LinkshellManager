@@ -508,6 +508,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("DateJoined")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("DkpSeedLedgerId")
+                        .HasColumnType("integer");
+
                     b.Property<int[]>("JobLevels")
                         .HasColumnType("jsonb");
 
@@ -519,6 +522,12 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("Rank")
                         .HasColumnType("text");
+
+                    b.Property<double>("SeededDkpEarned")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("SeededDkpSpent")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Status")
                         .HasColumnType("text");
@@ -664,6 +673,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("DiscordMessageId")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("DiscordMessageIds")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("EndTime")
                         .HasColumnType("timestamp with time zone");
@@ -1309,6 +1321,55 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("EventLootDetails", (string)null);
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.EventPartySlotSignup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("CharacterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("EventId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MainJob")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("PartySetupSlotId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("SignedUpAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubJob")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartySetupSlotId");
+
+                    b.HasIndex("EventId", "AppUserId");
+
+                    b.HasIndex("EventId", "PartySetupSlotId")
+                        .IsUnique();
+
+                    b.ToTable("EventPartySlotSignups", (string)null);
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Invite", b =>
                 {
                     b.Property<int>("Id")
@@ -1419,6 +1480,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<bool>("AuctionsLocked")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Details")
                         .HasColumnType("text");
 
@@ -1426,10 +1490,18 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("DiscordGuildName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("DkpRoundingIncrement")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DkpTemplateTabName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<bool>("EnableAuctions")
                         .HasColumnType("boolean");
@@ -1487,14 +1559,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
-
-                    b.Property<string>("LockedToDiscordGuildId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("LockedToDiscordGuildName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("LootStructure")
                         .IsRequired()
@@ -1614,6 +1678,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanCustomizeLinkshell")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanLockAuctions")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageAnnouncements")
@@ -2946,6 +3013,25 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("Event");
 
                     b.Navigation("EventHistory");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.EventPartySlotSignup", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Event", "Event")
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.PartySetupSlot", "PartySetupSlot")
+                        .WithMany()
+                        .HasForeignKey("PartySetupSlotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Event");
+
+                    b.Navigation("PartySetupSlot");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Invite", b =>

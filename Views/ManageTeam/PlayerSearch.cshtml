@@ -2,17 +2,27 @@
 @{
     ViewData["Title"] = "Add members";
     var filter = string.IsNullOrWhiteSpace(Model.Filter) ? "all" : Model.Filter!.Trim().ToLowerInvariant();
+    var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
+    var serverTied = !string.IsNullOrWhiteSpace(selectedLinkshell?.DiscordGuildId);
+    var addMemberError = TempData["AddMemberError"] as string;
 }
 
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Add members</h1>
-        <div class="page-sub"><span>Browse players and send linkshell invites</span></div>
+        <div class="page-sub"><span>Browse players and add them straight to your linkshell</span></div>
     </div>
     <div class="page-actions">
         <a class="btn ghost" asp-action="Index">Back to team</a>
     </div>
 </div>
+
+@if (!string.IsNullOrWhiteSpace(addMemberError))
+{
+    <div class="card fade d1" style="margin-bottom:12px;border-color:var(--danger)">
+        <div class="empty" style="color:var(--danger)">@addMemberError</div>
+    </div>
+}
 
 <div class="card fade d2" style="padding:16px">
     @* GET so search/filter/linkshell are shareable + bookmarkable and paginate
@@ -65,7 +75,7 @@
                 <tr>
                     <th>Character</th>
                     <th>Current linkshell</th>
-                    <th style="text-align:right">Invite</th>
+                    <th style="text-align:right">Add</th>
                 </tr>
             </thead>
             <tbody>
@@ -97,7 +107,7 @@
                                 <input type="hidden" name="search" value="@Model.SearchTerm" />
                                 <input type="hidden" name="filter" value="@filter" />
                                 <input type="hidden" name="page" value="@Model.PageNumber" />
-                                <button type="submit" class="btn primary sm">Send invite</button>
+                                <button type="submit" class="btn primary sm">Add to linkshell</button>
                             </form>
                         </td>
                     </tr>
@@ -141,3 +151,68 @@
         }
     }
 </div>
+
+@if (serverTied)
+{
+    <div class="card fade d3" style="margin-top:16px">
+        <div class="card-head">
+            <div class="card-title">From your Discord server</div>
+            <div class="card-sub"><span class="num">@Model.DiscordRoster.Count</span> available</div>
+        </div>
+        @if (Model.DiscordRoster.Count == 0)
+        {
+            <div class="empty">
+                <span>No one new to add — everyone in the server is already a member or invited. (If this looks wrong, make sure the LSM bot is in the server with the Server Members intent enabled.)</span>
+            </div>
+        }
+        else
+        {
+            <table class="table themed">
+                <thead>
+                    <tr>
+                        <th>Discord member</th>
+                        <th>Account</th>
+                        <th style="text-align:right">Add</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var candidate in Model.DiscordRoster)
+                    {
+                        <tr>
+                            <td>
+                                <span style="display:inline-flex;align-items:center;gap:8px">
+                                    @if (!string.IsNullOrWhiteSpace(candidate.AvatarUrl))
+                                    {
+                                        <img src="@candidate.AvatarUrl" alt="" width="24" height="24" style="border-radius:50%;display:block" />
+                                    }
+                                    <span>@candidate.DisplayName</span>
+                                </span>
+                            </td>
+                            <td>
+                                @if (candidate.HasAccount)
+                                {
+                                    <span class="tag">Has account</span>
+                                }
+                                else
+                                {
+                                    <span class="muted" style="color:var(--fg-3);font-size:12px">New · joins on first sign-in</span>
+                                }
+                            </td>
+                            <td style="text-align:right">
+                                <form asp-action="AddDiscordMember" method="post" style="display:inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="linkshellId" value="@Model.SelectedLinkshellId" />
+                                    <input type="hidden" name="discordUserId" value="@candidate.DiscordUserId" />
+                                    <input type="hidden" name="search" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="filter" value="@filter" />
+                                    <input type="hidden" name="page" value="@Model.PageNumber" />
+                                    <button type="submit" class="btn primary sm">@(candidate.HasAccount ? "Add to linkshell" : "Invite")</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}

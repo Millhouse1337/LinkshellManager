@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import {
   ActivityAddonToken,
   ActivityDkpRoundingIncrement,
+  ActivityGuildOption,
   ActivityLinkshellRole,
   ActivityLinkshellRolePermissionsInput,
   ActivityLootStructure,
@@ -30,6 +31,7 @@ export class ConfigurationsTabComponent {
     void this.loadRolesForSelectedLinkshell();
     this.syncCustomizeDraft();
     void this.loadDiscordChannels();
+    void this.loadEligibleGuilds();
 
     // Re-sync customize draft + reload roles when the active (primary)
     // linkshell changes — both cards now follow the dashboard selection so
@@ -45,6 +47,7 @@ export class ConfigurationsTabComponent {
       void this.loadRolesForSelectedLinkshell();
       void this.loadAddonTokensForCurrent();
       void this.loadDiscordChannels();
+      void this.loadEligibleGuilds();
     });
 
     this.destroyRef.onDestroy(() => {
@@ -235,6 +238,7 @@ export class ConfigurationsTabComponent {
     { key: 'canManageTods', label: 'Manage ToDs' },
     { key: 'canAuditDkp', label: 'Audit DKP' },
     { key: 'canManageAuctions', label: 'Manage auctions' },
+    { key: 'canLockAuctions', label: 'Lock auctions (bid freeze)' },
     { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' },
     { key: 'canManageParties', label: 'Manage party setups' },
     { key: 'canManageInvites', label: 'Manage invites' }
@@ -318,6 +322,7 @@ export class ConfigurationsTabComponent {
       canManageTods: !!this.roleDraft.permissions['canManageTods'],
       canAuditDkp: !!this.roleDraft.permissions['canAuditDkp'],
       canManageAuctions: !!this.roleDraft.permissions['canManageAuctions'],
+      canLockAuctions: !!this.roleDraft.permissions['canLockAuctions'],
       canCustomizeLinkshell: !!this.roleDraft.permissions['canCustomizeLinkshell'],
       canManageParties: !!this.roleDraft.permissions['canManageParties'],
       canManageInvites: !!this.roleDraft.permissions['canManageInvites']
@@ -474,8 +479,28 @@ export class ConfigurationsTabComponent {
   }
 
   // ----- Discord server lock -----
-  // Draft for the "server name" the user types when locking.
+  // Draft for the "server name" the user types when locking via the current
+  // server (fallback when no eligible-guild dropdown is available).
   protected guildLockNameDraft = '';
+
+  // Servers the caller can lock to (bot's servers they're also in) + the one
+  // picked in the dropdown.
+  protected readonly eligibleGuilds = signal<ActivityGuildOption[]>([]);
+  protected guildLockSelection = '';
+
+  protected async loadEligibleGuilds(): Promise<void> {
+    if (!this.canCustomizeSelectedLinkshell()) {
+      this.eligibleGuilds.set([]);
+      return;
+    }
+    const guilds = await this.activity.loadEligibleGuilds();
+    this.eligibleGuilds.set(guilds);
+    // Default the dropdown to the already-locked server (if it's in the list),
+    // else the first option.
+    const locked = this.lockedGuildId();
+    this.guildLockSelection =
+      (locked && guilds.some(g => g.id === locked) ? locked : guilds[0]?.id) ?? '';
+  }
 
   // The guild id the Activity is currently launched in (null on the website).
   protected currentGuildId(): string | null {
@@ -484,12 +509,12 @@ export class ConfigurationsTabComponent {
 
   protected lockedGuildId(): string | null {
     const id = this.customizeTargetLinkshellId();
-    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.lockedToDiscordGuildId ?? null;
+    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.discordGuildId ?? null;
   }
 
   protected lockedGuildName(): string | null {
     const id = this.customizeTargetLinkshellId();
-    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.lockedToDiscordGuildName ?? null;
+    return this.dashboardLinkshells().find(l => l.id === id)?.settings?.discordGuildName ?? null;
   }
 
   protected isLockedToCurrentGuild(): boolean {
@@ -497,10 +522,21 @@ export class ConfigurationsTabComponent {
     return !!locked && locked === this.currentGuildId();
   }
 
+  // Lock to the server chosen in the dropdown (the common path now).
+  protected async lockSelectedGuild(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    const guildId = this.guildLockSelection;
+    if (!id || !guildId) return;
+    const name = this.eligibleGuilds().find(g => g.id === guildId)?.name ?? null;
+    await this.activity.lockLinkshellToGuild(id, guildId, name);
+  }
+
+  // Fallback when the dropdown can't be built (bot can't list servers): lock to
+  // the server the Activity is launched in, with a typed display name.
   protected async lockToCurrentGuild(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id || !this.currentGuildId()) return;
-    const ok = await this.activity.lockLinkshellToGuild(id, this.guildLockNameDraft.trim() || null);
+    const ok = await this.activity.lockLinkshellToGuild(id, null, this.guildLockNameDraft.trim() || null);
     if (ok) this.guildLockNameDraft = '';
   }
 

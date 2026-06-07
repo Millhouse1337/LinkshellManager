@@ -252,6 +252,7 @@ public sealed partial class ActivityDataController
             if (trimmedGuildId.Length == 0)
             {
                 linkshell.DiscordGuildId = null;
+                linkshell.DiscordGuildName = null;
             }
             else if (trimmedGuildId.Length <= 20 && trimmedGuildId.All(char.IsDigit))
             {
@@ -287,10 +288,51 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Lock this linkshell to the Discord server the Activity is launched in.
-    // The guild id is taken from the request header (the server the caller is
-    // actually in) so a member can only lock to their current server, never an
-    // arbitrary one. Requires the CanCustomizeLinkshell permission.
+    // The Discord servers the caller can lock a linkshell to: the bot's servers
+    // that the caller is also a member of (mirrors the web Customize dropdown).
+    [HttpGet("eligible-guilds")]
+    public async Task<IActionResult> GetEligibleGuildsAsync(CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to list Discord servers." });
+        }
+
+        var discordUserId = await _dbContext.DiscordActivityUsers
+            .Where(link => link.IdentityUserId == appUser.Id)
+            .Select(link => link.DiscordUserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(discordUserId))
+        {
+            return Ok(Array.Empty<ActivityGuildOptionDto>());
+        }
+
+        var botGuilds = await _discordIdentityService.ListBotGuildsAsync(cancellationToken);
+        if (botGuilds is null || botGuilds.Count == 0)
+        {
+            return Ok(Array.Empty<ActivityGuildOptionDto>());
+        }
+
+        // Cap per-guild membership checks so a bot in many servers doesn't fan out
+        // into dozens of Discord calls (mirrors the web's BuildEligibleGuildsAsync).
+        const int maxChecks = 25;
+        var eligible = new List<ActivityGuildOptionDto>();
+        foreach (var guild in botGuilds.Take(maxChecks))
+        {
+            if (await _discordIdentityService.IsUserInGuildAsync(guild.Id, discordUserId, cancellationToken))
+            {
+                eligible.Add(new ActivityGuildOptionDto(guild.Id, guild.Name));
+            }
+        }
+
+        return Ok(eligible);
+    }
+
+    // Lock this linkshell to a Discord server. Prefers a server chosen from the
+    // eligible-guilds dropdown (request.GuildId, verified the caller is in it);
+    // falls back to the guild the Activity is launched in (header) when none is
+    // chosen. Requires the CanCustomizeLinkshell permission.
     [HttpPost("linkshells/{linkshellId:int}/lock-guild")]
     public async Task<IActionResult> LockLinkshellToGuildAsync(
         int linkshellId,
@@ -309,17 +351,48 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var guildId = GetRequestGuildId();
-        if (string.IsNullOrWhiteSpace(guildId))
+        string guildId;
+        var resolvedName = request.GuildName?.Trim();
+        var requestedGuildId = request.GuildId?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(requestedGuildId))
         {
-            return BadRequest(new { error = "Open the Activity inside the Discord server you want to lock to." });
+            // A server was picked from the dropdown — verify it's a real snowflake
+            // and that the caller is actually a member of it before locking.
+            if (requestedGuildId.Length > 20 || !requestedGuildId.All(char.IsDigit))
+            {
+                return BadRequest(new { error = "Invalid Discord server selection." });
+            }
+
+            var discordUserId = await _dbContext.DiscordActivityUsers
+                .Where(link => link.IdentityUserId == appUser.Id)
+                .Select(link => link.DiscordUserId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(discordUserId) ||
+                !await _discordIdentityService.IsUserInGuildAsync(requestedGuildId, discordUserId, cancellationToken))
+            {
+                return BadRequest(new { error = "You must be a member of the server you lock to." });
+            }
+
+            guildId = requestedGuildId;
+            if (string.IsNullOrWhiteSpace(resolvedName))
+            {
+                var botGuilds = await _discordIdentityService.ListBotGuildsAsync(cancellationToken);
+                resolvedName = botGuilds?.FirstOrDefault(guild => guild.Id == requestedGuildId)?.Name;
+            }
+        }
+        else
+        {
+            // No explicit pick — lock to the server the Activity is launched in.
+            guildId = GetRequestGuildId() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(guildId))
+            {
+                return BadRequest(new { error = "Pick a server from the list, or open the Activity inside the server you want to lock to." });
+            }
         }
 
-        // Don't let a member lock a linkshell to a server they can't currently
-        // see it from (their request must originate from that guild). Since the
-        // guild id is read from the header, this is implicitly satisfied, but we
-        // also reject if the linkshell is already locked to a different guild
-        // the caller isn't in (they'd be blocked from the overview anyway).
+        // Reject if the linkshell is already locked to a different guild the
+        // caller isn't launched from (they'd be blocked from the overview anyway).
         var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
         if (linkshell is null)
         {
@@ -331,9 +404,8 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        linkshell.LockedToDiscordGuildId = guildId;
-        var name = request.GuildName?.Trim();
-        linkshell.LockedToDiscordGuildName = string.IsNullOrWhiteSpace(name) ? null : name;
+        linkshell.DiscordGuildId = guildId;
+        linkshell.DiscordGuildName = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -367,8 +439,8 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        linkshell.LockedToDiscordGuildId = null;
-        linkshell.LockedToDiscordGuildName = null;
+        linkshell.DiscordGuildId = null;
+        linkshell.DiscordGuildName = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -399,9 +471,7 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
-        var guild = !string.IsNullOrWhiteSpace(linkshell.DiscordGuildId)
-            ? linkshell.DiscordGuildId
-            : linkshell.LockedToDiscordGuildId;
+        var guild = linkshell.DiscordGuildId;
         var available = string.IsNullOrWhiteSpace(guild)
             ? null
             : await _discordBot.ListTextChannelsAsync(guild, cancellationToken);
@@ -459,9 +529,7 @@ public sealed partial class ActivityDataController
         }
 
         var bindings = request.Channels ?? Array.Empty<ActivityDiscordChannelBinding>();
-        var guild = !string.IsNullOrWhiteSpace(linkshell.DiscordGuildId)
-            ? linkshell.DiscordGuildId
-            : linkshell.LockedToDiscordGuildId;
+        var guild = linkshell.DiscordGuildId;
         var available = string.IsNullOrWhiteSpace(guild)
             ? null
             : await _discordBot.ListTextChannelsAsync(guild, cancellationToken);

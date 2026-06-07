@@ -1,0 +1,79 @@
+@model LinkshellManagerDiscordApp.ViewModels.MemberProfileViewModel
+@{
+    ViewData["Title"] = "Member profile";
+    ViewData["BodyClass"] = "lsm-page";
+
+    string InitialsFor(string? name)
+    {
+        var initials = string.Concat((name ?? "?")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w[0])).ToUpperInvariant();
+        if (string.IsNullOrEmpty(initials)) { initials = "?"; }
+        return initials.Length > 2 ? initials[..2] : initials;
+    }
+
+    // Main + each named alt, as labeled characters to render.
+    var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels)>
+    {
+        (Model.Entry.CharacterName, false, Model.Entry.JobLevels)
+    };
+    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, Model.Entry.Alt1JobLevels)); }
+    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, Model.Entry.Alt2JobLevels)); }
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@Model.Entry.CharacterName</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span>@Model.LinkshellName</span>
+                <span class="dot"> · </span>
+            }
+            <span>@(Model.Entry.Rank ?? "Member")</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Index" asp-route-selectedLinkshellId="@Model.LinkshellId">Back to team</a>
+    </div>
+</div>
+
+<div class="card jr-card fade d2" style="max-width:720px">
+    <div class="jr-card-head">
+        <div class="jr-av">@InitialsFor(Model.Entry.CharacterName)</div>
+        <div class="jr-id">
+            <div class="jr-name">@Model.Entry.CharacterName</div>
+            <div class="jr-rank">@(Model.Entry.Rank ?? "Member")</div>
+        </div>
+    </div>
+
+    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-top:4px">Jobs</div>
+    @foreach (var ch in characters)
+    {
+        var leveled = ch.Levels
+            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl })
+            .Where(x => x.Level > 0)
+            .OrderByDescending(x => x.Level)
+            .ToList();
+
+        <div class="jr-char">
+            @if (ch.IsAlt)
+            {
+                <div class="jr-char-label">@ch.Label <span class="jr-alt-tag">alt</span></div>
+            }
+            @if (leveled.Count == 0)
+            {
+                <div class="jr-empty">No jobs entered</div>
+            }
+            else
+            {
+                <div class="jr-pills">
+                    @foreach (var job in leveled)
+                    {
+                        <span class="jr-pill"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span></span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>

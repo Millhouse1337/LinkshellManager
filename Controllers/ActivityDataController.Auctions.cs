@@ -54,9 +54,45 @@ public sealed partial class ActivityDataController
         var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
             _dbContext, appUser.Id, selectedLinkshellId, cancellationToken);
 
+        var auctionsLocked = await _dbContext.Linkshells
+            .Where(l => l.Id == selectedLinkshellId)
+            .Select(l => l.AuctionsLocked)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return Ok(auctions
-            .Select(auction => MapAuctionDto(auction, appUser.Id, nowUtc, availableDkp))
+            .Select(auction => MapAuctionDto(auction, appUser.Id, nowUtc, availableDkp, auctionsLocked))
             .ToList());
+    }
+
+    // Leadership freezes/unfreezes bidding for the whole linkshell (anti-collusion).
+    // Gated by CanLockAuctions.
+    [HttpPost("linkshells/{linkshellId:int}/auctions-lock")]
+    public async Task<IActionResult> SetAuctionsLockAsync(
+        int linkshellId,
+        [FromBody] ActivityAuctionsLockRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to lock auctions." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanLockAuctions, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "Linkshell not found." });
+        }
+
+        linkshell.AuctionsLocked = request.Locked;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, locked = linkshell.AuctionsLocked });
     }
 
     [HttpGet("auction-history")]
@@ -371,6 +407,15 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "This auction has already ended." });
         }
 
+        var auctionsLocked = await _dbContext.Linkshells
+            .Where(l => l.Id == auctionItem.Auction.LinkshellId)
+            .Select(l => l.AuctionsLocked)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (auctionsLocked)
+        {
+            return BadRequest(new { error = "Bidding is locked by leadership right now." });
+        }
+
         var bidAmount = request.BidAmount;
         if (bidAmount <= 0)
         {
@@ -383,10 +428,13 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = $"Bid amount cannot exceed {MaxBidAmount:N0}." });
         }
 
-        var minimumBid = Math.Max(auctionItem.StartingBidDkp ?? 0, auctionItem.CurrentHighestBid ?? 0);
-        if (bidAmount <= minimumBid)
+        // Starting bid is a suggested opening, not a floor: the first bid is
+        // accepted at any positive amount. After that, each bid must beat the
+        // current high by at least 1.
+        var currentHigh = auctionItem.CurrentHighestBid ?? 0;
+        if (currentHigh > 0 && bidAmount <= currentHigh)
         {
-            return BadRequest(new { error = $"Bid amount must be greater than {minimumBid}." });
+            return BadRequest(new { error = $"Bid amount must be greater than the current high bid of {currentHigh}." });
         }
 
         // Available = total minus DKP locked by bids the user is currently

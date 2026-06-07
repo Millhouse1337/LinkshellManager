@@ -273,6 +273,96 @@ public sealed class GoogleSheetsSyncService
         }
     }
 
+    // Resolves a tab name to its numeric sheetId (needed for batchUpdate
+    // formatting requests). Null when the tab doesn't exist.
+    public async Task<int?> GetSheetIdAsync(int linkshellId, string spreadsheetId, string tabName, CancellationToken cancellationToken)
+    {
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            return await GetSheetIdAsync(service, spreadsheetId, tabName, cancellationToken);
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
+    // Ensures a tab exists (creating it via AddSheet when missing) and returns
+    // its sheetId. Creating a tab is allowed under the spreadsheets scope.
+    public async Task<int> EnsureTabAsync(int linkshellId, string spreadsheetId, string tabName, CancellationToken cancellationToken)
+    {
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var existing = await GetSheetIdAsync(service, spreadsheetId, tabName, cancellationToken);
+            if (existing.HasValue) return existing.Value;
+
+            var request = new BatchUpdateSpreadsheetRequest
+            {
+                Requests = new List<Request>
+                {
+                    new() { AddSheet = new AddSheetRequest { Properties = new SheetProperties { Title = tabName } } },
+                },
+            };
+            var response = await service.Spreadsheets.BatchUpdate(request, spreadsheetId).ExecuteAsync(cancellationToken);
+            var added = response.Replies?.FirstOrDefault()?.AddSheet?.Properties?.SheetId;
+            return added ?? throw new InvalidOperationException($"Could not create tab \"{tabName}\".");
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
+    // Existing banded-range ids on a tab, so the caller can delete them before
+    // re-applying banding (AddBanding errors when ranges overlap).
+    public async Task<IReadOnlyList<int>> GetBandedRangeIdsAsync(int linkshellId, string spreadsheetId, int sheetId, CancellationToken cancellationToken)
+    {
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var request = service.Spreadsheets.Get(spreadsheetId);
+            request.Fields = "sheets(properties.sheetId,bandedRanges.bandedRangeId)";
+            var spreadsheet = await request.ExecuteAsync(cancellationToken);
+            var sheet = spreadsheet.Sheets?.FirstOrDefault(s => s.Properties?.SheetId == sheetId);
+            return (IReadOnlyList<int>?)sheet?.BandedRanges?
+                .Where(b => b.BandedRangeId.HasValue)
+                .Select(b => b.BandedRangeId!.Value)
+                .ToList()
+                ?? Array.Empty<int>();
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
+    // Generic batchUpdate executor for callers that build their own formatting
+    // requests (e.g. the DKP template export's styling pass).
+    public async Task BatchUpdateAsync(int linkshellId, string spreadsheetId, IList<Request> requests, CancellationToken cancellationToken)
+    {
+        if (requests is null || requests.Count == 0) return;
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var request = new BatchUpdateSpreadsheetRequest { Requests = requests };
+            await service.Spreadsheets.BatchUpdate(request, spreadsheetId).ExecuteAsync(cancellationToken);
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
     private async Task<SheetsService?> GetServiceAsync(int linkshellId, CancellationToken cancellationToken)
     {
         if (_serviceCache.TryGetValue(linkshellId, out var cached))

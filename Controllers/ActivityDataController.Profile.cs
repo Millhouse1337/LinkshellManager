@@ -73,6 +73,33 @@ public sealed partial class ActivityDataController
             }
         }
 
+        // Alt-character job levels live on the AppUser (not per-membership). Clear
+        // an alt's jobs when its name is removed; otherwise merge the submitted
+        // catalog-aligned levels — mirrors the web profile.
+        var altJobsChanged = false;
+        if (string.IsNullOrWhiteSpace(request.AltCharacterName1))
+        {
+            if (appUser.Alt1JobLevels is not null) { appUser.Alt1JobLevels = null; altJobsChanged = true; }
+        }
+        else if (request.Alt1JobLevels is { Length: > 0 })
+        {
+            appUser.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt1JobLevels, request.Alt1JobLevels);
+            altJobsChanged = true;
+        }
+        if (string.IsNullOrWhiteSpace(request.AltCharacterName2))
+        {
+            if (appUser.Alt2JobLevels is not null) { appUser.Alt2JobLevels = null; altJobsChanged = true; }
+        }
+        else if (request.Alt2JobLevels is { Length: > 0 })
+        {
+            appUser.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt2JobLevels, request.Alt2JobLevels);
+            altJobsChanged = true;
+        }
+        if (altJobsChanged)
+        {
+            await _userManager.UpdateAsync(appUser);
+        }
+
         return Ok(new { success = true });
     }
 

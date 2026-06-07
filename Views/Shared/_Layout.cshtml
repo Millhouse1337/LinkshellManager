@@ -75,6 +75,18 @@
         }
     }
 
+    // All of the signed-in user's memberships, for the sidebar linkshell
+    // switcher (name + rank per linkshell).
+    var userLinkshells = currentUser is not null
+        ? await DbContext.AppUserLinkshells
+            .AsNoTracking()
+            .Include(link => link.Linkshell)
+            .Where(link => link.AppUserId == currentUser.Id && link.Linkshell != null)
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .ToListAsync()
+        : new List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>();
+
+    ViewData["UserLinkshells"] = userLinkshells;
     ViewData["ActiveLinkshellId"] = currentUser?.PrimaryLinkshellId;
     ViewData["ActiveLinkshellType"] = activeLinkshellType;
     ViewData["ActiveEnableMissions"] = activeEnableMissions;

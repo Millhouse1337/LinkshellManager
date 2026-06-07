@@ -87,6 +87,9 @@ public partial class AuctionController
         ViewBag.CharacterName = user.CharacterName ?? user.UserName ?? "User";
         ViewBag.CurrentUserId = user.Id;
         ViewBag.CurrentTime = ConvertUtcToUserTimeZone(DateTime.UtcNow, user.TimeZone) ?? DateTime.UtcNow;
+        ViewBag.SelectedLinkshellId = selectedLinkshellId;
+        ViewBag.AuctionsLocked = false;
+        ViewBag.CanLockAuctions = false;
 
         if (selectedLinkshellId != 0)
         {
@@ -96,6 +99,12 @@ public partial class AuctionController
                 .FirstOrDefaultAsync();
             ViewBag.AvailableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
                 _context, user.Id, selectedLinkshellId, HttpContext.RequestAborted);
+            ViewBag.AuctionsLocked = await _context.Linkshells
+                .Where(l => l.Id == selectedLinkshellId)
+                .Select(l => l.AuctionsLocked)
+                .FirstOrDefaultAsync();
+            var role = await GetEffectiveRoleAsync(user.Id, selectedLinkshellId);
+            ViewBag.CanLockAuctions = role?.CanLockAuctions == true;
         }
 
         return View(viewModels);

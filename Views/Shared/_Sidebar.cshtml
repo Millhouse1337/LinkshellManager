@@ -5,6 +5,20 @@
     var activeRole = ViewData["ActiveRole"] as string;
     var perms = ViewData["ActivePermissions"] as LinkshellRole;
 
+    // Memberships for the linkshell switcher + the page to return to after a switch.
+    var userLinkshells = ViewData["UserLinkshells"] as List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>
+        ?? new List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>();
+    var switchReturnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
+
+    string LinkshellInitials(string? name)
+    {
+        var initials = string.Concat((name ?? "LS")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w[0])).ToUpperInvariant();
+        if (string.IsNullOrEmpty(initials)) { initials = "LS"; }
+        return initials.Length > 2 ? initials[..2] : initials;
+    }
+
     var currentController = (ViewContext.RouteData.Values["controller"] as string) ?? "";
     var currentAction = (ViewContext.RouteData.Values["action"] as string) ?? "";
 
@@ -51,16 +65,48 @@
         <div class="brand-name">LinkshellManager</div>
     </a>
 
-    <a class="ls-switch" asp-controller="Linkshell" asp-action="Index">
-        <div class="ls-avatar">@(string.IsNullOrEmpty(activeLinkshellInitials) ? "LS" : activeLinkshellInitials)</div>
-        <div class="ls-meta">
-            <div class="ls-name">@(activeLinkshellName ?? "No linkshell")</div>
-            <div class="ls-role">@(activeRole ?? "Member")</div>
+    <div class="ls-switcher" data-ls-switcher>
+        <button type="button" class="ls-switch" data-ls-toggle aria-haspopup="true" aria-expanded="false">
+            <div class="ls-avatar">@(string.IsNullOrEmpty(activeLinkshellInitials) ? "LS" : activeLinkshellInitials)</div>
+            <div class="ls-meta">
+                <div class="ls-name">@(activeLinkshellName ?? "No linkshell")</div>
+                <div class="ls-role">@(activeRole ?? "Member")</div>
+            </div>
+            <div class="ls-switch-icon">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6l3 3 3-3M5 10l3-3 3 3" opacity="0.6"/></svg>
+            </div>
+        </button>
+
+        <div class="ls-menu" data-ls-menu hidden>
+            @if (userLinkshells.Count > 0)
+            {
+                <div class="ls-menu-group">
+                    <div class="ls-menu-label">Switch linkshell</div>
+                    @foreach (var m in userLinkshells)
+                    {
+                        <form asp-controller="Linkshell" asp-action="Switch" method="post" class="ls-menu-form">
+                            <input type="hidden" name="linkshellId" value="@m.LinkshellId" />
+                            <input type="hidden" name="returnUrl" value="@switchReturnUrl" />
+                            <button type="submit" class="ls-menu-item @(m.LinkshellId == activeLinkshellId ? "active" : "")">
+                                <span class="ls-menu-avatar">@LinkshellInitials(m.Linkshell?.LinkshellName)</span>
+                                <span class="ls-menu-text">
+                                    <span class="ls-menu-name">@(m.Linkshell?.LinkshellName ?? "Unnamed linkshell")</span>
+                                    <span class="ls-menu-role">@(m.Rank ?? "Member")</span>
+                                </span>
+                                @if (m.LinkshellId == activeLinkshellId)
+                                {
+                                    <svg class="ls-menu-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3.5 3.5L13 5"/></svg>
+                                }
+                            </button>
+                        </form>
+                    }
+                </div>
+                <div class="ls-menu-sep"></div>
+            }
+            <a class="ls-menu-link" asp-controller="Linkshell" asp-action="Index">Manage linkshells</a>
+            <a class="ls-menu-link" asp-controller="Linkshell" asp-action="Create">Create linkshell</a>
         </div>
-        <div class="ls-switch-icon">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6l3 3 3-3M5 10l3-3 3 3" opacity="0.6"/></svg>
-        </div>
-    </a>
+    </div>
 
     <nav class="nav-section">
         <a class="nav-item @IsOn("Dashboard")" asp-controller="Dashboard" asp-action="Index">
@@ -215,6 +261,7 @@
             </button>
             <div id="nav-team" class="nav-sub">
                 <a class="nav-sub-item @IsSubActive("ManageTeam", "Index")" asp-controller="ManageTeam" asp-action="Index">View Team</a>
+                <a class="nav-sub-item @IsSubActive("ManageTeam", "JobsRoster")" asp-controller="ManageTeam" asp-action="JobsRoster">Jobs Roster</a>
                 <a class="nav-sub-item create @IsSubActive("ManageTeam", "SearchPlayers")" asp-controller="ManageTeam" asp-action="SearchPlayers">Add Members</a>
                 <a class="nav-sub-item @IsSubActive("ManageTeam", "ViewInvites")" asp-controller="ManageTeam" asp-action="ViewInvites">View Invites</a>
             </div>

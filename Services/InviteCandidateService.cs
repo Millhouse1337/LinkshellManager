@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -18,6 +19,17 @@ public sealed record InviteCandidatePage(
     int Total,
     int Page,
     int PageSize);
+
+// One member of a linkshell's Discord server who can be added straight from the
+// roster. HasAccount = already an LSM user (added straight to the roster) vs.
+// not (a Discord-keyed invite that auto-joins on their first sign-in).
+public sealed record DiscordRosterCandidate(
+    string DiscordUserId,
+    string DisplayName,
+    string? AvatarUrl,
+    bool HasAccount);
+
+public sealed record AddDiscordMemberResult(bool Success, string? Error);
 
 // Shared invite-candidate browse used by BOTH the Discord Activity
 // (ActivityDataController.Invites) and the website (ManageTeamController), so
@@ -161,5 +173,188 @@ public sealed class InviteCandidateService
             .ToListAsync(cancellationToken);
 
         return eligible.ToHashSet(StringComparer.Ordinal);
+    }
+
+    // Members of the linkshell's Discord server who can be added straight from
+    // the roster — INCLUDING people who have never used LSM. Excludes current
+    // members and anyone already holding a pending invite/join request. Returns
+    // empty when the linkshell isn't tied to a server or the bot roster is
+    // unavailable. Caller handles auth + the manage-invites permission.
+    public async Task<IReadOnlyList<DiscordRosterCandidate>> GetDiscordRosterCandidatesAsync(
+        int linkshellId,
+        string? discordGuildId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(discordGuildId))
+        {
+            return Array.Empty<DiscordRosterCandidate>();
+        }
+
+        var members = await _discordIdentityService.TryGetGuildMembersAsync(discordGuildId, cancellationToken);
+        if (members is null || members.Count == 0)
+        {
+            return Array.Empty<DiscordRosterCandidate>();
+        }
+
+        var rosterIds = members.Select(member => member.Id).ToList();
+
+        var memberAppUserIds = await _dbContext.AppUserLinkshells
+            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
+            .Select(link => link.AppUserId!)
+            .ToListAsync(cancellationToken);
+
+        var pendingInvites = await _dbContext.Invites
+            .Where(invite => invite.LinkshellId == linkshellId &&
+                             PendingInviteStatuses.Contains(invite.Status))
+            .Select(invite => new { invite.AppUserId, invite.DiscordUserId })
+            .ToListAsync(cancellationToken);
+
+        var excludedAppUserIds = memberAppUserIds
+            .Concat(pendingInvites.Where(i => i.AppUserId != null).Select(i => i.AppUserId!))
+            .Distinct()
+            .ToList();
+
+        var excludedDiscordIds = await _dbContext.DiscordActivityUsers
+            .Where(discordUser => discordUser.IdentityUserId != null &&
+                                  excludedAppUserIds.Contains(discordUser.IdentityUserId))
+            .Select(discordUser => discordUser.DiscordUserId)
+            .ToListAsync(cancellationToken);
+
+        var excluded = new HashSet<string>(excludedDiscordIds, StringComparer.Ordinal);
+        foreach (var pending in pendingInvites)
+        {
+            if (!string.IsNullOrWhiteSpace(pending.DiscordUserId))
+            {
+                excluded.Add(pending.DiscordUserId);
+            }
+        }
+
+        // Which roster members already have an LSM account (drives add-straight
+        // vs Discord-keyed invite, and a small badge in the UI).
+        var existingAccountIds = await _dbContext.DiscordActivityUsers
+            .Where(discordUser => discordUser.IdentityUserId != null && rosterIds.Contains(discordUser.DiscordUserId))
+            .Select(discordUser => discordUser.DiscordUserId)
+            .ToListAsync(cancellationToken);
+        var hasAccount = new HashSet<string>(existingAccountIds, StringComparer.Ordinal);
+
+        return members
+            .Where(member => !excluded.Contains(member.Id))
+            .OrderBy(member => member.GlobalName ?? member.Username)
+            .Take(500)
+            .Select(member => new DiscordRosterCandidate(
+                member.Id,
+                string.IsNullOrWhiteSpace(member.GlobalName) ? member.Username : member.GlobalName!,
+                DiscordIdentityService.BuildAvatarUrl(member.Id, member.Avatar),
+                hasAccount.Contains(member.Id)))
+            .ToList();
+    }
+
+    // Adds a member of the linkshell's Discord server. If they already have an
+    // LSM account they're added straight to the roster (auto-join); otherwise a
+    // Discord-keyed invite is stored that auto-joins them on first sign-in.
+    // Verifies the target is really in the server (never trust a raw id). Does
+    // NOT save when it returns an error. Caller handles auth + permission.
+    public async Task<AddDiscordMemberResult> AddDiscordMemberAsync(
+        int linkshellId,
+        string? discordGuildId,
+        string? discordUserId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(discordGuildId))
+        {
+            return new AddDiscordMemberResult(false, "This linkshell isn't tied to a Discord server.");
+        }
+
+        var trimmedId = discordUserId?.Trim() ?? string.Empty;
+        if (trimmedId.Length == 0)
+        {
+            return new AddDiscordMemberResult(false, "A Discord user is required.");
+        }
+
+        var members = await _discordIdentityService.TryGetGuildMembersAsync(discordGuildId, cancellationToken);
+        if (members is null)
+        {
+            return new AddDiscordMemberResult(false, "Couldn't read the linkshell's Discord server. Make sure the bot is in it.");
+        }
+
+        var target = members.FirstOrDefault(member => member.Id == trimmedId);
+        if (target is null)
+        {
+            return new AddDiscordMemberResult(false, "That person isn't a member of the linkshell's Discord server.");
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(target.GlobalName) ? target.Username : target.GlobalName!;
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+
+        var existingDiscordUser = await _dbContext.DiscordActivityUsers
+            .FirstOrDefaultAsync(
+                discordUser => discordUser.DiscordUserId == trimmedId && discordUser.IdentityUserId != null,
+                cancellationToken);
+
+        if (existingDiscordUser is not null)
+        {
+            var targetAppUserId = existingDiscordUser.IdentityUserId!;
+
+            var alreadyMember = await _dbContext.AppUserLinkshells
+                .AnyAsync(link => link.LinkshellId == linkshellId && link.AppUserId == targetAppUserId, cancellationToken);
+            if (alreadyMember)
+            {
+                return new AddDiscordMemberResult(false, "That player is already a member of this linkshell.");
+            }
+
+            var existingInvite = await _dbContext.Invites
+                .AnyAsync(invite => invite.LinkshellId == linkshellId &&
+                                    invite.AppUserId == targetAppUserId &&
+                                    PendingInviteStatuses.Contains(invite.Status),
+                    cancellationToken);
+            if (existingInvite)
+            {
+                return new AddDiscordMemberResult(false, "A pending invite or join request already exists for that player.");
+            }
+
+            // Auto-join the existing LSM user straight onto the roster.
+            var targetUser = await _dbContext.Users.FindAsync(new object?[] { targetAppUserId }, cancellationToken);
+            _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
+            {
+                AppUserId = targetAppUserId,
+                LinkshellId = linkshellId,
+                LinkshellDkp = 0,
+                DateJoined = DateTime.UtcNow,
+                CharacterName = targetUser?.CharacterName ?? targetUser?.UserName ?? displayName,
+                Rank = LinkshellRanks.Member,
+                Status = "Active"
+            });
+            if (targetUser is not null)
+            {
+                targetUser.PrimaryLinkshellId ??= linkshellId;
+                targetUser.PrimaryLinkshellName ??= linkshell?.LinkshellName;
+            }
+        }
+        else
+        {
+            var existingDiscordInvite = await _dbContext.Invites
+                .AnyAsync(invite => invite.LinkshellId == linkshellId &&
+                                    invite.DiscordUserId == trimmedId &&
+                                    invite.Status == "PendingInvite",
+                    cancellationToken);
+            if (existingDiscordInvite)
+            {
+                return new AddDiscordMemberResult(false, "That person has already been invited.");
+            }
+
+            // No LSM account yet — keep a Discord-keyed pending invite; it
+            // auto-joins them on their first sign-in (DiscordIdentityService).
+            _dbContext.Invites.Add(new Invite
+            {
+                AppUserId = null,
+                LinkshellId = linkshellId,
+                Status = "PendingInvite",
+                DiscordUserId = trimmedId,
+                DiscordDisplayName = displayName
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new AddDiscordMemberResult(true, null);
     }
 }

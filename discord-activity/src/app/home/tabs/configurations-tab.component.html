@@ -339,7 +339,26 @@
                 </p>
               }
             } @else {
-              @if (currentGuildId()) {
+              @if (eligibleGuilds().length > 0) {
+                <label class="customize-form__field" style="max-width:360px">
+                  <span>Discord server</span>
+                  <select name="guildLockSelect" [(ngModel)]="guildLockSelection">
+                    @for (guild of eligibleGuilds(); track guild.id) {
+                      <option [value]="guild.id">{{ guild.name }}</option>
+                    }
+                  </select>
+                </label>
+                <div style="margin-top:10px">
+                  <button type="button" class="btn primary" (click)="lockSelectedGuild()"
+                    [disabled]="!guildLockSelection || activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                    Lock to this server
+                  </button>
+                </div>
+                <p class="muted" style="font-size:12px;margin-top:8px">
+                  Only servers the LSM bot and you are both in are listed. Tip: lock to the server
+                  you're currently in so you keep access from here.
+                </p>
+              } @else if (currentGuildId()) {
                 <label class="customize-form__field" style="max-width:360px">
                   <span>Discord server name</span>
                   <input type="text" name="guildLockName" maxlength="256"
@@ -355,7 +374,7 @@
               } @else {
                 <div class="empty-state empty-state--compact">
                   <div class="empty-state-desc">
-                    Open the Activity inside the Discord server you want to lock this linkshell to.
+                    No servers available — make sure the LSM bot is in your Discord server, then reopen this page.
                   </div>
                 </div>
               }

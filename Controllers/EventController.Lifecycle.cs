@@ -1,5 +1,6 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -54,7 +55,11 @@ public partial class EventController
             .Distinct()
             .ToList();
 
-        Dictionary<int, PartySetupBoardViewModel> partySetupBoards;
+        // Party setups are reusable templates, so the roster is per EVENT — build a
+        // board per event from the template structure with that event's own slot
+        // signups overlaid (keeps one event's signups from showing on another, and
+        // keeps the web in sync with the Discord board + Activity panel).
+        Dictionary<int, PartySetupBoardViewModel> boardsByEvent = new();
         if (linkedSetupIds.Count > 0)
         {
             var linkedSetups = await _context.PartySetups
@@ -62,8 +67,21 @@ public partial class EventController
                 .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
                 .Where(ps => linkedSetupIds.Contains(ps.Id))
                 .ToListAsync();
+            var templatesById = linkedSetups.ToDictionary(ps => ps.Id);
 
-            partySetupBoards = linkedSetups.ToDictionary(ps => ps.Id, ps => new PartySetupBoardViewModel
+            var eventIdsWithSetup = events.Where(e => e.PartySetupId.HasValue).Select(e => e.Id).ToList();
+            var signupRows = await _context.EventPartySlotSignups
+                .AsNoTracking()
+                .Where(s => eventIdsWithSetup.Contains(s.EventId))
+                .ToListAsync();
+            var signupsByEvent = signupRows
+                .GroupBy(s => s.EventId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyDictionary<int, EventPartySlotSignup>)g.ToDictionary(s => s.PartySetupSlotId, s => s));
+            var emptySignups = (IReadOnlyDictionary<int, EventPartySlotSignup>)new Dictionary<int, EventPartySlotSignup>();
+
+            static PartySetupBoardViewModel BuildBoard(PartySetup ps, IReadOnlyDictionary<int, EventPartySlotSignup> sign) => new()
             {
                 Id = ps.Id,
                 Name = ps.Name,
@@ -73,29 +91,39 @@ public partial class EventController
                     Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
                     {
                         Name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
-                        Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s => new PartySetupSlotView
+                        Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s =>
                         {
-                            SlotId = s.Id,
-                            Position = s.SortOrder + 1,
-                            RequirementType = s.RequirementType,
-                            Role = s.Role,
-                            MainJob = s.MainJob,
-                            SubJob = s.SubJob,
-                            Label = s.Label,
-                            IsPartyLeader = s.IsPartyLeader,
-                            SignedUpAppUserId = s.SignedUpAppUserId,
-                            SignedUpCharacterName = s.SignedUpCharacterName,
-                            SignedUpRole = s.SignedUpRole,
-                            SignedUpMainJob = s.SignedUpMainJob,
-                            SignedUpSubJob = s.SignedUpSubJob
+                            sign.TryGetValue(s.Id, out var su);
+                            return new PartySetupSlotView
+                            {
+                                SlotId = s.Id,
+                                Position = s.SortOrder + 1,
+                                RequirementType = s.RequirementType,
+                                Role = s.Role,
+                                MainJob = s.MainJob,
+                                SubJob = s.SubJob,
+                                Label = s.Label,
+                                IsPartyLeader = s.IsPartyLeader,
+                                SignedUpAppUserId = su?.AppUserId,
+                                SignedUpCharacterName = su?.CharacterName,
+                                SignedUpRole = su?.Role,
+                                SignedUpMainJob = su?.MainJob,
+                                SignedUpSubJob = su?.SubJob
+                            };
                         }).ToList()
                     }).ToList()
                 }).ToList()
-            });
-        }
-        else
-        {
-            partySetupBoards = new Dictionary<int, PartySetupBoardViewModel>();
+            };
+
+            foreach (var evt in events.Where(e => e.PartySetupId.HasValue))
+            {
+                if (!templatesById.TryGetValue(evt.PartySetupId!.Value, out var template))
+                {
+                    continue;
+                }
+                signupsByEvent.TryGetValue(evt.Id, out var sign);
+                boardsByEvent[evt.Id] = BuildBoard(template, sign ?? emptySignups);
+            }
         }
 
         // Drive the manage badge + slot dropdown options on the inline panel.
@@ -108,7 +136,7 @@ public partial class EventController
         {
             PartySetupBoardViewModel? board = null;
             var userOwnsSlot = false;
-            if (evt.PartySetupId.HasValue && partySetupBoards.TryGetValue(evt.PartySetupId.Value, out var loaded))
+            if (evt.PartySetupId.HasValue && boardsByEvent.TryGetValue(evt.Id, out var loaded))
             {
                 board = loaded;
                 userOwnsSlot = loaded.Alliances
@@ -241,6 +269,84 @@ public partial class EventController
         return await _context.PartySetups
             .AnyAsync(setup => setup.Id == partySetupId && setup.LinkshellId == linkshellId);
     }
+
+    // Claim a linked party-setup slot FOR THIS EVENT (per-event roster, shared with
+    // the Discord board + Activity panel). Any linkshell member may sign up.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SignUpPartySlot(
+        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(evt => evt.Id == eventId);
+        if (eventEntity is null || eventEntity.PartySetupId is null)
+        {
+            return NotFound();
+        }
+
+        var slot = await _context.PartySetupSlots
+            .Include(s => s.Party!).ThenInclude(p => p.Alliance!)
+            .FirstOrDefaultAsync(s => s.Id == slotId);
+        if (slot is null || slot.Party?.Alliance?.PartySetupId != eventEntity.PartySetupId)
+        {
+            return NotFound();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
+        if (membership is null)
+        {
+            TempData["Error"] = "You're not a member of this linkshell.";
+            return SafeLocalRedirect(returnUrl);
+        }
+
+        var characterName = string.IsNullOrWhiteSpace(membership.CharacterName)
+            ? (user.CharacterName ?? user.UserName ?? "Member")
+            : membership.CharacterName;
+        var result = await EventPartySignupService.ClaimSlotAsync(
+            _context, eventId, slot, user.Id, characterName, role, mainJob, subJob, HttpContext.RequestAborted);
+        if (!result.Success)
+        {
+            TempData["Error"] = result.Error;
+        }
+        await _context.SaveChangesAsync();
+
+        return SafeLocalRedirect(returnUrl);
+    }
+
+    // Drop the member's slot in this event.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> WithdrawPartySlot(int eventId, string? returnUrl)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(evt => evt.Id == eventId);
+        if (eventEntity is null)
+        {
+            return NotFound();
+        }
+
+        if (await EventPartySignupService.LeaveAsync(_context, eventId, user.Id, HttpContext.RequestAborted))
+        {
+            await _context.SaveChangesAsync();
+        }
+
+        return SafeLocalRedirect(returnUrl);
+    }
+
+    private IActionResult SafeLocalRedirect(string? returnUrl)
+        => !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl)
+            ? Redirect(returnUrl)
+            : RedirectToAction(nameof(Index));
 
     public async Task<IActionResult> Edit(int id)
     {

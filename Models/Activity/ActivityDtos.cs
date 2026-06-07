@@ -32,7 +32,11 @@ public sealed record ActivityAppUserDto(
     string? PrimaryLinkshellName,
     // Per-job levels for the 15 classic jobs in EventJobCatalog.MainJobOptions
     // order (index 0 = WAR ... 14 = SMN). Pre-fills the profile "My Jobs" editor.
-    IReadOnlyList<int> JobLevels);
+    IReadOnlyList<int> JobLevels,
+    // Same catalog-aligned per-job levels for the two alt characters; pre-fill the
+    // per-alt job tabs.
+    IReadOnlyList<int> Alt1JobLevels,
+    IReadOnlyList<int> Alt2JobLevels);
 
 public sealed record ActivityLinkshellDto(
     int Id,
@@ -65,15 +69,12 @@ public sealed record ActivityLinkshellSettingsDto(
     IReadOnlyList<string> HiddenTodMonsters,
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     string LinkshellType,
-    // Discord server (guild) ID this linkshell is locked to, or null when
-    // unlocked. When set, only members of this server can access the linkshell
-    // (membership-verified via FilterAccessibleLinkshellIdsAsync).
+    // The single Discord server (guild) this linkshell is tied to, or null when
+    // not tied to any server. When set it both locks Activity access to that
+    // guild and scopes member search / roster to its members. DiscordGuildName
+    // is a display cache so the Configurations UI can show which server it is.
     string? DiscordGuildId,
-    // Discord guild this linkshell is locked to (null = not locked). When set,
-    // the Activity only exposes it when launched from this guild. The name is a
-    // display cache so the Configurations UI can show which server it's locked to.
-    string? LockedToDiscordGuildId,
-    string? LockedToDiscordGuildName);
+    string? DiscordGuildName);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -88,6 +89,7 @@ public sealed record ActivityPermissionsDto(
     bool CanManageTods,
     bool CanAuditDkp,
     bool CanManageAuctions,
+    bool CanLockAuctions,
     bool CanCustomizeLinkshell,
     bool CanManageParties,
     bool CanManageInvites);
@@ -183,6 +185,23 @@ public sealed record ActivityMemberDto(
     string? Status,
     double? LinkshellDkp,
     DateTime? DateJoined);
+
+// "Jobs Roster" — every member's leveled jobs (the levels they entered on their
+// Profile), for the linkshell's main + alt characters. JobCatalog is the job
+// name order (WAR..SMN); each member's level arrays are aligned to it.
+public sealed record ActivityJobsRosterDto(
+    IReadOnlyList<string> JobCatalog,
+    IReadOnlyList<ActivityJobsRosterMemberDto> Members);
+
+public sealed record ActivityJobsRosterMemberDto(
+    int Id,
+    string CharacterName,
+    string? Rank,
+    IReadOnlyList<int> JobLevels,
+    string? Alt1Name,
+    IReadOnlyList<int> Alt1JobLevels,
+    string? Alt2Name,
+    IReadOnlyList<int> Alt2JobLevels);
 
 public sealed record ActivityEventDto(
     int Id,
@@ -316,6 +335,7 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanManageTods,
     bool CanAuditDkp,
     bool CanManageAuctions,
+    bool CanLockAuctions,
     bool CanCustomizeLinkshell,
     bool CanManageParties,
     bool CanManageInvites);
@@ -337,6 +357,7 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanManageTods,
     bool CanAuditDkp,
     bool CanManageAuctions,
+    bool CanLockAuctions,
     bool CanCustomizeLinkshell,
     bool CanManageParties,
     bool CanManageInvites);
@@ -408,7 +429,10 @@ public sealed record ActivityAuctionDto(
     // The viewer's available DKP in this auction's linkshell (total minus
     // DKP locked by bids they're currently winning). Null when not computed
     // (single-auction action responses); the list endpoint always sets it.
-    double? AvailableDkp = null);
+    double? AvailableDkp = null,
+    // True when leadership has frozen bidding for the linkshell (set on the list
+    // endpoint). Drives the "Locked" badge + disabled bid inputs in the client.
+    bool AuctionsLocked = false);
 
 public sealed record ActivityAuctionItemDto(
     int Id,
@@ -568,11 +592,15 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null = leave unchanged, "" = unlock, digits = lock to that Discord server.
     string? DiscordGuildId);
 
-// Lock a linkshell to the Discord server the Activity is currently launched in.
-// The guild id comes from the X-Discord-Guild-Id header (the server the caller
-// is actually in — not spoofable via the body); the body only carries the
-// human-entered server name for display.
-public sealed record ActivityLockLinkshellRequest(string? GuildName);
+// Lock a linkshell to a Discord server. GuildId is a server chosen from the
+// eligible-guilds dropdown (the bot's servers the caller is also in) — verified
+// server-side. When GuildId is omitted, the server falls back to the guild the
+// Activity is launched in (X-Discord-Guild-Id header). GuildName is a display cache.
+public sealed record ActivityLockLinkshellRequest(string? GuildId, string? GuildName);
+
+// One Discord server the caller can lock a linkshell to (the bot is in it and
+// so is the caller). Mirrors the web Customize page's eligible-guild dropdown.
+public sealed record ActivityGuildOptionDto(string Id, string Name);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
@@ -633,7 +661,11 @@ public sealed record ActivityUpdateProfileRequest(
     string? AltCharacterName2 = null,
     // Per-job levels for the 15 classic jobs in EventJobCatalog.MainJobOptions
     // order (index 0 = WAR ... 14 = SMN). Persisted to the user's memberships.
-    int[]? JobLevels = null);
+    int[]? JobLevels = null,
+    // Catalog-aligned job levels for the two alt characters; persisted on the
+    // AppUser (not per-membership).
+    int[]? Alt1JobLevels = null,
+    int[]? Alt2JobLevels = null);
 
 // One purpose's channel binding (e.g. "HenmEvents" -> channel id). ChannelId
 // null/empty clears the binding for that purpose.
@@ -659,6 +691,8 @@ public sealed record ActivityCreateAuctionRequest(
     IReadOnlyList<ActivityAuctionItemInput> Items);
 
 public sealed record ActivityAuctionBidRequest(int BidAmount);
+
+public sealed record ActivityAuctionsLockRequest(bool Locked);
 
 public sealed record ActivityCloseAuctionRequest(IReadOnlyList<int>? DeliveredItemIds);
 

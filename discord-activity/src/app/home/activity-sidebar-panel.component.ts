@@ -31,13 +31,29 @@ export class ActivitySidebarPanelComponent {
     // the overview's appUser.jobLevels and bound to the "My Jobs" inputs. Starts
     // as 15 zeros (the classic job count) so the inputs always have a value even
     // before the overview seeds it.
-    jobLevels: Array.from({ length: 15 }, () => 0) as number[]
+    jobLevels: Array.from({ length: 15 }, () => 0) as number[],
+    // Same per-job arrays for the two alt characters (bound to the alt tabs).
+    alt1JobLevels: Array.from({ length: 15 }, () => 0) as number[],
+    alt2JobLevels: Array.from({ length: 15 }, () => 0) as number[]
   };
 
   // The 15 classic jobs, in the exact order the API's catalog-aligned jobLevels
   // array uses, so profileModel.jobLevels[i] is the level of profileJobOptions[i].
   protected readonly profileJobOptions = [...PROFILE_JOB_OPTIONS];
   protected readonly profileJobMaxLevel = 75;
+
+  // Which character's job grid the tabs are showing. The alt tabs only appear
+  // once the matching alt character has a name.
+  protected selectedJobTab: 'main' | 'alt1' | 'alt2' = 'main';
+  protected selectJobTab(tab: 'main' | 'alt1' | 'alt2'): void { this.selectedJobTab = tab; }
+
+  // The job-level array for the active tab (a live reference into profileModel,
+  // so edits write straight back to the right character).
+  protected get activeJobLevels(): number[] {
+    if (this.selectedJobTab === 'alt1' && this.profileModel.altCharacterName1.trim()) return this.profileModel.alt1JobLevels;
+    if (this.selectedJobTab === 'alt2' && this.profileModel.altCharacterName2.trim()) return this.profileModel.alt2JobLevels;
+    return this.profileModel.jobLevels;
+  }
 
   protected selectedLinkshellId = 0;
   protected selectedDkpHistoryAppUserId = '';
@@ -101,8 +117,13 @@ export class ActivitySidebarPanelComponent {
       const nextAlt2 = appUser.altCharacterName2 ?? '';
       const sourceLevels = appUser.jobLevels ?? [];
       const nextJobLevels = this.profileJobOptions.map((_, i) => sourceLevels[i] ?? 0);
+      const sourceAlt1 = appUser.alt1JobLevels ?? [];
+      const sourceAlt2 = appUser.alt2JobLevels ?? [];
+      const nextAlt1Jobs = this.profileJobOptions.map((_, i) => sourceAlt1[i] ?? 0);
+      const nextAlt2Jobs = this.profileJobOptions.map((_, i) => sourceAlt2[i] ?? 0);
       const nextSeed =
-        `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}|${nextJobLevels.join(',')}`;
+        `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}|` +
+        `${nextJobLevels.join(',')}|${nextAlt1Jobs.join(',')}|${nextAlt2Jobs.join(',')}`;
 
       if (nextSeed === this.profileSeed) {
         return;
@@ -114,6 +135,8 @@ export class ActivitySidebarPanelComponent {
       this.profileModel.altCharacterName1 = nextAlt1;
       this.profileModel.altCharacterName2 = nextAlt2;
       this.profileModel.jobLevels = nextJobLevels;
+      this.profileModel.alt1JobLevels = nextAlt1Jobs;
+      this.profileModel.alt2JobLevels = nextAlt2Jobs;
     });
 
     effect(() => {
@@ -236,21 +259,25 @@ export class ActivitySidebarPanelComponent {
   }
 
   protected async submitProfile(): Promise<void> {
-    // Only send job levels when the user is in a linkshell (they're stored
-    // per-membership); otherwise there's nothing to persist them onto.
-    const jobLevels = this.hasLinkshell()
-      ? this.profileModel.jobLevels.map(level => {
-          const value = Math.trunc(Number(level)) || 0;
-          return value < 0 ? 0 : value > this.profileJobMaxLevel ? this.profileJobMaxLevel : value;
-        })
-      : null;
+    const clamp = (levels: number[]): number[] => levels.map(level => {
+      const value = Math.trunc(Number(level)) || 0;
+      return value < 0 ? 0 : value > this.profileJobMaxLevel ? this.profileJobMaxLevel : value;
+    });
+
+    // Main job levels are stored per-membership, so only send them in a linkshell.
+    const jobLevels = this.hasLinkshell() ? clamp(this.profileModel.jobLevels) : null;
+    // Alt job levels live on the account; send each named alt's grid.
+    const alt1JobLevels = this.profileModel.altCharacterName1.trim() ? clamp(this.profileModel.alt1JobLevels) : null;
+    const alt2JobLevels = this.profileModel.altCharacterName2.trim() ? clamp(this.profileModel.alt2JobLevels) : null;
 
     await this.activity.updateProfile({
       characterName: this.profileModel.characterName.trim(),
       timeZone: this.profileModel.timeZone.trim() || null,
       altCharacterName1: this.profileModel.altCharacterName1.trim() || null,
       altCharacterName2: this.profileModel.altCharacterName2.trim() || null,
-      jobLevels
+      jobLevels,
+      alt1JobLevels,
+      alt2JobLevels
     });
   }
 

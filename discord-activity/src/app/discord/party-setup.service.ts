@@ -86,6 +86,69 @@ export class PartySetupService {
     );
   }
 
+  // ----- Per-EVENT board: party setups are reusable templates, so an event's
+  // roster is scoped to the event (shared with the Discord board + web). Cached
+  // by event id, separate from the template detailsById cache. -----
+  readonly eventBoardsById = signal<Record<number, ActivityPartySetupDetail>>({});
+
+  eventBoardFor(eventId: number): ActivityPartySetupDetail | null {
+    return this.eventBoardsById()[eventId] ?? null;
+  }
+
+  async loadEventBoard(eventId: number): Promise<void> {
+    if (!eventId) {
+      return;
+    }
+
+    this.busy.set(true);
+    this.auth.setActionError(null);
+    try {
+      const result = await this.http.fetchActivityJson<ActivityPartySetupDetail>(
+        `/api/activity/events/${eventId}/party-board`
+      );
+      this.eventBoardsById.update(map => ({ ...map, [eventId]: result }));
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading the party board failed.'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async signUpEvent(eventId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId,
+      `/api/activity/events/${eventId}/party-slots/${slotId}/signup`,
+      input,
+      'Signed up.'
+    );
+  }
+
+  async withdrawEvent(eventId: number, slotId: number): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId,
+      `/api/activity/events/${eventId}/party-slots/${slotId}/withdraw`,
+      undefined,
+      'Slot released.'
+    );
+  }
+
+  private async mutateEventSlot(eventId: number, path: string, body: unknown, message: string): Promise<boolean> {
+    this.busy.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(path, body);
+      await this.loadEventBoard(eventId);
+      this.auth.setActionMessage(message);
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the party board failed.'));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   // ----- Officer editor (create / edit / delete / assign) -----
 
   async create(input: ActivityPartySetupEditorInput): Promise<number | null> {

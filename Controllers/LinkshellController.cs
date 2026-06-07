@@ -55,6 +55,45 @@ public class LinkshellController : Controller
 
         return View(linkshells);
     }
+
+    // Switches the user's active (primary) linkshell from the sidebar switcher.
+    // The whole shell resolves data off PrimaryLinkshellId, so changing it here
+    // re-points the dashboard, nav gating, and every linkshell-scoped page.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Switch(int linkshellId, string? returnUrl)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var selected = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId)
+            .Select(link => link.Linkshell)
+            .FirstOrDefaultAsync();
+
+        // Only linkshells the user actually belongs to can be made active.
+        if (selected is null)
+        {
+            return Forbid();
+        }
+
+        user.PrimaryLinkshellId = selected.Id;
+        user.PrimaryLinkshellName = selected.LinkshellName;
+        await _userManager.UpdateAsync(user);
+
+        // Stay on the current page (local-only) so the switch feels in-place;
+        // fall back to the dashboard when there's no safe return target.
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return Redirect(returnUrl);
+        }
+
+        return RedirectToAction("Index", "Dashboard");
+    }
+
     public IActionResult Create() => View(new LinkshellViewModel());
 
     [HttpPost]
@@ -360,8 +399,8 @@ public class LinkshellController : Controller
             })
             .ToListAsync();
         EnsureWebhookRow(vm);
-        vm.LockedToDiscordGuildId = target.LockedToDiscordGuildId;
-        vm.LockedToDiscordGuildName = target.LockedToDiscordGuildName;
+        vm.LockedToDiscordGuildId = target.DiscordGuildId;
+        vm.LockedToDiscordGuildName = target.DiscordGuildName;
         vm.EligibleGuilds = await BuildEligibleGuildsAsync(user.Id, HttpContext.RequestAborted);
         await PopulateDiscordChannelsAsync(vm, target, HttpContext.RequestAborted);
         // Hide the Game Addon pairing card while a super admin has globally
@@ -586,11 +625,10 @@ public class LinkshellController : Controller
         var botGuilds = await _discordIdentity.ListBotGuildsAsync(HttpContext.RequestAborted);
         var resolvedName = botGuilds?.FirstOrDefault(guild => guild.Id == trimmed)?.Name;
 
-        linkshell.LockedToDiscordGuildId = trimmed;
-        linkshell.LockedToDiscordGuildName = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName;
-        // Keep DiscordGuildId aligned so the invite guild-eligibility filter and
-        // Discord-roster invites target the same server the linkshell is locked to.
+        // One field governs everything: Activity access lock + invite/roster
+        // scoping + channel listing all read DiscordGuildId.
         linkshell.DiscordGuildId = trimmed;
+        linkshell.DiscordGuildName = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName;
         await _context.SaveChangesAsync();
 
         TempData["CustomizeSaved"] = "Discord server lock updated.";
@@ -619,10 +657,8 @@ public class LinkshellController : Controller
             return NotFound();
         }
 
-        linkshell.LockedToDiscordGuildId = null;
-        linkshell.LockedToDiscordGuildName = null;
-        // Clear the aligned invite-filter guild too (we set it together on lock).
         linkshell.DiscordGuildId = null;
+        linkshell.DiscordGuildName = null;
         await _context.SaveChangesAsync();
 
         TempData["CustomizeSaved"] = "Discord server lock removed.";
@@ -679,9 +715,7 @@ public class LinkshellController : Controller
     private async Task PopulateDiscordChannelsAsync(
         LinkshellCustomizeViewModel vm, Linkshell target, CancellationToken cancellationToken)
     {
-        var guildForChannels = !string.IsNullOrWhiteSpace(target.DiscordGuildId)
-            ? target.DiscordGuildId
-            : target.LockedToDiscordGuildId;
+        var guildForChannels = target.DiscordGuildId;
         vm.DiscordChannelGuildId = guildForChannels;
 
         var existing = await _context.LinkshellDiscordChannels
@@ -739,9 +773,7 @@ public class LinkshellController : Controller
 
         channelIds ??= new Dictionary<string, string>();
 
-        var guildForChannels = !string.IsNullOrWhiteSpace(linkshell.DiscordGuildId)
-            ? linkshell.DiscordGuildId
-            : linkshell.LockedToDiscordGuildId;
+        var guildForChannels = linkshell.DiscordGuildId;
         var available = string.IsNullOrWhiteSpace(guildForChannels)
             ? null
             : await _discordBot.ListTextChannelsAsync(guildForChannels, HttpContext.RequestAborted);

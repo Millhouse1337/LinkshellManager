@@ -313,6 +313,16 @@ public partial class AuctionController
             return RedirectToAction(nameof(Index));
         }
 
+        var auctionsLocked = await _context.Linkshells
+            .Where(l => l.Id == auctionItem.Auction.LinkshellId)
+            .Select(l => l.AuctionsLocked)
+            .FirstOrDefaultAsync();
+        if (auctionsLocked)
+        {
+            TempData["AuctionError"] = "Bidding is locked by leadership right now.";
+            return RedirectToAction(nameof(Index));
+        }
+
         if (bidAmount <= 0)
         {
             TempData["AuctionError"] = "Bid amount must be a positive number.";
@@ -326,10 +336,13 @@ public partial class AuctionController
             return RedirectToAction(nameof(Index));
         }
 
-        var minimumBid = Math.Max(auctionItem.StartingBidDkp ?? 0, auctionItem.CurrentHighestBid ?? 0);
-        if (bidAmount <= minimumBid)
+        // Starting bid is a suggested opening, not a floor: the first bid is
+        // accepted at any positive amount. After that, each bid must beat the
+        // current high by at least 1.
+        var currentHigh = auctionItem.CurrentHighestBid ?? 0;
+        if (currentHigh > 0 && bidAmount <= currentHigh)
         {
-            TempData["AuctionError"] = $"Bid amount must be greater than {minimumBid}.";
+            TempData["AuctionError"] = $"Bid amount must be greater than the current high bid of {currentHigh}.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -362,6 +375,52 @@ public partial class AuctionController
 
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
+    }
+
+    // Leadership freezes/unfreezes bidding across ALL of the linkshell's auctions
+    // (anti-collusion: stops a friend overbidding you to release your committed
+    // DKP). Gated by the CanLockAuctions permission.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetAuctionsLock(int linkshellId, bool locked)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
+        if (role?.CanLockAuctions != true)
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FirstOrDefaultAsync(l => l.Id == linkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        linkshell.AuctionsLocked = locked;
+        await _context.SaveChangesAsync();
+        TempData["AuctionStatus"] = locked
+            ? "Bidding is now locked — no new bids will be accepted until you unlock."
+            : "Bidding is unlocked.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<LinkshellRole?> GetEffectiveRoleAsync(string appUserId, int linkshellId)
+    {
+        var rank = await _context.AppUserLinkshells
+            .Where(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId)
+            .Select(m => m.Rank)
+            .FirstOrDefaultAsync();
+        if (rank is null) return null;
+        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+        return await _context.LinkshellRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rankName);
     }
 
     // Stops bidding now without archiving the run. Mirrors the activity's

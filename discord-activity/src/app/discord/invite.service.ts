@@ -203,9 +203,9 @@ export class InviteService {
         appUserId
       });
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Invite sent.');
+      this.auth.setActionMessage('Member added to the linkshell.');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Sending the invite failed.'));
+      this.auth.setActionError(formatActionError(error, 'Adding the member failed.'));
     }
   }
 
@@ -272,9 +272,9 @@ export class InviteService {
         list.filter(candidate => candidate.discordUserId !== discordUserId)
       );
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Invite sent.');
+      this.auth.setActionMessage('Member added. (New players join on their first sign-in.)');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Sending the invite failed.'));
+      this.auth.setActionError(formatActionError(error, 'Adding the member failed.'));
     } finally {
       this.busyDiscordUserId.set(null);
     }

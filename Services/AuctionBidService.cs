@@ -49,6 +49,15 @@ public static class AuctionBidService
             return Fail("You're not a member of this linkshell, so you can't bid on its auctions.");
         }
 
+        var auctionsLocked = await db.Linkshells
+            .Where(l => l.Id == item.Auction.LinkshellId)
+            .Select(l => l.AuctionsLocked)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (auctionsLocked)
+        {
+            return Fail("Bidding is locked by leadership right now.");
+        }
+
         var now = DateTime.UtcNow;
         var started = item.Auction.StartedAt.HasValue
             || (item.Auction.StartTime.HasValue && now >= item.Auction.StartTime.Value);
@@ -71,10 +80,13 @@ public static class AuctionBidService
             return Fail($"Bid amount cannot exceed {MaxBidAmount:N0}.");
         }
 
-        var minimumBid = Math.Max(item.StartingBidDkp ?? 0, item.CurrentHighestBid ?? 0);
-        if (bidAmount <= minimumBid)
+        // The starting bid is a suggested opening, not a floor: the first bid is
+        // accepted at any positive amount (validated above). Once there's a high
+        // bid, each new bid must beat it by at least 1.
+        var currentHigh = item.CurrentHighestBid ?? 0;
+        if (currentHigh > 0 && bidAmount <= currentHigh)
         {
-            return Fail($"Bid must be greater than {minimumBid}.");
+            return Fail($"Bid must be greater than the current high bid of {currentHigh}.");
         }
 
         var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(

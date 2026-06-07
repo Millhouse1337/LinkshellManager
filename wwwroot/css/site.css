@@ -268,6 +268,82 @@ a { color: inherit; text-decoration: none; }
 .ls-role { font-size: 11px; color: var(--fg-3); }
 .ls-switch-icon svg { width: 12px; height: 12px; color: var(--fg-3); display: block; }
 
+/* Linkshell switcher dropdown (sidebar header). */
+.ls-switcher { position: relative; margin: 4px 10px 12px; }
+.ls-switcher .ls-switch { margin: 0; width: 100%; text-align: left; }
+.ls-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  z-index: 50;
+  background: var(--surface-2);
+  border: 1px solid var(--border-hot);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  max-height: 60vh; overflow-y: auto;
+}
+.ls-menu[hidden] { display: none; }
+.ls-menu-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-4); padding: 6px 8px 4px; font-weight: 600;
+}
+.ls-menu-form { margin: 0; }
+.ls-menu-item {
+  width: 100%; display: flex; align-items: center; gap: 9px;
+  padding: 7px 8px; border-radius: var(--r-sm);
+  background: transparent; border: 1px solid transparent;
+  color: var(--fg); cursor: pointer; text-align: left;
+}
+.ls-menu-item:hover { background: var(--surface); }
+.ls-menu-item.active { border-color: var(--border-hot); background: var(--surface); }
+.ls-menu-avatar {
+  width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  display: grid; place-items: center; font-size: 9px; font-weight: 700; color: #fff;
+}
+.ls-menu-text { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.ls-menu-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ls-menu-role { font-size: 11px; color: var(--fg-3); }
+.ls-menu-check { width: 14px; height: 14px; color: var(--accent); flex-shrink: 0; }
+.ls-menu-sep { height: 1px; background: var(--border); margin: 6px 4px; }
+.ls-menu-link {
+  display: block; padding: 7px 8px; border-radius: var(--r-sm);
+  font-size: 12.5px; color: var(--fg-2); text-decoration: none;
+}
+.ls-menu-link:hover { background: var(--surface); color: var(--fg); }
+
+/* Jobs Roster (Manage Team) — per-member leveled-job pills. */
+.jr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.jr-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.jr-card-head { display: flex; align-items: center; gap: 10px; }
+.jr-av {
+  width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff;
+}
+.jr-id { min-width: 0; }
+.jr-name { font-size: 14px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jr-rank { font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.jr-char { display: flex; flex-direction: column; gap: 5px; }
+.jr-char + .jr-char { border-top: 1px solid var(--border); padding-top: 8px; }
+.jr-char-label { font-size: 12px; color: var(--fg-2); font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.jr-alt-tag {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--fg-3); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px;
+}
+.jr-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.jr-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px 8px; font-size: 12px;
+}
+.jr-pill-job { color: var(--fg-2); font-weight: 500; }
+.jr-pill-lvl { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.jr-empty { font-size: 12px; color: var(--fg-3); font-style: italic; }
+
 .nav-section { padding: 2px 8px; }
 .nav-label {
   font-size: 10px;

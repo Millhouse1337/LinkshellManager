@@ -253,7 +253,8 @@
             @if (isPartySetupExpanded(event.partySetupId)) {
               <app-party-setup-panel
                 [setupId]="event.partySetupId"
-                [linkshellId]="event.linkshellId" />
+                [linkshellId]="event.linkshellId"
+                [eventId]="event.id" />
 
               @if (!event.currentParticipation) {
                 <div class="manual-signup">

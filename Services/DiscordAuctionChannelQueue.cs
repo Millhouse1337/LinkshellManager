@@ -10,8 +10,9 @@ public enum AuctionChannelJobKind
     // An auction was closed → post final results then delete the channel.
     Close,
 
-    // A bid was placed → edit the auction's posted message in place to show the
-    // current high bid per item (no new message, no channel spam).
+    // A bid was placed → post a NEW card at the bottom of the auction channel
+    // showing the current high bid per item, so the auction state isn't buried as
+    // people chat. Each bid is its own message (a running bid history).
     Update,
 }
 

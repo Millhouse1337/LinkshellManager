@@ -25,11 +25,24 @@
             History
           </button>
         </div>
+        @if (canLockAuctions()) {
+          <button type="button" class="btn sm" [class.danger-outline]="!auctionsLocked()"
+            (click)="toggleAuctionsLock()">
+            {{ auctionsLocked() ? 'Unlock bidding' : 'Lock bidding' }}
+          </button>
+        }
         @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
           <button type="button" class="btn primary sm" (click)="openCreateAuctionForm()">Create</button>
         }
       </div>
     </div>
+
+    @if (auctionsLocked()) {
+      <div class="auction-locked-banner" style="display:flex;align-items:center;gap:8px;margin:8px 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(248,113,113,.12);color:var(--fg)">
+        <span>🔒</span>
+        <span>Bidding is locked by leadership — no new bids are accepted right now.</span>
+      </div>
+    }
 
     <div class="auction-stats" role="group" aria-label="Auction stats">
       <div class="auction-stat">
@@ -180,7 +193,7 @@
                         }
                       </td>
                       <td>
-                        @if (auctionState(auction) !== 'ended' && auction.status === 'Live') {
+                        @if (auctionState(auction) !== 'ended' && auction.status === 'Live' && !auctionsLocked()) {
                           <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                             <input
                               class="bid-input"
@@ -198,6 +211,8 @@
                               {{ activity.busyAuctionItemId() === item.id ? '…' : 'Bid' }}
                             </button>
                           </div>
+                        } @else if (auctionsLocked() && auctionState(auction) !== 'ended') {
+                          <span class="muted">🔒 Locked</span>
                         } @else {
                           <span class="muted">—</span>
                         }

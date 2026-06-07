@@ -33,12 +33,12 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Two complementary guild locks are enforced together:
-        //  1. DiscordGuildId — drop any linkshell locked to a guild the user
-        //     can't prove membership in (membership-verified; unlocked = no call).
-        //  2. LockedToDiscordGuildId — hide linkshells locked to a different
-        //     Discord server than the one the Activity is launched in (the web,
-        //     with no guild header, is never filtered by this one).
+        // The single DiscordGuildId drives two complementary checks:
+        //  1. Membership — drop any linkshell tied to a guild the user can't
+        //     prove membership in (membership-verified; not tied = no call).
+        //  2. Launch context — hide linkshells tied to a different Discord
+        //     server than the one the Activity is launched in (the web, with no
+        //     guild header, is never filtered by this one).
         var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
             linkshellMemberships
                 .Select(link => (link.LinkshellId, link.Linkshell?.DiscordGuildId))
@@ -274,6 +274,9 @@ public sealed partial class ActivityDataController
         var profileJobLevels = ProfileJobLevels.ToCatalogLevels(
             linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.JobLevels
             ?? linkshellMemberships.FirstOrDefault(link => link.JobLevels != null)?.JobLevels);
+        // Alt-character job levels live on the AppUser (shared across linkshells).
+        var alt1JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt1JobLevels);
+        var alt2JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt2JobLevels);
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -285,7 +288,9 @@ public sealed partial class ActivityDataController
                 appUser.TimeZone,
                 appUser.PrimaryLinkshellId,
                 appUser.PrimaryLinkshellName,
-                profileJobLevels),
+                profileJobLevels,
+                alt1JobLevels,
+                alt2JobLevels),
             linkshellMemberships.Select(link => new ActivityLinkshellDto(
                 link.LinkshellId,
                 link.Linkshell?.LinkshellName ?? "Unknown linkshell",

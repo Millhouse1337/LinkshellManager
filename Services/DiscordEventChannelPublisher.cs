@@ -45,7 +45,11 @@ public sealed class DiscordEventChannelPublisher
 
         try
         {
+            // Load the linked party setup tree (when any) so the announcement can
+            // render the interactive board instead of the ad-hoc job roster.
             var ev = await _db.Events
+                .Include(item => item.PartySetup!)
+                    .ThenInclude(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
                 .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
             if (ev is null || !string.IsNullOrEmpty(ev.DiscordMessageId))
             {
@@ -65,7 +69,10 @@ public sealed class DiscordEventChannelPublisher
             }
 
             var signups = await LoadSignupsAsync(eventId, cancellationToken);
-            var payload = DiscordEventMessageBuilder.Build(ev, signups);
+            var slotSignups = ev.PartySetup is null
+                ? null
+                : await EventPartySignupService.GetSignupsForEventAsync(_db, ev.Id, cancellationToken);
+            var payload = DiscordEventMessageBuilder.Build(ev, signups, ev.PartySetup, slotSignups);
 
             var messageId = await _bot.PostMessageAsync(channel.ChannelId, payload, cancellationToken);
             if (string.IsNullOrEmpty(messageId))

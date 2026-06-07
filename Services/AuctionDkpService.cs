@@ -36,4 +36,27 @@ public static class AuctionDkpService
 
         return total - locked;
     }
+
+    // Batch version of the "locked" half of ComputeAvailableDkpAsync for a whole
+    // linkshell: AppUserId -> DKP committed to bids the member is currently
+    // winning on not-yet-closed auctions. Used by the DKP template export to fill
+    // the "Biddable DKP" column (= Current DKP minus this) in a single query.
+    public static async Task<Dictionary<string, double>> ComputeCommittedDkpByUserAsync(
+        ApplicationDbContext db,
+        int linkshellId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.AuctionItems
+            .Where(ai =>
+                ai.Auction != null
+                && ai.Auction.LinkshellId == linkshellId
+                && ai.CurrentHighestBidderAppUserId != null
+                && ai.CurrentHighestBid != null
+                && ai.CurrentHighestBid > 0)
+            .GroupBy(ai => ai.CurrentHighestBidderAppUserId!)
+            .Select(g => new { AppUserId = g.Key, Locked = g.Sum(ai => (double)(ai.CurrentHighestBid ?? 0)) })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(r => r.AppUserId, r => r.Locked, StringComparer.Ordinal);
+    }
 }

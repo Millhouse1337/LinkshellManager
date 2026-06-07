@@ -198,6 +198,19 @@ export class AuctionService {
     }
   }
 
+  // Leadership freezes/unfreezes bidding for the whole linkshell (anti-collusion).
+  async setAuctionsLock(linkshellId: number, locked: boolean): Promise<void> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/auctions-lock`, { locked });
+      await this.loadAuctions(linkshellId);
+      this.auth.setActionMessage(locked ? 'Bidding locked.' : 'Bidding unlocked.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the auction lock failed.'));
+    }
+  }
+
   async closeAuction(
     auctionId: number,
     linkshellId: number,

@@ -180,6 +180,38 @@ public sealed class DiscordBotClient
         }
     }
 
+    // Deletes a message (used to remove an event's signup board once the event
+    // is over). Returns false on failure; a 404 (already gone) is treated as
+    // success so re-runs don't error.
+    public async Task<bool> DeleteMessageAsync(string channelId, string messageId, CancellationToken cancellationToken)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(channelId) || string.IsNullOrWhiteSpace(messageId))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var client = CreateClient();
+            using var response = await client.DeleteAsync(
+                $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}",
+                cancellationToken);
+            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return true;
+            }
+            _logger.LogWarning(
+                "Discord delete of message {MessageId} in channel {ChannelId} failed: {Status}.",
+                messageId, channelId, response.StatusCode);
+            return false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Unable to delete message {MessageId} in channel {ChannelId}.", messageId, channelId);
+            return false;
+        }
+    }
+
     private static string Truncate(string value, int max) =>
         string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max] + "…";
 

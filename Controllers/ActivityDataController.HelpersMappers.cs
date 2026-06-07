@@ -19,7 +19,7 @@ public sealed partial class ActivityDataController
         {
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
-                Array.Empty<string>(), LinkshellTypes.Both, null, null, null);
+                Array.Empty<string>(), LinkshellTypes.Both, null, null);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -37,8 +37,7 @@ public sealed partial class ActivityDataController
             ParseHiddenTodMonsters(linkshell.HiddenTodMonsters),
             LinkshellTypes.Normalize(linkshell.LinkshellType),
             linkshell.DiscordGuildId,
-            linkshell.LockedToDiscordGuildId,
-            linkshell.LockedToDiscordGuildName);
+            linkshell.DiscordGuildName);
     }
 
     // Splits the pipe-separated storage form into a clean list of names
@@ -112,6 +111,7 @@ public sealed partial class ActivityDataController
             role.CanManageTods,
             role.CanAuditDkp,
             role.CanManageAuctions,
+            role.CanLockAuctions,
             role.CanCustomizeLinkshell,
             role.CanManageParties,
             role.CanManageInvites);
@@ -136,6 +136,7 @@ public sealed partial class ActivityDataController
             role.CanManageTods,
             role.CanAuditDkp,
             role.CanManageAuctions,
+            role.CanLockAuctions,
             role.CanCustomizeLinkshell,
             role.CanManageParties,
             role.CanManageInvites);
@@ -166,7 +167,7 @@ public sealed partial class ActivityDataController
     }
 
     private static ActivityAuctionDto MapAuctionDto(
-        Auction auction, string currentUserId, DateTime nowUtc, double? availableDkp = null)
+        Auction auction, string currentUserId, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false)
     {
         var isCreator = IsAuctionCreator(currentUserId, auction);
         var status = HasAuctionEnded(auction, nowUtc)
@@ -211,7 +212,8 @@ public sealed partial class ActivityDataController
                     item.SourceItemId,
                     item.GilAmount))
                 .ToList(),
-            availableDkp);
+            availableDkp,
+            auctionsLocked);
     }
 
     private static ActivityAuctionHistoryDto MapAuctionHistoryDto(AuctionHistory history)

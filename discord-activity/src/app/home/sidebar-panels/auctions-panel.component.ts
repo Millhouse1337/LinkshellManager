@@ -95,6 +95,26 @@ export class AuctionsPanelComponent {
     return rank === 'leader' || rank === 'officer';
   }
 
+  // The CanLockAuctions permission for the selected linkshell (gates the toggle).
+  protected canLockAuctions(): boolean {
+    const link = this.activity.overview()?.linkshells?.find(l => l.id === this.selectedLinkshellId);
+    return link?.permissions?.canLockAuctions === true;
+  }
+
+  // Leadership has frozen bidding. The list endpoint stamps the same flag on
+  // every auction, so the first one is representative.
+  protected auctionsLocked(): boolean {
+    const auctions = this.auctions();
+    return auctions.length > 0 && auctions[0].auctionsLocked === true;
+  }
+
+  protected async toggleAuctionsLock(): Promise<void> {
+    if (!this.selectedLinkshellId) {
+      return;
+    }
+    await this.activity.setAuctionsLock(this.selectedLinkshellId, !this.auctionsLocked());
+  }
+
   protected openCreateAuctionForm(): void {
     const linkshellId = this.selectedLinkshellId || this.primaryLinkshellId() || 0;
     if (!linkshellId) {
@@ -462,7 +482,9 @@ export class AuctionsPanelComponent {
   protected itemMinBid(item: { startingBidDkp?: number | null; currentHighestBid?: number | null }): number {
     const highest = item.currentHighestBid ?? 0;
     if (highest > 0) return highest + 1;
-    return item.startingBidDkp ?? 0;
+    // First bid: any positive amount — the starting bid is a suggested opening
+    // (shown in its own column), not a floor.
+    return 1;
   }
 
   protected isCurrentUserWinning(item: { currentHighestBidderAppUserId?: string | null; currentHighestBid?: number | null }): boolean {

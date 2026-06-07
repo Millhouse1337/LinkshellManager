@@ -44,18 +44,30 @@ export class PartySetupPanelComponent {
   // (a setup is a reusable template; signing up happens on an event), so it never
   // surfaces or invites roster changes.
   readonly templateOnly = input<boolean>(false);
+  // When > 0, this panel is rendering an EVENT's board: the roster is scoped to
+  // the event (per-event signups), so detail + sign-up/withdraw use the event
+  // endpoints instead of the shared template. Keeps the Activity in sync with the
+  // Discord board and the web event page.
+  readonly eventId = input<number>(0);
 
   private readonly drafts = signal<Record<number, SlotSignupDraft>>({});
 
   constructor() {
     effect(() => {
-      const id = this.setupId();
-      if (id) queueMicrotask(() => void this.partySetup.loadDetail(id));
+      const eventId = this.eventId();
+      const setupId = this.setupId();
+      if (eventId > 0) {
+        queueMicrotask(() => void this.partySetup.loadEventBoard(eventId));
+      } else if (setupId) {
+        queueMicrotask(() => void this.partySetup.loadDetail(setupId));
+      }
     });
   }
 
   protected detail() {
-    return this.partySetup.detailFor(this.setupId());
+    return this.eventId() > 0
+      ? this.partySetup.eventBoardFor(this.eventId())
+      : this.partySetup.detailFor(this.setupId());
   }
 
   protected roleOptions(): string[] {
@@ -153,17 +165,24 @@ export class PartySetupPanelComponent {
 
   protected async signUp(slot: ActivityPartySetupSlot): Promise<void> {
     const draft = this.draftFor(slot.slotId);
-    const ok = await this.partySetup.signUp(this.setupId(), slot.slotId, {
+    const picks = {
       role: this.needsRole(slot) ? (draft.role || null) : null,
       mainJob: this.needsMainJob(slot) ? (draft.mainJob || null) : null,
       subJob: this.needsSubJob(slot) ? (draft.subJob || null) : null
-    });
+    };
+    const ok = this.eventId() > 0
+      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, picks)
+      : await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
     if (ok) {
       this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '' });
     }
   }
 
   protected async withdraw(slot: ActivityPartySetupSlot): Promise<void> {
-    await this.partySetup.withdraw(this.setupId(), slot.slotId);
+    if (this.eventId() > 0) {
+      await this.partySetup.withdrawEvent(this.eventId(), slot.slotId);
+    } else {
+      await this.partySetup.withdraw(this.setupId(), slot.slotId);
+    }
   }
 }

@@ -71,6 +71,11 @@ public class Linkshell
 
     public bool EnableAuctions { get; set; } = true;
 
+    // When true, leadership has frozen bidding: all new bids are rejected across
+    // every active auction in the linkshell (prevents collusive overbidding that
+    // would release a winner's committed/biddable DKP). Toggled by CanLockAuctions.
+    public bool AuctionsLocked { get; set; } = false;
+
     public bool EnableToDs { get; set; } = true;
 
     public bool EnableEndgame { get; set; } = false;
@@ -89,19 +94,34 @@ public class Linkshell
     // grows a mob name with a comma in it. Edited from the Customize panel.
     public string HiddenTodMonsters { get; set; } = string.Empty;
 
-    // Discord guild (server) this linkshell is locked to. NULL/empty = not
-    // locked: any linkshell member may access. When set, a user must be a
-    // member of THIS guild (verified server-side via
-    // GET /users/@me/guilds/{id}/member with the user's bearer token) to
-    // access the linkshell's Activity data. Discord snowflakes are <= 20 digits.
+    // The Discord guild (server) this linkshell is tied to. NULL/empty = not
+    // tied to any server. When set it is the single source of truth for every
+    // server-scoped behavior:
+    //   * Access lock — the Activity can only be opened from this guild
+    //     (IsBlockedByGuildLock); the website is unaffected.
+    //   * Player search — Add-members browse is narrowed to people in this
+    //     server, and the bot can pull the server roster (incl. non-LSM users).
+    //   * Discord channel posting — channels are listed from this guild.
+    // Discord snowflakes are <= 20 digits. DiscordGuildName is a display cache
+    // captured when the guild is set.
     [MaxLength(20)]
     public string? DiscordGuildId { get; set; }
+
+    [MaxLength(256)]
+    public string? DiscordGuildName { get; set; }
 
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 
     [MaxLength(64)]
     public string? GoogleSheetTabName { get; set; }
+
+    // Tab that the generic DKP template export writes to and the template
+    // import reads from (the canonical 6-column Member/Alts/Current/Total/Spent
+    // layout). Default "LSM DKP". A linkshell can point this at a tab of their
+    // own sheet that they've reformatted to match the template.
+    [MaxLength(64)]
+    public string? DkpTemplateTabName { get; set; }
 
     public string? GoogleOAuthRefreshTokenEnc { get; set; }
 
@@ -111,18 +131,6 @@ public class Linkshell
     public DateTime? GoogleOAuthConnectedAt { get; set; }
 
     public bool SheetSyncEnabled { get; set; } = false;
-
-    // When set, this linkshell is locked to a single Discord server (guild):
-    // the Discord Activity only surfaces / allows access to it when launched
-    // from this guild. Prevents members from opening the linkshell's data in
-    // a different server. Null = not locked (accessible from any server). The
-    // website is unaffected — the lock only governs the Activity. The name is
-    // a display cache captured at lock time.
-    [MaxLength(32)]
-    public string? LockedToDiscordGuildId { get; set; }
-
-    [MaxLength(256)]
-    public string? LockedToDiscordGuildName { get; set; }
 
     // Per-LS override of the AttInput tab name. Default is "AttInput", but
     // each linkshell can rename their tab. The sync service appends rows here

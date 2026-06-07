@@ -1,8 +1,8 @@
 @model LinkshellManagerDiscordApp.ViewModels.LinkshellSheetViewModel
 @{
     ViewData["Title"] = "Google Sheet";
-    var readRange = Model.PreviewRange ?? "Main!B7:C200";
-    var preview = Model.Preview;
+    var templatePreview = Model.TemplatePreview;
+    var templateTab = string.IsNullOrWhiteSpace(Model.DkpTemplateTabName) ? "LSM DKP" : Model.DkpTemplateTabName;
 }
 
 @functions {
@@ -27,7 +27,7 @@
     <div>
         <h1 class="page-title">Google Sheet Integration</h1>
         <div class="page-sub">
-            <span>One-way sync from LSManager to a Google Sheet</span>
+            <span>Sync DKP with a Google Sheet — export &amp; import the generic template</span>
             @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
             {
                 <span class="dot"> · </span>
@@ -213,6 +213,11 @@ else
                         <input class="input" type="text" name="manualPointsTabName" value="@Model.ManualPointsTabName" placeholder="ManualPoints" />
                         <small>Defaults to <code>ManualPoints</code>. Each DKP audit adds a new column to this tab (header = <code>M/D Audit: reason</code>, value in the affected member's row).</small>
                     </div>
+                    <div class="form-row" style="margin:0">
+                        <label>DKP template tab name (optional)</label>
+                        <input class="input" type="text" name="dkpTemplateTabName" value="@Model.DkpTemplateTabName" placeholder="LSM DKP" />
+                        <small>Defaults to <code>LSM DKP</code>. The Export below writes this tab and Import reads it. Point it at a tab you've reformatted to match the template.</small>
+                    </div>
                 </div>
                 <div style="margin-top:12px">
                     <button type="submit" class="btn">Save</button>
@@ -228,145 +233,93 @@ else
         {
             <div class="card fade d4">
                 <div class="card-head">
-                    <div class="card-title">Step 3 — Import existing balances (optional)</div>
+                    <div class="card-title">Generic DKP template — Export &amp; Import</div>
                 </div>
-                <form asp-action="ImportPreview" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
-                    <input type="hidden" name="readRange" value="@readRange" />
-                    <div>
-                        <button type="submit" class="btn">Preview import</button>
-                    </div>
-                </form>
+                <div style="padding:12px 16px">
+                    <p style="margin-top:0">
+                        One styled tab — <code>@templateTab</code> — is the canonical DKP layout:
+                        <strong>Member Name</strong>, <strong>Alt 1</strong>, <strong>Alt 2</strong>,
+                        <strong>Current DKP</strong>, <strong>Biddable DKP</strong>, <strong>Total DKP</strong>, <strong>Total DKP Spent</strong>.
+                        <em>Export</em> pushes the app's DKP into it; <em>Import</em> pulls it back in — it sets each
+                        member's Current DKP and seeds their lifetime totals, matching members by name (alts count too).
+                        Biddable DKP (Current minus DKP locked in winning bids on active auctions) is computed and
+                        export-only — it's ignored on import. To bring in your own tracker, format a tab to match those
+                        headers and point the tab name at it above.
+                    </p>
 
-                @if (preview is not null)
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                        <form asp-action="ExportTemplate" asp-route-linkshellId="@Model.LinkshellId" method="post" style="display:inline">
+                            <button type="submit" class="btn btn-primary">Export DKP to template</button>
+                        </form>
+                        <form asp-action="ImportPreview" asp-route-linkshellId="@Model.LinkshellId" method="post" style="display:inline">
+                            <button type="submit" class="btn">Preview import</button>
+                        </form>
+                        @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+                        {
+                            <a class="btn" target="_blank" href="https://docs.google.com/spreadsheets/d/@Model.SpreadsheetId/edit">Open sheet</a>
+                        }
+                    </div>
+                </div>
+
+                @if (templatePreview is not null)
                 {
-                    var willCreate = preview.MissingMembers.Count;
-                    var willUpdate = preview.Updates.Count(u => !u.Matches);
-                    var unchanged = preview.Updates.Count(u => u.Matches);
-                    <div style="padding:8px 16px">
+                    <div style="padding:0 16px 12px">
                         <div style="margin-bottom:8px;font-size:14px">
-                            <span style="color:#4ade80">@unchanged unchanged</span> ·
-                            <span style="color:#fbbf24">@willUpdate will update</span> ·
-                            <span style="color:#60a5fa">@willCreate will create placeholder(s)</span>
-                            · range <code>@preview.Range</code>
+                            <span style="color:#4ade80">@templatePreview.MatchedCount matched</span> ·
+                            <span style="color:#fbbf24">@templatePreview.UnmatchedCount not in roster</span>
+                            · tab <code>@templatePreview.Tab</code>
                         </div>
 
-                        @if (preview.Updates.Count > 0)
+                        @if (templatePreview.Rows.Count == 0)
                         {
-                            <details open style="margin-top:8px">
-                                <summary>Existing members in this linkshell that match the sheet (@preview.Updates.Count)</summary>
-                                <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
-                                    <thead><tr>
-                                        <th style="text-align:left;padding:6px 10px">Character</th>
-                                        <th style="text-align:right;padding:6px 10px">App DKP</th>
-                                        <th style="text-align:right;padding:6px 10px">Sheet DKP</th>
-                                        <th style="text-align:left;padding:6px 10px">Result</th>
-                                    </tr></thead>
-                                    <tbody>
-                                    @foreach (var u in preview.Updates)
-                                    {
-                                        <tr style="border-top:1px solid var(--border,#222)">
-                                            <td style="padding:6px 10px">@u.CharacterName</td>
-                                            <td style="padding:6px 10px;text-align:right">@u.CurrentDkp.ToString("0.##")</td>
-                                            <td style="padding:6px 10px;text-align:right">@u.SheetDkp.ToString("0.##")</td>
-                                            <td style="padding:6px 10px">
-                                                @if (u.Matches)
-                                                {
-                                                    <span style="color:#4ade80">✓ no change</span>
-                                                }
-                                                else
-                                                {
-                                                    <span style="color:#fbbf24">will update (@((u.SheetDkp - u.CurrentDkp).ToString("+0.##;-0.##;0"))) </span>
-                                                }
-                                            </td>
-                                        </tr>
-                                    }
-                                    </tbody>
-                                </table>
-                            </details>
+                            <div class="empty">No rows found in the template tab. Export first, or check the tab name and headers.</div>
                         }
-
-                        @if (preview.MissingMembers.Count > 0)
+                        else
                         {
-                            <details open style="margin-top:8px" id="missing-details">
-                                <summary>Sheet characters not yet in this linkshell — will be created as placeholders (@preview.MissingMembers.Count)</summary>
-                                <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap">
-                                    <input type="text" id="missing-search" placeholder="Search character name…" autocomplete="off" style="flex:1;min-width:200px;max-width:320px;padding:4px 8px" />
-                                    <span id="missing-count" style="font-size:12px;color:var(--fg-muted,#888)"></span>
-                                </div>
-                                <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px" id="missing-table">
-                                    <thead><tr>
-                                        <th style="text-align:left;padding:6px 10px">Character</th>
-                                        <th style="text-align:right;padding:6px 10px">Sheet DKP</th>
-                                    </tr></thead>
-                                    <tbody>
-                                    @foreach (var m in preview.MissingMembers)
-                                    {
-                                        <tr style="border-top:1px solid var(--border,#222)">
-                                            <td style="padding:6px 10px">@m.CharacterName</td>
-                                            <td style="padding:6px 10px;text-align:right">@m.SheetDkp.ToString("0.##")</td>
-                                        </tr>
-                                    }
-                                    </tbody>
-                                </table>
-                                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:13px">
-                                    <button type="button" class="btn sm" id="missing-prev">‹ Prev</button>
-                                    <span id="missing-page-indicator" style="color:var(--fg-muted,#888)">Page 1 / 1</span>
-                                    <button type="button" class="btn sm" id="missing-next">Next ›</button>
-                                </div>
-                            </details>
-                            <script nonce="@Html.CspNonce()">
-                                (function () {
-                                    var PAGE_SIZE = 15;
-                                    var table = document.getElementById('missing-table');
-                                    if (!table) return;
-                                    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
-                                    var search = document.getElementById('missing-search');
-                                    var indicator = document.getElementById('missing-page-indicator');
-                                    var countLabel = document.getElementById('missing-count');
-                                    var prev = document.getElementById('missing-prev');
-                                    var next = document.getElementById('missing-next');
-                                    var page = 0;
-                                    var filter = '';
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
+                                <thead><tr>
+                                    <th style="text-align:left;padding:6px 10px">Member</th>
+                                    <th style="text-align:right;padding:6px 10px">Current (app → sheet)</th>
+                                    <th style="text-align:right;padding:6px 10px">Total</th>
+                                    <th style="text-align:right;padding:6px 10px">Spent</th>
+                                    <th style="text-align:left;padding:6px 10px">Match</th>
+                                </tr></thead>
+                                <tbody>
+                                @foreach (var row in templatePreview.Rows)
+                                {
+                                    <tr style="border-top:1px solid var(--border,#222)">
+                                        <td style="padding:6px 10px">@row.Name</td>
+                                        <td style="padding:6px 10px;text-align:right">
+                                            @if (row.Matched)
+                                            {
+                                                <span>@row.OldCurrent.ToString("0.##") → <strong>@row.NewCurrent.ToString("0.##")</strong></span>
+                                            }
+                                            else
+                                            {
+                                                <span>@row.NewCurrent.ToString("0.##")</span>
+                                            }
+                                        </td>
+                                        <td style="padding:6px 10px;text-align:right">@row.Total.ToString("0.##")</td>
+                                        <td style="padding:6px 10px;text-align:right">@row.Spent.ToString("0.##")</td>
+                                        <td style="padding:6px 10px">
+                                            @if (row.Matched)
+                                            {
+                                                <span style="color:#4ade80">✓ matched</span>
+                                            }
+                                            else
+                                            {
+                                                <span style="color:#fbbf24">no member</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
 
-                                    function render() {
-                                        var visible = filter
-                                            ? rows.filter(function (r) {
-                                                var cell = r.firstElementChild;
-                                                return cell && cell.textContent.toLowerCase().indexOf(filter) !== -1;
-                                            })
-                                            : rows;
-                                        var totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-                                        if (page >= totalPages) page = totalPages - 1;
-                                        if (page < 0) page = 0;
-                                        var start = page * PAGE_SIZE;
-                                        var end = start + PAGE_SIZE;
-                                        for (var i = 0; i < rows.length; i++) rows[i].style.display = 'none';
-                                        var slice = visible.slice(start, end);
-                                        for (var j = 0; j < slice.length; j++) slice[j].style.display = '';
-                                        indicator.textContent = 'Page ' + (page + 1) + ' / ' + totalPages;
-                                        countLabel.textContent = filter
-                                            ? visible.length + ' matched of ' + rows.length
-                                            : rows.length + ' total';
-                                        prev.disabled = page === 0;
-                                        next.disabled = page >= totalPages - 1;
-                                    }
-
-                                    search.addEventListener('input', function () {
-                                        filter = search.value.trim().toLowerCase();
-                                        page = 0;
-                                        render();
-                                    });
-                                    prev.addEventListener('click', function () { page--; render(); });
-                                    next.addEventListener('click', function () { page++; render(); });
-                                    render();
-                                })();
-                            </script>
+                            <form asp-action="ImportCommit" asp-route-linkshellId="@Model.LinkshellId" method="post" style="margin-top:12px">
+                                <button type="submit" class="btn btn-primary" onclick="return confirm('Commit the import? This sets each matched member\'s Current DKP from the sheet and seeds their lifetime Total / Total Spent.');">Commit import</button>
+                            </form>
                         }
-
-                        <form asp-action="ImportCommit" asp-route-linkshellId="@Model.LinkshellId" method="post" style="margin-top:12px">
-                            <input type="hidden" name="readRange" value="@readRange" />
-                            <button type="submit" class="btn btn-primary" onclick="return confirm('Commit the import? This will set member DKP balances to the sheet values, create placeholders for new names, and write SheetImport ledger entries.');">Commit import</button>
-                        </form>
                     </div>
                 }
             </div>

@@ -1,0 +1,134 @@
+@model LinkshellManagerDiscordApp.ViewModels.JobsRosterViewModel
+@{
+    ViewData["Title"] = "Jobs Roster";
+    ViewData["BodyClass"] = "lsm-page";
+    var message = ViewBag.Message as string;
+    var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
+
+    string InitialsFor(string? name)
+    {
+        var initials = string.Concat((name ?? "?")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w[0])).ToUpperInvariant();
+        if (string.IsNullOrEmpty(initials)) { initials = "?"; }
+        return initials.Length > 2 ? initials[..2] : initials;
+    }
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Jobs Roster</h1>
+        <div class="page-sub">
+            @if (selectedLinkshell != null)
+            {
+                <span>@selectedLinkshell.LinkshellName</span>
+                <span class="dot"> · </span>
+            }
+            <span><span class="num">@Model.Entries.Count</span> member@(Model.Entries.Count == 1 ? "" : "s")</span>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">@message</div>
+        </div>
+    </div>
+}
+else
+{
+    @if (Model.Linkshells.Count > 1)
+    {
+        <div class="card fade d2" style="padding:16px;margin-bottom:16px">
+            <form asp-action="JobsRoster" method="get" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+                <div class="field">
+                    <label for="selectedLinkshellId">Linkshell</label>
+                    <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select" style="min-width:240px">
+                        @foreach (var linkshell in Model.Linkshells)
+                        {
+                            if (linkshell.Id == Model.SelectedLinkshellId)
+                            {
+                                <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                            }
+                            else
+                            {
+                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <button type="submit" class="btn primary sm" style="margin-bottom:14px;white-space:nowrap">Switch Linkshell</button>
+            </form>
+        </div>
+    }
+
+    <div class="card fade d2" style="padding:14px 16px;margin-bottom:16px">
+        <div class="page-sub" style="margin:0">
+            Job levels each member entered on their Profile. Only leveled jobs (1–@LinkshellManagerDiscordApp.Utils.ProfileJobLevels.MaxLevel) are shown.
+        </div>
+    </div>
+
+    @if (Model.Entries.Count == 0)
+    {
+        <div class="card fade d3">
+            <div class="empty">
+                <div style="font-size:15px;color:var(--fg);font-weight:500">No app-linked members yet.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="jr-grid fade d3">
+            @foreach (var entry in Model.Entries)
+            {
+                var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels)>
+                {
+                    (entry.CharacterName, false, entry.JobLevels)
+                };
+                if (entry.Alt1Name is not null) { characters.Add((entry.Alt1Name, true, entry.Alt1JobLevels)); }
+                if (entry.Alt2Name is not null) { characters.Add((entry.Alt2Name, true, entry.Alt2JobLevels)); }
+
+                <div class="card jr-card">
+                    <div class="jr-card-head">
+                        <div class="jr-av">@InitialsFor(entry.CharacterName)</div>
+                        <div class="jr-id">
+                            <div class="jr-name">@entry.CharacterName</div>
+                            <div class="jr-rank">@(entry.Rank ?? "Member")</div>
+                        </div>
+                    </div>
+
+                    @foreach (var ch in characters)
+                    {
+                        var leveled = ch.Levels
+                            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl })
+                            .Where(x => x.Level > 0)
+                            .OrderByDescending(x => x.Level)
+                            .ToList();
+
+                        <div class="jr-char">
+                            @if (ch.IsAlt)
+                            {
+                                <div class="jr-char-label">@ch.Label <span class="jr-alt-tag">alt</span></div>
+                            }
+                            @if (leveled.Count == 0)
+                            {
+                                <div class="jr-empty">No jobs entered</div>
+                            }
+                            else
+                            {
+                                <div class="jr-pills">
+                                    @foreach (var job in leveled)
+                                    {
+                                        <span class="jr-pill"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span></span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+}

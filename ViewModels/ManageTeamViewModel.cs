@@ -49,6 +49,11 @@ public class ManageTeamViewModel
     // "all" (default), "unaffiliated" (no linkshell), or "affiliated".
     public string? Filter { get; set; }
 
+    // Members of the linkshell's Discord server (incl. people without an LSM
+    // account yet) who can be added straight from the roster. Populated on the
+    // Add-members page only when the linkshell is tied to a Discord server.
+    public List<DiscordRosterCandidate> DiscordRoster { get; set; } = new();
+
     public List<Invite> PendingInvites { get; set; } = new();
 
     public List<Invite> SentInvites { get; set; } = new();

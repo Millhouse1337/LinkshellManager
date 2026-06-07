@@ -77,62 +77,83 @@
 
         @if (Model.HasLinkshell)
         {
+            var mainTabLabel = string.IsNullOrWhiteSpace(Model.CharacterName) ? "Main" : Model.CharacterName;
+            var hasAlt1 = !string.IsNullOrWhiteSpace(Model.AltCharacterName1);
+            var hasAlt2 = !string.IsNullOrWhiteSpace(Model.AltCharacterName2);
+
             <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
                 <div style="font-weight:500;color:var(--fg);margin-bottom:6px">My Jobs</div>
-                <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
+                <div style="font-size:12px;color:var(--fg-3);margin-bottom:12px">
                     Set the level of each job you have (0 = not leveled, max @ProfileJobLevels.MaxLevel). These are
                     shared with your linkshells and the in-game addon's "can equip" loot filter.
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
-                    @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+
+                @* Character tabs — main always; an alt tab appears once it's named.
+                   All panels stay in the DOM so the form still submits every grid;
+                   the script below just toggles which one is visible. *@
+                <div class="jobtabs" role="tablist" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+                    <button type="button" class="btn sm primary jobtab" data-jobtab="main">@mainTabLabel</button>
+                    @if (hasAlt1)
                     {
-                        var level = i < Model.JobLevels.Count ? Model.JobLevels[i] : 0;
-                        <div class="field" style="margin:0">
-                            <label for="job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
-                            <input id="job-@i" type="number" class="form-control" name="JobLevels[@i]"
-                                   value="@level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
-                        </div>
+                        <button type="button" class="btn sm jobtab" data-jobtab="alt1">@Model.AltCharacterName1</button>
+                    }
+                    @if (hasAlt2)
+                    {
+                        <button type="button" class="btn sm jobtab" data-jobtab="alt2">@Model.AltCharacterName2</button>
                     }
                 </div>
+
+                <div class="jobtab-panel" data-jobpanel="main">
+                    <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@mainTabLabel job levels</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                        @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+                        {
+                            var level = i < Model.JobLevels.Count ? Model.JobLevels[i] : 0;
+                            <div class="field" style="margin:0">
+                                <label for="job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
+                                <input id="job-@i" type="number" class="form-control" name="JobLevels[@i]"
+                                       value="@level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (hasAlt1)
+                {
+                    <div class="jobtab-panel" data-jobpanel="alt1" hidden>
+                        <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@Model.AltCharacterName1 job levels</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                            @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+                            {
+                                var alt1Level = i < Model.Alt1JobLevels.Count ? Model.Alt1JobLevels[i] : 0;
+                                <div class="field" style="margin:0">
+                                    <label for="alt1-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
+                                    <input id="alt1-job-@i" type="number" class="form-control" name="Alt1JobLevels[@i]"
+                                           value="@alt1Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (hasAlt2)
+                {
+                    <div class="jobtab-panel" data-jobpanel="alt2" hidden>
+                        <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@Model.AltCharacterName2 job levels</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                            @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
+                            {
+                                var alt2Level = i < Model.Alt2JobLevels.Count ? Model.Alt2JobLevels[i] : 0;
+                                <div class="field" style="margin:0">
+                                    <label for="alt2-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
+                                    <input id="alt2-job-@i" type="number" class="form-control" name="Alt2JobLevels[@i]"
+                                           value="@alt2Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
-
-            @if (!string.IsNullOrWhiteSpace(Model.AltCharacterName1))
-            {
-                <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-                    <div style="font-weight:500;color:var(--fg);margin-bottom:6px">Jobs — @Model.AltCharacterName1</div>
-                    <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">Job levels for your alt @Model.AltCharacterName1.</div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
-                        @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
-                        {
-                            var alt1Level = i < Model.Alt1JobLevels.Count ? Model.Alt1JobLevels[i] : 0;
-                            <div class="field" style="margin:0">
-                                <label for="alt1-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
-                                <input id="alt1-job-@i" type="number" class="form-control" name="Alt1JobLevels[@i]"
-                                       value="@alt1Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(Model.AltCharacterName2))
-            {
-                <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-                    <div style="font-weight:500;color:var(--fg);margin-bottom:6px">Jobs — @Model.AltCharacterName2</div>
-                    <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">Job levels for your alt @Model.AltCharacterName2.</div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
-                        @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
-                        {
-                            var alt2Level = i < Model.Alt2JobLevels.Count ? Model.Alt2JobLevels[i] : 0;
-                            <div class="field" style="margin:0">
-                                <label for="alt2-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
-                                <input id="alt2-job-@i" type="number" class="form-control" name="Alt2JobLevels[@i]"
-                                       value="@alt2Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
         }
 
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
@@ -216,3 +237,22 @@
         </li>
     </ul>
 </div>
+
+@section Scripts {
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var tabs = document.querySelectorAll('.jobtab');
+            var panels = document.querySelectorAll('.jobtab-panel');
+            if (!tabs.length) { return; }
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    var target = tab.getAttribute('data-jobtab');
+                    tabs.forEach(function (t) { t.classList.toggle('primary', t === tab); });
+                    panels.forEach(function (p) {
+                        p.hidden = p.getAttribute('data-jobpanel') !== target;
+                    });
+                });
+            });
+        })();
+    </script>
+}

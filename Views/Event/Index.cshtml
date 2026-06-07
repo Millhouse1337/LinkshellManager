@@ -325,7 +325,7 @@ else
                                                 </div>
                                                 @if (slot.IsOpen)
                                                 {
-                                                    <form class="event-ps-slot__controls" asp-controller="PartySetup" asp-action="SignUp" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post">
+                                                    <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@item.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
                                                         @Html.AntiForgeryToken()
                                                         <input type="hidden" name="returnUrl" value="@returnUrl" />
                                                         @if (!slotRequiresRole)
@@ -362,7 +362,7 @@ else
                                                                 <span class="muted">· @slot.SignedUpJobsDisplay</span>
                                                             }
                                                         </span>
-                                                        <form asp-controller="PartySetup" asp-action="Withdraw" asp-route-id="@board.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
+                                                        <form asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@item.Event.Id" method="post" style="display:inline">
                                                             @Html.AntiForgeryToken()
                                                             <input type="hidden" name="returnUrl" value="@returnUrl" />
                                                             <button type="submit" class="btn ghost sm" style="color:var(--danger)">Withdraw</button>

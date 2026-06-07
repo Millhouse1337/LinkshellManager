@@ -14,6 +14,10 @@
         var notEnded = !a.Auction.EndTime.HasValue || currentTime < a.Auction.EndTime.Value;
         return started && notEnded;
     });
+
+    var auctionsLocked = ViewBag.AuctionsLocked as bool? ?? false;
+    var canLockAuctions = ViewBag.CanLockAuctions as bool? ?? false;
+    var selectedLinkshellId = ViewBag.SelectedLinkshellId as int? ?? 0;
 }
 
 <div class="page-head fade d1">
@@ -25,9 +29,33 @@
             {
                 <span class="live-dot">Live</span>
             }
+            @if (auctionsLocked)
+            {
+                <span class="tag" style="color:var(--danger)">🔒 Bidding locked</span>
+            }
         </div>
     </div>
+    @if (canLockAuctions && selectedLinkshellId != 0)
+    {
+        <div class="page-actions">
+            <form asp-action="SetAuctionsLock" method="post" style="display:inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="linkshellId" value="@selectedLinkshellId" />
+                <input type="hidden" name="locked" value="@((!auctionsLocked).ToString().ToLowerInvariant())" />
+                <button type="submit" class="btn @(auctionsLocked ? "primary" : "")">
+                    @(auctionsLocked ? "Unlock bidding" : "Lock bidding")
+                </button>
+            </form>
+        </div>
+    }
 </div>
+
+@if (auctionsLocked)
+{
+    <div class="alert alert-danger fade d2">
+        🔒 Bidding is locked by leadership — no new bids are accepted until it's unlocked.
+    </div>
+}
 
 @if (TempData["AuctionError"] is string auctionError)
 {
@@ -184,7 +212,7 @@ else
                                 <td style="text-align:right">
                                     <div style="display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap">
                                         <button type="button" class="btn ghost sm viewBidsButton" data-item-id="@item.Id">View Bids</button>
-                                        @if (auctionLive)
+                                        @if (auctionLive && !auctionsLocked)
                                         {
                                             <button type="button"
                                                     class="btn primary sm makeBidButton"
@@ -192,6 +220,10 @@ else
                                                     data-item-name="@item.ItemName"
                                                     data-current-highest-bid="@item.CurrentHighestBid"
                                                     data-starting-bid="@item.StartingBidDkp">Bid</button>
+                                        }
+                                        else if (auctionLive && auctionsLocked)
+                                        {
+                                            <span class="tag" style="color:var(--danger)">🔒 Locked</span>
                                         }
                                         @if (canEdit)
                                         {
@@ -425,10 +457,13 @@ else
                     const itemName = button.getAttribute('data-item-name');
                     const currentHighestBid = parseInt(button.getAttribute('data-current-highest-bid') || '0', 10);
                     const startingBid = parseInt(button.getAttribute('data-starting-bid') || '0', 10);
-                    minimumBid = Math.max(currentHighestBid, startingBid);
+                    // Starting bid is a suggested opening, not a floor: the first bid
+                    // only needs to be positive; later bids must beat the current high.
+                    minimumBid = currentHighestBid;
+                    const suggested = currentHighestBid > 0 ? currentHighestBid + 1 : Math.max(startingBid, 1);
                     document.getElementById('auctionItemId').value = itemId;
                     document.getElementById('itemName').value = itemName;
-                    document.getElementById('bidAmount').value = String(minimumBid + 1);
+                    document.getElementById('bidAmount').value = String(suggested);
                     new bootstrap.Modal(document.getElementById('makeBidModal')).show();
                 });
             });

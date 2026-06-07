@@ -92,6 +92,7 @@
                   <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
                   <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
                   <div class="ac-roster-actions">
+                    <button type="button" class="btn ghost sm" (click)="openMemberProfile(member.id)">View Profile</button>
                     @if (canEditRosterRank(member.appUserId)) {
                       @if (editingRankMemberId() === member.id) {
                         <button
@@ -161,6 +162,62 @@
             <div class="empty-state empty-state--compact">
               <div class="empty-state-desc">No members in this linkshell yet.</div>
             </div>
+          }
+        </div>
+      }
+
+      <!-- Jobs Roster: every member's leveled jobs (from their Profile). -->
+      @if (selectedDashboardLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Jobs Roster</div>
+            <button type="button" class="btn ghost sm" (click)="toggleJobsRoster()">
+              {{ jobsRosterExpanded() ? 'Hide' : 'Show jobs' }}
+            </button>
+          </div>
+          @if (jobsRosterExpanded()) {
+            @if (jobsRosterBusy()) {
+              <div class="empty-state empty-state--compact"><div class="empty-state-desc">Loading jobs…</div></div>
+            } @else if (jobsRosterForCurrent(); as roster) {
+              @if (roster.members.length === 0) {
+                <div class="empty-state empty-state--compact"><div class="empty-state-desc">No app-linked members yet.</div></div>
+              } @else {
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  @for (member of roster.members; track member.id) {
+                    <div style="border:1px solid var(--border, rgba(255,255,255,.08));border-radius:10px;padding:10px 12px">
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                        <strong>{{ member.characterName }}</strong>
+                        <span class="tag default">{{ member.rank || 'Member' }}</span>
+                      </div>
+                      @for (ch of rosterCharacters(member); track ch.label) {
+                        <div style="margin-top:6px">
+                          @if (ch.isAlt) {
+                            <div style="font-size:12px;color:var(--fg-2);margin-bottom:4px">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
+                          }
+                          @if (leveledJobs(ch.levels); as jobs) {
+                            @if (jobs.length === 0) {
+                              <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
+                            } @else {
+                              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                @for (job of jobs; track job.name) {
+                                  <span class="tag default" style="display:inline-flex;gap:5px">
+                                    <span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>
+                                  </span>
+                                }
+                              </div>
+                            }
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            } @else {
+              <div class="empty-state empty-state--compact">
+                <button type="button" class="btn sm" (click)="ensureJobsRoster()">Load jobs roster</button>
+              </div>
+            }
           }
         </div>
       }
@@ -335,4 +392,49 @@
           </div>
         }
       </div>
+
+      <!-- Per-member "View Profile" modal (their leveled jobs, main + alts). -->
+      @if (viewingProfileBusy() || viewingProfileMember()) {
+        <div
+          style="position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow:auto"
+          (click)="closeMemberProfile()">
+          <div
+            role="dialog" aria-modal="true"
+            style="background:var(--surface, #1f1f23);border:1px solid var(--border, rgba(255,255,255,.12));border-radius:12px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(0,0,0,.45)"
+            (click)="$event.stopPropagation()">
+            @if (viewingProfileMember(); as m) {
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <strong style="font-size:15px">{{ m.characterName }}</strong>
+                  <span class="tag default">{{ m.rank || 'Member' }}</span>
+                </div>
+                <button type="button" class="btn ghost sm" (click)="closeMemberProfile()" aria-label="Close">✕</button>
+              </div>
+              <div style="padding:14px 16px;max-height:60vh;overflow:auto">
+                <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Jobs</div>
+                @for (ch of rosterCharacters(m); track ch.label) {
+                  <div style="margin-top:8px">
+                    @if (ch.isAlt) {
+                      <div style="font-size:12px;color:var(--fg-2);margin-bottom:4px">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
+                    }
+                    @if (leveledJobs(ch.levels); as jobs) {
+                      @if (jobs.length === 0) {
+                        <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
+                      } @else {
+                        <div style="display:flex;flex-wrap:wrap;gap:6px">
+                          @for (job of jobs; track job.name) {
+                            <span class="tag default" style="display:inline-flex;gap:5px"><span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span></span>
+                          }
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            } @else {
+              <div style="padding:24px 16px;text-align:center;color:var(--fg-3);font-size:13px">Loading…</div>
+            }
+          </div>
+        </div>
+      }
     </div>

@@ -33,6 +33,8 @@ import type {
   ActivityLootHistoryList,
   ActivityHistoryDetail,
   ActivityItemInput,
+  ActivityGuildOption,
+  ActivityJobsRoster,
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
   ActivityLootInput,
@@ -71,10 +73,13 @@ export type {
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
   ActivityEventParticipant,
+  ActivityGuildOption,
   ActivityHistory,
   ActivityHistoryDetail,
   ActivityItem,
   ActivityItemInput,
+  ActivityJobsRoster,
+  ActivityJobsRosterMember,
   ActivityLinkshellPermissions,
   ActivityLinkshellRole,
   ActivityLinkshellRolePermissionsInput,
@@ -492,7 +497,9 @@ export class DiscordActivityService {
         timeZone: input.timeZone || null,
         altCharacterName1: input.altCharacterName1 || null,
         altCharacterName2: input.altCharacterName2 || null,
-        jobLevels: input.jobLevels ?? null
+        jobLevels: input.jobLevels ?? null,
+        alt1JobLevels: input.alt1JobLevels ?? null,
+        alt2JobLevels: input.alt2JobLevels ?? null
       });
       await this.auth.refreshOverview();
 
@@ -740,6 +747,7 @@ export class DiscordActivityService {
   placeAuctionBid(itemId: number, bidAmount: number, linkshellId: number): Promise<void> { return this.auctionService.placeAuctionBid(itemId, bidAmount, linkshellId); }
   endAuction(auctionId: number, linkshellId: number): Promise<void> { return this.auctionService.endAuction(auctionId, linkshellId); }
   closeAuction(auctionId: number, linkshellId: number, deliveredItemIds: number[] = []): Promise<void> { return this.auctionService.closeAuction(auctionId, linkshellId, deliveredItemIds); }
+  setAuctionsLock(linkshellId: number, locked: boolean): Promise<void> { return this.auctionService.setAuctionsLock(linkshellId, locked); }
   markAuctionHistoryItemReceived(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.markAuctionHistoryItemReceived(itemId, linkshellId); }
   undoAuctionHistoryItem(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.undoAuctionHistoryItem(itemId, linkshellId); }
 
@@ -768,7 +776,8 @@ export class DiscordActivityService {
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
   updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
-  lockLinkshellToGuild(linkshellId: number, guildName: string | null): Promise<boolean> { return this.linkshellService.lockLinkshellToGuild(linkshellId, guildName); }
+  loadEligibleGuilds(): Promise<ActivityGuildOption[]> { return this.linkshellService.loadEligibleGuilds(); }
+  lockLinkshellToGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.lockLinkshellToGuild(linkshellId, guildId, guildName); }
   unlockLinkshellGuild(linkshellId: number): Promise<boolean> { return this.linkshellService.unlockLinkshellGuild(linkshellId); }
   loadDiscordChannels(linkshellId: number): Promise<ActivityDiscordChannelsResponse | null> { return this.linkshellService.loadDiscordChannels(linkshellId); }
   saveDiscordChannels(linkshellId: number, channels: ActivityDiscordChannelBindingInput[]): Promise<boolean> { return this.linkshellService.saveDiscordChannels(linkshellId, channels); }
@@ -780,6 +789,7 @@ export class DiscordActivityService {
   removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> { return this.linkshellService.removeLinkshellMember(linkshellId, memberId); }
   updateLinkshellMemberRole(linkshellId: number, memberId: number, role: string, characterName?: string | null): Promise<void> { return this.linkshellService.updateLinkshellMemberRole(linkshellId, memberId, role, characterName); }
   loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> { return this.linkshellService.loadLinkshellRoles(linkshellId); }
+  loadJobsRoster(linkshellId: number): Promise<ActivityJobsRoster | null> { return this.linkshellService.loadJobsRoster(linkshellId); }
   createLinkshellRole(linkshellId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> { return this.linkshellService.createLinkshellRole(linkshellId, input); }
   updateLinkshellRole(linkshellId: number, roleId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> { return this.linkshellService.updateLinkshellRole(linkshellId, roleId, input); }
   deleteLinkshellRole(linkshellId: number, roleId: number): Promise<boolean> { return this.linkshellService.deleteLinkshellRole(linkshellId, roleId); }

@@ -8,6 +8,8 @@ import type {
   ActivityDiscordChannelBindingInput,
   ActivityDiscordChannelsResponse,
   ActivityDkpRoundingIncrement,
+  ActivityGuildOption,
+  ActivityJobsRoster,
   ActivityLinkshellDetail,
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
@@ -25,6 +27,7 @@ export class LinkshellService {
   readonly busyMemberId = signal<number | null>(null);
   readonly busyRoles = signal(false);
   readonly busyDiscordChannels = signal(false);
+  readonly busyJobsRoster = signal(false);
 
   async loadLinkshellDetail(linkshellId: number): Promise<void> {
     if (linkshellId <= 0) {
@@ -126,23 +129,44 @@ export class LinkshellService {
     }
   }
 
-  // Lock this linkshell to the Discord server the Activity is launched in. The
-  // server reads the guild id from the X-Discord-Guild-Id header (sent on every
-  // request); we only pass the human-entered server name for display.
-  async lockLinkshellToGuild(linkshellId: number, guildName: string | null): Promise<boolean> {
+  // The Discord servers the caller can lock to (the bot's servers they're also
+  // in). Drives the Configurations "Discord server lock" dropdown.
+  async loadEligibleGuilds(): Promise<ActivityGuildOption[]> {
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      const data = await this.http.fetchActivityJson<ActivityGuildOption[]>(
+        '/api/activity/eligible-guilds',
+        accessToken
+      );
+      return data ?? [];
+    } catch {
+      // Non-fatal: the lock card falls back to "lock to this server".
+      return [];
+    }
+  }
+
+  // Lock this linkshell to a Discord server. guildId = a server chosen from the
+  // eligible-guilds dropdown; null = fall back to the server the Activity is
+  // launched in (X-Discord-Guild-Id header). guildName is the display label.
+  async lockLinkshellToGuild(
+    linkshellId: number,
+    guildId: string | null,
+    guildName: string | null
+  ): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
 
     try {
       await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/lock-guild`, {
+        guildId: guildId?.trim() || null,
         guildName: guildName?.trim() || null
       });
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell locked to this Discord server.');
+      this.auth.setActionMessage('Linkshell locked to that Discord server.');
       return true;
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Locking the linkshell to this server failed.'));
+      this.auth.setActionError(formatActionError(error, 'Locking the linkshell to that server failed.'));
       return false;
     } finally {
       this.busyLinkshellId.set(null);
@@ -320,6 +344,26 @@ export class LinkshellService {
       return null;
     } finally {
       this.busyRoles.set(false);
+    }
+  }
+
+  async loadJobsRoster(linkshellId: number): Promise<ActivityJobsRoster | null> {
+    if (linkshellId <= 0) {
+      return null;
+    }
+    this.busyJobsRoster.set(true);
+    this.auth.setActionError(null);
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      return await this.http.fetchActivityJson<ActivityJobsRoster>(
+        `/api/activity/linkshells/${linkshellId}/jobs-roster`,
+        accessToken
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading the jobs roster failed.'));
+      return null;
+    } finally {
+      this.busyJobsRoster.set(false);
     }
   }
 

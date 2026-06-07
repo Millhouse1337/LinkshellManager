@@ -19,7 +19,7 @@ public sealed class LinkshellSheetController : Controller
     private readonly GoogleSheetsSyncService _sheets;
     private readonly GoogleOAuthService _oauth;
     private readonly GoogleSheetsOptions _options;
-    private readonly SheetMigrationService _migration;
+    private readonly DkpTemplateSheetService _template;
     private readonly SheetSyncQueue _sheetSync;
     private readonly TimeZoneConversionService _timeZones;
 
@@ -29,7 +29,7 @@ public sealed class LinkshellSheetController : Controller
         GoogleSheetsSyncService sheets,
         GoogleOAuthService oauth,
         IOptions<GoogleSheetsOptions> options,
-        SheetMigrationService migration,
+        DkpTemplateSheetService template,
         SheetSyncQueue sheetSync,
         TimeZoneConversionService timeZones)
     {
@@ -38,7 +38,7 @@ public sealed class LinkshellSheetController : Controller
         _sheets = sheets;
         _oauth = oauth;
         _options = options.Value;
-        _migration = migration;
+        _template = template;
         _sheetSync = sheetSync;
         _timeZones = timeZones;
     }
@@ -87,6 +87,7 @@ public sealed class LinkshellSheetController : Controller
             AttInputTabName = linkshell.AttInputTabName,
             AttInputDefaultEntryType = linkshell.AttInputDefaultEntryType,
             ManualPointsTabName = linkshell.ManualPointsTabName,
+            DkpTemplateTabName = DkpTemplateSheetService.ResolveTabName(linkshell.DkpTemplateTabName),
         };
     }
 
@@ -189,7 +190,8 @@ public sealed class LinkshellSheetController : Controller
         [FromForm] string? tabName,
         [FromForm] string? attInputTabName,
         [FromForm] string? attInputDefaultEntryType,
-        [FromForm] string? manualPointsTabName)
+        [FromForm] string? manualPointsTabName,
+        [FromForm] string? dkpTemplateTabName)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -203,15 +205,54 @@ public sealed class LinkshellSheetController : Controller
         linkshell.AttInputTabName = string.IsNullOrWhiteSpace(attInputTabName) ? null : attInputTabName.Trim();
         linkshell.AttInputDefaultEntryType = string.IsNullOrWhiteSpace(attInputDefaultEntryType) ? null : attInputDefaultEntryType.Trim();
         linkshell.ManualPointsTabName = string.IsNullOrWhiteSpace(manualPointsTabName) ? null : manualPointsTabName.Trim();
+        linkshell.DkpTemplateTabName = string.IsNullOrWhiteSpace(dkpTemplateTabName) ? null : dkpTemplateTabName.Trim();
 
         await _db.SaveChangesAsync();
         TempData["SheetConfigSuccess"] = "Google Sheet configuration saved.";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Export the linkshell's DKP into the styled generic template tab on the
+    // connected sheet (creates/refreshes the tab).
+    [HttpPost("/linkshells/{linkshellId:int}/sheet/export-template")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExportTemplate(int linkshellId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+        if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
+
+        var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(linkshell?.GoogleSpreadsheetId))
+        {
+            TempData["SheetImportError"] = "Configure a spreadsheet ID before exporting.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+        if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
+        {
+            TempData["SheetImportError"] = "Connect a Google account before exporting.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        try
+        {
+            var result = await _template.ExportAsync(linkshellId, cancellationToken);
+            TempData["SheetImportSuccess"] = $"Exported {result.MemberCount} member(s) to the \"{result.Tab}\" tab.";
+        }
+        catch (GoogleOAuthRevokedException)
+        {
+            TempData["SheetImportError"] = "Google rejected the saved connection — reconnect the Google account.";
+        }
+        catch (Exception ex)
+        {
+            TempData["SheetImportError"] = $"Export failed: {ex.Message}";
+        }
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
     [HttpPost("/linkshells/{linkshellId:int}/sheet/import-preview")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ImportPreview(int linkshellId, [FromForm] string? readRange, CancellationToken cancellationToken)
+    public async Task<IActionResult> ImportPreview(int linkshellId, CancellationToken cancellationToken)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -233,9 +274,7 @@ public sealed class LinkshellSheetController : Controller
 
         try
         {
-            var preview = await _migration.BuildPreviewAsync(linkshellId, viewModel.SpreadsheetId!, readRange, cancellationToken);
-            viewModel.Preview = preview;
-            viewModel.PreviewRange = preview.Range;
+            viewModel.TemplatePreview = await _template.BuildPreviewAsync(linkshellId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -246,7 +285,7 @@ public sealed class LinkshellSheetController : Controller
 
     [HttpPost("/linkshells/{linkshellId:int}/sheet/import-commit")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ImportCommit(int linkshellId, [FromForm] string? readRange, CancellationToken cancellationToken)
+    public async Task<IActionResult> ImportCommit(int linkshellId, CancellationToken cancellationToken)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -266,9 +305,11 @@ public sealed class LinkshellSheetController : Controller
 
         try
         {
-            var result = await _migration.CommitAsync(linkshellId, linkshell.GoogleSpreadsheetId, readRange, cancellationToken);
-            TempData["SheetImportSuccess"] = $"Imported: {result.Updated} updated, {result.Created} new placeholder member(s), {result.Unchanged} unchanged.";
-            await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
+            var result = await _template.CommitAsync(linkshellId, cancellationToken);
+            var unmatched = result.Unmatched.Count == 0
+                ? string.Empty
+                : $" {result.Unmatched.Count} row(s) didn't match a member ({string.Join(", ", result.Unmatched.Take(5))}{(result.Unmatched.Count > 5 ? "…" : string.Empty)}).";
+            TempData["SheetImportSuccess"] = $"Imported from \"{result.Tab}\": {result.Updated} member(s) updated.{unmatched}";
         }
         catch (Exception ex)
         {

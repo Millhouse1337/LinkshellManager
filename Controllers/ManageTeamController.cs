@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -108,6 +109,97 @@ public class ManageTeamController : Controller
         });
     }
 
+    // Read-only roster of every member's leveled jobs (the levels they entered on
+    // their Profile), for the linkshell's main + alt characters. Any member can
+    // view it; the sidebar link sits under the manager-gated Manage Team group.
+    public async Task<IActionResult> JobsRoster(int? selectedLinkshellId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var userLinkshells = await _context.AppUserLinkshells
+            .Include(ul => ul.Linkshell)
+            .Where(ul => ul.AppUserId == user.Id)
+            .Select(ul => ul.Linkshell!)
+            .Where(l => l != null)
+            .OrderBy(l => l.LinkshellName)
+            .ToListAsync();
+
+        if (userLinkshells.Count == 0)
+        {
+            ViewBag.Message = "You are not part of any linkshells.";
+            return View(new JobsRosterViewModel());
+        }
+
+        var targetId = selectedLinkshellId
+            ?? (userLinkshells.Any(l => l.Id == user.PrimaryLinkshellId) ? user.PrimaryLinkshellId : null)
+            ?? userLinkshells[0].Id;
+
+        // Only app-linked members carry profile job data; sheet-only placeholders
+        // (no AppUserId) have nothing to show, so leave them out.
+        var members = await _context.AppUserLinkshells
+            .Include(ul => ul.AppUser)
+            .Where(ul => ul.LinkshellId == targetId && ul.AppUserId != null)
+            .OrderBy(ul => ul.CharacterName)
+            .ToListAsync();
+
+        var entries = members.Select(m => new JobsRosterEntry
+        {
+            CharacterName = m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown",
+            Rank = m.Rank,
+            JobLevels = ProfileJobLevels.ToCatalogLevels(m.JobLevels),
+            Alt1Name = string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName1) ? null : m.AppUser!.AltCharacterName1,
+            Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt1JobLevels),
+            Alt2Name = string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName2) ? null : m.AppUser!.AltCharacterName2,
+            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt2JobLevels)
+        }).ToList();
+
+        return View(new JobsRosterViewModel
+        {
+            Linkshells = userLinkshells,
+            SelectedLinkshellId = targetId,
+            Entries = entries
+        });
+    }
+
+    // Read-only profile for a single member (their leveled jobs, main + alts) —
+    // opened from the View Team roster. id = the AppUserLinkshell row id. Any
+    // member of the same linkshell may view it; built to grow (e.g. crafts later).
+    public async Task<IActionResult> MemberProfile(int id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var member = await _context.AppUserLinkshells
+            .Include(ul => ul.AppUser)
+            .Include(ul => ul.Linkshell)
+            .FirstOrDefaultAsync(ul => ul.Id == id);
+        if (member is null) return NotFound();
+
+        // Only people in the same linkshell can view a member's profile.
+        var callerIsMember = await _context.AppUserLinkshells
+            .AnyAsync(l => l.AppUserId == user.Id && l.LinkshellId == member.LinkshellId);
+        if (!callerIsMember) return Forbid();
+
+        var entry = new JobsRosterEntry
+        {
+            CharacterName = member.CharacterName ?? member.AppUser?.CharacterName ?? member.AppUser?.UserName ?? "Unknown",
+            Rank = member.Rank,
+            JobLevels = ProfileJobLevels.ToCatalogLevels(member.JobLevels),
+            Alt1Name = string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName1) ? null : member.AppUser!.AltCharacterName1,
+            Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(member.AppUser?.Alt1JobLevels),
+            Alt2Name = string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName2) ? null : member.AppUser!.AltCharacterName2,
+            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(member.AppUser?.Alt2JobLevels)
+        };
+
+        return View(new MemberProfileViewModel
+        {
+            Entry = entry,
+            LinkshellId = member.LinkshellId,
+            LinkshellName = member.Linkshell?.LinkshellName
+        });
+    }
+
     // Add-members browse. Paginated, searchable, and filterable via the shared
     // InviteCandidateService (same query the Discord Activity's invite panel
     // uses), so the web and Activity surface the same eligible players — minus
@@ -139,6 +231,14 @@ public class ManageTeamController : Controller
             ManageTeamViewModel.MembersPageSize,
             HttpContext.RequestAborted);
 
+        // When the linkshell is tied to a Discord server, also surface that
+        // server's members (including people who've never used LSM) so officers
+        // can add them in one click. Skipped when no server is set (no bot call).
+        var discordRoster = string.IsNullOrWhiteSpace(targetLinkshell.DiscordGuildId)
+            ? new List<Services.DiscordRosterCandidate>()
+            : (await _inviteCandidates.GetDiscordRosterCandidatesAsync(
+                targetId, targetLinkshell.DiscordGuildId, HttpContext.RequestAborted)).ToList();
+
         return View("PlayerSearch", new ManageTeamViewModel
         {
             Linkshells = manageable,
@@ -147,10 +247,37 @@ public class ManageTeamController : Controller
             SearchTerm = search,
             Filter = filter,
             Candidates = result.Items.ToList(),
+            DiscordRoster = discordRoster,
             PageNumber = result.Page,
             PageSize = result.PageSize,
             TotalCount = result.Total
         });
+    }
+
+    // Adds a member straight from the linkshell's Discord server (web parity with
+    // the Activity). Existing LSM users join immediately; people without an
+    // account get a Discord-keyed invite that auto-joins on first sign-in.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDiscordMember(
+        int linkshellId, string discordUserId, string? search, string? filter, int page = 1)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        var result = await _inviteCandidates.AddDiscordMemberAsync(
+            linkshellId, linkshell?.DiscordGuildId, discordUserId, HttpContext.RequestAborted);
+
+        if (!result.Success)
+        {
+            TempData["AddMemberError"] = result.Error;
+        }
+
+        return RedirectToAction(nameof(SearchPlayers),
+            new { selectedLinkshellId = linkshellId, search, filter, page });
     }
 
     [HttpPost]
@@ -162,27 +289,49 @@ public class ManageTeamController : Controller
 
         if (!await CanManageAsync(user.Id, input.LinkshellId)) return Forbid();
 
-        var targetExists = await _context.Users.AnyAsync(u => u.Id == input.UserId);
-        if (!targetExists) return NotFound();
+        var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == input.UserId);
+        if (targetUser is null) return NotFound();
 
         var alreadyMember = await _context.AppUserLinkshells
             .AnyAsync(ul => ul.AppUserId == input.UserId && ul.LinkshellId == input.LinkshellId);
-        var alreadyInvited = await _context.Invites
-            .AnyAsync(i => i.AppUserId == input.UserId && i.LinkshellId == input.LinkshellId);
 
-        if (!alreadyMember && !alreadyInvited)
+        if (!alreadyMember)
         {
-            _context.Invites.Add(new Invite
+            // Auto-join: inviting a player adds them straight to the roster — no
+            // accept step. (Discord-only people without an LSM account still get a
+            // pending invite that auto-joins on first sign-in; that path lives in
+            // the Activity/DiscordIdentityService and is unchanged.)
+            var linkshell = await _context.Linkshells.FirstOrDefaultAsync(l => l.Id == input.LinkshellId);
+            _context.AppUserLinkshells.Add(new AppUserLinkshell
             {
-                AppUserId = input.UserId,
+                AppUserId = targetUser.Id,
                 LinkshellId = input.LinkshellId,
-                Status = "Pending"
+                LinkshellDkp = 0,
+                DateJoined = DateTime.UtcNow,
+                CharacterName = targetUser.CharacterName ?? targetUser.UserName,
+                Rank = LinkshellRanks.Member,
+                Status = "Active"
             });
+
+            // Drop any stale pending invite/request for this pair so the roster
+            // and the invites page don't show a phantom "pending" entry.
+            var stale = await _context.Invites
+                .Where(i => i.AppUserId == input.UserId && i.LinkshellId == input.LinkshellId)
+                .ToListAsync();
+            if (stale.Count > 0) _context.Invites.RemoveRange(stale);
+
+            if (targetUser.PrimaryLinkshellId is null)
+            {
+                targetUser.PrimaryLinkshellId = input.LinkshellId;
+                targetUser.PrimaryLinkshellName = linkshell?.LinkshellName;
+                _context.Update(targetUser);
+            }
+
             await _context.SaveChangesAsync();
         }
 
         // Return to the browse (same linkshell + search/filter/page) so officers
-        // can keep inviting without losing their place.
+        // can keep adding members without losing their place.
         return RedirectToAction(nameof(SearchPlayers),
             new { selectedLinkshellId = input.LinkshellId, search, filter, page });
     }

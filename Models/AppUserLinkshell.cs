@@ -26,6 +26,19 @@ public class AppUserLinkshell
 
     public double? LinkshellDkp { get; set; }
 
+    // Lifetime DKP totals seeded from the generic DKP template import. The
+    // app's live totals = these seeds + the DkpLedgerEntry rows recorded AFTER
+    // DkpSeedLedgerId (the ledger Id watermark at import time). This lets a
+    // linkshell migrating in from an external sheet carry its lifetime
+    // earned/spent without re-bookkeeping every past transaction, while
+    // app-native linkshells (never seeded → all 0) compute totals purely from
+    // the ledger. See Services/DkpTemplateSheetService.
+    public double SeededDkpEarned { get; set; }
+
+    public double SeededDkpSpent { get; set; }
+
+    public int DkpSeedLedgerId { get; set; }
+
     public DateTime? DateJoined { get; set; }
 
     [Column(TypeName = "jsonb")]

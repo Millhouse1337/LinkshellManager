@@ -91,7 +91,7 @@ public sealed partial class ActivityDataController
     // governs the Discord Activity, so a request with no guild id passes.
     private bool IsBlockedByGuildLock(Linkshell? linkshell)
     {
-        if (linkshell is null || string.IsNullOrWhiteSpace(linkshell.LockedToDiscordGuildId))
+        if (linkshell is null || string.IsNullOrWhiteSpace(linkshell.DiscordGuildId))
         {
             return false;
         }
@@ -99,13 +99,13 @@ public sealed partial class ActivityDataController
         var requestGuildId = GetRequestGuildId();
         // No guild context (website / non-Discord) → not blocked. Activity
         // requests always carry the header, so a mismatch here means the
-        // Activity is open in a different server than the linkshell is locked to.
+        // Activity is open in a different server than the linkshell is tied to.
         if (requestGuildId is null)
         {
             return false;
         }
 
-        return !string.Equals(requestGuildId, linkshell.LockedToDiscordGuildId, StringComparison.Ordinal);
+        return !string.Equals(requestGuildId, linkshell.DiscordGuildId, StringComparison.Ordinal);
     }
 
     private async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
@@ -304,6 +304,7 @@ public sealed partial class ActivityDataController
         role.CanManageTods = permissions.CanManageTods;
         role.CanAuditDkp = permissions.CanAuditDkp;
         role.CanManageAuctions = permissions.CanManageAuctions;
+        role.CanLockAuctions = permissions.CanLockAuctions;
         role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
         role.CanManageParties = permissions.CanManageParties;
         role.CanManageInvites = permissions.CanManageInvites;

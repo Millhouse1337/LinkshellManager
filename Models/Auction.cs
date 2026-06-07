@@ -37,12 +37,15 @@ public class Auction
     [MaxLength(32)]
     public string? DiscordChannelId { get; set; }
 
-    // Discord message id of the bot-posted "auction opened" message. Stored so a
-    // bid can edit that same message in place (current high bid per item) instead
-    // of spamming a new message per bid. Null when posted via webhook (which
-    // can't be edited) or when no bot channel is configured.
+    // Discord message id of the latest bot-posted card for this auction.
     [MaxLength(32)]
     public string? DiscordMessageId { get; set; }
+
+    // Every bot-posted card message id for this auction (the "opened" card plus
+    // one per bid), comma-separated. Captured so all of them can be deleted from
+    // the channel when the auction closes, leaving just the results summary.
+    // Empty/null for webhook-only auctions (those can't be bot-deleted).
+    public string? DiscordMessageIds { get; set; }
 
     public ICollection<AuctionItem> AuctionItems { get; set; } = new List<AuctionItem>();
 }

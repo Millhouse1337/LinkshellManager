@@ -78,6 +78,9 @@ export interface ActivityAppUser {
   // Per-job levels for the 15 classic jobs in PROFILE_JOB_OPTIONS order
   // (index 0 = WAR ... 14 = SMN). Pre-fills the profile "My Jobs" editor.
   jobLevels?: number[] | null;
+  // Same catalog-aligned levels for the two alt characters; pre-fill the alt tabs.
+  alt1JobLevels?: number[] | null;
+  alt2JobLevels?: number[] | null;
 }
 
 export interface ActivityLinkshell {
@@ -115,13 +118,19 @@ export interface ActivityLinkshellSettings {
   hiddenTodMonsters: string[];
   // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
   linkshellType: string;
-  // Discord server (guild) ID this linkshell is locked to, or null when
-  // unlocked. When set, only members of that server can access the linkshell.
+  // The single Discord server (guild) this linkshell is tied to, or null when
+  // not tied to any server. When set it both locks Activity access to that
+  // guild and scopes member search / roster to its members. discordGuildName is
+  // a display cache for the Configurations UI.
   discordGuildId: string | null;
-  // Discord guild this linkshell is locked to (null = not locked). When set,
-  // the Activity only exposes it when launched from this server.
-  lockedToDiscordGuildId?: string | null;
-  lockedToDiscordGuildName?: string | null;
+  discordGuildName?: string | null;
+}
+
+// One Discord server the caller can lock a linkshell to (the bot is in it and so
+// is the caller). Populates the Configurations "Discord server lock" dropdown.
+export interface ActivityGuildOption {
+  id: string;
+  name: string;
 }
 
 export interface ActivityLinkshellPermissions {
@@ -137,6 +146,7 @@ export interface ActivityLinkshellPermissions {
   canManageTods: boolean;
   canAuditDkp: boolean;
   canManageAuctions: boolean;
+  canLockAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
@@ -159,6 +169,7 @@ export interface ActivityLinkshellRole {
   canManageTods: boolean;
   canAuditDkp: boolean;
   canManageAuctions: boolean;
+  canLockAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
@@ -183,6 +194,7 @@ export interface ActivityLinkshellRolePermissionsInput {
   canManageTods: boolean;
   canAuditDkp: boolean;
   canManageAuctions: boolean;
+  canLockAuctions: boolean;
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
@@ -321,6 +333,24 @@ export interface ActivityMember {
   status?: string | null;
   linkshellDkp?: number | null;
   dateJoined?: string | null;
+}
+
+// "Jobs Roster" — every member's leveled jobs. jobCatalog is the job-name order
+// (WAR..SMN); each member's level arrays are aligned to it (0 = not leveled).
+export interface ActivityJobsRoster {
+  jobCatalog: string[];
+  members: ActivityJobsRosterMember[];
+}
+
+export interface ActivityJobsRosterMember {
+  id: number;
+  characterName: string;
+  rank?: string | null;
+  jobLevels: number[];
+  alt1Name?: string | null;
+  alt1JobLevels: number[];
+  alt2Name?: string | null;
+  alt2JobLevels: number[];
 }
 
 export interface ActivityEventParticipant {
@@ -694,6 +724,8 @@ export interface ActivityAuction {
   // Viewer's available DKP in this auction's linkshell (total minus DKP
   // locked by bids they're currently winning). Set by the list endpoint.
   availableDkp?: number | null;
+  // True when leadership has frozen bidding for the linkshell.
+  auctionsLocked?: boolean;
 }
 
 export interface ActivityAuctionBid {
@@ -873,6 +905,9 @@ export interface ActivityUpdateProfileInput {
   // Catalog-aligned per-job levels (index 0 = WAR ... 14 = SMN), or null to
   // leave job levels unchanged.
   jobLevels?: number[] | null;
+  // Catalog-aligned job levels for the two alt characters.
+  alt1JobLevels?: number[] | null;
+  alt2JobLevels?: number[] | null;
 }
 
 export interface DiscordRpcErrorLike {

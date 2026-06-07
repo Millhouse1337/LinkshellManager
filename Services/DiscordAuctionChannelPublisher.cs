@@ -90,22 +90,33 @@ public sealed class DiscordAuctionChannelPublisher
         {
             auction.DiscordChannelId = channelId;
             auction.DiscordMessageId = messageId;
+            AppendMessageId(auction, messageId);
             await _db.SaveChangesAsync(ct);
         }
     }
 
-    // A bid landed → edit the auction's "opened" message in place to reflect the
-    // current high bid per item (no new message). No-op when the auction wasn't
-    // bot-posted (webhook fallback can't be edited) or the bot isn't configured.
+    // Track every posted card id so they can all be deleted from the channel on
+    // close (leaving just the results summary).
+    private static void AppendMessageId(Auction auction, string messageId)
+    {
+        auction.DiscordMessageIds = string.IsNullOrEmpty(auction.DiscordMessageIds)
+            ? messageId
+            : $"{auction.DiscordMessageIds},{messageId}";
+    }
+
+    // A bid landed → post a brand-new card at the BOTTOM of the auction channel
+    // (rather than editing the original in place) so the current auction state is
+    // never buried as people chat. Every bid becomes its own message — a running
+    // bid history. No-op when the auction wasn't bot-posted (webhook fallback
+    // can't carry components) or the bot isn't configured.
     private async Task UpdateAsync(int auctionId, CancellationToken ct)
     {
+        // Tracked so we can keep DiscordMessageId pointing at the latest card.
         var auction = await _db.Auctions
-            .AsNoTracking()
             .Include(a => a.AuctionItems)
             .FirstOrDefaultAsync(a => a.Id == auctionId, ct);
         if (auction is null
             || string.IsNullOrEmpty(auction.DiscordChannelId)
-            || string.IsNullOrEmpty(auction.DiscordMessageId)
             || !_bot.IsConfigured)
         {
             return;
@@ -113,11 +124,17 @@ public sealed class DiscordAuctionChannelPublisher
 
         var payload = new
         {
-            embeds = new[] { BuildCreateEmbed(auction) },
+            embeds = new[] { BuildCreateEmbed(auction, "New bid") },
             components = BuildCreateComponents(auction),
             allowed_mentions = new { parse = Array.Empty<string>() }
         };
-        await _bot.EditMessageAsync(auction.DiscordChannelId, auction.DiscordMessageId, payload, ct);
+        var messageId = await _bot.PostMessageAsync(auction.DiscordChannelId, payload, ct);
+        if (!string.IsNullOrEmpty(messageId))
+        {
+            auction.DiscordMessageId = messageId;
+            AppendMessageId(auction, messageId);
+            await _db.SaveChangesAsync(ct);
+        }
     }
 
     private async Task CloseAsync(int auctionHistoryId, CancellationToken ct)
@@ -284,7 +301,7 @@ public sealed class DiscordAuctionChannelPublisher
         }
     }
 
-    private object BuildCreateEmbed(Auction auction)
+    private object BuildCreateEmbed(Auction auction, string footerText = "Auction opened")
     {
         var sb = new StringBuilder();
         var items = auction.AuctionItems.OrderBy(i => i.Id).ToList();
@@ -301,7 +318,7 @@ public sealed class DiscordAuctionChannelPublisher
                 string line;
                 if (i.CurrentHighestBid.HasValue && i.CurrentHighestBid.Value > 0)
                 {
-                    line = $"• **{Escape(i.ItemName ?? "(item)")}** — current **{i.CurrentHighestBid.Value} DKP**"
+                    line = $"• **{Escape(i.ItemName ?? "(item)")}** — current highest bid **{i.CurrentHighestBid.Value} DKP**"
                          + (string.IsNullOrWhiteSpace(i.CurrentHighestBidder)
                              ? string.Empty
                              : $" ({Escape(i.CurrentHighestBidder!)})");
@@ -342,7 +359,7 @@ public sealed class DiscordAuctionChannelPublisher
             description = sb.ToString(),
             color = CreateColor,
             fields = fields.ToArray(),
-            footer = new { text = "Auction opened" },
+            footer = new { text = footerText },
             timestamp = DateTime.UtcNow.ToString("o"),
         };
     }

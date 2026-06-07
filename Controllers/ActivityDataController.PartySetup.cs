@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Mvc;
@@ -192,91 +193,19 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, setup.LinkshellId, cancellationToken);
         if (membership is null) return Forbid();
 
-        if (!string.IsNullOrEmpty(slot.SignedUpAppUserId) && slot.SignedUpAppUserId != appUser.Id)
-        {
-            return BadRequest(new { error = $"That slot was just taken by {slot.SignedUpCharacterName ?? "another member"}." });
-        }
-
         // Snapshot the member's character name in this linkshell (fall back to
         // their profile name) so the panel renders without extra joins.
         var characterName = string.IsNullOrWhiteSpace(membership.CharacterName)
             ? (appUser.CharacterName ?? appUser.UserName ?? "Member")
             : membership.CharacterName;
 
-        // Resolve Role / Main / Sub: a field the slot ALREADY pins is taken from
-        // the slot (a crafted request can't override a hard requirement);
-        // otherwise use the member's submitted pick (validated against catalog).
-        var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
-        var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
-        var slotRequiresSub = !string.IsNullOrWhiteSpace(slot.SubJob);
-
-        string? signedRole;
-        if (slotRequiresRole)
+        var result = await PartySetupSignupService.ClaimSlotAsync(
+            _dbContext, slot, setup.Id, appUser.Id, characterName,
+            request.Role, request.MainJob, request.SubJob, cancellationToken);
+        if (!result.Success)
         {
-            signedRole = slot.Role;
+            return BadRequest(new { error = result.Error });
         }
-        else
-        {
-            var trimmed = request.Role?.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed)) return BadRequest(new { error = "Pick a role before signing up." });
-            if (!PartySetupValidRoles.Contains(trimmed)) return BadRequest(new { error = "That role isn't a valid pick." });
-            signedRole = trimmed;
-        }
-
-        string? signedMain;
-        if (slotRequiresMain)
-        {
-            signedMain = slot.MainJob;
-        }
-        else
-        {
-            var trimmed = request.MainJob?.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed)) return BadRequest(new { error = "Pick a main job before signing up." });
-            if (!PartySetupValidMainJobs.Contains(trimmed)) return BadRequest(new { error = "That main job isn't a valid pick." });
-            signedMain = trimmed;
-        }
-
-        string? signedSub;
-        if (slotRequiresSub)
-        {
-            signedSub = slot.SubJob;
-        }
-        else
-        {
-            var trimmed = request.SubJob?.Trim();
-            // Sub is optional -- blank is fine ("anything works" / no sub).
-            if (string.IsNullOrWhiteSpace(trimmed))
-            {
-                signedSub = null;
-            }
-            else if (!PartySetupValidSubJobs.Contains(trimmed))
-            {
-                return BadRequest(new { error = "That sub job isn't a valid pick." });
-            }
-            else
-            {
-                signedSub = trimmed;
-            }
-        }
-
-        // One slot per setup: release any other slot in this setup the member
-        // currently holds before claiming the new one.
-        var heldElsewhere = await _dbContext.PartySetupSlots
-            .Where(s => s.SignedUpAppUserId == appUser.Id
-                        && s.Party!.Alliance!.PartySetupId == setup.Id
-                        && s.Id != slot.Id)
-            .ToListAsync(cancellationToken);
-        foreach (var held in heldElsewhere)
-        {
-            ClearSlotSignup(held);
-        }
-
-        slot.SignedUpAppUserId = appUser.Id;
-        slot.SignedUpCharacterName = characterName;
-        slot.SignedUpAtUtc = DateTime.UtcNow;
-        slot.SignedUpRole = signedRole;
-        slot.SignedUpMainJob = signedMain;
-        slot.SignedUpSubJob = signedSub;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { success = true });
@@ -306,19 +235,9 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        ClearSlotSignup(slot);
+        PartySetupSignupService.ClearSlotSignup(slot);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
-    }
-
-    private static void ClearSlotSignup(PartySetupSlot slot)
-    {
-        slot.SignedUpAppUserId = null;
-        slot.SignedUpCharacterName = null;
-        slot.SignedUpAtUtc = null;
-        slot.SignedUpRole = null;
-        slot.SignedUpMainJob = null;
-        slot.SignedUpSubJob = null;
     }
 
     // ----- Officer editor (create / edit / delete / assign) -----

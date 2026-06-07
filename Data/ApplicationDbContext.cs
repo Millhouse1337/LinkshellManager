@@ -14,6 +14,7 @@ namespace LinkshellManagerDiscordApp.Data
         private readonly DiscordAuctionChannelQueue? _auctionChannelQueue;
         private readonly DiscordEventChannelQueue? _eventChannelQueue;
         private readonly DiscordEventEndedQueue? _eventEndedQueue;
+        private readonly DiscordEventCleanupQueue? _eventCleanupQueue;
         private readonly DiscordLootChannelQueue? _lootChannelQueue;
         // Live change-feed bus (long-poll). Nullable + defaulted like the queues
         // so design-time / reflection construction never fails when it's absent.
@@ -27,7 +28,8 @@ namespace LinkshellManagerDiscordApp.Data
             DiscordEventChannelQueue? eventChannelQueue = null,
             DiscordLootChannelQueue? lootChannelQueue = null,
             LinkshellChangeNotifier? changeNotifier = null,
-            DiscordEventEndedQueue? eventEndedQueue = null)
+            DiscordEventEndedQueue? eventEndedQueue = null,
+            DiscordEventCleanupQueue? eventCleanupQueue = null)
             : base(options)
         {
             _todBoardQueue = todBoardQueue;
@@ -37,6 +39,7 @@ namespace LinkshellManagerDiscordApp.Data
             _lootChannelQueue = lootChannelQueue;
             _changeNotifier = changeNotifier;
             _eventEndedQueue = eventEndedQueue;
+            _eventCleanupQueue = eventCleanupQueue;
         }
 
         // Distinct linkshell ids of Tod rows changed in the current
@@ -215,6 +218,79 @@ namespace LinkshellManagerDiscordApp.Data
                 {
                     _eventEndedQueue.Enqueue(history.Id);
                 }
+            }
+        }
+
+        // An event's signup/party board lives as one Discord message whose ids
+        // are stored on the Event row. When the event is deleted (every end +
+        // cancel path removes the Event), capture those ids pre-save so the board
+        // can be deleted post-commit — otherwise it lingers in the channel.
+        private List<DiscordMessageRef> CollectDeletedEventBoards()
+        {
+            if (_eventCleanupQueue is null)
+            {
+                return new List<DiscordMessageRef>();
+            }
+            var boards = new List<DiscordMessageRef>();
+            foreach (var entry in ChangeTracker.Entries<Event>())
+            {
+                if (entry.State != EntityState.Deleted)
+                {
+                    continue;
+                }
+                var channelId = entry.Entity.DiscordChannelId;
+                var messageId = entry.Entity.DiscordMessageId;
+                if (!string.IsNullOrWhiteSpace(channelId) && !string.IsNullOrWhiteSpace(messageId))
+                {
+                    boards.Add(new DiscordMessageRef(channelId!, messageId!));
+                }
+            }
+            return boards;
+        }
+
+        // An auction accumulates one bot-posted card per state change (the
+        // "opened" card + one per bid), with all their message ids stored
+        // comma-separated on the Auction row. When the auction is deleted (close
+        // removes it, after archiving to AuctionHistory), capture every card id
+        // so they can be removed from the channel — leaving just the results
+        // summary that DiscordAuctionChannelPublisher posts on close.
+        private List<DiscordMessageRef> CollectDeletedAuctionCards()
+        {
+            if (_eventCleanupQueue is null)
+            {
+                return new List<DiscordMessageRef>();
+            }
+            var cards = new List<DiscordMessageRef>();
+            foreach (var entry in ChangeTracker.Entries<Auction>())
+            {
+                if (entry.State != EntityState.Deleted)
+                {
+                    continue;
+                }
+                var channelId = entry.Entity.DiscordChannelId;
+                if (string.IsNullOrWhiteSpace(channelId) || string.IsNullOrWhiteSpace(entry.Entity.DiscordMessageIds))
+                {
+                    continue;
+                }
+                foreach (var messageId in entry.Entity.DiscordMessageIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    cards.Add(new DiscordMessageRef(channelId!, messageId));
+                }
+            }
+            return cards;
+        }
+
+        // Enqueues Discord messages to delete (event signup boards + auction
+        // cards) onto the shared cleanup queue.
+        private void EnqueueMessageDeletions(IReadOnlyList<DiscordMessageRef> messages)
+        {
+            if (_eventCleanupQueue is null)
+            {
+                return;
+            }
+            foreach (var message in messages)
+            {
+                _eventCleanupQueue.Enqueue(message);
             }
         }
 
@@ -533,6 +609,8 @@ namespace LinkshellManagerDiscordApp.Data
             var createdEvents = CollectAddedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
             var endedEvents = CollectAddedEventHistories();
+            var deletedEventBoards = CollectDeletedEventBoards();
+            var deletedAuctionCards = CollectDeletedAuctionCards();
             var bidItemIds = CollectAddedBidAuctionItemIds();
             var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -542,6 +620,8 @@ namespace LinkshellManagerDiscordApp.Data
             EnqueueEventPosts(createdEvents);
             EnqueueLootPosts(todLoot, eventLoot);
             EnqueueEventEndedSummaries(endedEvents);
+            EnqueueMessageDeletions(deletedEventBoards);
+            EnqueueMessageDeletions(deletedAuctionCards);
             await EnqueueAuctionBidUpdatesAsync(bidItemIds);
             await NotifyLiveChangesAsync(liveChanges);
             return result;
@@ -555,6 +635,8 @@ namespace LinkshellManagerDiscordApp.Data
             var createdEvents = CollectAddedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
             var endedEvents = CollectAddedEventHistories();
+            var deletedEventBoards = CollectDeletedEventBoards();
+            var deletedAuctionCards = CollectDeletedAuctionCards();
             var liveChanges = CollectLiveChanges();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
@@ -563,6 +645,8 @@ namespace LinkshellManagerDiscordApp.Data
             EnqueueEventPosts(createdEvents);
             EnqueueLootPosts(todLoot, eventLoot);
             EnqueueEventEndedSummaries(endedEvents);
+            EnqueueMessageDeletions(deletedEventBoards);
+            EnqueueMessageDeletions(deletedAuctionCards);
             NotifyLiveChangesDirect(liveChanges);
             return result;
         }
@@ -582,6 +666,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<EventHistory> EventHistories => Set<EventHistory>();
         public DbSet<AppUserEventHistory> AppUserEventHistories => Set<AppUserEventHistory>();
         public DbSet<EventLootDetail> EventLootDetails => Set<EventLootDetail>();
+        public DbSet<EventPartySlotSignup> EventPartySlotSignups => Set<EventPartySlotSignup>();
         public DbSet<Tod> Tods => Set<Tod>();
         public DbSet<TodLootDetail> TodLootDetails => Set<TodLootDetail>();
         public DbSet<PartySetup> PartySetups => Set<PartySetup>();
@@ -892,6 +977,23 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.EventHistoryId);
+            });
+
+            builder.Entity<EventPartySlotSignup>(entity =>
+            {
+                entity.ToTable("EventPartySlotSignups");
+                entity.HasOne(item => item.Event)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.PartySetupSlot)
+                    .WithMany()
+                    .HasForeignKey(item => item.PartySetupSlotId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // One signup per slot per event.
+                entity.HasIndex(item => new { item.EventId, item.PartySetupSlotId }).IsUnique();
+                // Find a member's signup within an event (one-slot-per-event + leave).
+                entity.HasIndex(item => new { item.EventId, item.AppUserId });
             });
 
             builder.Entity<Rule>(entity =>

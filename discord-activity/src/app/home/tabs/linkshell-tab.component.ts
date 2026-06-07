@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import {
   ActivityItem,
   ActivityItemInput,
+  ActivityJobsRoster,
+  ActivityJobsRosterMember,
   ActivityLinkshellRole,
   ActivityRevenueEntry,
   ActivityRevenueInput,
@@ -153,6 +155,83 @@ export class LinkshellTabComponent {
 
   protected canManageSelectedDashboard(): boolean {
     return this.canManageLinkshell(this.selectedDashboardLinkshellId());
+  }
+
+  // ----- Jobs Roster (every member's leveled jobs) -----
+  // Lazy + cached per linkshell; collapsed by default so opening the Management
+  // tab doesn't fire an extra request until the user asks for it.
+  protected readonly jobsRoster = signal<ActivityJobsRoster | null>(null);
+  protected readonly jobsRosterExpanded = signal(false);
+  protected readonly jobsRosterBusy = signal(false);
+  private readonly jobsRosterLoadedFor = signal<number | null>(null);
+
+  // The cached roster, but only if it belongs to the currently-selected
+  // linkshell — guards against showing one linkshell's jobs after a switch.
+  protected jobsRosterForCurrent(): ActivityJobsRoster | null {
+    return this.jobsRosterLoadedFor() === this.selectedDashboardLinkshellId() ? this.jobsRoster() : null;
+  }
+
+  protected async toggleJobsRoster(): Promise<void> {
+    const next = !this.jobsRosterExpanded();
+    this.jobsRosterExpanded.set(next);
+    if (next) await this.ensureJobsRoster();
+  }
+
+  protected async ensureJobsRoster(): Promise<void> {
+    const id = this.selectedDashboardLinkshellId();
+    if (id <= 0) return;
+    if (this.jobsRosterLoadedFor() === id && this.jobsRoster()) return;
+
+    this.jobsRosterBusy.set(true);
+    try {
+      const data = await this.activity.loadJobsRoster(id);
+      if (data) {
+        this.jobsRoster.set(data);
+        this.jobsRosterLoadedFor.set(id);
+      }
+    } finally {
+      this.jobsRosterBusy.set(false);
+    }
+  }
+
+  // Main + named alts for one roster member, as labeled characters to render.
+  protected rosterCharacters(member: ActivityJobsRosterMember): { label: string; isAlt: boolean; levels: number[] }[] {
+    const list = [{ label: member.characterName, isAlt: false, levels: member.jobLevels ?? [] }];
+    if (member.alt1Name) { list.push({ label: member.alt1Name, isAlt: true, levels: member.alt1JobLevels ?? [] }); }
+    if (member.alt2Name) { list.push({ label: member.alt2Name, isAlt: true, levels: member.alt2JobLevels ?? [] }); }
+    return list;
+  }
+
+  // The leveled jobs (level > 0) for one character, highest level first.
+  protected leveledJobs(levels: number[] | null | undefined): { name: string; level: number }[] {
+    const catalog = this.jobsRosterForCurrent()?.jobCatalog ?? [];
+    const arr = levels ?? [];
+    return catalog
+      .map((name, i) => ({ name, level: arr[i] ?? 0 }))
+      .filter(entry => entry.level > 0)
+      .sort((a, b) => b.level - a.level);
+  }
+
+  // ----- Per-member "View Profile" modal -----
+  // Reuses the jobs-roster data (lazy-loaded) to show one member's jobs in a
+  // popup, opened from the roster row. Built to grow (e.g. crafts later).
+  protected readonly viewingProfileMember = signal<ActivityJobsRosterMember | null>(null);
+  protected readonly viewingProfileBusy = signal(false);
+
+  protected async openMemberProfile(memberId: number): Promise<void> {
+    this.viewingProfileBusy.set(true);
+    this.viewingProfileMember.set(null);
+    try {
+      await this.ensureJobsRoster();
+      const found = this.jobsRosterForCurrent()?.members.find(m => m.id === memberId) ?? null;
+      this.viewingProfileMember.set(found);
+    } finally {
+      this.viewingProfileBusy.set(false);
+    }
+  }
+
+  protected closeMemberProfile(): void {
+    this.viewingProfileMember.set(null);
   }
 
   // ----- Rank editing UI (only shown in this tab) -----

@@ -44,6 +44,10 @@ public class LinkshellRole
 
     public bool CanManageAuctions { get; set; }
 
+    // Lock/unlock bidding across the linkshell's auctions (Linkshell.AuctionsLocked)
+    // to prevent collusive overbidding from freeing a winner's committed DKP.
+    public bool CanLockAuctions { get; set; }
+
     public bool CanCustomizeLinkshell { get; set; }
 
     public bool CanSubmitTodForApproval { get; set; }

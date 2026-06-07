@@ -25,6 +25,9 @@ public sealed class LinkshellSheetViewModel
     public string? AttInputDefaultEntryType { get; set; }
     public string? ManualPointsTabName { get; set; }
 
-    public string? PreviewRange { get; set; }
-    public ImportPreview? Preview { get; set; }
+    // The tab the generic DKP template exports to / imports from (default "LSM DKP").
+    public string? DkpTemplateTabName { get; set; }
+
+    // Populated by Import preview: each template row matched against the roster.
+    public DkpTemplatePreview? TemplatePreview { get; set; }
 }

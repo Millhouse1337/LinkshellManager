@@ -228,6 +228,7 @@ builder.Services.AddSingleton<GoogleSheetsSyncService>();
 builder.Services.AddSingleton<SheetSyncQueue>();
 builder.Services.AddScoped<GoogleOAuthService>();
 builder.Services.AddScoped<SheetMigrationService>();
+builder.Services.AddScoped<DkpTemplateSheetService>();
 builder.Services.AddMemoryCache();
 
 // Liveness has no checks (process up = healthy); readiness verifies the database
@@ -265,6 +266,10 @@ builder.Services.AddHostedService<DiscordEventChannelBackgroundService>();
 builder.Services.AddSingleton<DiscordEventEndedQueue>();
 builder.Services.AddScoped<DiscordEventEndedPublisher>();
 builder.Services.AddHostedService<DiscordEventEndedBackgroundService>();
+// Deletes an event's signup/party board from Discord once the event is over
+// (fires off the Event row being deleted on any end/cancel path).
+builder.Services.AddSingleton<DiscordEventCleanupQueue>();
+builder.Services.AddHostedService<DiscordEventCleanupBackgroundService>();
 builder.Services.AddSingleton<DiscordLootChannelQueue>();
 builder.Services.AddScoped<DiscordLootChannelPublisher>();
 builder.Services.AddHostedService<DiscordLootChannelBackgroundService>();
