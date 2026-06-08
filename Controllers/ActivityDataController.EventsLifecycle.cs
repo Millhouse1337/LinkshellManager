@@ -241,6 +241,9 @@ public sealed partial class ActivityDataController
 
         eventEntity.CommencementStartTime ??= DateTime.UtcNow;
         eventEntity.StarterUserId ??= appUser.Id;
+        // Bring party-slot signups (Discord post / Activity) into the live event as
+        // pending attendees — without this they'd never appear in the started event.
+        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(_dbContext, eventEntity, cancellationToken);
         foreach (var participation in eventEntity.AppUserEvents)
         {
             if (absentIds is { Count: > 0 } && absentIds.Contains(participation.Id))

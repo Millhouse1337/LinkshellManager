@@ -236,6 +236,39 @@
             </div>
 
             <div class="customize-form__row" style="margin-top:24px">
+              <div class="customize-form__row-label" style="font-weight:600;font-size:13px;color:var(--fg);margin-bottom:4px">Member Activity Tracking</div>
+              <div class="customize-form__row-body">
+                <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
+                  Show an Active/Inactive badge per member based on event attendance. A member goes
+                  <strong>Inactive</strong> after N consecutive absences from events that count, and back to
+                  <strong>Active</strong> after M consecutive credited attendances.
+                </div>
+                <label class="customize-form__toggle" style="margin-bottom:10px">
+                  <input type="checkbox" name="enableActivityTrackingDraft"
+                    [ngModel]="customizeDraft.enableActivityTracking"
+                    (ngModelChange)="customizeDraft.enableActivityTracking = $event; onCustomizeFieldChange()" />
+                  <span>Enable activity tracking</span>
+                </label>
+                @if (customizeDraft.enableActivityTracking) {
+                  <div style="display:flex;gap:16px;flex-wrap:wrap">
+                    <label class="customize-form__field" style="flex:0 0 220px">
+                      <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Absences before Inactive</span>
+                      <input type="number" min="1" step="1" name="inactiveAfterAbsencesDraft"
+                        [ngModel]="customizeDraft.inactiveAfterAbsences"
+                        (ngModelChange)="customizeDraft.inactiveAfterAbsences = $event; onCustomizeFieldChange()" />
+                    </label>
+                    <label class="customize-form__field" style="flex:0 0 220px">
+                      <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Attendances back to Active</span>
+                      <input type="number" min="1" step="1" name="activeAfterAttendancesDraft"
+                        [ngModel]="customizeDraft.activeAfterAttendances"
+                        (ngModelChange)="customizeDraft.activeAfterAttendances = $event; onCustomizeFieldChange()" />
+                    </label>
+                  </div>
+                }
+              </div>
+            </div>
+
+            <div class="customize-form__row" style="margin-top:24px">
               <div class="customize-form__row-label" style="font-weight:600;font-size:13px;color:var(--fg);margin-bottom:4px">Hide ToD Mobs</div>
               <div class="customize-form__row-body">
                 <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">

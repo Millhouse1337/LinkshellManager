@@ -22,7 +22,11 @@ public sealed class GoogleOAuthService
     private const string AuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
     private const string TokenEndpoint = "https://oauth2.googleapis.com/token";
     private const string UserInfoEndpoint = "https://openidconnect.googleapis.com/v1/userinfo";
-    private const string SpreadsheetsScope = "https://www.googleapis.com/auth/spreadsheets";
+    // Per-file Drive scope: the app can only touch spreadsheets it CREATED (or
+    // that the user explicitly picked) — never the user's other spreadsheets.
+    // This is what limits LSManager to the single "LSM DKP" sheet it makes, and
+    // it's a non-sensitive scope (avoids Google's restricted-scope verification).
+    private const string DriveFileScope = "https://www.googleapis.com/auth/drive.file";
     private const string OpenIdScope = "openid";
     private const string EmailScope = "email";
     internal const string StateProtectorPurpose = "Linkshell.GoogleOAuth.State";
@@ -59,7 +63,7 @@ public sealed class GoogleOAuthService
 
         var state = ProtectState(linkshellId, appUserId);
 
-        var scope = string.Join(" ", new[] { SpreadsheetsScope, OpenIdScope, EmailScope });
+        var scope = string.Join(" ", new[] { DriveFileScope, OpenIdScope, EmailScope });
         var query = new Dictionary<string, string?>
         {
             ["client_id"] = _options.ClientId,
@@ -68,7 +72,10 @@ public sealed class GoogleOAuthService
             ["scope"] = scope,
             ["access_type"] = "offline",
             ["prompt"] = "consent",
-            ["include_granted_scopes"] = "true",
+            // We're REDUCING scope (drive.file only). Incremental auth would union
+            // this with any previously-granted broad scope and carry it forward on
+            // reconnect, so keep each authorization independent.
+            ["include_granted_scopes"] = "false",
             ["state"] = state,
         };
 

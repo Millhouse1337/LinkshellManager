@@ -558,6 +558,10 @@ public partial class EventController
         eventToStart.CommencementStartTime ??= DateTime.UtcNow;
         eventToStart.StarterUserId ??= user.Id;
 
+        // Bring party-slot signups (Discord post / Activity) into the live event as
+        // pending attendees — without this they'd never appear in the started event.
+        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(_context, eventToStart, default);
+
         foreach (var participation in eventToStart.AppUserEvents)
         {
             participation.StartTime ??= eventToStart.CommencementStartTime;
@@ -619,6 +623,15 @@ public partial class EventController
         if (rosterMatch is null)
         {
             return BadRequest("Winner must be a current linkshell member.");
+        }
+
+        // Block awarding loot the winner can't afford (DKP is deducted at close,
+        // so this is the only point we can stop the balance going negative).
+        var insufficient = await LootDkpGuard.CheckEventLootAsync(
+            _context, eventId, eventEntity.LinkshellId, rosterMatch, winningDkpSpent, default);
+        if (insufficient is not null)
+        {
+            return BadRequest(insufficient);
         }
 
         _context.EventLootDetails.Add(new EventLootDetail

@@ -78,6 +78,7 @@ public sealed class LinkshellSheetController : Controller
             LinkshellId = linkshell.Id,
             LinkshellName = linkshell.LinkshellName,
             SpreadsheetId = linkshell.GoogleSpreadsheetId,
+            GoogleSheetAppCreated = linkshell.GoogleSheetAppCreated,
             IsOAuthConfigured = _oauth.IsConfigured,
             IsOAuthConnected = !string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc),
             ConnectedGoogleEmail = linkshell.GoogleOAuthUserEmail,
@@ -191,10 +192,12 @@ public sealed class LinkshellSheetController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Saves the optional template tab name. The spreadsheet itself is no longer
+    // pasted in — under the drive.file scope the app can only use a sheet it
+    // created (see CreateSheet), so the id is set there, not here.
     [HttpPost("/linkshells/{linkshellId:int}/sheet/config")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveConfig(int linkshellId,
-        [FromForm] string? spreadsheetId,
         [FromForm] string? dkpTemplateTabName)
     {
         var user = await _userManager.GetUserAsync(User);
@@ -204,11 +207,68 @@ public sealed class LinkshellSheetController : Controller
         var linkshell = await _db.Linkshells.FirstOrDefaultAsync(l => l.Id == linkshellId);
         if (linkshell is null) return NotFound();
 
-        linkshell.GoogleSpreadsheetId = string.IsNullOrWhiteSpace(spreadsheetId) ? null : spreadsheetId.Trim();
         linkshell.DkpTemplateTabName = string.IsNullOrWhiteSpace(dkpTemplateTabName) ? null : dkpTemplateTabName.Trim();
 
         await _db.SaveChangesAsync();
-        TempData["SheetConfigSuccess"] = "Google Sheet configuration saved.";
+        TempData["SheetConfigSuccess"] = "Template tab name saved.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Creates a dedicated "LSM DKP" spreadsheet owned by the connected Google
+    // account and links it. This is the only way to obtain a sheet under the
+    // drive.file scope (the app can't open arbitrary sheets the user owns), so
+    // it replaces the old "paste a spreadsheet id" flow. Immediately exports the
+    // current DKP into the template tab so the new sheet isn't empty.
+    [HttpPost("/linkshells/{linkshellId:int}/sheet/create")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateSheet(int linkshellId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+        if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
+
+        var linkshell = await _db.Linkshells.FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
+        if (linkshell is null) return NotFound();
+        if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
+        {
+            TempData["SheetConfigError"] = "Connect a Google account first.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        try
+        {
+            var title = string.IsNullOrWhiteSpace(linkshell.LinkshellName)
+                ? "LSM DKP"
+                : $"LSM DKP — {linkshell.LinkshellName}";
+            var newId = await _sheets.CreateSpreadsheetAsync(linkshellId, title, cancellationToken);
+
+            linkshell.GoogleSpreadsheetId = newId;
+            linkshell.GoogleSheetAppCreated = true;
+            await _db.SaveChangesAsync(cancellationToken);
+            _sheets.InvalidateCache(linkshellId);
+
+            // Populate the template tab right away. Non-fatal: the sheet exists
+            // and is linked either way, and the user can Export manually.
+            try
+            {
+                var export = await _template.ExportAsync(linkshellId, cancellationToken);
+                TempData["SheetConfigSuccess"] =
+                    $"Created a dedicated \"LSM DKP\" sheet and exported {export.MemberCount} member(s) into it.";
+            }
+            catch (Exception)
+            {
+                TempData["SheetConfigSuccess"] =
+                    "Created a dedicated \"LSM DKP\" sheet. Click \"Export DKP to template\" to populate it.";
+            }
+        }
+        catch (GoogleOAuthRevokedException)
+        {
+            TempData["SheetConfigError"] = "Google rejected the saved connection — reconnect the Google account.";
+        }
+        catch (Exception ex)
+        {
+            TempData["SheetConfigError"] = $"Could not create the sheet: {ex.Message}";
+        }
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 

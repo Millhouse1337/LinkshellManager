@@ -197,7 +197,13 @@
             </div>
             <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
             <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
-            <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+            <div>
+              <span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span>
+              @if (member.active !== null && member.active !== undefined) {
+                <span class="tag {{ member.active ? 'success' : 'danger' }}" style="margin-left:4px"
+                      title="Activity status — computed from event attendance">{{ member.active ? '✓ Active' : '✕ Inactive' }}</span>
+              }
+            </div>
             @if (canManageMembers() && member.appUserId && member.appUserId !== appUserId()) {
               <div class="ac-roster-actions">
                 <select

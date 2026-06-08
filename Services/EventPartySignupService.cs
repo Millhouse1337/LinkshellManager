@@ -144,6 +144,63 @@ public static class EventPartySignupService
         }
     }
 
+    // Turns party-slot signups into live-event participations when the event
+    // starts. Slot signups (from the Discord post or the Activity) live in
+    // EventPartySlotSignups, but the live event rooms / timers / DKP / close all
+    // run off AppUserEvents — so without this a signed-up member never appears in
+    // the started event. Each signup that doesn't already have a participation for
+    // this event becomes a pending (unverified) attendee carrying their slot's
+    // role + job, with StartTime = the event's commencement, so they land in the
+    // Attendance room and accrue from the start once a leader verifies them.
+    // Requires eventEntity.AppUserEvents to be loaded and CommencementStartTime
+    // set. Does NOT commit — the caller (the start action) owns SaveChanges.
+    // Returns the number of participations created.
+    public static async Task<int> MaterializeSignupsAsParticipantsAsync(
+        ApplicationDbContext db, Event eventEntity, CancellationToken cancellationToken)
+    {
+        var signups = await db.EventPartySlotSignups
+            .Where(s => s.EventId == eventEntity.Id && s.AppUserId != null)
+            .ToListAsync(cancellationToken);
+        if (signups.Count == 0)
+        {
+            return 0;
+        }
+
+        // Don't double-add anyone who already joined (e.g. "Join (no slot)").
+        var alreadyParticipating = new HashSet<string>(
+            eventEntity.AppUserEvents
+                .Where(p => !string.IsNullOrEmpty(p.AppUserId))
+                .Select(p => p.AppUserId!),
+            StringComparer.Ordinal);
+
+        var created = 0;
+        foreach (var signup in signups)
+        {
+            if (signup.AppUserId is null || !alreadyParticipating.Add(signup.AppUserId))
+            {
+                continue;
+            }
+
+            eventEntity.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = signup.AppUserId,
+                EventId = eventEntity.Id,
+                CharacterName = signup.CharacterName,
+                JobName = signup.MainJob,
+                SubJobName = signup.SubJob,
+                JobType = signup.Role,
+                StartTime = eventEntity.CommencementStartTime,
+                EventDkp = 0,
+                // Pending → shows in the Attendance room until a leader verifies,
+                // mirroring the Activity "Join" flow (IsVerified left null).
+                IsVerified = null,
+            });
+            created++;
+        }
+
+        return created;
+    }
+
     // Map of PartySetupSlotId -> the event's signup for that slot, for rendering.
     public static async Task<Dictionary<int, EventPartySlotSignup>> GetSignupsForEventAsync(
         ApplicationDbContext db, int eventId, CancellationToken cancellationToken)

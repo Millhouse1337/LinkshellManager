@@ -127,6 +127,26 @@ public sealed class GoogleSheetsSyncService
         }
     }
 
+    // Creates a brand-new spreadsheet owned by the connected Google account and
+    // returns its id. With the drive.file scope this is the only way the app can
+    // obtain a sheet it's allowed to touch — the dedicated "LSM DKP" sheet.
+    public async Task<string> CreateSpreadsheetAsync(int linkshellId, string title, CancellationToken cancellationToken)
+    {
+        var service = await GetServiceAsync(linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
+        try
+        {
+            var spreadsheet = new Spreadsheet { Properties = new SpreadsheetProperties { Title = title } };
+            var created = await service.Spreadsheets.Create(spreadsheet).ExecuteAsync(cancellationToken);
+            return created.SpreadsheetId;
+        }
+        catch (TokenResponseException ex) when (IsInvalidGrant(ex))
+        {
+            InvalidateCache(linkshellId);
+            throw new GoogleOAuthRevokedException(linkshellId, ex);
+        }
+    }
+
     public async Task<IReadOnlyList<string>> GetSheetTitlesAsync(int linkshellId, string spreadsheetId, CancellationToken cancellationToken)
     {
         var service = await GetServiceAsync(linkshellId, cancellationToken)
@@ -450,7 +470,10 @@ public sealed class GoogleSheetsSyncService
                 ClientId = _options.ClientId,
                 ClientSecret = _options.ClientSecret,
             },
-            Scopes = new[] { SheetsService.Scope.Spreadsheets },
+            // Per-file access only — matches the drive.file scope requested at
+            // consent time (see GoogleOAuthService). The Sheets API accepts this
+            // for spreadsheets the app created, which is all we ever touch.
+            Scopes = new[] { SheetsService.Scope.DriveFile },
             DataStore = new NullDataStore(),
         });
     }

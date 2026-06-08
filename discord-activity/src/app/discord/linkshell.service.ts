@@ -88,6 +88,10 @@ export class LinkshellService {
       enableItems?: boolean | null;
       enableRevenue?: boolean | null;
       dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null;
+      // Member activity tracking (null = leave unchanged).
+      enableActivityTracking?: boolean | null;
+      inactiveAfterAbsences?: number | null;
+      activeAfterAttendances?: number | null;
       // null = leave unchanged; [] = clear; [...names] = replace.
       hiddenTodMonsters?: string[] | null;
       // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
@@ -116,6 +120,9 @@ export class LinkshellService {
         enableItems: input.enableItems ?? null,
         enableRevenue: input.enableRevenue ?? null,
         dkpRoundingIncrement: input.dkpRoundingIncrement ?? null,
+        enableActivityTracking: input.enableActivityTracking ?? null,
+        inactiveAfterAbsences: input.inactiveAfterAbsences ?? null,
+        activeAfterAttendances: input.activeAfterAttendances ?? null,
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
         linkshellType: input.linkshellType ?? null,
         discordGuildId: input.discordGuildId ?? null

@@ -118,6 +118,11 @@ export interface ActivityLinkshellSettings {
   enableItems: boolean;
   enableRevenue: boolean;
   dkpRoundingIncrement: ActivityDkpRoundingIncrement;
+  // Member activity tracking: opt-in Active/Inactive badge from event attendance.
+  // Inactive after N consecutive uncredited counting events, back to Active after M.
+  enableActivityTracking: boolean;
+  inactiveAfterAbsences: number;
+  activeAfterAttendances: number;
   // Names of monsters the linkshell admin has elected to hide from the
   // ToD Tracker (Dashboard + ToDs tab). Empty when none are hidden.
   hiddenTodMonsters: string[];
@@ -341,6 +346,9 @@ export interface ActivityMember {
   status?: string | null;
   linkshellDkp?: number | null;
   dateJoined?: string | null;
+  // Computed Active/Inactive from event attendance. Null when the linkshell has
+  // not enabled activity tracking — the badge is hidden in that case.
+  active?: boolean | null;
 }
 
 // "Jobs Roster" — every member's leveled jobs. jobCatalog is the job-name order

@@ -82,6 +82,12 @@ public class EventHistoryController : Controller
         history.EndTime = ConvertUtcToUserTimeZone(history.EndTime, user.TimeZone);
         // Leaders/Officers can reconcile per-member active-status credit on this page.
         ViewBag.CanReconcileActive = await CanManageAsync(user.Id, history.LinkshellId);
+        // The whole active-credit apparatus (column, reconcile, tags) only shows
+        // when the linkshell has opted into member activity tracking.
+        ViewBag.ActivityTrackingEnabled = await _context.Linkshells
+            .Where(l => l.Id == history.LinkshellId)
+            .Select(l => l.EnableActivityTracking)
+            .FirstOrDefaultAsync();
         return View(history);
     }
 

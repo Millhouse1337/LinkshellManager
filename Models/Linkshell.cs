@@ -131,6 +131,13 @@ public class Linkshell
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 
+    // True when GoogleSpreadsheetId points at a sheet LSManager CREATED itself
+    // (the dedicated "LSM DKP" sheet) rather than an externally-pasted id from
+    // the old broad-scope flow. Under the drive.file scope the app can only
+    // access sheets it created, so this gates the connected-sheet UI and lets us
+    // nudge legacy (pasted-id) linkshells to create a dedicated sheet.
+    public bool GoogleSheetAppCreated { get; set; }
+
     // Tab that the generic DKP template export writes to and the template
     // import reads from (the canonical 6-column Member/Alts/Current/Total/Spent
     // layout). Default "LSM DKP". A linkshell can point this at a tab of their

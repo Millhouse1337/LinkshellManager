@@ -145,7 +145,7 @@ else
             }
             else
             {
-                <p>Authorize LSManager to read and write spreadsheets you own. You'll see Google's consent screen — grant the Sheets permission to continue.</p>
+                <p>Authorize LSManager to create and manage a single DKP spreadsheet for this linkshell. You'll see Google's consent screen — LSManager only ever sees the one sheet it creates, never your other spreadsheets.</p>
                 <form asp-action="Connect" asp-route-linkshellId="@Model.LinkshellId" method="post">
                     <button type="submit" class="btn btn-primary">Connect Google account</button>
                 </form>
@@ -155,30 +155,67 @@ else
 
     @if (Model.IsOAuthConnected)
     {
-        <div class="card fade d4">
-            <div class="card-head">
-                <div class="card-title">Step 2 — Spreadsheet</div>
+        @if (Model.GoogleSheetAppCreated && !string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+        {
+            <div class="card fade d4">
+                <div class="card-head">
+                    <div class="card-title">Step 2 — Your DKP sheet</div>
+                </div>
+                <div style="padding:12px 16px">
+                    <p style="margin-top:0">
+                        LSManager created and manages a dedicated <code>@templateTab</code> spreadsheet for this linkshell —
+                        it's the only file the app can touch.
+                    </p>
+                    <a class="btn" target="_blank" href="https://docs.google.com/spreadsheets/d/@Model.SpreadsheetId/edit">Open sheet</a>
+                </div>
+                <form asp-action="SaveConfig" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:0 16px 12px">
+                    <div class="form-row">
+                        <label>DKP template tab name (optional)</label>
+                        <input class="input" type="text" name="dkpTemplateTabName" value="@Model.DkpTemplateTabName" placeholder="LSM DKP" />
+                        <small>Defaults to <code>LSM DKP</code>. The Export below writes this tab and Import reads it. Point it at another tab in this sheet if you've reformatted one to match the template.</small>
+                    </div>
+                    <div style="margin-top:12px">
+                        <button type="submit" class="btn">Save</button>
+                    </div>
+                </form>
             </div>
-            <form asp-action="SaveConfig" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:12px 16px">
-                <div class="form-row">
-                    <label>Spreadsheet ID</label>
-                    <input class="input" type="text" name="spreadsheetId" value="@Model.SpreadsheetId" placeholder="e.g. 1YNfaF5AXbZoJdKrs21p29pfAl6Q9wJsQWafPztG3Nxk" />
-                    <small>The long string between <code>/d/</code> and <code>/edit</code> in the sheet URL.</small>
+        }
+        else
+        {
+            <div class="card fade d4">
+                <div class="card-head">
+                    <div class="card-title">Step 2 — Create your DKP sheet</div>
                 </div>
-                <div class="form-row" style="margin-top:14px">
-                    <label>DKP template tab name (optional)</label>
-                    <input class="input" type="text" name="dkpTemplateTabName" value="@Model.DkpTemplateTabName" placeholder="LSM DKP" />
-                    <small>Defaults to <code>LSM DKP</code>. The Export below writes this tab and Import reads it. Point it at a tab you've reformatted to match the template.</small>
-                </div>
-                <div style="margin-top:12px">
-                    <button type="submit" class="btn">Save</button>
+                <div style="padding:12px 16px">
                     @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
                     {
-                        <a class="btn" target="_blank" href="https://docs.google.com/spreadsheets/d/@Model.SpreadsheetId/edit">Open sheet</a>
+                        <p style="margin-top:0">
+                            This linkshell was previously linked to an external spreadsheet under Google's broad
+                            permission. LSManager now uses a dedicated sheet it creates and manages, so it only needs
+                            access to that one file. Click below to create it — your DKP exports straight into it.
+                        </p>
+                    }
+                    else
+                    {
+                        <p style="margin-top:0">
+                            Create a dedicated <code>@templateTab</code> spreadsheet for this linkshell. LSManager makes it
+                            in your Google Drive and only ever touches this one sheet — your current DKP is exported into
+                            it automatically.
+                        </p>
+                    }
+                    <form asp-action="CreateSheet" asp-route-linkshellId="@Model.LinkshellId" method="post">
+                        <button type="submit" class="btn btn-primary">Create LSM DKP sheet</button>
+                    </form>
+                    @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+                    {
+                        <p style="margin-top:10px;font-size:12px;color:var(--fg-3)">
+                            To fully drop the old broad access, <strong>Disconnect</strong> above and reconnect first — the
+                            new permission is limited to the sheet LSManager creates.
+                        </p>
                     }
                 </div>
-            </form>
-        </div>
+            </div>
+        }
 
         @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
         {

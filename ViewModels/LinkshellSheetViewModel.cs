@@ -7,6 +7,10 @@ public sealed class LinkshellSheetViewModel
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
     public string? SpreadsheetId { get; set; }
+    // True when SpreadsheetId is a sheet the app created (the dedicated "LSM DKP"
+    // sheet). False for legacy externally-pasted ids — the UI nudges those to
+    // create a dedicated sheet so the app needs only per-file Google access.
+    public bool GoogleSheetAppCreated { get; set; }
     public bool IsOAuthConfigured { get; set; }
     public bool IsOAuthConnected { get; set; }
     public string? ConnectedGoogleEmail { get; set; }

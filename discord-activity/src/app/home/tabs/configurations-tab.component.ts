@@ -138,6 +138,9 @@ export class ConfigurationsTabComponent {
         enableItems: settings?.enableItems ?? null,
         enableRevenue: settings?.enableRevenue ?? null,
         dkpRoundingIncrement: settings?.dkpRoundingIncrement ?? null,
+        enableActivityTracking: settings?.enableActivityTracking ?? null,
+        inactiveAfterAbsences: settings?.inactiveAfterAbsences ?? null,
+        activeAfterAttendances: settings?.activeAfterAttendances ?? null,
         hiddenTodMonsters: settings?.hiddenTodMonsters ?? null,
         linkshellType: settings?.linkshellType ?? null
       });
@@ -428,6 +431,10 @@ export class ConfigurationsTabComponent {
     enableItems: boolean;
     enableRevenue: boolean;
     dkpRoundingIncrement: ActivityDkpRoundingIncrement;
+    // Member activity tracking (opt-in Active/Inactive badge from attendance).
+    enableActivityTracking: boolean;
+    inactiveAfterAbsences: number;
+    activeAfterAttendances: number;
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     linkshellType: string;
     // Lower-cased names of monsters the linkshell wants hidden from the
@@ -446,6 +453,9 @@ export class ConfigurationsTabComponent {
     enableItems: true,
     enableRevenue: true,
     dkpRoundingIncrement: 'Quarter',
+    enableActivityTracking: false,
+    inactiveAfterAbsences: 3,
+    activeAfterAttendances: 2,
     linkshellType: 'Both',
     hiddenTodMonsters: new Set<string>()
   };
@@ -632,6 +642,9 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableItems = settings.enableItems;
     this.customizeDraft.enableRevenue = settings.enableRevenue;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
+    this.customizeDraft.enableActivityTracking = settings.enableActivityTracking ?? false;
+    this.customizeDraft.inactiveAfterAbsences = settings.inactiveAfterAbsences || 3;
+    this.customizeDraft.activeAfterAttendances = settings.activeAfterAttendances || 2;
     this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
@@ -698,6 +711,9 @@ export class ConfigurationsTabComponent {
         enableItems: this.customizeDraft.enableItems,
         enableRevenue: this.customizeDraft.enableRevenue,
         dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement,
+        enableActivityTracking: this.customizeDraft.enableActivityTracking,
+        inactiveAfterAbsences: this.customizeDraft.inactiveAfterAbsences,
+        activeAfterAttendances: this.customizeDraft.activeAfterAttendances,
         hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
         linkshellType: this.customizeDraft.linkshellType
         // The Discord server is set via the dedicated "Discord server" card

@@ -85,7 +85,13 @@ public sealed record ActivityLinkshellSettingsDto(
     string? DiscordGuildName,
     // Optional, separate access lock. When true, the Activity can only open this
     // linkshell from DiscordGuildId. Off by default (associated but not locked).
-    bool LockToDiscordGuild);
+    bool LockToDiscordGuild,
+    // Member activity tracking: opt-in Active/Inactive badge from event attendance.
+    // Streak hysteresis — Inactive after N consecutive uncredited counting events,
+    // back to Active after M consecutive credited ones.
+    bool EnableActivityTracking,
+    int InactiveAfterAbsences,
+    int ActiveAfterAttendances);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -195,7 +201,10 @@ public sealed record ActivityMemberDto(
     string? Rank,
     string? Status,
     double? LinkshellDkp,
-    DateTime? DateJoined);
+    DateTime? DateJoined,
+    // Computed activity state (event-attendance streak). Null when the linkshell
+    // hasn't enabled activity tracking, so the client hides the badge.
+    bool? Active = null);
 
 // "Jobs Roster" — every member's leveled jobs (the levels they entered on their
 // Profile), for the linkshell's main + alt characters. JobCatalog is the job
@@ -610,7 +619,12 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
     string? LinkshellType,
     // null = leave unchanged, "" = unlock, digits = lock to that Discord server.
-    string? DiscordGuildId);
+    string? DiscordGuildId,
+    // Member activity tracking (null = leave unchanged). Thresholds are clamped to
+    // a minimum of 1 server-side.
+    bool? EnableActivityTracking = null,
+    int? InactiveAfterAbsences = null,
+    int? ActiveAfterAttendances = null);
 
 // Associate a linkshell with a Discord server (does NOT lock access). GuildId is
 // a server chosen from the eligible-guilds dropdown (the bot's servers the caller

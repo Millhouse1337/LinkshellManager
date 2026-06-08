@@ -105,6 +105,12 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
+        // Computed Active/Inactive per member (empty when tracking is disabled, so
+        // every member's Active stays null and the client hides the badge).
+        var activeByUser = linkshell.EnableActivityTracking
+            ? await _memberActivity.ComputeActiveByAppUserAsync(linkshellId, cancellationToken)
+            : new Dictionary<string, bool>();
+
         return Ok(new ActivityLinkshellDetailDto(
             linkshell.Id,
             linkshell.LinkshellName ?? "Unknown linkshell",
@@ -122,7 +128,10 @@ public sealed partial class ActivityDataController
                     link.Rank,
                     link.Status,
                     link.LinkshellDkp,
-                    link.DateJoined))
+                    link.DateJoined,
+                    link.AppUserId is not null && activeByUser.TryGetValue(link.AppUserId, out var active)
+                        ? active
+                        : (bool?)null))
                 .ToList()));
     }
 
@@ -242,6 +251,20 @@ public sealed partial class ActivityDataController
         if (request.HiddenTodMonsters is not null)
         {
             linkshell.HiddenTodMonsters = SerializeHiddenTodMonsters(request.HiddenTodMonsters);
+        }
+        // Member activity tracking (null = leave unchanged). Thresholds clamp to >= 1
+        // to match the web Customize page and MemberActivityService's own guard.
+        if (request.EnableActivityTracking.HasValue)
+        {
+            linkshell.EnableActivityTracking = request.EnableActivityTracking.Value;
+        }
+        if (request.InactiveAfterAbsences.HasValue)
+        {
+            linkshell.InactiveAfterAbsences = Math.Max(1, request.InactiveAfterAbsences.Value);
+        }
+        if (request.ActiveAfterAttendances.HasValue)
+        {
+            linkshell.ActiveAfterAttendances = Math.Max(1, request.ActiveAfterAttendances.Value);
         }
         // null in the request = leave unchanged. Empty/whitespace clears the
         // server association (and, with it, the access lock). A non-empty value
