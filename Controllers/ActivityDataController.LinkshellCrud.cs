@@ -105,12 +105,9 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
-        // Computed Active/Inactive per member (empty when tracking is disabled, so
-        // every member's Active stays null and the client hides the badge).
-        var activeByUser = linkshell.EnableActivityTracking
-            ? await _memberActivity.ComputeActiveByAppUserAsync(linkshellId, cancellationToken)
-            : new Dictionary<string, bool>();
-
+        // Member Status is now the single source of truth (the attendance rule
+        // auto-drives Active/Inactive at close — see MemberActivityService), so the
+        // roster just surfaces Status; no separate computed activity flag.
         return Ok(new ActivityLinkshellDetailDto(
             linkshell.Id,
             linkshell.LinkshellName ?? "Unknown linkshell",
@@ -128,10 +125,7 @@ public sealed partial class ActivityDataController
                     link.Rank,
                     link.Status,
                     link.LinkshellDkp,
-                    link.DateJoined,
-                    link.AppUserId is not null && activeByUser.TryGetValue(link.AppUserId, out var active)
-                        ? active
-                        : (bool?)null))
+                    link.DateJoined))
                 .ToList()));
     }
 
@@ -313,6 +307,11 @@ public sealed partial class ActivityDataController
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Enabling tracking or changing thresholds can change who's Inactive →
+        // recompute member statuses now (no-op when tracking is off).
+        await _memberActivity.ApplyComputedStatusAsync(linkshellId, cancellationToken);
+
         return Ok(new { success = true });
     }
 

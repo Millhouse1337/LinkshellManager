@@ -84,6 +84,11 @@ public class ManageTeamController : Controller
                 && (ul.Status == null || ul.Status == "Active"));
         }
 
+        // Keep the single Status current before listing members: the attendance
+        // rule auto-drives Active/Inactive (no-op when tracking is off). This also
+        // backfills linkshells whose events closed before auto-status existed.
+        await _memberActivity.ApplyComputedStatusAsync(targetId, HttpContext.RequestAborted);
+
         var totalCount = await filteredQuery.CountAsync();
         const int pageSize = ManageTeamViewModel.MembersPageSize;
         var totalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -96,14 +101,6 @@ public class ManageTeamController : Controller
             .ToListAsync();
 
         var canManage = await CanManageAsync(user.Id, targetId);
-
-        // Computed Active/Inactive activity badge (separate from the manual Status),
-        // only when the linkshell opts into attendance-based activity tracking.
-        var selectedLinkshell = userLinkshells.First(l => l.Id == targetId);
-        ViewBag.ActivityTrackingEnabled = selectedLinkshell.EnableActivityTracking;
-        ViewBag.MemberActivity = selectedLinkshell.EnableActivityTracking
-            ? await _memberActivity.ComputeActiveByAppUserAsync(targetId, HttpContext.RequestAborted)
-            : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
         return View(new ManageTeamViewModel
         {

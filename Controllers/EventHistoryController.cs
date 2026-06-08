@@ -123,6 +123,9 @@ public class EventHistoryController : Controller
         }
         await _context.SaveChangesAsync();
 
+        // Credit changes alter the attendance streak → recompute member statuses.
+        await new Services.MemberActivityService(_context).ApplyComputedStatusAsync(history.LinkshellId, HttpContext.RequestAborted);
+
         TempData["EventHistoryStatus"] = "Active-status credit updated.";
         return RedirectToAction(nameof(Details), new { id });
     }

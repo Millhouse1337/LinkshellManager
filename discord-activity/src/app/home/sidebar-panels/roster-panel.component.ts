@@ -222,6 +222,9 @@ export class RosterPanelComponent {
     if (normalized === 'pending') {
       return 'warning';
     }
+    if (normalized === 'inactive') {
+      return 'danger';
+    }
     return 'default';
   }
 

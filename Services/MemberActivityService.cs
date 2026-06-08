@@ -133,4 +133,49 @@ public sealed class MemberActivityService
         var map = await ComputeActiveByAppUserAsync(linkshellId, cancellationToken);
         return !map.TryGetValue(appUserId, out var active) || active;
     }
+
+    // Persists the computed result onto each member's manual Status field so there
+    // is a SINGLE status (Active/Pending/Inactive) everywhere. The attendance rule
+    // owns Active <-> Inactive; "Pending" is a manual, sticky state the rule never
+    // overwrites. No-op when activity tracking is disabled (the compute returns an
+    // empty map). Call after anything that changes the streak: event close, credit
+    // reconciliation, or a thresholds/enable change. Returns the number changed.
+    public async Task<int> ApplyComputedStatusAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var map = await ComputeActiveByAppUserAsync(linkshellId, cancellationToken);
+        if (map.Count == 0)
+        {
+            return 0; // tracking off, or no app-linked members → leave Status alone
+        }
+
+        var members = await _db.AppUserLinkshells
+            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
+            .ToListAsync(cancellationToken);
+
+        var changed = 0;
+        foreach (var member in members)
+        {
+            if (member.AppUserId is null || !map.TryGetValue(member.AppUserId, out var active))
+            {
+                continue;
+            }
+            // Pending is a manual state leadership controls; never auto-overwrite it.
+            if (string.Equals(member.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var desired = active ? "Active" : "Inactive";
+            if (!string.Equals(member.Status, desired, StringComparison.Ordinal))
+            {
+                member.Status = desired;
+                changed++;
+            }
+        }
+
+        if (changed > 0)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        return changed;
+    }
 }

@@ -451,6 +451,11 @@ public sealed partial class ActivityDataController
         _dbContext.Events.Remove(eventEntity);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // A counting event just closed → recompute each member's Active/Inactive
+        // status from attendance (no-op when tracking is disabled for the linkshell).
+        await _memberActivity.ApplyComputedStatusAsync(eventEntity.LinkshellId, cancellationToken);
+
         return Ok(new { success = true });
     }
 

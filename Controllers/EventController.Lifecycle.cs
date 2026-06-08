@@ -884,6 +884,10 @@ public partial class EventController
         dbContext.Events.Remove(eventEntity);
         await dbContext.SaveChangesAsync();
 
+        // A counting event just closed → recompute each member's Active/Inactive
+        // status from attendance (no-op when the linkshell hasn't enabled tracking).
+        await new MemberActivityService(dbContext).ApplyComputedStatusAsync(eventEntity.LinkshellId, CancellationToken.None);
+
         return new EndEventResult(endTimeUtc, participantSummaries, windowCount, history.Id, hasLootDeductions);
     }
 }

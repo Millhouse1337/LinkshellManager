@@ -567,6 +567,10 @@ public class LinkshellController : Controller
 
         await _context.SaveChangesAsync();
 
+        // Enabling tracking or changing the thresholds can change who's Inactive →
+        // recompute member statuses now (no-op when tracking is off).
+        await new Services.MemberActivityService(_context).ApplyComputedStatusAsync(linkshell.Id, HttpContext.RequestAborted);
+
         // Refresh the live ToD board now so toggling a channel on (or editing
         // its name) reflects immediately rather than waiting for the next ToD
         // change. No-op when no board webhook is configured.
