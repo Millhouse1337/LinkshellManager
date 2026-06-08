@@ -244,7 +244,8 @@ export class ConfigurationsTabComponent {
     { key: 'canLockAuctions', label: 'Lock auctions (bid freeze)' },
     { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' },
     { key: 'canManageParties', label: 'Manage party setups' },
-    { key: 'canManageInvites', label: 'Manage invites' }
+    { key: 'canManageInvites', label: 'Manage invites' },
+    { key: 'canBid', label: 'Place bids on auctions' }
   ] as const;
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
@@ -302,7 +303,8 @@ export class ConfigurationsTabComponent {
     this.roleDraft.name = '';
     this.roleDraft.permissions = {};
     for (const perm of this.permissionKeys) {
-      this.roleDraft.permissions[perm.key] = false;
+      // Bidding is on by default (the norm); every other permission starts off.
+      this.roleDraft.permissions[perm.key] = perm.key === 'canBid';
     }
   }
 
@@ -328,7 +330,8 @@ export class ConfigurationsTabComponent {
       canLockAuctions: !!this.roleDraft.permissions['canLockAuctions'],
       canCustomizeLinkshell: !!this.roleDraft.permissions['canCustomizeLinkshell'],
       canManageParties: !!this.roleDraft.permissions['canManageParties'],
-      canManageInvites: !!this.roleDraft.permissions['canManageInvites']
+      canManageInvites: !!this.roleDraft.permissions['canManageInvites'],
+      canBid: !!this.roleDraft.permissions['canBid']
     };
 
     const ok = this.editingRoleId !== null

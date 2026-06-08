@@ -57,4 +57,8 @@ public class LinkshellRole
     public bool CanManageParties { get; set; }
 
     public bool CanManageInvites { get; set; }
+
+    // Permission to place bids on auctions. On for everyone by default; the built-in
+    // "Trial" role has it off so trial members can attend/earn but not bid yet.
+    public bool CanBid { get; set; }
 }

@@ -41,6 +41,15 @@ public static class DiscordEventMessageBuilder
     public const string PartyWizardSubPrefix = "evt:psws:";
     public const string PartyWizardNoSub = "__nosub__";
 
+    // "Join (no slot)" job-pick wizard (role → main → sub). Same shape as the
+    // slot wizard prefixes, but there's no slot to claim — the picks become a
+    // general-attendance AppUserEvent. Role can be "no role"; the main job is
+    // still required so an attendee always says what they're coming as.
+    public const string PartyJoinWizardRolePrefix = "evt:gjwr:";
+    public const string PartyJoinWizardMainPrefix = "evt:gjwm:";
+    public const string PartyJoinWizardSubPrefix = "evt:gjws:";
+    public const string PartyWizardNoRole = "__norole__";
+
     // Leader-path variants of the sign-up flow. Identical to the prefixes above
     // except they additionally mark the claimed slot as that party's leader
     // (first-claim-wins). Separate prefixes keep the leader intent flowing through

@@ -177,11 +177,35 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandlePartySlotLeaveAsync(eventId, appUserId, cancellationToken);
         }
 
-        // "Join (no slot)" → general attendance (AppUserEvent), no party slot.
+        // "Join (no slot)" → open an ephemeral job-pick wizard (role optional, job
+        // required) so the attendee still says what they're coming as.
         if (customId.StartsWith(DiscordEventMessageBuilder.PartyJoinEventPrefix, StringComparison.Ordinal))
         {
             var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartyJoinEventPrefix);
-            return await HandleGeneralJoinAsync(eventId, appUserId, cancellationToken);
+            return await StartGeneralJoinAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // General-join wizard selects (role → main → sub). Raw picks ride in the
+        // custom_id; the sub step (or last needed step) creates the attendance row.
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartyJoinWizardRolePrefix);
+            return await AdvanceGeneralJoinWizardAsync(eventId, SelectedValue(data), null, null, false, appUserId, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyJoinWizardMainPrefix, StringComparison.Ordinal))
+        {
+            var p = customId[DiscordEventMessageBuilder.PartyJoinWizardMainPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var role = p.Length > 1 ? p[1] : null; // raw (may be the "no role" sentinel)
+            return await AdvanceGeneralJoinWizardAsync(eventId, role, SelectedValue(data), null, false, appUserId, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyJoinWizardSubPrefix, StringComparison.Ordinal))
+        {
+            var p = customId[DiscordEventMessageBuilder.PartyJoinWizardSubPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var role = p.Length > 1 ? p[1] : null; // raw
+            var main = p.Length > 2 ? p[2] : null; // raw
+            return await AdvanceGeneralJoinWizardAsync(eventId, role, main, SelectedValue(data), true, appUserId, cancellationToken);
         }
 
         // Job-pick wizard selects (role → main → sub). Each carries the picks made
@@ -667,7 +691,9 @@ public sealed class DiscordInteractionsController : ControllerBase
             : null;
 
     private static string? NormalizeWizardValue(string? value) =>
-        string.IsNullOrWhiteSpace(value) || value == "-" || value == DiscordEventMessageBuilder.PartyWizardNoSub
+        string.IsNullOrWhiteSpace(value) || value == "-"
+        || value == DiscordEventMessageBuilder.PartyWizardNoSub
+        || value == DiscordEventMessageBuilder.PartyWizardNoRole
             ? null
             : value;
 
@@ -706,11 +732,53 @@ public sealed class DiscordInteractionsController : ControllerBase
         return await UpdatedEventMessageAsync(eventId, cancellationToken);
     }
 
-    // "Join (no slot)" → adds the member to the event's general attendance roster
-    // (AppUserEvent) without claiming a party slot. Idempotent. The button lives
-    // on the board, so the board refreshes in place to show the new attendee.
-    private async Task<IActionResult> HandleGeneralJoinAsync(
+    // "Join (no slot)" button on the board → a NEW ephemeral wizard message (so the
+    // board itself isn't replaced). Subsequent picks morph this ephemeral via
+    // AdvanceGeneralJoinWizardAsync. Starts at the role step (optional).
+    private async Task<IActionResult> StartGeneralJoinAsync(
         int eventId, string appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+
+        var ev = await _db.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+
+        var isMember = await _db.AppUserLinkshells
+            .AnyAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
+        if (!isMember)
+        {
+            return Ephemeral("You're not a member of this linkshell, so you can't join its events.");
+        }
+
+        var roleOptions = new[] { (object)new { label = "No specific role", value = DiscordEventMessageBuilder.PartyWizardNoRole } }
+            .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
+            .ToArray();
+        return Ok(new
+        {
+            type = ResponseChannelMessage,
+            data = new
+            {
+                content = "Join (no slot) — pick your role (optional):",
+                components = SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions),
+                flags = EphemeralFlag
+            }
+        });
+    }
+
+    // "Join (no slot)" job-pick wizard: role (optional) → main job (required) →
+    // sub (optional). Mirrors the slot wizard but there's no slot to claim — the
+    // picks become a general-attendance AppUserEvent so the attendee always says
+    // what job they're coming as (no more blank "Role Unassigned / Job/Sub" rows).
+    // Re-running replaces the member's existing attendance for this event.
+    private async Task<IActionResult> AdvanceGeneralJoinWizardAsync(
+        int eventId, string? role, string? main, string? sub, bool subPicked,
+        string appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -732,26 +800,70 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("You're not a member of this linkshell, so you can't join its events.");
         }
 
-        var already = await _db.AppUserEvents
-            .AnyAsync(p => p.EventId == eventId && p.AppUserId == appUserId, cancellationToken);
-        if (already)
+        // Step 1 — role (optional; an explicit "No specific role" choice lets a
+        // member proceed without one but still pick a job next).
+        if (string.IsNullOrWhiteSpace(role))
         {
-            return Ephemeral("You're already on this event's roster.");
+            var roleOptions = new[] { (object)new { label = "No specific role", value = DiscordEventMessageBuilder.PartyWizardNoRole } }
+                .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
+                .ToArray();
+            return WizardStep(
+                "Join (no slot) — pick your role (optional):",
+                SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions));
         }
 
+        // Step 2 — main job (required).
+        if (string.IsNullOrWhiteSpace(main))
+        {
+            return WizardStep(
+                "Pick your main job:",
+                JobSelectRow(DiscordEventMessageBuilder.PartyJoinWizardMainPrefix, $"{eventId}:{role}",
+                    "Pick your main job", EventJobCatalog.MainJobOptions));
+        }
+
+        // Step 3 — sub job (optional). Exclude the chosen main + offer "no sub".
+        if (!subPicked)
+        {
+            var subOptions = new[] { (object)new { label = "No sub job", value = DiscordEventMessageBuilder.PartyWizardNoSub } }
+                .Concat(EventJobCatalog.SubJobOptions
+                    .Where(j => !string.Equals(j, main, StringComparison.OrdinalIgnoreCase))
+                    .Select(j => (object)new { label = j, value = j }))
+                .ToArray();
+            return WizardStep(
+                "Pick your sub job (optional):",
+                SelectRow(DiscordEventMessageBuilder.PartyJoinWizardSubPrefix, $"{eventId}:{role}:{main}",
+                    "Pick your sub job", subOptions));
+        }
+
+        // Done — (re)create the general-attendance row carrying the chosen job.
         var characterName = membership.CharacterName
             ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Member";
+
+        var existing = await _db.AppUserEvents
+            .Where(p => p.EventId == eventId && p.AppUserId == appUserId)
+            .ToListAsync(cancellationToken);
+        if (existing.Count > 0)
+        {
+            _db.AppUserEvents.RemoveRange(existing);
+        }
+
         _db.AppUserEvents.Add(new AppUserEvent
         {
             AppUserId = appUserId,
             EventId = eventId,
             CharacterName = characterName,
+            JobType = NormalizeWizardValue(role),
+            JobName = NormalizeWizardValue(main),
+            SubJobName = NormalizeWizardValue(sub),
             EventDkp = 0,
             StartTime = ev.CommencementStartTime,
         });
         await _db.SaveChangesAsync(cancellationToken);
+        await EditBoardViaBotAsync(eventId, cancellationToken);
 
-        return await UpdatedEventMessageAsync(eventId, cancellationToken);
+        var jobLabel = NormalizeWizardValue(main) ?? "your job";
+        var subLabel = NormalizeWizardValue(sub) is { } chosenSub ? $"/{chosenSub}" : string.Empty;
+        return WizardStep($"✅ Joined (no slot) as {jobLabel}{subLabel}.", Array.Empty<object>());
     }
 
     // Loads an event with its party-setup tree (for the picker + board render).

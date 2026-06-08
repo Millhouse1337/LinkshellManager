@@ -12,6 +12,12 @@ public static class LinkshellRanks
     public const string Officer = "Officer";
     public const string Member = "Member";
 
+    /// <summary>
+    /// Built-in probationary rank: same access as Member but without bidding
+    /// (LinkshellRole.CanBid off). Not part of the manage bar.
+    /// </summary>
+    public const string Trial = "Trial";
+
     /// <summary>True if the rank is Leader (case-insensitive).</summary>
     public static bool IsLeader(string? rank)
         => string.Equals(rank, Leader, StringComparison.OrdinalIgnoreCase);

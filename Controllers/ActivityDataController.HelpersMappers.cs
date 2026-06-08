@@ -119,7 +119,8 @@ public sealed partial class ActivityDataController
             role.CanLockAuctions,
             role.CanCustomizeLinkshell,
             role.CanManageParties,
-            role.CanManageInvites);
+            role.CanManageInvites,
+            role.CanBid);
     }
 
     private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
@@ -144,7 +145,8 @@ public sealed partial class ActivityDataController
             role.CanLockAuctions,
             role.CanCustomizeLinkshell,
             role.CanManageParties,
-            role.CanManageInvites);
+            role.CanManageInvites,
+            role.CanBid);
     }
 
     private static ActivityTodDto MapTodDto(Tod tod)

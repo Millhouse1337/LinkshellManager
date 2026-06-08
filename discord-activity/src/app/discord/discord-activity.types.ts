@@ -163,6 +163,7 @@ export interface ActivityLinkshellPermissions {
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
+  canBid: boolean;
 }
 
 export interface ActivityLinkshellRole {
@@ -186,6 +187,7 @@ export interface ActivityLinkshellRole {
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
+  canBid: boolean;
 }
 
 export interface ActivityLinkshellRolesResponse {
@@ -211,6 +213,7 @@ export interface ActivityLinkshellRolePermissionsInput {
   canCustomizeLinkshell: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
+  canBid: boolean;
 }
 
 export interface ActivityPrimaryLinkshell {

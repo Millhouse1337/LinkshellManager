@@ -300,6 +300,13 @@ public partial class AuctionController
             return Forbid();
         }
 
+        // Trial members (and any role with bidding off) can't place bids.
+        if (!await AuctionBidService.CanRankBidAsync(_context, auctionItem.Auction.LinkshellId, membership.Rank, default))
+        {
+            TempData["AuctionError"] = "Your role isn't allowed to place bids.";
+            return RedirectToAction(nameof(Index));
+        }
+
         var nowUtc = DateTime.UtcNow;
         if (!IsAuctionLive(auctionItem.Auction, nowUtc))
         {

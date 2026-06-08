@@ -311,5 +311,6 @@ public sealed partial class ActivityDataController
         role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
         role.CanManageParties = permissions.CanManageParties;
         role.CanManageInvites = permissions.CanManageInvites;
+        role.CanBid = permissions.CanBid;
     }
 }

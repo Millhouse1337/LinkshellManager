@@ -109,7 +109,8 @@ public sealed record ActivityPermissionsDto(
     bool CanLockAuctions,
     bool CanCustomizeLinkshell,
     bool CanManageParties,
-    bool CanManageInvites);
+    bool CanManageInvites,
+    bool CanBid);
 
 public sealed record ActivityPrimaryLinkshellDto(
     int Id,
@@ -364,7 +365,8 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanLockAuctions,
     bool CanCustomizeLinkshell,
     bool CanManageParties,
-    bool CanManageInvites);
+    bool CanManageInvites,
+    bool CanBid = true);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -386,7 +388,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanLockAuctions,
     bool CanCustomizeLinkshell,
     bool CanManageParties,
-    bool CanManageInvites);
+    bool CanManageInvites,
+    bool CanBid);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,

@@ -396,6 +396,12 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // Trial members (and any role with bidding off) can't place bids.
+        if (!await CanAsync(membership, r => r.CanBid, cancellationToken))
+        {
+            return BadRequest(new { error = "Your role isn't allowed to place bids on auctions." });
+        }
+
         var nowUtc = DateTime.UtcNow;
         if (!IsAuctionLive(auctionItem.Auction, nowUtc))
         {

@@ -29,7 +29,8 @@ public static class LinkshellRoleDefaults
             CanSubmitTodForApproval = true,
             CanSubmitAttendanceForApproval = true,
             CanManageParties = true,
-            CanManageInvites = true
+            CanManageInvites = true,
+            CanBid = true
         };
 
         yield return new LinkshellRole
@@ -55,7 +56,8 @@ public static class LinkshellRoleDefaults
             CanSubmitTodForApproval = true,
             CanSubmitAttendanceForApproval = true,
             CanManageParties = true,
-            CanManageInvites = true
+            CanManageInvites = true,
+            CanBid = true
         };
 
         yield return new LinkshellRole
@@ -63,7 +65,21 @@ public static class LinkshellRoleDefaults
             LinkshellId = linkshellId,
             Name = LinkshellRanks.Member,
             IsSystem = true,
-            SortOrder = 2
+            SortOrder = 2,
+            // Regular members can bid; all management permissions stay off.
+            CanBid = true
+        };
+
+        // Probationary rank: same (lack of) management access as Member, but no
+        // bidding. Leaders can flip CanBid on later if they want to graduate
+        // bidding separately from the full Member rank.
+        yield return new LinkshellRole
+        {
+            LinkshellId = linkshellId,
+            Name = LinkshellRanks.Trial,
+            IsSystem = true,
+            SortOrder = 3,
+            CanBid = false
         };
     }
 }

@@ -66,7 +66,10 @@ public class ManageTeamViewModel
     {
         "Leader",
         "Officer",
-        "Member"
+        "Member",
+        // Probationary rank — same access as Member but can't bid on auctions
+        // (LinkshellRole.CanBid off for the built-in Trial role).
+        "Trial"
     };
 
     public static readonly IReadOnlyList<string> StatusOptions = new[]
