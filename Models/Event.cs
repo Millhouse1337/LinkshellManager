@@ -38,6 +38,12 @@ public class Event
     // (those are driven by the in-game addon). Default false.
     public bool AutoStart { get; set; }
 
+    // When true, this event participates in the member activity (Active/Inactive)
+    // calculation: at close every attendee defaults to earning "active credit",
+    // which leadership can then reconcile. False = the event is ignored entirely
+    // by activity tracking. Default true. Copied to EventHistory at close.
+    public bool CountsTowardActive { get; set; } = true;
+
     public double? Duration { get; set; }
 
     public int? DkpPerHour { get; set; }
@@ -60,16 +66,8 @@ public class Event
     // ShortWindowHnm. Null = fall back to name-based detection (default).
     public int? WindowCountOverride { get; set; }
 
-    // Maps this event to a row category in the linkshell's Google Sheet AttInput
-    // tab. Examples: "Misc Camp", "Kill", "Kings Camp", "Wyrms Camp". Null means
-    // "do not append AttInput rows for this event" -- snapshots / window posts /
-    // event-close awards for this event simply skip the sheet.
-    [MaxLength(32)]
-    public string? AttInputEntryType { get; set; }
-
-    // Idempotency stamp for the event-close AttInput append. Set once after
-    // the row batch is successfully written so a retry / re-end doesn't
-    // create duplicate AttInput rows. Null = not yet appended.
+    // Idempotency stamp left over from the (removed) event-close sheet append.
+    // Retained as a harmless nullable column; no longer written.
     public DateTime? AttInputAppendedAt { get; set; }
 
     // Set when this event was auto-created from a ToD post (HNM workflow).

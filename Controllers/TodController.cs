@@ -25,20 +25,17 @@ public class TodController : Controller
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
     private readonly SubmissionApprovalService _submissionApproval;
-    private readonly SheetSyncQueue _sheetSync;
 
     public TodController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        SubmissionApprovalService submissionApproval,
-        SheetSyncQueue sheetSync)
+        SubmissionApprovalService submissionApproval)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
         _submissionApproval = submissionApproval;
-        _sheetSync = sheetSync;
     }
 
     [HttpGet]
@@ -384,10 +381,6 @@ public class TodController : Controller
             await ActivityDataController.AdjustTodLootDkpAsync(_context, tod, normalizedLootDetails, occurredAtUtc, isRefund: false, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
         }
-
-        // Recompute this ToD's day column on the ManualPoints tab so web ToD
-        // loot edits land on the DKP sheet too (idempotent whole-day rebuild).
-        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImagePath, StringComparison.Ordinal))
         {

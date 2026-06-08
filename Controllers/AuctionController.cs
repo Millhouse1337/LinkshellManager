@@ -15,18 +15,15 @@ public partial class AuctionController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
-    private readonly SheetSyncQueue _sheetSync;
 
     public AuctionController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones,
-        SheetSyncQueue sheetSync)
+        TimeZoneConversionService timeZones)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
-        _sheetSync = sheetSync;
     }
 
     private async Task<AuctionViewModel> BuildAuctionViewModelAsync(AppUser user, AuctionViewModel? source = null)

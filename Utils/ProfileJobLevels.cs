@@ -53,5 +53,46 @@ public static class ProfileJobLevels
         return result;
     }
 
+    // ----- "Strong" job flags -----
+    // A parallel array, indexed the same FFXI-job-id way as the level arrays, where
+    // a non-zero value marks the job as "strong" (well-geared / merited — a hint the
+    // member surfaces to the rest of the linkshell). Stored as int[] (0/1) so it
+    // reuses the same jsonb column shape as the level arrays.
+
+    // Reads the stored FFXI-job-id flag array into a catalog-aligned list of bools
+    // (index i = is MainJobOptions[i] strong); missing/short entries become false.
+    public static List<bool> ToCatalogFlags(int[]? stored)
+    {
+        var flags = new List<bool>(JobCount);
+        for (var i = 0; i < JobCount; i++)
+        {
+            var jobId = FirstJobId + i;
+            flags.Add(stored is not null && jobId < stored.Length && stored[jobId] != 0);
+        }
+        return flags;
+    }
+
+    // Writes catalog-aligned strong flags back into the stored FFXI-job-id array
+    // (1 = strong, 0 = not), preserving index 0 (None) and any higher job ids.
+    // Returns a new array.
+    public static int[] MergeFlagsIntoStored(int[]? existing, IReadOnlyList<bool>? catalogFlags)
+    {
+        var minLength = FirstJobId + JobCount; // covers indices 0..(FirstJobId + JobCount - 1)
+        var length = Math.Max(existing?.Length ?? 0, minLength);
+        var result = new int[length];
+        if (existing is not null)
+        {
+            Array.Copy(existing, result, existing.Length);
+        }
+        if (catalogFlags is not null)
+        {
+            for (var i = 0; i < JobCount && i < catalogFlags.Count; i++)
+            {
+                result[FirstJobId + i] = catalogFlags[i] ? 1 : 0;
+            }
+        }
+        return result;
+    }
+
     private static int Clamp(int level) => level < 0 ? 0 : level > MaxLevel ? MaxLevel : level;
 }

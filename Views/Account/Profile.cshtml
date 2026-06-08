@@ -109,10 +109,16 @@
                         @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
                         {
                             var level = i < Model.JobLevels.Count ? Model.JobLevels[i] : 0;
+                            var strong = i < Model.StrongJobs.Count && Model.StrongJobs[i];
                             <div class="field" style="margin:0">
                                 <label for="job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
                                 <input id="job-@i" type="number" class="form-control" name="JobLevels[@i]"
                                        value="@level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                                <label class="job-strong" title="Mark this job as well-geared / merited">
+                                    <input type="checkbox" name="StrongJobs[@i]" value="true" @(strong ? "checked" : "") />
+                                    <input type="hidden" name="StrongJobs[@i]" value="false" />
+                                    <span>★ Strong</span>
+                                </label>
                             </div>
                         }
                     </div>
@@ -126,10 +132,16 @@
                             @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
                             {
                                 var alt1Level = i < Model.Alt1JobLevels.Count ? Model.Alt1JobLevels[i] : 0;
+                                var alt1Strong = i < Model.Alt1StrongJobs.Count && Model.Alt1StrongJobs[i];
                                 <div class="field" style="margin:0">
                                     <label for="alt1-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
                                     <input id="alt1-job-@i" type="number" class="form-control" name="Alt1JobLevels[@i]"
                                            value="@alt1Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                                    <label class="job-strong" title="Mark this job as well-geared / merited">
+                                        <input type="checkbox" name="Alt1StrongJobs[@i]" value="true" @(alt1Strong ? "checked" : "") />
+                                        <input type="hidden" name="Alt1StrongJobs[@i]" value="false" />
+                                        <span>★ Strong</span>
+                                    </label>
                                 </div>
                             }
                         </div>
@@ -144,10 +156,16 @@
                             @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
                             {
                                 var alt2Level = i < Model.Alt2JobLevels.Count ? Model.Alt2JobLevels[i] : 0;
+                                var alt2Strong = i < Model.Alt2StrongJobs.Count && Model.Alt2StrongJobs[i];
                                 <div class="field" style="margin:0">
                                     <label for="alt2-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
                                     <input id="alt2-job-@i" type="number" class="form-control" name="Alt2JobLevels[@i]"
                                            value="@alt2Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
+                                    <label class="job-strong" title="Mark this job as well-geared / merited">
+                                        <input type="checkbox" name="Alt2StrongJobs[@i]" value="true" @(alt2Strong ? "checked" : "") />
+                                        <input type="hidden" name="Alt2StrongJobs[@i]" value="false" />
+                                        <span>★ Strong</span>
+                                    </label>
                                 </div>
                             }
                         </div>

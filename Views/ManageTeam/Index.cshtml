@@ -112,12 +112,18 @@ else
         }
         else
         {
+            var activityEnabled = ViewBag.ActivityTrackingEnabled is true;
+            var memberActivity = ViewBag.MemberActivity as IDictionary<string, bool> ?? new Dictionary<string, bool>();
             <table class="table themed">
                 <thead>
                     <tr>
                         <th>Character</th>
                         <th>Rank</th>
                         <th>Status</th>
+                        @if (activityEnabled)
+                        {
+                            <th>Activity</th>
+                        }
                         <th style="text-align:right">DKP</th>
                         <th>Joined</th>
                         <th style="text-align:right">Actions</th>
@@ -130,6 +136,23 @@ else
                             <td>@(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")</td>
                             <td><span class="tag">@(member.Rank ?? "—")</span></td>
                             <td>@(member.Status ?? "—")</td>
+                            @if (activityEnabled)
+                            {
+                                <td>
+                                    @if (member.AppUserId == null)
+                                    {
+                                        <span class="tag">—</span>
+                                    }
+                                    else if (!memberActivity.TryGetValue(member.AppUserId, out var act) || act)
+                                    {
+                                        <span class="tag success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="tag danger">Inactive</span>
+                                    }
+                                </td>
+                            }
                             <td class="num" style="text-align:right">@((member.LinkshellDkp ?? 0).ToString("N0"))</td>
                             <td style="font-size:12px;color:var(--fg-3)">
                                 @(member.DateJoined.HasValue ? member.DateJoined.Value.ToString("MMM d, yyyy") : "—")

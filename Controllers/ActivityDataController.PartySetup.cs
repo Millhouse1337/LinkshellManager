@@ -57,7 +57,10 @@ public sealed partial class ActivityDataController
         string? SignedUpCharacterName,
         string? SignedUpRole,
         string? SignedUpMainJob,
-        string? SignedUpSubJob);
+        string? SignedUpSubJob,
+        // Per-event: whether the member in this slot is the party's leader.
+        // Distinct from IsPartyLeader above (the template's designated-leader slot).
+        bool SignedUpIsPartyLeader);
 
     public sealed record ActivityPartySetupPartyDto(
         string Name,
@@ -76,7 +79,7 @@ public sealed partial class ActivityDataController
         bool CanManage,
         IReadOnlyList<ActivityPartySetupAllianceDto> Alliances);
 
-    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob);
+    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false);
 
     [HttpGet("party-setups")]
     public async Task<IActionResult> GetPartySetupsAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)
@@ -155,7 +158,8 @@ public sealed partial class ActivityDataController
                                 s.SignedUpCharacterName,
                                 s.SignedUpRole,
                                 s.SignedUpMainJob,
-                                s.SignedUpSubJob))
+                                s.SignedUpSubJob,
+                                false))
                             .ToList()))
                     .ToList()))
             .ToList();

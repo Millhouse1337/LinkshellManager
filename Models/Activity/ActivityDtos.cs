@@ -36,7 +36,13 @@ public sealed record ActivityAppUserDto(
     // Same catalog-aligned per-job levels for the two alt characters; pre-fill the
     // per-alt job tabs.
     IReadOnlyList<int> Alt1JobLevels,
-    IReadOnlyList<int> Alt2JobLevels);
+    IReadOnlyList<int> Alt2JobLevels,
+    // Catalog-aligned "strong" flags parallel to the level arrays above (true =
+    // the member marked that job well-geared/merited). Pre-fill the profile
+    // editor's per-job Strong toggles.
+    IReadOnlyList<bool> StrongJobs,
+    IReadOnlyList<bool> Alt1StrongJobs,
+    IReadOnlyList<bool> Alt2StrongJobs);
 
 public sealed record ActivityLinkshellDto(
     int Id,
@@ -206,7 +212,12 @@ public sealed record ActivityJobsRosterMemberDto(
     string? Alt1Name,
     IReadOnlyList<int> Alt1JobLevels,
     string? Alt2Name,
-    IReadOnlyList<int> Alt2JobLevels);
+    IReadOnlyList<int> Alt2JobLevels,
+    // Catalog-aligned "strong" flags parallel to each character's level array
+    // (true = well-geared/merited). Rendered as a marker on the job pills.
+    IReadOnlyList<bool> StrongJobs,
+    IReadOnlyList<bool> Alt1StrongJobs,
+    IReadOnlyList<bool> Alt2StrongJobs);
 
 public sealed record ActivityEventDto(
     int Id,
@@ -221,6 +232,7 @@ public sealed record ActivityEventDto(
     int? DkpPerHour,
     string? Details,
     bool AutoStart,
+    bool CountsTowardActive,
     int ParticipantCount,
     ActivityParticipationDto? CurrentParticipation,
     IReadOnlyList<ActivityEventParticipantDto> Participants,
@@ -572,7 +584,10 @@ public sealed record ActivityCreateEventRequest(
     int? PartySetupId,
     // When true, the event auto-starts at its StartTime (background service)
     // instead of waiting for a manual Start. Ignored for HNM events.
-    bool AutoStart = false);
+    bool AutoStart = false,
+    // When true, attendees earn active-member credit (reconciled at close).
+    // Default true, matching the web event form.
+    bool CountsTowardActive = true);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 
@@ -675,7 +690,12 @@ public sealed record ActivityUpdateProfileRequest(
     // Catalog-aligned job levels for the two alt characters; persisted on the
     // AppUser (not per-membership).
     int[]? Alt1JobLevels = null,
-    int[]? Alt2JobLevels = null);
+    int[]? Alt2JobLevels = null,
+    // Catalog-aligned "strong" flags parallel to the level arrays above; null
+    // leaves the existing flags unchanged.
+    bool[]? StrongJobs = null,
+    bool[]? Alt1StrongJobs = null,
+    bool[]? Alt2StrongJobs = null);
 
 // One purpose's channel binding (e.g. "HenmEvents" -> channel id). ChannelId
 // null/empty clears the binding for that purpose.

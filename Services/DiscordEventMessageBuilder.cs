@@ -32,10 +32,27 @@ public static class DiscordEventMessageBuilder
     public const string PartySlotSignUpPrefix = "evt:pssignup:";
     public const string PartySlotClaimPrefix = "evt:psclaim:";
     public const string PartySlotLeavePrefix = "evt:psleave:";
+    // General attendance on a party-board event: join the roster WITHOUT claiming
+    // a slot (overflow / "I'm coming"). Backed by AppUserEvent, same as the
+    // attendance roster used for DKP at close.
+    public const string PartyJoinEventPrefix = "evt:joinevent:";
     public const string PartyWizardRolePrefix = "evt:pswr:";
     public const string PartyWizardMainPrefix = "evt:pswm:";
     public const string PartyWizardSubPrefix = "evt:psws:";
     public const string PartyWizardNoSub = "__nosub__";
+
+    // Leader-path variants of the sign-up flow. Identical to the prefixes above
+    // except they additionally mark the claimed slot as that party's leader
+    // (first-claim-wins). Separate prefixes keep the leader intent flowing through
+    // the picker → claim → job-pick wizard without re-encoding the tail:
+    //   evt:psLsignup:{eventId}   — board "Sign up as leader" button
+    //   evt:psLclaim:{eventId}    — leader slot picker select
+    //   evt:psLwr/psLwm/psLws:... — leader job-pick wizard steps (same tail format)
+    public const string PartySlotLeaderSignUpPrefix = "evt:psLsignup:";
+    public const string PartySlotClaimLeaderPrefix = "evt:psLclaim:";
+    public const string PartyWizardLeaderRolePrefix = "evt:psLwr:";
+    public const string PartyWizardLeaderMainPrefix = "evt:psLwm:";
+    public const string PartyWizardLeaderSubPrefix = "evt:psLws:";
 
     // When the event has a linked party setup, the message shows the board
     // (parties -> slots -> who's in each) + a single "Sign Up" button (which opens
@@ -54,7 +71,7 @@ public static class DiscordEventMessageBuilder
             var signupsBySlot = slotSignups ?? new Dictionary<int, EventPartySlotSignup>();
             return new
             {
-                embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot) },
+                embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot, signups) },
                 components = BuildBoardComponents(ev.Id),
                 allowed_mentions = new { parse = Array.Empty<string>() },
             };
@@ -72,11 +89,19 @@ public static class DiscordEventMessageBuilder
     // Sign Up: a select of the OPEN slots (≤25; Discord's select cap). Returns an
     // empty array when nothing is open (caller shows a "full" notice instead).
     public static object[] BuildSlotPickerComponents(
-        int eventId, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
+        int eventId, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
+        bool asLeader = false)
     {
         var options = new List<object>();
         foreach (var (party, label) in LabeledParties(setup))
         {
+            // For the leader flow, only offer slots in parties that don't already
+            // have a leader (first-claim-wins). A full party always has a leader
+            // (auto-promoted on fill), so leaderless parties always have open slots.
+            if (asLeader && party.Slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader))
+            {
+                continue;
+            }
             foreach (var slot in party.Slots.OrderBy(s => s.SortOrder))
             {
                 if (slotSignups.ContainsKey(slot.Id))
@@ -115,8 +140,8 @@ public static class DiscordEventMessageBuilder
                     new
                     {
                         type = 3, // string select
-                        custom_id = $"{PartySlotClaimPrefix}{eventId}",
-                        placeholder = "Pick a slot to claim",
+                        custom_id = $"{(asLeader ? PartySlotClaimLeaderPrefix : PartySlotClaimPrefix)}{eventId}",
+                        placeholder = asLeader ? "Pick a slot to lead" : "Pick a slot to claim",
                         min_values = 1,
                         max_values = 1,
                         options = options.ToArray(),
@@ -262,7 +287,8 @@ public static class DiscordEventMessageBuilder
     // per-EVENT signup), open slots show the requirement. Inline fields lay the
     // parties out side-by-side, echoing the in-app board.
     private static object BuildBoardEmbed(
-        Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
+        Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
+        IReadOnlyList<EventSignupLine> generalSignups)
     {
         var fields = BuildEventDetailFields(ev);
 
@@ -281,7 +307,9 @@ public static class DiscordEventMessageBuilder
             {
                 slotSignups.TryGetValue(slot.Id, out var signup);
                 var icon = RoleIcon(slot, signup);
-                var crown = slot.IsPartyLeader ? "👑 " : string.Empty;
+                // Crown the actual party leader (the per-event signup flagged as
+                // leader), not the template's designated-leader slot.
+                var crown = (signup?.IsPartyLeader ?? false) ? "👑 " : string.Empty;
                 string line;
                 if (signup is not null)
                 {
@@ -309,6 +337,34 @@ public static class DiscordEventMessageBuilder
             });
         }
 
+        // General attendees (the AppUserEvent roster) who joined WITHOUT claiming a
+        // party slot — shown so "Join (no slot)" overflow is visible on the board.
+        // Slot-holders are excluded (they already appear in their party above).
+        var slotNames = new HashSet<string>(
+            slotSignups.Values
+                .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
+                .Select(s => s.CharacterName!.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var extra = generalSignups
+            .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
+            .ToList();
+        if (extra.Count > 0 && fields.Count < 25)
+        {
+            var sb = new StringBuilder();
+            foreach (var g in extra)
+            {
+                if (sb.Length > 0) { sb.Append('\n'); }
+                var jobs = string.IsNullOrWhiteSpace(g.JobName) ? string.Empty : $" — {Escape(g.JobName!)}";
+                sb.Append($"• {Escape(g.CharacterName)}{jobs}");
+            }
+            fields.Add(new
+            {
+                name = Truncate($"Also attending — no slot ({extra.Count})", 250),
+                value = Truncate(sb.ToString(), 1024),
+                inline = false,
+            });
+        }
+
         var typePrefix = string.IsNullOrWhiteSpace(ev.EventType) ? string.Empty : $"{ev.EventType!.Trim()}: ";
         var title = Truncate($"⚔️ {typePrefix}{ev.EventName ?? $"Event #{ev.Id}"}", 250);
 
@@ -318,7 +374,7 @@ public static class DiscordEventMessageBuilder
             description = string.IsNullOrWhiteSpace(ev.Details) ? null : Truncate(Escape(ev.Details!.Trim()), 1500),
             color = EmbedColor,
             fields = fields.ToArray(),
-            footer = new { text = "Sign Up to claim a slot · Leave my slot to drop out" },
+            footer = new { text = "Sign Up to claim a slot · Join (no slot) for attendance · Leave event to drop out" },
         };
     }
 
@@ -343,8 +399,22 @@ public static class DiscordEventMessageBuilder
                     new
                     {
                         type = 2, // button
-                        style = 2, // secondary
-                        label = "Leave my slot",
+                        style = 3, // success (green) — stands out as the leader option
+                        label = "👑 Sign up as leader",
+                        custom_id = $"{PartySlotLeaderSignUpPrefix}{eventId}",
+                    },
+                    new
+                    {
+                        type = 2, // button
+                        style = 2, // secondary — general attendance, no party slot
+                        label = "Join (no slot)",
+                        custom_id = $"{PartyJoinEventPrefix}{eventId}",
+                    },
+                    new
+                    {
+                        type = 2, // button
+                        style = 2, // secondary — drops both the slot AND general attendance
+                        label = "Leave event",
                         custom_id = $"{PartySlotLeavePrefix}{eventId}",
                     },
                 },

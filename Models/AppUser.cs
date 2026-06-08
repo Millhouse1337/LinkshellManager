@@ -24,6 +24,16 @@ public class AppUser : IdentityUser
     [Column(TypeName = "jsonb")]
     public int[]? Alt2JobLevels { get; set; }
 
+    // Per-job "strong" flags for the two alt characters, parallel to Alt1/Alt2
+    // JobLevels and in the same FFXI-job-id-indexed format (see ProfileJobLevels).
+    // A non-zero entry marks the job as well-geared/merited. Null when the alt has
+    // no name / no flags set.
+    [Column(TypeName = "jsonb")]
+    public int[]? Alt1StrongJobs { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public int[]? Alt2StrongJobs { get; set; }
+
     public string? TimeZone { get; set; }
 
     public int? PrimaryLinkshellId { get; set; }

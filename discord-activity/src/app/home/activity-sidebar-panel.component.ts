@@ -34,7 +34,12 @@ export class ActivitySidebarPanelComponent {
     jobLevels: Array.from({ length: 15 }, () => 0) as number[],
     // Same per-job arrays for the two alt characters (bound to the alt tabs).
     alt1JobLevels: Array.from({ length: 15 }, () => 0) as number[],
-    alt2JobLevels: Array.from({ length: 15 }, () => 0) as number[]
+    alt2JobLevels: Array.from({ length: 15 }, () => 0) as number[],
+    // Parallel "strong" flags (well-geared/merited), toggled per job under each
+    // slot. Same index layout as the level arrays above.
+    strongJobs: Array.from({ length: 15 }, () => false) as boolean[],
+    alt1StrongJobs: Array.from({ length: 15 }, () => false) as boolean[],
+    alt2StrongJobs: Array.from({ length: 15 }, () => false) as boolean[]
   };
 
   // The 15 classic jobs, in the exact order the API's catalog-aligned jobLevels
@@ -53,6 +58,19 @@ export class ActivitySidebarPanelComponent {
     if (this.selectedJobTab === 'alt1' && this.profileModel.altCharacterName1.trim()) return this.profileModel.alt1JobLevels;
     if (this.selectedJobTab === 'alt2' && this.profileModel.altCharacterName2.trim()) return this.profileModel.alt2JobLevels;
     return this.profileModel.jobLevels;
+  }
+
+  // The "strong" flag array for the active tab (a live reference, like
+  // activeJobLevels), so the per-job toggles write to the right character.
+  protected get activeStrongJobs(): boolean[] {
+    if (this.selectedJobTab === 'alt1' && this.profileModel.altCharacterName1.trim()) return this.profileModel.alt1StrongJobs;
+    if (this.selectedJobTab === 'alt2' && this.profileModel.altCharacterName2.trim()) return this.profileModel.alt2StrongJobs;
+    return this.profileModel.strongJobs;
+  }
+
+  protected toggleStrong(index: number): void {
+    const flags = this.activeStrongJobs;
+    flags[index] = !flags[index];
   }
 
   protected selectedLinkshellId = 0;
@@ -121,9 +139,16 @@ export class ActivitySidebarPanelComponent {
       const sourceAlt2 = appUser.alt2JobLevels ?? [];
       const nextAlt1Jobs = this.profileJobOptions.map((_, i) => sourceAlt1[i] ?? 0);
       const nextAlt2Jobs = this.profileJobOptions.map((_, i) => sourceAlt2[i] ?? 0);
+      const sourceStrong = appUser.strongJobs ?? [];
+      const sourceAlt1Strong = appUser.alt1StrongJobs ?? [];
+      const sourceAlt2Strong = appUser.alt2StrongJobs ?? [];
+      const nextStrong = this.profileJobOptions.map((_, i) => sourceStrong[i] ?? false);
+      const nextAlt1Strong = this.profileJobOptions.map((_, i) => sourceAlt1Strong[i] ?? false);
+      const nextAlt2Strong = this.profileJobOptions.map((_, i) => sourceAlt2Strong[i] ?? false);
       const nextSeed =
         `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}|` +
-        `${nextJobLevels.join(',')}|${nextAlt1Jobs.join(',')}|${nextAlt2Jobs.join(',')}`;
+        `${nextJobLevels.join(',')}|${nextAlt1Jobs.join(',')}|${nextAlt2Jobs.join(',')}|` +
+        `${nextStrong.join(',')}|${nextAlt1Strong.join(',')}|${nextAlt2Strong.join(',')}`;
 
       if (nextSeed === this.profileSeed) {
         return;
@@ -137,6 +162,9 @@ export class ActivitySidebarPanelComponent {
       this.profileModel.jobLevels = nextJobLevels;
       this.profileModel.alt1JobLevels = nextAlt1Jobs;
       this.profileModel.alt2JobLevels = nextAlt2Jobs;
+      this.profileModel.strongJobs = nextStrong;
+      this.profileModel.alt1StrongJobs = nextAlt1Strong;
+      this.profileModel.alt2StrongJobs = nextAlt2Strong;
     });
 
     effect(() => {
@@ -269,6 +297,10 @@ export class ActivitySidebarPanelComponent {
     // Alt job levels live on the account; send each named alt's grid.
     const alt1JobLevels = this.profileModel.altCharacterName1.trim() ? clamp(this.profileModel.alt1JobLevels) : null;
     const alt2JobLevels = this.profileModel.altCharacterName2.trim() ? clamp(this.profileModel.alt2JobLevels) : null;
+    // "Strong" flags travel alongside the matching level arrays, same gating.
+    const strongJobs = this.hasLinkshell() ? [...this.profileModel.strongJobs] : null;
+    const alt1StrongJobs = this.profileModel.altCharacterName1.trim() ? [...this.profileModel.alt1StrongJobs] : null;
+    const alt2StrongJobs = this.profileModel.altCharacterName2.trim() ? [...this.profileModel.alt2StrongJobs] : null;
 
     await this.activity.updateProfile({
       characterName: this.profileModel.characterName.trim(),
@@ -277,7 +309,10 @@ export class ActivitySidebarPanelComponent {
       altCharacterName2: this.profileModel.altCharacterName2.trim() || null,
       jobLevels,
       alt1JobLevels,
-      alt2JobLevels
+      alt2JobLevels,
+      strongJobs,
+      alt1StrongJobs,
+      alt2StrongJobs
     });
   }
 
@@ -477,6 +512,14 @@ export class ActivitySidebarPanelComponent {
 
   protected canAuditSelectedLinkshell(): boolean {
     return !!this.selectedLinkshellId && this.canManageLinkshell(this.selectedLinkshellId);
+  }
+
+  // "Add to a previous entry" credits a member missed by a snapshot — a concept
+  // that only exists for HNM-style attendance (snapshots / window events). Hide
+  // it for Sky/Sea/Dynamis linkshells, which never produce snapshots.
+  protected canCreditSnapshot(): boolean {
+    const ls = (this.activity.overview()?.linkshells ?? []).find(l => l.id === this.selectedLinkshellId);
+    return (ls?.settings?.linkshellType ?? 'Both') !== 'SkySeaDynamis';
   }
 
   protected openDkpAudit(): void {

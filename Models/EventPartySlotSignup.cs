@@ -44,4 +44,11 @@ public class EventPartySlotSignup
     public string? SubJob { get; set; }
 
     public DateTime SignedUpAtUtc { get; set; }
+
+    // True when this signup is its party's designated leader for this event.
+    // At most one signup per party carries this. Set when a member explicitly
+    // "signs up as party leader" (first-claim-wins), or auto-assigned to the
+    // party's earliest signup once every slot in the party is filled and nobody
+    // claimed leadership. Purely a designation (a 👑 on the board) — no perms.
+    public bool IsPartyLeader { get; set; }
 }

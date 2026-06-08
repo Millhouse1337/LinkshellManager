@@ -81,6 +81,11 @@ export interface ActivityAppUser {
   // Same catalog-aligned levels for the two alt characters; pre-fill the alt tabs.
   alt1JobLevels?: number[] | null;
   alt2JobLevels?: number[] | null;
+  // Catalog-aligned "strong" flags parallel to the level arrays above (true = the
+  // member marked that job well-geared/merited). Pre-fill the per-job Strong toggles.
+  strongJobs?: boolean[] | null;
+  alt1StrongJobs?: boolean[] | null;
+  alt2StrongJobs?: boolean[] | null;
 }
 
 export interface ActivityLinkshell {
@@ -354,6 +359,11 @@ export interface ActivityJobsRosterMember {
   alt1JobLevels: number[];
   alt2Name?: string | null;
   alt2JobLevels: number[];
+  // Catalog-aligned "strong" flags parallel to each character's level array
+  // (true = well-geared/merited). Rendered as a marker on the job pills.
+  strongJobs: boolean[];
+  alt1StrongJobs: boolean[];
+  alt2StrongJobs: boolean[];
 }
 
 export interface ActivityEventParticipant {
@@ -420,6 +430,8 @@ export interface ActivityEvent {
   details?: string | null;
   // True when the event is flagged to auto-start at its start time.
   autoStart?: boolean;
+  // True when attendees earn active-member credit (reconciled at close).
+  countsTowardActive?: boolean;
   participantCount: number;
   currentParticipation?: ActivityParticipation | null;
   participants: ActivityEventParticipant[];
@@ -830,6 +842,8 @@ export interface ActivityCreateEventInput {
   partySetupId?: number | null;
   // When true, the event auto-starts at its start time (no manual Start).
   autoStart?: boolean;
+  // When true, attendees earn active-member credit (reconciled at close). Default true.
+  countsTowardActive?: boolean;
 }
 
 export interface ActivityCreateLinkshellInput {
@@ -911,6 +925,11 @@ export interface ActivityUpdateProfileInput {
   // Catalog-aligned job levels for the two alt characters.
   alt1JobLevels?: number[] | null;
   alt2JobLevels?: number[] | null;
+  // Catalog-aligned "strong" flags parallel to the level arrays above; null
+  // leaves the existing flags unchanged.
+  strongJobs?: boolean[] | null;
+  alt1StrongJobs?: boolean[] | null;
+  alt2StrongJobs?: boolean[] | null;
 }
 
 export interface DiscordRpcErrorLike {
@@ -964,6 +983,9 @@ export interface ActivityPartySetupSlot {
   signedUpRole?: string | null;
   signedUpMainJob?: string | null;
   signedUpSubJob?: string | null;
+  // Per-event: whether the member in this slot is the party's leader (👑).
+  // Distinct from isPartyLeader above (the template's designated-leader slot).
+  signedUpIsPartyLeader?: boolean;
 }
 
 export interface ActivityPartySetupParty {
@@ -990,6 +1012,8 @@ export interface ActivityPartySetupSignUpInput {
   role?: string | null;
   mainJob?: string | null;
   subJob?: string | null;
+  // Event boards only: also claim this party's leader spot (first-claim-wins).
+  asLeader?: boolean;
 }
 
 // Officer editor: a flat slot list (each row carries its alliance/party/slot

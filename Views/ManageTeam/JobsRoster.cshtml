@@ -83,12 +83,12 @@ else
         <div class="jr-grid fade d3">
             @foreach (var entry in Model.Entries)
             {
-                var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels)>
+                var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong)>
                 {
-                    (entry.CharacterName, false, entry.JobLevels)
+                    (entry.CharacterName, false, entry.JobLevels, entry.StrongJobs)
                 };
-                if (entry.Alt1Name is not null) { characters.Add((entry.Alt1Name, true, entry.Alt1JobLevels)); }
-                if (entry.Alt2Name is not null) { characters.Add((entry.Alt2Name, true, entry.Alt2JobLevels)); }
+                if (entry.Alt1Name is not null) { characters.Add((entry.Alt1Name, true, entry.Alt1JobLevels, entry.Alt1StrongJobs)); }
+                if (entry.Alt2Name is not null) { characters.Add((entry.Alt2Name, true, entry.Alt2JobLevels, entry.Alt2StrongJobs)); }
 
                 <div class="card jr-card">
                     <div class="jr-card-head">
@@ -102,7 +102,7 @@ else
                     @foreach (var ch in characters)
                     {
                         var leveled = ch.Levels
-                            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl })
+                            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl, Strong = i < ch.Strong.Count && ch.Strong[i] })
                             .Where(x => x.Level > 0)
                             .OrderByDescending(x => x.Level)
                             .ToList();
@@ -121,7 +121,7 @@ else
                                 <div class="jr-pills">
                                     @foreach (var job in leveled)
                                     {
-                                        <span class="jr-pill"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span></span>
+                                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "")"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong" title="Strong — well-geared / merited">★</span>}</span>
                                     }
                                 </div>
                             }

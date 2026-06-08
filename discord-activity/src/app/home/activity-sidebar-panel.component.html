@@ -119,6 +119,15 @@
                   step="1"
                   [(ngModel)]="activeJobLevels[i]"
                   [name]="'profileJob' + i" />
+                <button
+                  type="button"
+                  class="strong-toggle"
+                  [class.on]="activeStrongJobs[i]"
+                  (click)="toggleStrong(i)"
+                  [attr.aria-pressed]="activeStrongJobs[i]"
+                  title="Mark this job as well-geared / merited">
+                  ★ Strong
+                </button>
               </label>
             }
           </div>
@@ -413,14 +422,16 @@
                 <span class="muted">Fix DKP awarded/charged on a past event or auction.</span>
               </span>
             </label>
-            <label class="dkp-audit-form__mode-option">
-              <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
-                (ngModelChange)="onDkpAuditModeChange('Add')" value="Add" />
-              <span>
-                <strong>Add to a previous entry</strong>
-                <span class="muted">Credit a member who was missed by a snapshot.</span>
-              </span>
-            </label>
+            @if (canCreditSnapshot()) {
+              <label class="dkp-audit-form__mode-option">
+                <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
+                  (ngModelChange)="onDkpAuditModeChange('Add')" value="Add" />
+                <span>
+                  <strong>Add to a previous entry</strong>
+                  <span class="muted">Credit a member who was missed by a snapshot.</span>
+                </span>
+              </label>
+            }
             <label class="dkp-audit-form__mode-option">
               <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
                 (ngModelChange)="onDkpAuditModeChange('Misc')" value="Misc" />

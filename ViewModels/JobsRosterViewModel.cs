@@ -34,6 +34,14 @@ public class JobsRosterEntry
     public string? Alt2Name { get; set; }
 
     public IReadOnlyList<int> Alt2JobLevels { get; set; } = Array.Empty<int>();
+
+    // Catalog-aligned "strong" flags parallel to each character's level array
+    // (true = well-geared/merited). Rendered as a marker on the job pills.
+    public IReadOnlyList<bool> StrongJobs { get; set; } = Array.Empty<bool>();
+
+    public IReadOnlyList<bool> Alt1StrongJobs { get; set; } = Array.Empty<bool>();
+
+    public IReadOnlyList<bool> Alt2StrongJobs { get; set; } = Array.Empty<bool>();
 }
 
 // Backs the per-member "View Profile" page (one member's leveled jobs, main +

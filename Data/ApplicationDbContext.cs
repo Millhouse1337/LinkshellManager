@@ -16,6 +16,7 @@ namespace LinkshellManagerDiscordApp.Data
         private readonly DiscordEventEndedQueue? _eventEndedQueue;
         private readonly DiscordEventCleanupQueue? _eventCleanupQueue;
         private readonly DiscordLootChannelQueue? _lootChannelQueue;
+        private readonly SheetTemplateSyncQueue? _templateSyncQueue;
         // Live change-feed bus (long-poll). Nullable + defaulted like the queues
         // so design-time / reflection construction never fails when it's absent.
         private readonly LinkshellChangeNotifier? _changeNotifier;
@@ -29,7 +30,8 @@ namespace LinkshellManagerDiscordApp.Data
             DiscordLootChannelQueue? lootChannelQueue = null,
             LinkshellChangeNotifier? changeNotifier = null,
             DiscordEventEndedQueue? eventEndedQueue = null,
-            DiscordEventCleanupQueue? eventCleanupQueue = null)
+            DiscordEventCleanupQueue? eventCleanupQueue = null,
+            SheetTemplateSyncQueue? templateSyncQueue = null)
             : base(options)
         {
             _todBoardQueue = todBoardQueue;
@@ -40,6 +42,7 @@ namespace LinkshellManagerDiscordApp.Data
             _changeNotifier = changeNotifier;
             _eventEndedQueue = eventEndedQueue;
             _eventCleanupQueue = eventCleanupQueue;
+            _templateSyncQueue = templateSyncQueue;
         }
 
         // Distinct linkshell ids of Tod rows changed in the current
@@ -117,6 +120,51 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Linkshells whose member DKP changed this save → re-export the "LSM DKP"
+        // template tab (live sync, push-only). Any DkpLedgerEntry add/edit/delete
+        // or an AppUserLinkshell whose LinkshellDkp was modified counts, so every
+        // DKP path triggers a refresh without per-controller wiring. Captured
+        // pre-save; enqueued only on a successful commit. The background service
+        // no-ops for linkshells with live sync off or no connected sheet.
+        private List<int> CollectDkpChangedLinkshellIds()
+        {
+            if (_templateSyncQueue is null)
+            {
+                return new List<int>();
+            }
+            var ids = new HashSet<int>();
+            foreach (var entry in ChangeTracker.Entries<DkpLedgerEntry>())
+            {
+                if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
+                    && entry.Entity.LinkshellId > 0)
+                {
+                    ids.Add(entry.Entity.LinkshellId);
+                }
+            }
+            foreach (var entry in ChangeTracker.Entries<AppUserLinkshell>())
+            {
+                if (entry.State == EntityState.Modified
+                    && entry.Property(nameof(AppUserLinkshell.LinkshellDkp)).IsModified
+                    && entry.Entity.LinkshellId > 0)
+                {
+                    ids.Add(entry.Entity.LinkshellId);
+                }
+            }
+            return ids.ToList();
+        }
+
+        private void EnqueueTemplateSyncRefreshes(IReadOnlyList<int> linkshellIds)
+        {
+            if (_templateSyncQueue is null)
+            {
+                return;
+            }
+            foreach (var id in linkshellIds)
+            {
+                _templateSyncQueue.Enqueue(id);
+            }
+        }
+
         // Newly-created auctions (→ post an "auction opened" embed) and
         // newly-created auction histories (→ post the "closed" results embed)
         // to the linkshell's Auctions webhook. Only *Added* rows are collected.
@@ -181,6 +229,42 @@ namespace LinkshellManagerDiscordApp.Data
                     _eventChannelQueue.Enqueue(eventEntity.Id);
                 }
             }
+        }
+
+        // Already-announced events whose details changed this save → re-render the
+        // posted Discord message so edits (name, time, DKP/hour, location, party
+        // setup) show immediately instead of only when a signup interaction next
+        // refreshes the board. The publisher edits in place when DiscordMessageId
+        // is set. Skips the publisher's OWN post-write (which sets DiscordMessageId)
+        // so a fresh post doesn't immediately re-edit itself.
+        private List<Event> CollectEditedEvents()
+        {
+            if (_eventChannelQueue is null)
+            {
+                return new List<Event>();
+            }
+            var edited = new List<Event>();
+            foreach (var entry in ChangeTracker.Entries<Event>())
+            {
+                if (entry.State != EntityState.Modified)
+                {
+                    continue;
+                }
+                // Not posted yet → nothing to edit (a later post renders current state).
+                if (string.IsNullOrEmpty(entry.Entity.DiscordMessageId))
+                {
+                    continue;
+                }
+                // The publisher assigns DiscordMessageId/DiscordChannelId on first
+                // post; that save shouldn't trigger a redundant edit of the same
+                // content.
+                if (entry.Property(nameof(Event.DiscordMessageId)).IsModified)
+                {
+                    continue;
+                }
+                edited.Add(entry.Entity);
+            }
+            return edited;
         }
 
         // Newly-created EventHistory rows (an event closed → post an "event ended"
@@ -607,21 +691,25 @@ namespace LinkshellManagerDiscordApp.Data
             var dkpSpends = CollectAddedDkpSpends();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
+            var editedEvents = CollectEditedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
             var endedEvents = CollectAddedEventHistories();
             var deletedEventBoards = CollectDeletedEventBoards();
             var deletedAuctionCards = CollectDeletedAuctionCards();
             var bidItemIds = CollectAddedBidAuctionItemIds();
+            var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             EnqueueTodBoardRefreshes(affected);
             EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
             EnqueueEventPosts(createdEvents);
+            EnqueueEventPosts(editedEvents);
             EnqueueLootPosts(todLoot, eventLoot);
             EnqueueEventEndedSummaries(endedEvents);
             EnqueueMessageDeletions(deletedEventBoards);
             EnqueueMessageDeletions(deletedAuctionCards);
+            EnqueueTemplateSyncRefreshes(dkpChangedLinkshells);
             await EnqueueAuctionBidUpdatesAsync(bidItemIds);
             await NotifyLiveChangesAsync(liveChanges);
             return result;
@@ -633,20 +721,24 @@ namespace LinkshellManagerDiscordApp.Data
             var dkpSpends = CollectAddedDkpSpends();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
+            var editedEvents = CollectEditedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
             var endedEvents = CollectAddedEventHistories();
             var deletedEventBoards = CollectDeletedEventBoards();
             var deletedAuctionCards = CollectDeletedAuctionCards();
+            var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
             EnqueueEventPosts(createdEvents);
+            EnqueueEventPosts(editedEvents);
             EnqueueLootPosts(todLoot, eventLoot);
             EnqueueEventEndedSummaries(endedEvents);
             EnqueueMessageDeletions(deletedEventBoards);
             EnqueueMessageDeletions(deletedAuctionCards);
+            EnqueueTemplateSyncRefreshes(dkpChangedLinkshells);
             NotifyLiveChangesDirect(liveChanges);
             return result;
         }

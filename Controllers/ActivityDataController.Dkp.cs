@@ -27,7 +27,6 @@ public sealed partial class ActivityDataController
     public async Task<IActionResult> GetDkpHistoryAsync(
         int? linkshellId,
         string? appUserId,
-        [FromServices] SheetDkpPullService sheetDkpPull,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -69,11 +68,6 @@ public sealed partial class ActivityDataController
 
         var selectedLinkshell = accessibleMemberships.First(link => link.LinkshellId == selectedLinkshellId);
         await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, cancellationToken);
-        // Pull-on-load (cached): when the sheet is connected it is the source of
-        // truth for DKP, so refresh stored balances from it AFTER the app-side
-        // crediting above. Running it last keeps the sheet authoritative without
-        // double-counting app-originated earnings already reflected on the sheet.
-        await sheetDkpPull.EnsureFreshAsync(selectedLinkshellId, cancellationToken);
 
         var linkshellMembers = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == selectedLinkshellId && link.AppUserId != null)
@@ -225,7 +219,6 @@ public sealed partial class ActivityDataController
 
         DkpLedgerEntry newEntry;
         double deltaAmount;
-        var appendManualPoints = true;
 
         if (string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase))
         {
@@ -272,24 +265,6 @@ public sealed partial class ActivityDataController
                 SourceWindowEventId = original.SourceWindowEventId,
                 AttInputRowNumber = original.AttInputRowNumber
             };
-
-            if (SnapshotAttInputAuditService.IsSnapshotEarnedEntry(original))
-            {
-                try
-                {
-                    var attInputRowNumber = await _snapshotAttInputAudit.CorrectSnapshotEarnedRowAsync(
-                        original,
-                        request.Amount,
-                        cancellationToken);
-                    newEntry.AttInputRowNumber = attInputRowNumber;
-                    newEntry.SheetAppendedAt = nowUtc;
-                    appendManualPoints = false;
-                }
-                catch (InvalidOperationException ex)
-                {
-                    return BadRequest(new { error = ex.Message });
-                }
-            }
         }
         else if (string.Equals(mode, "Add", StringComparison.OrdinalIgnoreCase))
         {
@@ -298,21 +273,50 @@ public sealed partial class ActivityDataController
                 return BadRequest(new { error = "A snapshot entry is required when adding a missing member." });
             }
 
-            SnapshotMissingMemberRowResult addResult;
-            try
+            var windowEventId = request.SourceWindowEventId.Value;
+
+            var alreadyRecorded = await _dbContext.DkpLedgerEntries.AnyAsync(entry =>
+                entry.LinkshellId == request.LinkshellId &&
+                entry.AppUserId == request.TargetAppUserId &&
+                entry.SourceWindowEventId == windowEventId &&
+                entry.EntryType == "SnapshotEarned",
+                cancellationToken);
+            if (alreadyRecorded)
             {
-                addResult = await _snapshotAttInputAudit.AddMissingSnapshotMemberRowAsync(
-                    request.LinkshellId,
-                    request.SourceWindowEventId.Value,
-                    targetMembership,
-                    cancellationToken);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new { error = ex.Message });
+                return BadRequest(new { error = "That member already has DKP recorded for the selected snapshot entry." });
             }
 
-            deltaAmount = addResult.Amount;
+            var windowEvent = await _dbContext.WindowEvents
+                .AsNoTracking()
+                .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+                .FirstOrDefaultAsync(w => w.Id == windowEventId && w.LinkshellId == request.LinkshellId, cancellationToken);
+            if (windowEvent is null)
+            {
+                return NotFound(new { error = "The selected snapshot entry was not found." });
+            }
+
+            if (!windowEvent.DkpAmount.HasValue || !WindowEventEntryTypes.IsValid(windowEvent.EntryType))
+            {
+                return BadRequest(new { error = "The selected snapshot entry has no posted DKP amount." });
+            }
+
+            // Derive the snapshot's representative time + zone from the captured
+            // attendance data (DB only — this used to come back from the sheet row).
+            var activeSnapshots = windowEvent.Snapshots
+                .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
+                .OrderByDescending(s => s.CapturedAtUtc)
+                .ToList();
+            var occurredAt = activeSnapshots.FirstOrDefault()?.CapturedAtUtc ?? windowEvent.LastCapturedAtUtc;
+            var primaryZone = activeSnapshots
+                .SelectMany(s => s.Entries)
+                .Where(e => !string.IsNullOrWhiteSpace(e.Zone))
+                .GroupBy(e => e.Zone!, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.Key)
+                .FirstOrDefault();
+
+            deltaAmount = windowEvent.DkpAmount.Value;
             newEntry = new DkpLedgerEntry
             {
                 AppUserId = request.TargetAppUserId,
@@ -320,19 +324,16 @@ public sealed partial class ActivityDataController
                 EntryType = "SnapshotEarned",
                 Amount = deltaAmount,
                 Sequence = sequence,
-                OccurredAt = addResult.OccurredAt,
+                OccurredAt = occurredAt,
                 CharacterName = targetMembership.CharacterName,
-                EventName = addResult.EventName,
-                EventType = addResult.EventType,
-                EventLocation = addResult.EventLocation,
-                EventStartTime = addResult.EventStartTime,
-                EventEndTime = addResult.EventEndTime,
+                EventName = string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
+                EventType = windowEvent.EntryType,
+                EventLocation = primaryZone,
+                EventStartTime = windowEvent.FirstCapturedAtUtc,
+                EventEndTime = windowEvent.LastCapturedAtUtc,
                 Details = $"Added to snapshot entry by {officerName}: {reason}",
-                SourceWindowEventId = addResult.WindowEventId,
-                AttInputRowNumber = addResult.AttInputRowNumber,
-                SheetAppendedAt = nowUtc
+                SourceWindowEventId = windowEvent.Id
             };
-            appendManualPoints = false;
         }
         else
         {
@@ -354,10 +355,6 @@ public sealed partial class ActivityDataController
         _dbContext.DkpLedgerEntries.Add(newEntry);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        if (appendManualPoints)
-        {
-            await _sheetSync.EnqueueDkpAuditAsync(newEntry.Id, cancellationToken);
-        }
         return Ok(new { success = true });
     }
 

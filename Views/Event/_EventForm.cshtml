@@ -17,11 +17,6 @@
         : (isKnownEventType ? currentEventType : "Other");
     var initialOtherValue = isKnownEventType ? string.Empty : currentEventType;
 
-    // Linkshell style for this event's linkshell. The AttInput Entry Type field
-    // holds HNM-camp categories (Kings Camp, Wyrms Camp, …), so it's hidden for
-    // Sky/Sea/Dynamis linkshells, which run no HNM.
-    var formLinkshellType = Model.Linkshells.FirstOrDefault(l => l.Id == Model.LinkshellId)?.LinkshellType;
-
     // Edit-mode auto-tick: if we're editing a saved event (Id > 0) and the field is null,
     // pre-check the matching "Not specified" checkbox so addon-created HNM events (which
     // have null EndTime + Duration) display correctly. On Create (Id == 0) all boxes
@@ -150,29 +145,17 @@
             </label>
         </div>
     </div>
-    @if (formLinkshellType != "SkySeaDynamis")
-    {
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_AttInputEntryType">AttInput Entry Type</label>
-        <select class="form-control" id="Event_AttInputEntryType" name="Event.AttInputEntryType">
-            <option value="">(none — skip sheet sync)</option>
-            @{ var currentEntryType = Model.Event.AttInputEntryType; }
-            <option value="Misc Camp" selected="@(currentEntryType == "Misc Camp")">Misc Camp</option>
-            <option value="Kill" selected="@(currentEntryType == "Kill")">Kill</option>
-            <option value="Kings Camp" selected="@(currentEntryType == "Kings Camp")">Kings Camp</option>
-            <option value="Wyrms Camp" selected="@(currentEntryType == "Wyrms Camp")">Wyrms Camp</option>
-            @if (!string.IsNullOrWhiteSpace(currentEntryType)
-                 && currentEntryType != "Misc Camp"
-                 && currentEntryType != "Kill"
-                 && currentEntryType != "Kings Camp"
-                 && currentEntryType != "Wyrms Camp")
-            {
-                <option value="@currentEntryType" selected="selected">@currentEntryType</option>
-            }
-        </select>
-        <small style="color:var(--fg-4);font-size:11px;margin-top:2px">Category written to the K column of the AttInput tab. Leave blank to skip sheet sync for this event.</small>
+    <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
+        @* Activity tracking: when checked, attendees of this event earn active-member
+           credit (reconciled at close). Hidden "false" makes an unchecked box post
+           false (MVC checkbox pattern), same as Auto start above. *@
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg-2);margin:0">
+            <input type="checkbox" name="Event.CountsTowardActive" value="true" @(Model.Event.CountsTowardActive ? "checked" : null) />
+            <input type="hidden" name="Event.CountsTowardActive" value="false" />
+            Counts toward active-member status
+        </label>
+        <span style="font-size:11px;color:var(--fg-4);margin-top:2px">Attendees get active credit (checked by default; reconcile per member when the event closes).</span>
     </div>
-    }
     <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
         <label for="Event_Details">Details</label>
         <textarea class="form-control" id="Event_Details" name="Event.Details" rows="4">@Model.Event.Details</textarea>

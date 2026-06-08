@@ -14,18 +14,15 @@ public class DkpAdjustmentController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
-    private readonly SheetSyncQueue _sheetSync;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
 
     public DkpAdjustmentController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        SheetSyncQueue sheetSync,
         WindowEventDkpLedgerService windowEventDkpLedger)
     {
         _context = context;
         _userManager = userManager;
-        _sheetSync = sheetSync;
         _windowEventDkpLedger = windowEventDkpLedger;
     }
 
@@ -60,6 +57,7 @@ public class DkpAdjustmentController : Controller
 
         viewModel.SelectedLinkshellId = selectedLinkshellId;
         viewModel.SelectedLinkshellName = viewModel.Linkshells.First(l => l.Id == selectedLinkshellId).Name;
+        viewModel.SelectedLinkshellType = manageableLinkshells.First(l => l.Id == selectedLinkshellId).LinkshellType;
 
         await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, HttpContext.RequestAborted);
 
@@ -118,7 +116,6 @@ public class DkpAdjustmentController : Controller
         _context.DkpLedgerEntries.Add(ledgerEntry);
 
         await _context.SaveChangesAsync();
-        await _sheetSync.EnqueueDkpAuditAsync(ledgerEntry.Id);
         TempData["DkpAdjustmentSuccess"] = $"Adjusted {membership.CharacterName}'s DKP by {input.Amount:+0.##;-0.##;0}.";
         return RedirectToAction(nameof(Index), new { linkshellId = input.LinkshellId });
     }

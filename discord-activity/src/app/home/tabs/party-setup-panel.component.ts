@@ -163,7 +163,18 @@ export class PartySetupPanelComponent {
     return parts.join(' - ');
   }
 
-  protected async signUp(slot: ActivityPartySetupSlot): Promise<void> {
+  // Event boards only: whether claiming a party-leader spot is offered.
+  protected isEventBoard(): boolean {
+    return this.eventId() > 0;
+  }
+
+  // True once any slot in the party has a per-event leader, so the "Sign up as
+  // leader" action is hidden (first-claim-wins).
+  protected partyHasLeader(party: { slots: ActivityPartySetupSlot[] }): boolean {
+    return party.slots.some(s => s.signedUpIsPartyLeader === true);
+  }
+
+  protected async signUp(slot: ActivityPartySetupSlot, asLeader = false): Promise<void> {
     const draft = this.draftFor(slot.slotId);
     const picks = {
       role: this.needsRole(slot) ? (draft.role || null) : null,
@@ -171,7 +182,7 @@ export class PartySetupPanelComponent {
       subJob: this.needsSubJob(slot) ? (draft.subJob || null) : null
     };
     const ok = this.eventId() > 0
-      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, picks)
+      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, { ...picks, asLeader })
       : await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
     if (ok) {
       this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '' });

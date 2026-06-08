@@ -71,13 +71,19 @@
                             </select>
                           }
                           <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
+                          @if (isEventBoard() && !partyHasLeader(party)) {
+                            <button type="button" class="btn sm ps-signup-btn" (click)="signUp(slot, true)" [disabled]="signUpDisabled(slot)" title="Claim this party's leader spot">👑 Leader</button>
+                          }
                         </div>
                       }
                     } @else {
                       <div class="ps-slot-member">
                         <span class="ps-member-avatar" aria-hidden="true">{{ (slot.signedUpCharacterName || '?').charAt(0) }}</span>
                         <span class="ps-member-text">
-                          <span class="ps-name">{{ slot.signedUpCharacterName }}</span>
+                          <span class="ps-name">
+                            @if (slot.signedUpIsPartyLeader) { <span class="ps-leader-inline" title="Party leader" aria-label="Party leader">👑</span> }
+                            {{ slot.signedUpCharacterName }}
+                          </span>
                           @if (signedUpJobs(slot)) { <span class="ps-jobs">{{ signedUpJobs(slot) }}</span> }
                         </span>
                         @if (!readOnly()) {

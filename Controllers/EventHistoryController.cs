@@ -80,7 +80,53 @@ public class EventHistoryController : Controller
 
         history.StartTime = ConvertUtcToUserTimeZone(history.StartTime, user.TimeZone);
         history.EndTime = ConvertUtcToUserTimeZone(history.EndTime, user.TimeZone);
+        // Leaders/Officers can reconcile per-member active-status credit on this page.
+        ViewBag.CanReconcileActive = await CanManageAsync(user.Id, history.LinkshellId);
         return View(history);
+    }
+
+    // Reconcile active-status credit: leadership (un)checks which attendees earned
+    // credit toward active-member status for this event. Posted "credited" carries
+    // the checked AppUserEventHistory row ids; everything else is set uncredited.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveActiveCredits(int id, int[]? credited)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var history = await _context.EventHistories
+            .Include(item => item.AppUserEventHistories)
+            .FirstOrDefaultAsync(item => item.Id == id);
+        if (history is null)
+        {
+            return NotFound();
+        }
+        if (!await CanManageAsync(user.Id, history.LinkshellId))
+        {
+            return Forbid();
+        }
+
+        var creditedSet = (credited ?? Array.Empty<int>()).ToHashSet();
+        foreach (var row in history.AppUserEventHistories)
+        {
+            row.ActiveCredit = creditedSet.Contains(row.Id);
+        }
+        await _context.SaveChangesAsync();
+
+        TempData["EventHistoryStatus"] = "Active-status credit updated.";
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    private async Task<bool> CanManageAsync(string appUserId, int linkshellId)
+    {
+        var membership = await _context.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId);
+        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
     }
 
     private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)

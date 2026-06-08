@@ -59,7 +59,7 @@ public class AccountController : Controller
 
         var jobLevelRows = await _context.AppUserLinkshells
             .Where(link => link.AppUserId == user.Id)
-            .Select(link => new { link.LinkshellId, link.JobLevels })
+            .Select(link => new { link.LinkshellId, link.JobLevels, link.StrongJobs })
             .ToListAsync();
         var hasLinkshell = jobLevelRows.Count > 0;
         var addonConfigured = await _context.AddonApiTokens
@@ -70,6 +70,9 @@ public class AccountController : Controller
         var storedJobLevels =
             jobLevelRows.FirstOrDefault(row => row.LinkshellId == user.PrimaryLinkshellId)?.JobLevels
             ?? jobLevelRows.FirstOrDefault(row => row.JobLevels != null)?.JobLevels;
+        var storedStrongJobs =
+            jobLevelRows.FirstOrDefault(row => row.LinkshellId == user.PrimaryLinkshellId)?.StrongJobs
+            ?? jobLevelRows.FirstOrDefault(row => row.StrongJobs != null)?.StrongJobs;
 
         return View(new ProfileViewModel
         {
@@ -85,7 +88,10 @@ public class AccountController : Controller
             AddonConfigured = addonConfigured,
             JobLevels = ProfileJobLevels.ToCatalogLevels(storedJobLevels),
             Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt1JobLevels),
-            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt2JobLevels)
+            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt2JobLevels),
+            StrongJobs = ProfileJobLevels.ToCatalogFlags(storedStrongJobs),
+            Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(user.Alt1StrongJobs),
+            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(user.Alt2StrongJobs)
         });
     }
 
@@ -133,35 +139,60 @@ public class AccountController : Controller
         // Main-character job levels go on every membership (per-character, in the
         // addon's FFXI-job-id format). Alt job levels live on the account (alts
         // have no membership). One SaveChanges flushes both.
-        if (model.JobLevels.Count > 0)
+        if (model.JobLevels.Count > 0 || model.StrongJobs.Count > 0)
         {
             var memberships = await _context.AppUserLinkshells
                 .Where(link => link.AppUserId == user.Id)
                 .ToListAsync();
             foreach (var membership in memberships)
             {
-                membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, model.JobLevels);
+                if (model.JobLevels.Count > 0)
+                {
+                    membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, model.JobLevels);
+                }
+                // "Strong" flags ride alongside the levels — one character, one set
+                // of strengths, written identically to every membership.
+                if (model.StrongJobs.Count > 0)
+                {
+                    membership.StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(membership.StrongJobs, model.StrongJobs);
+                }
             }
         }
 
-        // Alt job levels: clear when the alt has no name, otherwise save what was
-        // posted (the grid only renders when the alt has a name).
+        // Alt job levels + strong flags: clear when the alt has no name, otherwise
+        // save what was posted (the grid only renders when the alt has a name).
         if (string.IsNullOrWhiteSpace(user.AltCharacterName1))
         {
             user.Alt1JobLevels = null;
+            user.Alt1StrongJobs = null;
         }
-        else if (model.Alt1JobLevels.Count > 0)
+        else
         {
-            user.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(user.Alt1JobLevels, model.Alt1JobLevels);
+            if (model.Alt1JobLevels.Count > 0)
+            {
+                user.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(user.Alt1JobLevels, model.Alt1JobLevels);
+            }
+            if (model.Alt1StrongJobs.Count > 0)
+            {
+                user.Alt1StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(user.Alt1StrongJobs, model.Alt1StrongJobs);
+            }
         }
 
         if (string.IsNullOrWhiteSpace(user.AltCharacterName2))
         {
             user.Alt2JobLevels = null;
+            user.Alt2StrongJobs = null;
         }
-        else if (model.Alt2JobLevels.Count > 0)
+        else
         {
-            user.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(user.Alt2JobLevels, model.Alt2JobLevels);
+            if (model.Alt2JobLevels.Count > 0)
+            {
+                user.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(user.Alt2JobLevels, model.Alt2JobLevels);
+            }
+            if (model.Alt2StrongJobs.Count > 0)
+            {
+                user.Alt2StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(user.Alt2StrongJobs, model.Alt2StrongJobs);
+            }
         }
 
         await _context.SaveChangesAsync();

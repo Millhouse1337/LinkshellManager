@@ -58,7 +58,8 @@ public sealed partial class ActivityDataController
                                     su?.CharacterName,
                                     su?.Role,
                                     su?.MainJob,
-                                    su?.SubJob);
+                                    su?.SubJob,
+                                    su?.IsPartyLeader ?? false);
                             })
                             .ToList()))
                     .ToList()))
@@ -96,9 +97,15 @@ public sealed partial class ActivityDataController
             ? (appUser.CharacterName ?? appUser.UserName ?? "Member")
             : membership.CharacterName;
         var result = await EventPartySignupService.ClaimSlotAsync(
-            _dbContext, eventId, slot, appUser.Id, characterName, request.Role, request.MainJob, request.SubJob, cancellationToken);
+            _dbContext, eventId, slot, appUser.Id, characterName, request.Role, request.MainJob, request.SubJob,
+            cancellationToken, request.AsLeader);
         if (!result.Success) return BadRequest(new { error = result.Error });
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Auto-promote the earliest signup to leader if the party just filled
+        // without anyone claiming leadership.
+        await EventPartySignupService.ResolvePartyLeadershipAsync(
+            _dbContext, eventId, slot.PartySetupPartyId, cancellationToken);
         return Ok(new { success = true });
     }
 

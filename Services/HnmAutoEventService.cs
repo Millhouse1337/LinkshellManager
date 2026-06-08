@@ -9,10 +9,6 @@ namespace LinkshellManagerDiscordApp.Services;
 // SubmissionApprovalService.ApproveTodAsync (officer approves a pending
 // member ToD). Web/activity ToD posts intentionally do NOT trigger this --
 // auto-event creation is addon-only by product design.
-//
-// The auto-event ships with AttInputEntryType = "Kill" so the existing
-// AttInputAppendService flow (per-window + event-close) writes the right
-// rows to the user's sheet without any new sync code here.
 public sealed class HnmAutoEventService
 {
     private const string AutoEventDetails = "Auto-created from ToD post";
@@ -100,7 +96,6 @@ public sealed class HnmAutoEventService
             Details = AutoEventDetails,
             CreationSource = "Addon",
             WindowCountOverride = HnmConfig.GetWindowCount(monster),
-            AttInputEntryType = "Kill",
             SourceTodId = todId,
             TimeStamp = DateTime.UtcNow,
         };

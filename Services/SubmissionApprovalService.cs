@@ -20,18 +20,15 @@ namespace LinkshellManagerDiscordApp.Services;
 public sealed class SubmissionApprovalService
 {
     private readonly ApplicationDbContext _db;
-    private readonly SheetSyncQueue _sheetSync;
     private readonly HnmAutoEventService _hnmAutoEvent;
     private readonly ILogger<SubmissionApprovalService> _logger;
 
     public SubmissionApprovalService(
         ApplicationDbContext db,
-        SheetSyncQueue sheetSync,
         HnmAutoEventService hnmAutoEvent,
         ILogger<SubmissionApprovalService> logger)
     {
         _db = db;
-        _sheetSync = sheetSync;
         _hnmAutoEvent = hnmAutoEvent;
         _logger = logger;
     }
@@ -188,8 +185,6 @@ public sealed class SubmissionApprovalService
         // A new ToD = a new pop window, so reset any party sign-ups assigned to
         // this monster (the old roster is for the pop that just happened).
         await PartySetupController.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, tod.MonsterName, cancellationToken);
-
-        await _sheetSync.EnqueueAsync(pending.LinkshellId, cancellationToken);
 
         // Streamlined HNM workflow: mirror the immediate-addon path so an
         // approved member-submitted ToD also kicks off auto-event creation

@@ -280,6 +280,13 @@ public sealed partial class ActivityDataController
         // Alt-character job levels live on the AppUser (shared across linkshells).
         var alt1JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt1JobLevels);
         var alt2JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt2JobLevels);
+        // "Strong" flags, parallel to the level arrays above (main from the same
+        // membership, alts from the AppUser).
+        var strongJobs = ProfileJobLevels.ToCatalogFlags(
+            linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.StrongJobs
+            ?? linkshellMemberships.FirstOrDefault(link => link.StrongJobs != null)?.StrongJobs);
+        var alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt1StrongJobs);
+        var alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt2StrongJobs);
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -293,7 +300,10 @@ public sealed partial class ActivityDataController
                 appUser.PrimaryLinkshellName,
                 profileJobLevels,
                 alt1JobLevels,
-                alt2JobLevels),
+                alt2JobLevels,
+                strongJobs,
+                alt1StrongJobs,
+                alt2StrongJobs),
             linkshellMemberships.Select(link => new ActivityLinkshellDto(
                 link.LinkshellId,
                 link.Linkshell?.LinkshellName ?? "Unknown linkshell",
@@ -391,6 +401,7 @@ public sealed partial class ActivityDataController
                 evt.DkpPerHour,
                 evt.Details,
                 evt.AutoStart,
+                evt.CountsTowardActive,
                 evt.AppUserEvents.Count,
                 evt.AppUserEvents
                     .Where(participation => participation.AppUserId == appUser.Id)

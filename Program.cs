@@ -225,23 +225,21 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeyRingPath))
     dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath));
 }
 builder.Services.AddSingleton<GoogleSheetsSyncService>();
-builder.Services.AddSingleton<SheetSyncQueue>();
 builder.Services.AddScoped<GoogleOAuthService>();
-builder.Services.AddScoped<SheetMigrationService>();
 builder.Services.AddScoped<DkpTemplateSheetService>();
+// Live DKP template sync (push-only): a SaveChanges hook enqueues affected
+// linkshells; the hosted service debounces + re-exports the "LSM DKP" tab.
+builder.Services.AddSingleton<SheetTemplateSyncQueue>();
+builder.Services.AddHostedService<SheetTemplateSyncBackgroundService>();
 builder.Services.AddMemoryCache();
 
 // Liveness has no checks (process up = healthy); readiness verifies the database
 // is reachable so an orchestrator/proxy can gate traffic until the DB is ready.
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>("database", tags: new[] { "ready" });
-builder.Services.AddScoped<SheetDkpPullService>();
 builder.Services.AddScoped<WindowEventDkpLedgerService>();
-builder.Services.AddScoped<SnapshotAttInputAuditService>();
-builder.Services.AddScoped<AttInputAppendService>();
-builder.Services.AddScoped<ManualPointsAppendService>();
+builder.Services.AddScoped<MemberActivityService>();
 builder.Services.AddScoped<HnmAutoEventService>();
-builder.Services.AddHostedService<SheetSyncBackgroundService>();
 builder.Services.AddSingleton<DiscordWebhookQueue>();
 builder.Services.AddScoped<DiscordSnapshotPublisher>();
 builder.Services.AddHostedService<DiscordWebhookBackgroundService>();

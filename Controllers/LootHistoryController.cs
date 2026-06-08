@@ -16,20 +16,17 @@ public class LootHistoryController : Controller
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
     private readonly LootEditService _lootEditService;
-    private readonly SheetSyncQueue _sheetSync;
 
     public LootHistoryController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        LootEditService lootEditService,
-        SheetSyncQueue sheetSync)
+        LootEditService lootEditService)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
         _lootEditService = lootEditService;
-        _sheetSync = sheetSync;
     }
 
     [HttpGet("/LootHistory/Add")]
@@ -138,9 +135,6 @@ public class LootHistoryController : Controller
         await ActivityDataController.AdjustTodLootDkpAsync(
             _context, tod, new[] { detail }, nowUtc, isRefund: false, HttpContext.RequestAborted);
         await _context.SaveChangesAsync();
-        // Recompute this day's ManualPoints column (idempotent; edits/deletes
-        // self-correct via Loot History Edit).
-        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, HttpContext.RequestAborted);
 
         TempData["LootHistoryMessage"] = $"Loot added: {detail.ItemName} → {detail.ItemWinner} ({detail.WinningDkpSpent} DKP).";
         return RedirectToAction(nameof(Index));

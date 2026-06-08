@@ -58,7 +58,7 @@ public sealed partial class ActivityDataController
         // so the character's jobs are consistent across linkshells and stored in
         // the addon's FFXI-job-id format. The client sends a catalog-aligned
         // array (index 0 = WAR ... 14 = SMN).
-        if (request.JobLevels is { Length: > 0 })
+        if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 })
         {
             var memberships = await _dbContext.AppUserLinkshells
                 .Where(link => link.AppUserId == appUser.Id)
@@ -67,7 +67,16 @@ public sealed partial class ActivityDataController
             {
                 foreach (var membership in memberships)
                 {
-                    membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, request.JobLevels);
+                    if (request.JobLevels is { Length: > 0 })
+                    {
+                        membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, request.JobLevels);
+                    }
+                    // "Strong" flags ride alongside the levels — same value on every
+                    // membership, since it's one character's set of strengths.
+                    if (request.StrongJobs is { Length: > 0 })
+                    {
+                        membership.StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(membership.StrongJobs, request.StrongJobs);
+                    }
                 }
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
@@ -80,20 +89,38 @@ public sealed partial class ActivityDataController
         if (string.IsNullOrWhiteSpace(request.AltCharacterName1))
         {
             if (appUser.Alt1JobLevels is not null) { appUser.Alt1JobLevels = null; altJobsChanged = true; }
+            if (appUser.Alt1StrongJobs is not null) { appUser.Alt1StrongJobs = null; altJobsChanged = true; }
         }
-        else if (request.Alt1JobLevels is { Length: > 0 })
+        else
         {
-            appUser.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt1JobLevels, request.Alt1JobLevels);
-            altJobsChanged = true;
+            if (request.Alt1JobLevels is { Length: > 0 })
+            {
+                appUser.Alt1JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt1JobLevels, request.Alt1JobLevels);
+                altJobsChanged = true;
+            }
+            if (request.Alt1StrongJobs is { Length: > 0 })
+            {
+                appUser.Alt1StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(appUser.Alt1StrongJobs, request.Alt1StrongJobs);
+                altJobsChanged = true;
+            }
         }
         if (string.IsNullOrWhiteSpace(request.AltCharacterName2))
         {
             if (appUser.Alt2JobLevels is not null) { appUser.Alt2JobLevels = null; altJobsChanged = true; }
+            if (appUser.Alt2StrongJobs is not null) { appUser.Alt2StrongJobs = null; altJobsChanged = true; }
         }
-        else if (request.Alt2JobLevels is { Length: > 0 })
+        else
         {
-            appUser.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt2JobLevels, request.Alt2JobLevels);
-            altJobsChanged = true;
+            if (request.Alt2JobLevels is { Length: > 0 })
+            {
+                appUser.Alt2JobLevels = ProfileJobLevels.MergeIntoStored(appUser.Alt2JobLevels, request.Alt2JobLevels);
+                altJobsChanged = true;
+            }
+            if (request.Alt2StrongJobs is { Length: > 0 })
+            {
+                appUser.Alt2StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(appUser.Alt2StrongJobs, request.Alt2StrongJobs);
+                altJobsChanged = true;
+            }
         }
         if (altJobsChanged)
         {

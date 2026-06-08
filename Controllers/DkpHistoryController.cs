@@ -30,7 +30,6 @@ public class DkpHistoryController : Controller
         string? appUserId,
         int page = 1,
         [FromServices] WindowEventDkpLedgerService? windowEventDkpLedger = null,
-        [FromServices] SheetDkpPullService? sheetDkpPull = null,
         CancellationToken cancellationToken = default)
     {
         var user = await _userManager.GetUserAsync(User);
@@ -72,16 +71,10 @@ public class DkpHistoryController : Controller
         }
 
         // Mirror the Activity DKP endpoint: materialize any posted window-event
-        // credit, then pull-on-load (cached) from the connected sheet so the
-        // stored balance reflects the sheet (the source of truth). The pull is a
-        // SET that runs last, so it never double-counts app-side credit.
+        // credit so DKP history/totals are current before rendering.
         if (windowEventDkpLedger is not null)
         {
             await windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, cancellationToken);
-        }
-        if (sheetDkpPull is not null)
-        {
-            await sheetDkpPull.EnsureFreshAsync(selectedLinkshellId, cancellationToken);
         }
 
         var linkshellMembers = await _context.AppUserLinkshells

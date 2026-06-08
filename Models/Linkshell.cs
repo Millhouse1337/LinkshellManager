@@ -88,6 +88,16 @@ public class Linkshell
 
     public bool EnableRevenue { get; set; } = true;
 
+    // Member activity (Active/Inactive) tracking, derived from event attendance.
+    // Opt-in per linkshell (off by default — not every linkshell uses it). When on,
+    // a computed Active/Inactive badge shows on the roster. The rule is a streak
+    // hysteresis over each member's "counting" events:
+    //   * InactiveAfterAbsences consecutive absences  -> Inactive (default 3)
+    //   * ActiveAfterAttendances consecutive credited attendances -> Active (default 2)
+    public bool EnableActivityTracking { get; set; } = false;
+    public int InactiveAfterAbsences { get; set; } = 3;
+    public int ActiveAfterAttendances { get; set; } = 2;
+
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing
     // hidden. Pipe separator avoids the comma collision risk if FFXI ever
@@ -121,9 +131,6 @@ public class Linkshell
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 
-    [MaxLength(64)]
-    public string? GoogleSheetTabName { get; set; }
-
     // Tab that the generic DKP template export writes to and the template
     // import reads from (the canonical 6-column Member/Alts/Current/Total/Spent
     // layout). Default "LSM DKP". A linkshell can point this at a tab of their
@@ -131,32 +138,19 @@ public class Linkshell
     [MaxLength(64)]
     public string? DkpTemplateTabName { get; set; }
 
+    // Live sync (push-only): when true, the "LSM DKP" template tab is
+    // automatically re-exported whenever a member's DKP changes (event close,
+    // auction, loot, audits, window events). Off by default; requires a
+    // connected Google account + spreadsheet id to actually push. Import
+    // (sheet → app) stays manual regardless of this flag.
+    public bool SheetTemplateSyncEnabled { get; set; } = false;
+
     public string? GoogleOAuthRefreshTokenEnc { get; set; }
 
     [MaxLength(256)]
     public string? GoogleOAuthUserEmail { get; set; }
 
     public DateTime? GoogleOAuthConnectedAt { get; set; }
-
-    public bool SheetSyncEnabled { get; set; } = false;
-
-    // Per-LS override of the AttInput tab name. Default is "AttInput", but
-    // each linkshell can rename their tab. The sync service appends rows here
-    // rather than overwriting Main!C so the user's existing formula chain
-    // (AttInput -> Tally -> Main!F -> Main!C) keeps working unchanged.
-    [MaxLength(64)]
-    public string? AttInputTabName { get; set; }
-
-    // Fallback Entry Type for snapshots / window posts that have no linked
-    // event with an AttInputEntryType set. Examples: "Misc Camp", "Kill".
-    [MaxLength(32)]
-    public string? AttInputDefaultEntryType { get; set; }
-
-    // Per-LS override of the ManualPoints tab name. Default is "ManualPoints".
-    // Each DKP audit appends a new column to this tab; the cell at the
-    // member's row gets the audit amount.
-    [MaxLength(64)]
-    public string? ManualPointsTabName { get; set; }
 
     // Named Discord channel webhooks. Every `/lsm now` attendance snapshot is
     // posted to each of these as a party-grouped embed. Empty = Discord

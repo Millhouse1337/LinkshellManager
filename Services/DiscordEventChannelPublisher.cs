@@ -51,9 +51,26 @@ public sealed class DiscordEventChannelPublisher
                 .Include(item => item.PartySetup!)
                     .ThenInclude(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
                 .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
-            if (ev is null || !string.IsNullOrEmpty(ev.DiscordMessageId))
+            if (ev is null)
             {
-                // Missing, or already announced (idempotent).
+                return;
+            }
+
+            var payload = await BuildPayloadAsync(ev, cancellationToken);
+
+            // Already announced → edit the posted message in place so detail edits
+            // (name, time, DKP/hour, location, party setup) show immediately,
+            // without waiting for a signup interaction to refresh it.
+            if (!string.IsNullOrEmpty(ev.DiscordMessageId))
+            {
+                if (string.IsNullOrEmpty(ev.DiscordChannelId))
+                {
+                    return;
+                }
+                await _bot.EditMessageAsync(ev.DiscordChannelId, ev.DiscordMessageId, payload, cancellationToken);
+                _logger.LogInformation(
+                    "Event {EventId} board updated in place (message {MessageId}).",
+                    eventId, ev.DiscordMessageId);
                 return;
             }
 
@@ -67,12 +84,6 @@ public sealed class DiscordEventChannelPublisher
                     eventId, ev.LinkshellId, ev.EventType ?? "(none)");
                 return;
             }
-
-            var signups = await LoadSignupsAsync(eventId, cancellationToken);
-            var slotSignups = ev.PartySetup is null
-                ? null
-                : await EventPartySignupService.GetSignupsForEventAsync(_db, ev.Id, cancellationToken);
-            var payload = DiscordEventMessageBuilder.Build(ev, signups, ev.PartySetup, slotSignups);
 
             var messageId = await _bot.PostMessageAsync(channel.ChannelId, payload, cancellationToken);
             if (string.IsNullOrEmpty(messageId))
@@ -99,6 +110,18 @@ public sealed class DiscordEventChannelPublisher
         {
             _logger.LogWarning(ex, "Event announce for event {EventId} failed.", eventId);
         }
+    }
+
+    // Builds the message payload for an event: the interactive party board when a
+    // setup is linked, else the ad-hoc job-roster + signup. `ev` must be loaded
+    // with its PartySetup tree.
+    private async Task<object> BuildPayloadAsync(Event ev, CancellationToken cancellationToken)
+    {
+        var signups = await LoadSignupsAsync(ev.Id, cancellationToken);
+        var slotSignups = ev.PartySetup is null
+            ? null
+            : await EventPartySignupService.GetSignupsForEventAsync(_db, ev.Id, cancellationToken);
+        return DiscordEventMessageBuilder.Build(ev, signups, ev.PartySetup, slotSignups);
     }
 
     // The channel for the event's type, falling back to the general "Other

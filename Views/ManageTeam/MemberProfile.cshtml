@@ -13,12 +13,12 @@
     }
 
     // Main + each named alt, as labeled characters to render.
-    var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels)>
+    var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong)>
     {
-        (Model.Entry.CharacterName, false, Model.Entry.JobLevels)
+        (Model.Entry.CharacterName, false, Model.Entry.JobLevels, Model.Entry.StrongJobs)
     };
-    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, Model.Entry.Alt1JobLevels)); }
-    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, Model.Entry.Alt2JobLevels)); }
+    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, Model.Entry.Alt1JobLevels, Model.Entry.Alt1StrongJobs)); }
+    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, Model.Entry.Alt2JobLevels, Model.Entry.Alt2StrongJobs)); }
 }
 
 <div class="page-head fade d1">
@@ -51,7 +51,7 @@
     @foreach (var ch in characters)
     {
         var leveled = ch.Levels
-            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl })
+            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl, Strong = i < ch.Strong.Count && ch.Strong[i] })
             .Where(x => x.Level > 0)
             .OrderByDescending(x => x.Level)
             .ToList();
@@ -70,7 +70,7 @@
                 <div class="jr-pills">
                     @foreach (var job in leveled)
                     {
-                        <span class="jr-pill"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span></span>
+                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "")"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong" title="Strong — well-geared / merited">★</span>}</span>
                     }
                 </div>
             }

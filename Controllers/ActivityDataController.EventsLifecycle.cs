@@ -80,6 +80,7 @@ public sealed partial class ActivityDataController
             Details = request.Details?.Trim(),
             PartySetupId = request.PartySetupId,
             AutoStart = request.AutoStart,
+            CountsTowardActive = request.CountsTowardActive,
             TimeStamp = DateTime.UtcNow
         };
 
@@ -174,6 +175,7 @@ public sealed partial class ActivityDataController
         eventEntity.Details = request.Details?.Trim();
         eventEntity.PartySetupId = request.PartySetupId;
         eventEntity.AutoStart = request.AutoStart;
+        eventEntity.CountsTowardActive = request.CountsTowardActive;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -303,6 +305,7 @@ public sealed partial class ActivityDataController
             DkpPerHour = eventEntity.DkpPerHour,
             EventDkp = eventEntity.EventDkp,
             Details = eventEntity.Details,
+            CountsTowardActive = eventEntity.CountsTowardActive,
             TimeStamp = DateTime.UtcNow,
             AppUserEventHistories = new List<AppUserEventHistory>()
         };
@@ -342,7 +345,8 @@ public sealed partial class ActivityDataController
                 EventDkp = eventDkp,
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,
-                Proctor = participation.Proctor
+                Proctor = participation.Proctor,
+                ActiveCredit = eventEntity.CountsTowardActive
             });
 
             if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&

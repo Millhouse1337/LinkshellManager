@@ -195,19 +195,21 @@ export class LinkshellTabComponent {
   }
 
   // Main + named alts for one roster member, as labeled characters to render.
-  protected rosterCharacters(member: ActivityJobsRosterMember): { label: string; isAlt: boolean; levels: number[] }[] {
-    const list = [{ label: member.characterName, isAlt: false, levels: member.jobLevels ?? [] }];
-    if (member.alt1Name) { list.push({ label: member.alt1Name, isAlt: true, levels: member.alt1JobLevels ?? [] }); }
-    if (member.alt2Name) { list.push({ label: member.alt2Name, isAlt: true, levels: member.alt2JobLevels ?? [] }); }
+  protected rosterCharacters(member: ActivityJobsRosterMember): { label: string; isAlt: boolean; levels: number[]; strong: boolean[] }[] {
+    const list = [{ label: member.characterName, isAlt: false, levels: member.jobLevels ?? [], strong: member.strongJobs ?? [] }];
+    if (member.alt1Name) { list.push({ label: member.alt1Name, isAlt: true, levels: member.alt1JobLevels ?? [], strong: member.alt1StrongJobs ?? [] }); }
+    if (member.alt2Name) { list.push({ label: member.alt2Name, isAlt: true, levels: member.alt2JobLevels ?? [], strong: member.alt2StrongJobs ?? [] }); }
     return list;
   }
 
-  // The leveled jobs (level > 0) for one character, highest level first.
-  protected leveledJobs(levels: number[] | null | undefined): { name: string; level: number }[] {
+  // The leveled jobs (level > 0) for one character, highest level first; each
+  // carries its "strong" flag (well-geared/merited) for the pill marker.
+  protected leveledJobs(levels: number[] | null | undefined, strong?: boolean[] | null): { name: string; level: number; strong: boolean }[] {
     const catalog = this.jobsRosterForCurrent()?.jobCatalog ?? [];
     const arr = levels ?? [];
+    const flags = strong ?? [];
     return catalog
-      .map((name, i) => ({ name, level: arr[i] ?? 0 }))
+      .map((name, i) => ({ name, level: arr[i] ?? 0, strong: flags[i] ?? false }))
       .filter(entry => entry.level > 0)
       .sort((a, b) => b.level - a.level);
   }

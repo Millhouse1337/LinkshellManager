@@ -569,14 +569,6 @@ public sealed partial class AddonApiController
 
         var ledgerIds = pendingLedgers.Select(l => l.Id).ToList();
 
-        // Fire-and-forget AttInput append for this window. Skipped silently
-        // when sheet integration is disabled, AttInputEntryType is null, or
-        // the window has already been appended (idempotency stamp).
-        if (attendanceWindow is not null)
-        {
-            await _sheetSync.EnqueueEventWindowAsync(attendanceWindow.Id, cancellationToken);
-        }
-
         return Ok(new
         {
             matched,
@@ -936,10 +928,6 @@ public sealed partial class AddonApiController
             _dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        // Push this ToD's loot deductions to the ManualPoints tab (one
-        // recomputed column per linkshell+day). Idempotent, so post / edit /
-        // delete all converge on the same column.
-        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
 
         return Ok(new
         {

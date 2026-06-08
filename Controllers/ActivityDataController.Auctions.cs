@@ -661,7 +661,6 @@ public sealed partial class ActivityDataController
         _dbContext.AuctionItems.RemoveRange(auction.AuctionItems);
         _dbContext.Auctions.Remove(auction);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueAsync(auction.LinkshellId, cancellationToken);
 
         return Ok(new { success = true });
     }

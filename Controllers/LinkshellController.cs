@@ -494,6 +494,10 @@ public class LinkshellController : Controller
         linkshell.EnableDkp      = model.EnableDkp;
         linkshell.EnableItems    = model.EnableItems;
         linkshell.EnableRevenue  = model.EnableRevenue;
+        linkshell.EnableActivityTracking = model.EnableActivityTracking;
+        // Clamp to >= 1 so the streak rule can't be configured into a no-op.
+        linkshell.InactiveAfterAbsences   = Math.Max(1, model.InactiveAfterAbsences);
+        linkshell.ActiveAfterAttendances  = Math.Max(1, model.ActiveAfterAttendances);
         // Pipe-separated, trimmed, de-duped — same storage format the Discord
         // Activity writes and TodController reads when filtering the tracker.
         linkshell.HiddenTodMonsters = string.Join('|',
@@ -878,6 +882,9 @@ public class LinkshellController : Controller
             EnableDkp             = target.EnableDkp,
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
+            EnableActivityTracking = target.EnableActivityTracking,
+            InactiveAfterAbsences  = target.InactiveAfterAbsences,
+            ActiveAfterAttendances = target.ActiveAfterAttendances,
             HiddenTodMonsters     = (target.HiddenTodMonsters ?? string.Empty)
                 .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList(),

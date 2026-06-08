@@ -140,6 +140,10 @@ public class PartySetupSlotView
     public string? SignedUpCharacterName { get; set; }
     public bool IsOpen => string.IsNullOrEmpty(SignedUpAppUserId);
 
+    // Per-event: whether the member in this slot is this party's leader (👑).
+    // Distinct from IsPartyLeader above (the template's designated-leader slot).
+    public bool SignedUpIsPartyLeader { get; set; }
+
     // What the signing-up member committed to BRING. The fields the slot
     // already pinned (Role on a Role slot; MainJob/SubJob on a Job slot)
     // mirror the slot's values; the fields the slot left open record the

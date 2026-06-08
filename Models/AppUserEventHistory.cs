@@ -37,4 +37,11 @@ public class AppUserEventHistory
     public bool? IsVerified { get; set; }
 
     public string? Proctor { get; set; }
+
+    // Per-member "active credit" for this event. Defaults to the event's
+    // CountsTowardActive at close (so everyone is credited by default); leadership
+    // can uncheck it on the event-history page for members who don't deserve it
+    // (e.g. attended one window, skipped the rest). A credited row = an attendance
+    // in the member's activity streak; uncredited (or absent) = an absence.
+    public bool ActiveCredit { get; set; } = true;
 }

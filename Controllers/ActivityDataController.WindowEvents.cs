@@ -169,8 +169,9 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Sets DKP + Entry Type (and any per-character overrides) and enqueues the
-    // AttInput append. Ports WindowEventsController.PostToSheet.
+    // Publishes a window event: sets DKP + Entry Type (and any per-character
+    // overrides), marks it posted, and materializes the per-member SnapshotEarned
+    // DKP ledger. Ports WindowEventsController.PostToSheet.
     [HttpPost("window-events/{windowEventId:int}/post")]
     public async Task<IActionResult> PostWindowEventToSheetAsync(
         int windowEventId,
@@ -183,21 +184,24 @@ public sealed partial class ActivityDataController
 
         if (windowEvent.Value!.PostedToSheetAt.HasValue)
         {
-            return BadRequest(new { error = "This event has already been posted to the DKP sheet." });
+            return BadRequest(new { error = "This event has already been published." });
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
         windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
         windowEvent.Value.EntryType = request.EntryType;
         ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        windowEvent.Value.PostedToSheetAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        await _sheetSync.EnqueueWindowEventPostAsync(windowEvent.Value.Id, cancellationToken);
+        // Publish = credit DKP. Materialize the per-member SnapshotEarned ledger
+        // rows now that the event is marked posted (idempotent).
+        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesAsync(windowEvent.Value.Id, cancellationToken);
         return Ok(new { success = true });
     }
 
-    // Edits a posted event's DKP + Entry Type (and overrides) and enqueues the
-    // reconcile job (rewrites the appended rows + ledger by the delta).
+    // Edits a published event's DKP + Entry Type (and overrides) and reconciles
+    // the existing ledger entries + per-member LinkshellDkp totals by the delta.
     [HttpPost("window-events/{windowEventId:int}/edit-posted")]
     public async Task<IActionResult> EditPostedWindowEventAsync(
         int windowEventId,
@@ -210,7 +214,7 @@ public sealed partial class ActivityDataController
 
         if (!windowEvent.Value!.PostedToSheetAt.HasValue)
         {
-            return BadRequest(new { error = "This event hasn't been posted yet. Use Post to send it to the sheet." });
+            return BadRequest(new { error = "This event hasn't been published yet. Use Post to publish it." });
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
@@ -219,7 +223,7 @@ public sealed partial class ActivityDataController
         ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        await _sheetSync.EnqueueWindowEventEditAsync(windowEvent.Value.Id, cancellationToken);
+        await _windowEventDkpLedger.ReconcilePostedWindowEventLedgerAsync(windowEvent.Value.Id, cancellationToken);
         return Ok(new { success = true });
     }
 

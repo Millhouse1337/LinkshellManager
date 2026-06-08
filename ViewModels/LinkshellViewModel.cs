@@ -41,6 +41,12 @@ public class LinkshellCustomizeViewModel
     public bool EnableItems      { get; set; } = true;
     public bool EnableRevenue    { get; set; } = true;
 
+    // Member activity (Active/Inactive) tracking from event attendance. Opt-in;
+    // streak thresholds configurable (defaults 3 absences -> inactive, 2 -> active).
+    public bool EnableActivityTracking { get; set; } = false;
+    public int InactiveAfterAbsences   { get; set; } = 3;
+    public int ActiveAfterAttendances  { get; set; } = 2;
+
     // Named Discord channel webhooks. Every `/lsm now` snapshot is posted to
     // each as a party-grouped embed. Rows with a blank URL are dropped on
     // save (so clearing a row deletes the webhook). Empty = posting disabled.

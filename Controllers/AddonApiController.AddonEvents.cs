@@ -287,14 +287,6 @@ public sealed partial class AddonApiController
 
         var result = await EventController.EndEventCoreAsync(_dbContext, eventEntity);
         var windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
-        if (windowCount <= 1)
-        {
-            await _sheetSync.EnqueueEventCloseAsync(eventEntity.Id, cancellationToken);
-        }
-        if (result.HasLootDeductions)
-        {
-            await _sheetSync.EnqueueEventLootDeductionsAsync(result.EventHistoryId, cancellationToken);
-        }
 
         // For windowed events DkpPerHour is reused as DkpPerWindow (same column,
         // different semantic). Surface both names so the addon can format the

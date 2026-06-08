@@ -19,18 +19,18 @@ public sealed class WindowEventsController : Controller
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
-    private readonly SheetSyncQueue _sheetSync;
+    private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
 
     public WindowEventsController(
         ApplicationDbContext db,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        SheetSyncQueue sheetSync)
+        WindowEventDkpLedgerService windowEventDkpLedger)
     {
         _db = db;
         _userManager = userManager;
         _timeZones = timeZones;
-        _sheetSync = sheetSync;
+        _windowEventDkpLedger = windowEventDkpLedger;
     }
 
     [HttpGet("/linkshells/{linkshellId:int}/window-events")]
@@ -330,9 +330,10 @@ public sealed class WindowEventsController : Controller
         ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
         await _db.SaveChangesAsync(cancellationToken);
 
-        await _sheetSync.EnqueueWindowEventEditAsync(windowEvent.Id, cancellationToken);
+        // Reconcile the already-credited ledger + per-member DKP by the delta.
+        await _windowEventDkpLedger.ReconcilePostedWindowEventLedgerAsync(windowEvent.Id, cancellationToken);
 
-        TempData["WindowEventStatus"] = $"Updating \"{windowEvent.Name}\" on the DKP sheet...";
+        TempData["WindowEventStatus"] = $"Updated DKP for \"{windowEvent.Name}\".";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
@@ -382,11 +383,14 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = dkpAmount.Value;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
+        windowEvent.PostedToSheetAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        await _sheetSync.EnqueueWindowEventPostAsync(windowEvent.Id, cancellationToken);
+        // Publish = credit DKP. Materialize the per-member SnapshotEarned ledger
+        // rows now that the event is marked posted (idempotent).
+        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesAsync(windowEvent.Id, cancellationToken);
 
-        TempData["WindowEventStatus"] = $"Posting \"{windowEvent.Name}\" to the DKP sheet...";
+        TempData["WindowEventStatus"] = $"Published \"{windowEvent.Name}\" and credited DKP.";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 

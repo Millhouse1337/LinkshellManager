@@ -7,7 +7,6 @@ public sealed class LinkshellSheetViewModel
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
     public string? SpreadsheetId { get; set; }
-    public string? TabName { get; set; }
     public bool IsOAuthConfigured { get; set; }
     public bool IsOAuthConnected { get; set; }
     public string? ConnectedGoogleEmail { get; set; }
@@ -19,14 +18,13 @@ public sealed class LinkshellSheetViewModel
     public DateTime? ConnectedAt { get; set; }
     public DateTime? ConnectedAtUserLocal { get; set; }
     public string? ConnectedAtTimeZoneLabel { get; set; }
-    public bool SheetSyncEnabled { get; set; }
-
-    public string? AttInputTabName { get; set; }
-    public string? AttInputDefaultEntryType { get; set; }
-    public string? ManualPointsTabName { get; set; }
 
     // The tab the generic DKP template exports to / imports from (default "LSM DKP").
     public string? DkpTemplateTabName { get; set; }
+
+    // Live sync (push-only): when on, the LSM DKP tab auto-refreshes on every
+    // DKP change. Import (sheet → app) stays manual.
+    public bool LiveSyncEnabled { get; set; }
 
     // Populated by Import preview: each template row matched against the roster.
     public DkpTemplatePreview? TemplatePreview { get; set; }

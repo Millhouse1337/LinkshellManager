@@ -106,6 +106,7 @@ public partial class EventController
                                 IsPartyLeader = s.IsPartyLeader,
                                 SignedUpAppUserId = su?.AppUserId,
                                 SignedUpCharacterName = su?.CharacterName,
+                                SignedUpIsPartyLeader = su?.IsPartyLeader ?? false,
                                 SignedUpRole = su?.Role,
                                 SignedUpMainJob = su?.MainJob,
                                 SignedUpSubJob = su?.SubJob
@@ -251,8 +252,8 @@ public partial class EventController
             Duration = eventViewModel.Event.Duration,
             DkpPerHour = eventViewModel.Event.DkpPerHour,
             Details = eventViewModel.Event.Details,
-            AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim(),
             AutoStart = eventViewModel.Event.AutoStart,
+            CountsTowardActive = eventViewModel.Event.CountsTowardActive,
             PartySetupId = requestedPartySetupId,
             CreatorUserId = user.Id,
             TimeStamp = DateTime.UtcNow
@@ -275,7 +276,7 @@ public partial class EventController
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SignUpPartySlot(
-        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl)
+        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -308,12 +309,14 @@ public partial class EventController
             ? (user.CharacterName ?? user.UserName ?? "Member")
             : membership.CharacterName;
         var result = await EventPartySignupService.ClaimSlotAsync(
-            _context, eventId, slot, user.Id, characterName, role, mainJob, subJob, HttpContext.RequestAborted);
+            _context, eventId, slot, user.Id, characterName, role, mainJob, subJob, HttpContext.RequestAborted, asLeader);
         if (!result.Success)
         {
             TempData["Error"] = result.Error;
         }
         await _context.SaveChangesAsync();
+        // Auto-promote earliest signup if the party just filled with no leader.
+        await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, slot.PartySetupPartyId, HttpContext.RequestAborted);
 
         return SafeLocalRedirect(returnUrl);
     }
@@ -335,9 +338,11 @@ public partial class EventController
             return NotFound();
         }
 
-        if (await EventPartySignupService.LeaveAsync(_context, eventId, user.Id, HttpContext.RequestAborted))
+        var leftPartyId = await EventPartySignupService.LeaveAsync(_context, eventId, user.Id, HttpContext.RequestAborted);
+        if (leftPartyId is not null)
         {
             await _context.SaveChangesAsync();
+            await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, leftPartyId, HttpContext.RequestAborted);
         }
 
         return SafeLocalRedirect(returnUrl);
@@ -439,8 +444,8 @@ public partial class EventController
         eventToUpdate.Duration = eventViewModel.Event.Duration;
         eventToUpdate.DkpPerHour = eventViewModel.Event.DkpPerHour;
         eventToUpdate.Details = eventViewModel.Event.Details;
-        eventToUpdate.AttInputEntryType = string.IsNullOrWhiteSpace(eventViewModel.Event.AttInputEntryType) ? null : eventViewModel.Event.AttInputEntryType.Trim();
         eventToUpdate.AutoStart = eventViewModel.Event.AutoStart;
+        eventToUpdate.CountsTowardActive = eventViewModel.Event.CountsTowardActive;
         eventToUpdate.PartySetupId = requestedPartySetupId;
 
         await _context.SaveChangesAsync();
@@ -654,20 +659,7 @@ public partial class EventController
             return Forbid();
         }
 
-        var endResult = await EndEventCoreAsync(_context, eventEntity);
-        // AttInput append fires only for non-windowed events; HNM-style events
-        // (windowCount > 1) already appended per-window via PostAttendanceAsync.
-        var windowCount = eventEntity.WindowCountOverride ?? Services.HnmConfig.GetWindowCount(eventEntity.EventName);
-        if (windowCount <= 1)
-        {
-            await _sheetSync.EnqueueEventCloseAsync(eventEntity.Id);
-        }
-        // ManualPoints deductions: one column per event close carrying every
-        // LootSpent row's negative DKP. Skipped when no items were won.
-        if (endResult.HasLootDeductions)
-        {
-            await _sheetSync.EnqueueEventLootDeductionsAsync(endResult.EventHistoryId);
-        }
+        await EndEventCoreAsync(_context, eventEntity);
 
         return RedirectToAction(nameof(Index), "EventHistory");
     }
@@ -726,6 +718,7 @@ public partial class EventController
             DkpPerHour = eventEntity.DkpPerHour,
             EventDkp = eventEntity.EventDkp,
             Details = eventEntity.Details,
+            CountsTowardActive = eventEntity.CountsTowardActive,
             TimeStamp = DateTime.UtcNow,
             AppUserEventHistories = new List<AppUserEventHistory>()
         };
@@ -778,7 +771,8 @@ public partial class EventController
                 EventDkp = eventDkp,
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,
-                Proctor = participation.Proctor
+                Proctor = participation.Proctor,
+                ActiveCredit = eventEntity.CountsTowardActive
             });
 
             if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&

@@ -45,7 +45,10 @@ public sealed partial class ActivityDataController
                 string.IsNullOrWhiteSpace(link.AppUser?.AltCharacterName1) ? null : link.AppUser!.AltCharacterName1,
                 ProfileJobLevels.ToCatalogLevels(link.AppUser?.Alt1JobLevels),
                 string.IsNullOrWhiteSpace(link.AppUser?.AltCharacterName2) ? null : link.AppUser!.AltCharacterName2,
-                ProfileJobLevels.ToCatalogLevels(link.AppUser?.Alt2JobLevels)))
+                ProfileJobLevels.ToCatalogLevels(link.AppUser?.Alt2JobLevels),
+                ProfileJobLevels.ToCatalogFlags(link.StrongJobs),
+                ProfileJobLevels.ToCatalogFlags(link.AppUser?.Alt1StrongJobs),
+                ProfileJobLevels.ToCatalogFlags(link.AppUser?.Alt2StrongJobs)))
             .ToList();
 
         return Ok(new ActivityJobsRosterDto(EventJobCatalog.MainJobOptions, roster));

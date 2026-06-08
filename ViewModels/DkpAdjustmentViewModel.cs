@@ -6,6 +6,9 @@ public class DkpAdjustmentViewModel
 {
     public int SelectedLinkshellId { get; set; }
     public string? SelectedLinkshellName { get; set; }
+    // SkySeaDynamis | HnmOnly | Both. Drives whether the snapshot-credit ("Add to
+    // a previous entry") audit option is offered — it's HNM-only.
+    public string? SelectedLinkshellType { get; set; }
     public bool CanManage { get; set; }
     public List<DkpAdjustmentLinkshellOption> Linkshells { get; set; } = new();
     public List<DkpAdjustmentMemberRow> Members { get; set; } = new();

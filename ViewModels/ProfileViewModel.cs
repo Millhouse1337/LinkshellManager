@@ -26,6 +26,13 @@ public class ProfileViewModel
     public List<int> Alt1JobLevels { get; set; } = new();
     public List<int> Alt2JobLevels { get; set; } = new();
 
+    // Per-job "strong" flags (catalog order), parallel to the level lists above.
+    // True = the member marked the job well-geared/merited. Round-trip through the
+    // form's Strong toggles; persisted via ProfileJobLevels.MergeFlagsIntoStored.
+    public List<bool> StrongJobs { get; set; } = new();
+    public List<bool> Alt1StrongJobs { get; set; } = new();
+    public List<bool> Alt2StrongJobs { get; set; } = new();
+
     // Populated by the controller from IDateTimeZoneProvider so the Profile view
     // can render a dropdown instead of a free-form input. Not posted back: the
     // server validates the submitted TimeZone against the provider directly.

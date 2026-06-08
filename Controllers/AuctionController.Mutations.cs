@@ -617,15 +617,6 @@ public partial class AuctionController
         _context.Auctions.Remove(auction);
         await _context.SaveChangesAsync();
 
-        // SaveChanges populated AuctionHistory.Id and each ledger entry's
-        // SourceAuctionHistoryId. Hand the AuctionHistory id to the queue so
-        // ManualPointsAppendService can pull every AuctionSpent entry tied to
-        // this close and write them into a single sheet column.
-        if (auctionHistory.Id > 0)
-        {
-            await _sheetSync.EnqueueAuctionDeductionsAsync(auctionHistory.Id);
-        }
-
         return RedirectToAction(nameof(Index), "AuctionHistory");
     }
 }

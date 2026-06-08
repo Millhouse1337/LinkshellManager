@@ -20,7 +20,7 @@ public sealed class LinkshellSheetController : Controller
     private readonly GoogleOAuthService _oauth;
     private readonly GoogleSheetsOptions _options;
     private readonly DkpTemplateSheetService _template;
-    private readonly SheetSyncQueue _sheetSync;
+    private readonly SheetTemplateSyncQueue _templateSync;
     private readonly TimeZoneConversionService _timeZones;
 
     public LinkshellSheetController(
@@ -30,7 +30,7 @@ public sealed class LinkshellSheetController : Controller
         GoogleOAuthService oauth,
         IOptions<GoogleSheetsOptions> options,
         DkpTemplateSheetService template,
-        SheetSyncQueue sheetSync,
+        SheetTemplateSyncQueue templateSync,
         TimeZoneConversionService timeZones)
     {
         _db = db;
@@ -39,7 +39,7 @@ public sealed class LinkshellSheetController : Controller
         _oauth = oauth;
         _options = options.Value;
         _template = template;
-        _sheetSync = sheetSync;
+        _templateSync = templateSync;
         _timeZones = timeZones;
     }
 
@@ -78,22 +78,21 @@ public sealed class LinkshellSheetController : Controller
             LinkshellId = linkshell.Id,
             LinkshellName = linkshell.LinkshellName,
             SpreadsheetId = linkshell.GoogleSpreadsheetId,
-            TabName = linkshell.GoogleSheetTabName,
             IsOAuthConfigured = _oauth.IsConfigured,
             IsOAuthConnected = !string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc),
             ConnectedGoogleEmail = linkshell.GoogleOAuthUserEmail,
             ConnectedAt = linkshell.GoogleOAuthConnectedAt,
-            SheetSyncEnabled = linkshell.SheetSyncEnabled,
-            AttInputTabName = linkshell.AttInputTabName,
-            AttInputDefaultEntryType = linkshell.AttInputDefaultEntryType,
-            ManualPointsTabName = linkshell.ManualPointsTabName,
             DkpTemplateTabName = DkpTemplateSheetService.ResolveTabName(linkshell.DkpTemplateTabName),
+            LiveSyncEnabled = linkshell.SheetTemplateSyncEnabled,
         };
     }
 
-    [HttpPost("/linkshells/{linkshellId:int}/sheet/sync-toggle")]
+    // Toggle live sync (push-only): when ON, the "LSM DKP" tab is auto-refreshed
+    // whenever DKP changes. Enabling while connected kicks off an immediate push
+    // so the sheet reflects the current state right away.
+    [HttpPost("/linkshells/{linkshellId:int}/sheet/live-sync-toggle")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ToggleSync(int linkshellId, [FromForm] bool enabled, CancellationToken cancellationToken)
+    public async Task<IActionResult> ToggleLiveSync(int linkshellId, [FromForm] bool enabled, CancellationToken cancellationToken)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -102,11 +101,21 @@ public sealed class LinkshellSheetController : Controller
         var linkshell = await _db.Linkshells.FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
         if (linkshell is null) return NotFound();
 
-        linkshell.SheetSyncEnabled = enabled;
+        linkshell.SheetTemplateSyncEnabled = enabled;
         await _db.SaveChangesAsync(cancellationToken);
+
+        if (enabled
+            && !string.IsNullOrWhiteSpace(linkshell.GoogleSpreadsheetId)
+            && !string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
+        {
+            // Push current state now (debounced background export) so the tab is
+            // immediately current instead of waiting for the next DKP change.
+            _templateSync.Enqueue(linkshellId);
+        }
+
         TempData["SheetConfigSuccess"] = enabled
-            ? "Live sync to the sheet is now ENABLED. Attendance + DKP audits append to AttInput / ManualPoints; column C is never overwritten."
-            : "Live sync to the sheet is now DISABLED. The sheet won't be touched.";
+            ? "Live sync is ON — the \"LSM DKP\" tab now refreshes automatically whenever DKP changes."
+            : "Live sync is OFF — the sheet only updates when you click \"Export DKP to template\".";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
@@ -159,7 +168,6 @@ public sealed class LinkshellSheetController : Controller
                 return Forbid();
             }
             await _oauth.HandleCallbackAsync(code, state, user.Id, BuildCallbackUri(), cancellationToken);
-            await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
             TempData["SheetConfigSuccess"] = "Google account connected.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
@@ -187,10 +195,6 @@ public sealed class LinkshellSheetController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveConfig(int linkshellId,
         [FromForm] string? spreadsheetId,
-        [FromForm] string? tabName,
-        [FromForm] string? attInputTabName,
-        [FromForm] string? attInputDefaultEntryType,
-        [FromForm] string? manualPointsTabName,
         [FromForm] string? dkpTemplateTabName)
     {
         var user = await _userManager.GetUserAsync(User);
@@ -201,10 +205,6 @@ public sealed class LinkshellSheetController : Controller
         if (linkshell is null) return NotFound();
 
         linkshell.GoogleSpreadsheetId = string.IsNullOrWhiteSpace(spreadsheetId) ? null : spreadsheetId.Trim();
-        linkshell.GoogleSheetTabName = string.IsNullOrWhiteSpace(tabName) ? null : tabName.Trim();
-        linkshell.AttInputTabName = string.IsNullOrWhiteSpace(attInputTabName) ? null : attInputTabName.Trim();
-        linkshell.AttInputDefaultEntryType = string.IsNullOrWhiteSpace(attInputDefaultEntryType) ? null : attInputDefaultEntryType.Trim();
-        linkshell.ManualPointsTabName = string.IsNullOrWhiteSpace(manualPointsTabName) ? null : manualPointsTabName.Trim();
         linkshell.DkpTemplateTabName = string.IsNullOrWhiteSpace(dkpTemplateTabName) ? null : dkpTemplateTabName.Trim();
 
         await _db.SaveChangesAsync();
@@ -318,17 +318,18 @@ public sealed class LinkshellSheetController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
-    [HttpPost("/linkshells/{linkshellId:int}/sheet/resync")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Resync(int linkshellId, CancellationToken cancellationToken)
+    // Downloads a small .xlsx with the canonical template layout + sample data so
+    // a linkshell can see exactly how to format a tab they want to import. Static
+    // content (no linkshell data), but gated like the rest of the page.
+    [HttpGet("/linkshells/{linkshellId:int}/sheet/sample-template")]
+    public async Task<IActionResult> DownloadSampleTemplate(int linkshellId)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
         if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
 
-        await _sheetSync.EnqueueAsync(linkshellId, cancellationToken);
-        TempData["SheetConfigSuccess"] = "Sync queued. The sheet should update within a few seconds.";
-        return RedirectToAction(nameof(Index), new { linkshellId });
+        var bytes = SampleDkpTemplateWorkbook.Build();
+        return File(bytes, SampleDkpTemplateWorkbook.ContentType, SampleDkpTemplateWorkbook.FileName);
     }
 
     private string BuildCallbackUri()

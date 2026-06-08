@@ -225,8 +225,6 @@ public sealed partial class ActivityDataController
         _dbContext.TodLootDetails.Add(detail);
         await AdjustTodLootDkpAsync(_dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        // Recompute this day's ManualPoints column (idempotent; edits/deletes self-correct).
-        await _sheetSync.EnqueueTodLootDeductionsAsync(tod.Id, cancellationToken);
 
         return Ok(new { success = true, lootDetailId = detail.Id });
     }

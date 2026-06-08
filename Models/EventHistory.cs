@@ -35,6 +35,11 @@ public class EventHistory
 
     public string? Details { get; set; }
 
+    // Copied from Event.CountsTowardActive at close (the live Event is deleted, so
+    // the activity calculation reads this permanent record). When true, this event
+    // is part of each attendee's attendance/absence streak.
+    public bool CountsTowardActive { get; set; } = true;
+
     public ICollection<AppUserEventHistory> AppUserEventHistories { get; set; } = new List<AppUserEventHistory>();
 
     public DateTime? TimeStamp { get; set; }

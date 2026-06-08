@@ -37,16 +37,13 @@ public sealed class LootEditService
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<LootEditService> _logger;
-    private readonly SheetSyncQueue _sheetSync;
 
     public LootEditService(
         ApplicationDbContext db,
-        ILogger<LootEditService> logger,
-        SheetSyncQueue sheetSync)
+        ILogger<LootEditService> logger)
     {
         _db = db;
         _logger = logger;
-        _sheetSync = sheetSync;
     }
 
     public async Task<LootEditResult> EditTodLootAsync(
@@ -124,10 +121,6 @@ public sealed class LootEditService
         detail.LastEditReason = request.Reason.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
-        // Recompute this ToD's day column on the ManualPoints tab so the edit
-        // is reflected as a correction (the recompute reads the now-updated
-        // loot rows). detail.Tod is loaded above (linkshellId came from it).
-        await _sheetSync.EnqueueTodLootDeductionsAsync(detail.Tod.Id, cancellationToken);
         _logger.LogInformation(
             "Loot edit applied (ToD #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
             detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);
@@ -247,14 +240,6 @@ public sealed class LootEditService
         detail.LastEditReason = request.Reason.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
-        // Closed-event loot lives in one ManualPoints column written at event
-        // close; recompute it from the surviving rows so this edit lands on
-        // the sheet. Active-event loot has no column yet (written at close),
-        // so there's nothing to sync here.
-        if (detail.EventHistoryId.HasValue)
-        {
-            await _sheetSync.EnqueueEventLootRecomputeAsync(detail.EventHistoryId.Value, cancellationToken);
-        }
         _logger.LogInformation(
             "Loot edit applied (Event #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
             detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);
@@ -314,7 +299,6 @@ public sealed class LootEditService
 
         _db.TodLootDetails.Remove(detail);
         await _db.SaveChangesAsync(cancellationToken);
-        await _sheetSync.EnqueueTodLootDeductionsAsync(todId, cancellationToken);
         _logger.LogInformation(
             "Loot deleted (ToD #{LootDetailId}) by {Actor}: '{Winner}' ({Dkp} DKP). Reason: {Reason}",
             lootDetailId, actor.Id, winnerName, dkpRaw, reason);
@@ -405,13 +389,6 @@ public sealed class LootEditService
         var eventHistoryId = detail.EventHistoryId;
         _db.EventLootDetails.Remove(detail);
         await _db.SaveChangesAsync(cancellationToken);
-        // Recompute the closed event's ManualPoints column from the surviving
-        // loot rows (mirrors the ToD path — blanks the deleted winner if they
-        // no longer owe). Active-event loot has no sheet column yet, so skip.
-        if (eventHistoryId.HasValue)
-        {
-            await _sheetSync.EnqueueEventLootRecomputeAsync(eventHistoryId.Value, cancellationToken);
-        }
         _logger.LogInformation(
             "Loot deleted (Event #{LootDetailId}) by {Actor}: '{Winner}' ({Dkp} DKP). Reason: {Reason}",
             lootDetailId, actor.Id, winnerName, dkpRaw, reason);

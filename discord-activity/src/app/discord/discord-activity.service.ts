@@ -499,7 +499,10 @@ export class DiscordActivityService {
         altCharacterName2: input.altCharacterName2 || null,
         jobLevels: input.jobLevels ?? null,
         alt1JobLevels: input.alt1JobLevels ?? null,
-        alt2JobLevels: input.alt2JobLevels ?? null
+        alt2JobLevels: input.alt2JobLevels ?? null,
+        strongJobs: input.strongJobs ?? null,
+        alt1StrongJobs: input.alt1StrongJobs ?? null,
+        alt2StrongJobs: input.alt2StrongJobs ?? null
       });
       await this.auth.refreshOverview();
 

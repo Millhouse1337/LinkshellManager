@@ -43,4 +43,12 @@ public class AppUserLinkshell
 
     [Column(TypeName = "jsonb")]
     public int[]? JobLevels { get; set; }
+
+    // Per-job "strong" flags for the main character, parallel to JobLevels and in
+    // the same FFXI-job-id-indexed format (see ProfileJobLevels). A non-zero entry
+    // marks the job as well-geared/merited so the linkshell can see at a glance who
+    // brings a strong setup. Like JobLevels, the profile editor writes the same
+    // value to every membership (one character, one set of strengths).
+    [Column(TypeName = "jsonb")]
+    public int[]? StrongJobs { get; set; }
 }

@@ -181,6 +181,82 @@ public sealed class WindowEventDkpLedgerService
         return ledgerEntries.Count;
     }
 
+    // Reconciles the DKP of an ALREADY-posted window event after its amount /
+    // entry type / per-member overrides were edited. EnsurePosted... only inserts
+    // missing rows, so it can't correct existing ones — this walks the existing
+    // SnapshotEarned ledger entries for the window event, recomputes each
+    // member's amount (override or default), applies the delta to LinkshellDkp,
+    // and rewrites the entry amount + type. Was previously done by the (now
+    // removed) AttInput sheet job; this is the DB-only equivalent.
+    public async Task<int> ReconcilePostedWindowEventLedgerAsync(int windowEventId, CancellationToken cancellationToken)
+    {
+        var windowEvent = await _db.WindowEvents
+            .Include(w => w.MemberDkpOverrides)
+            .FirstOrDefaultAsync(w => w.Id == windowEventId, cancellationToken);
+
+        if (windowEvent is null ||
+            !windowEvent.PostedToSheetAt.HasValue ||
+            !windowEvent.DkpAmount.HasValue ||
+            !WindowEventEntryTypes.IsValid(windowEvent.EntryType))
+        {
+            return 0;
+        }
+
+        var defaultAmount = windowEvent.DkpAmount.Value;
+        var newEntryType = windowEvent.EntryType!;
+        var overridesByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+
+        double AmountForCharacter(string? characterName)
+            => !string.IsNullOrWhiteSpace(characterName) &&
+               overridesByName.TryGetValue(characterName.Trim(), out var v)
+                ? v
+                : defaultAmount;
+
+        var ledgerEntries = await _db.DkpLedgerEntries
+            .Where(entry => entry.SourceWindowEventId == windowEventId && entry.AppUserId != null)
+            .ToListAsync(cancellationToken);
+        if (ledgerEntries.Count == 0)
+        {
+            return 0;
+        }
+
+        var appUserIds = ledgerEntries
+            .Select(entry => entry.AppUserId!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var memberships = await _db.AppUserLinkshells
+            .Where(link => link.LinkshellId == windowEvent.LinkshellId && appUserIds.Contains(link.AppUserId!))
+            .ToListAsync(cancellationToken);
+        var membershipByAppUserId = memberships
+            .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
+            .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in ledgerEntries)
+        {
+            var newAmountForEntry = AmountForCharacter(entry.CharacterName);
+            var oldAmount = entry.Amount;
+            if (Math.Abs(oldAmount - newAmountForEntry) > 0.0001 &&
+                !string.IsNullOrWhiteSpace(entry.AppUserId) &&
+                membershipByAppUserId.TryGetValue(entry.AppUserId, out var membership))
+            {
+                var delta = newAmountForEntry - oldAmount;
+                membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + delta;
+            }
+            entry.Amount = newAmountForEntry;
+            entry.EventType = newEntryType;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "Window Event ledger reconciled after edit: event {WindowEventId} -> {Count} entries.",
+            windowEventId, ledgerEntries.Count);
+        return ledgerEntries.Count;
+    }
+
     public async Task<int> EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(int linkshellId, CancellationToken cancellationToken)
     {
         var windowEventIds = await _db.WindowEvents

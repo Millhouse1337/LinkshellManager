@@ -191,7 +191,13 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int[]>("Alt1JobLevels")
                         .HasColumnType("jsonb");
 
+                    b.Property<int[]>("Alt1StrongJobs")
+                        .HasColumnType("jsonb");
+
                     b.Property<int[]>("Alt2JobLevels")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int[]>("Alt2StrongJobs")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("AltCharacterName1")
@@ -348,6 +354,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("ActiveCredit")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("AppUserId")
                         .HasColumnType("text");
@@ -531,6 +540,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("Status")
                         .HasColumnType("text");
+
+                    b.Property<int[]>("StrongJobs")
+                        .HasColumnType("jsonb");
 
                     b.HasKey("Id");
 
@@ -1095,15 +1107,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("AttInputAppendedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("AttInputEntryType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
                     b.Property<bool>("AutoStart")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("CommencementStartTime")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("CountsTowardActive")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("CreationSource")
                         .HasMaxLength(32)
@@ -1226,6 +1237,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("CommencementStartTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("CountsTowardActive")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Details")
                         .HasColumnType("text");
 
@@ -1339,6 +1353,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int>("EventId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsPartyLeader")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("MainJob")
                         .HasMaxLength(8)
@@ -1469,16 +1486,11 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("ActiveAfterAttendances")
+                        .HasColumnType("integer");
+
                     b.Property<string>("AppUserId")
                         .HasColumnType("text");
-
-                    b.Property<string>("AttInputDefaultEntryType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("AttInputTabName")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
 
                     b.Property<bool>("AuctionsLocked")
                         .HasColumnType("boolean");
@@ -1502,6 +1514,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("DkpTemplateTabName")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("EnableActivityTracking")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("EnableAuctions")
                         .HasColumnType("boolean");
@@ -1540,10 +1555,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<string>("GoogleSheetTabName")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<string>("GoogleSpreadsheetId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -1551,6 +1562,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("HiddenTodMonsters")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("InactiveAfterAbsences")
+                        .HasColumnType("integer");
 
                     b.Property<string>("LinkshellName")
                         .HasColumnType("text");
@@ -1568,11 +1582,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<string>("ManualPointsTabName")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<bool>("SheetSyncEnabled")
+                    b.Property<bool>("SheetTemplateSyncEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Status")

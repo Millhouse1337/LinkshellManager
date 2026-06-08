@@ -15,15 +15,18 @@ public class ManageTeamController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly Services.InviteCandidateService _inviteCandidates;
+    private readonly Services.MemberActivityService _memberActivity;
 
     public ManageTeamController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        Services.InviteCandidateService inviteCandidates)
+        Services.InviteCandidateService inviteCandidates,
+        Services.MemberActivityService memberActivity)
     {
         _context = context;
         _userManager = userManager;
         _inviteCandidates = inviteCandidates;
+        _memberActivity = memberActivity;
     }
 
     public async Task<IActionResult> Index(int? selectedLinkshellId, string? search, int page = 1, bool appSync = true)
@@ -94,6 +97,14 @@ public class ManageTeamController : Controller
 
         var canManage = await CanManageAsync(user.Id, targetId);
 
+        // Computed Active/Inactive activity badge (separate from the manual Status),
+        // only when the linkshell opts into attendance-based activity tracking.
+        var selectedLinkshell = userLinkshells.First(l => l.Id == targetId);
+        ViewBag.ActivityTrackingEnabled = selectedLinkshell.EnableActivityTracking;
+        ViewBag.MemberActivity = selectedLinkshell.EnableActivityTracking
+            ? await _memberActivity.ComputeActiveByAppUserAsync(targetId, HttpContext.RequestAborted)
+            : new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
         return View(new ManageTeamViewModel
         {
             Linkshells = userLinkshells,
@@ -151,7 +162,10 @@ public class ManageTeamController : Controller
             Alt1Name = string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName1) ? null : m.AppUser!.AltCharacterName1,
             Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt1JobLevels),
             Alt2Name = string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName2) ? null : m.AppUser!.AltCharacterName2,
-            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt2JobLevels)
+            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt2JobLevels),
+            StrongJobs = ProfileJobLevels.ToCatalogFlags(m.StrongJobs),
+            Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt1StrongJobs),
+            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt2StrongJobs)
         }).ToList();
 
         return View(new JobsRosterViewModel
@@ -189,7 +203,10 @@ public class ManageTeamController : Controller
             Alt1Name = string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName1) ? null : member.AppUser!.AltCharacterName1,
             Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(member.AppUser?.Alt1JobLevels),
             Alt2Name = string.IsNullOrWhiteSpace(member.AppUser?.AltCharacterName2) ? null : member.AppUser!.AltCharacterName2,
-            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(member.AppUser?.Alt2JobLevels)
+            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(member.AppUser?.Alt2JobLevels),
+            StrongJobs = ProfileJobLevels.ToCatalogFlags(member.StrongJobs),
+            Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(member.AppUser?.Alt1StrongJobs),
+            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(member.AppUser?.Alt2StrongJobs)
         };
 
         return View(new MemberProfileViewModel
