@@ -100,7 +100,7 @@ if ($pw) {
 } else {
     Write-Host "    No Playwright log lines yet — Chromium may still be downloading on first boot." -ForegroundColor Yellow
     Write-Host "    Boards post as the text-embed fallback until it's ready. Re-check with:" -ForegroundColor Yellow
-    Write-Host "      ssh $DropletHost ""sudo journalctl -u lsmanager | grep -i playwright""" -ForegroundColor Yellow
+    Write-Host "      ssh $DropletHost 'sudo journalctl -u lsmanager | grep -i playwright'" -ForegroundColor Yellow
 }
 
 Write-Host "==> Done." -ForegroundColor Green
