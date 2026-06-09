@@ -239,6 +239,12 @@ public sealed partial class ActivityDataController
         {
             linkshell.DkpRoundingIncrement = NormalizeDkpRounding(request.DkpRoundingIncrement);
         }
+        // null/blank = leave unchanged. Resolve normalises to a known theme key
+        // (or the default), so an unknown value can never reach the renderer.
+        if (!string.IsNullOrWhiteSpace(request.EventBoardTheme))
+        {
+            linkshell.EventBoardTheme = EventBoardThemes.Resolve(request.EventBoardTheme);
+        }
         // null in the request = leave unchanged. An explicitly empty list
         // clears the hidden-mob list. The serializer trims, drops blanks,
         // and de-dupes so the stored value stays clean.
@@ -531,9 +537,10 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // --- Discord channel posting config (Phase 2), mirrored from the web
-    // Customize page so officers can set it from the Activity too. The bot posts
-    // event/auction/loot announcements directly to these channels. ---
+    // --- Discord channel routes config, mirrored from the web Customize page so
+    // officers can set it from the Activity too. Officers add named routes, pick a
+    // channel, and tick which post types (events/loot/auctions/attendance/ToD) the
+    // bot posts there — combine several into one channel or split them out. ---
 
     [HttpGet("linkshells/{linkshellId:int}/discord-channels")]
     public async Task<IActionResult> GetDiscordChannelsAsync(int linkshellId, CancellationToken cancellationToken)
@@ -562,22 +569,11 @@ public sealed partial class ActivityDataController
             ? null
             : await _discordBot.ListTextChannelsAsync(guild, cancellationToken);
 
-        var existing = await _dbContext.LinkshellDiscordChannels
+        var routes = await _dbContext.LinkshellChannelRoutes
             .AsNoTracking()
-            .Where(channel => channel.LinkshellId == linkshellId)
+            .Where(route => route.LinkshellId == linkshellId)
+            .OrderBy(route => route.Id)
             .ToListAsync(cancellationToken);
-
-        var channels = DiscordChannelPurposes.All.Select(purpose =>
-        {
-            var row = existing.FirstOrDefault(channel => channel.Purpose == purpose);
-            return new
-            {
-                purpose,
-                label = DiscordChannelPurposes.Label(purpose),
-                channelId = row?.ChannelId,
-                channelName = row?.ChannelName
-            };
-        }).ToList();
 
         return Ok(new
         {
@@ -585,14 +581,28 @@ public sealed partial class ActivityDataController
             availableChannels = (available ?? Array.Empty<DiscordChannelInfo>())
                 .Select(channel => new { id = channel.Id, name = channel.Name })
                 .ToList(),
-            channels
+            postTypes = ChannelPostTypes.All.Select(key => new { key, label = ChannelPostTypes.Label(key) }).ToList(),
+            eventTypes = EventTypeVocabulary.All,
+            routes = routes.Select(route => new
+            {
+                id = route.Id,
+                name = route.Name,
+                channelId = route.ChannelId,
+                channelName = route.ChannelName,
+                postEvents = route.PostEvents,
+                postLoot = route.PostLoot,
+                postAuctions = route.PostAuctions,
+                postAttendance = route.PostAttendance,
+                postTodBoard = route.PostTodBoard,
+                eventTypeFilter = SplitEventTypeFilter(route.EventTypeFilter),
+            }).ToList(),
         });
     }
 
     [HttpPost("linkshells/{linkshellId:int}/discord-channels")]
     public async Task<IActionResult> SaveDiscordChannelsAsync(
         int linkshellId,
-        [FromBody] ActivitySaveDiscordChannelsRequest request,
+        [FromBody] ActivitySaveChannelRoutesRequest request,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -614,56 +624,30 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
-        var bindings = request.Channels ?? Array.Empty<ActivityDiscordChannelBinding>();
         var guild = linkshell.DiscordGuildId;
         var available = string.IsNullOrWhiteSpace(guild)
             ? null
             : await _discordBot.ListTextChannelsAsync(guild, cancellationToken);
 
-        var existing = await _dbContext.LinkshellDiscordChannels
-            .Where(channel => channel.LinkshellId == linkshellId)
-            .ToListAsync(cancellationToken);
+        var edits = (request.Routes ?? Array.Empty<ActivityChannelRouteInput>())
+            .Select(r => new ChannelRouteEdit(
+                r.Id, r.Name, r.ChannelId,
+                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard,
+                r.EventTypeFilter))
+            .ToList();
 
-        foreach (var purpose in DiscordChannelPurposes.All)
+        var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, cancellationToken);
+        if (error is not null)
         {
-            var chosen = bindings
-                .FirstOrDefault(binding => string.Equals(binding.Purpose, purpose, StringComparison.OrdinalIgnoreCase))?
-                .ChannelId?.Trim();
-            var row = existing.FirstOrDefault(channel => channel.Purpose == purpose);
-
-            // Empty / non-snowflake clears the binding for that purpose.
-            var valid = !string.IsNullOrEmpty(chosen) && chosen!.Length <= 20 && chosen.All(char.IsDigit);
-            if (!valid)
-            {
-                if (row is not null)
-                {
-                    _dbContext.LinkshellDiscordChannels.Remove(row);
-                }
-                continue;
-            }
-
-            var name = available?.FirstOrDefault(channel => channel.Id == chosen)?.Name;
-            if (row is not null)
-            {
-                row.ChannelId = chosen!;
-                row.ChannelName = name;
-            }
-            else
-            {
-                _dbContext.LinkshellDiscordChannels.Add(new LinkshellDiscordChannel
-                {
-                    LinkshellId = linkshellId,
-                    Purpose = purpose,
-                    ChannelId = chosen!,
-                    ChannelName = name,
-                    CreatedAtUtc = DateTime.UtcNow
-                });
-            }
+            return BadRequest(new { error });
         }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
+
+    private static IReadOnlyList<string> SplitEventTypeFilter(string? filter) =>
+        string.IsNullOrWhiteSpace(filter)
+            ? Array.Empty<string>()
+            : filter.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     [HttpPost("linkshells/{linkshellId:int}/delete")]
     public async Task<IActionResult> DeleteLinkshellAsync(int linkshellId, CancellationToken cancellationToken)

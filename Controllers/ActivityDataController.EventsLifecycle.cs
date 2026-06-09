@@ -173,6 +173,16 @@ public sealed partial class ActivityDataController
         eventEntity.Duration = request.Duration;
         eventEntity.DkpPerHour = request.DkpPerHour;
         eventEntity.Details = request.Details?.Trim();
+        // Changing (or removing) the linked party setup orphans the event's slot
+        // signups — they're keyed to the OLD setup's slot ids. Rather than drop
+        // those members, move them to the event's "no slot" attendance so they
+        // still show on the new board (under "Also attending — no slot"). The
+        // Activity warns the user first.
+        if (eventEntity.PartySetupId != request.PartySetupId)
+        {
+            await EventPartySignupService.MoveSlotSignupsToNoSlotAsync(
+                _dbContext, eventEntity.Id, eventEntity.CommencementStartTime, cancellationToken);
+        }
         eventEntity.PartySetupId = request.PartySetupId;
         eventEntity.AutoStart = request.AutoStart;
         eventEntity.CountsTowardActive = request.CountsTowardActive;

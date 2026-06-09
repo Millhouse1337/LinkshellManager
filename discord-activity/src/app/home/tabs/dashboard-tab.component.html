@@ -251,7 +251,7 @@
 
       <!-- News & Updates (left) + Upcoming Events (right) -->
       @if (selectedDashboardLinkshell()) {
-        <div class="dash-row">
+        <div class="dash-row dash-row--stretch">
           <!-- News & Updates -->
           <div class="card">
             <div class="card-head">
@@ -494,7 +494,7 @@
 
       <!-- Recent activity -->
       @if (selectedDashboardLinkshell()) {
-        <div class="card">
+        <div class="card activity-card">
           <div class="card-head">
             <div class="card-title">Recent activity</div>
             <button type="button" class="card-link" (click)="setActiveTab('timed-events')">Full log</button>

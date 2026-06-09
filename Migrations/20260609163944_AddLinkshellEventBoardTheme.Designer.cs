@@ -3,6 +3,7 @@ using System;
 using LinkshellManagerDiscordApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LinkshellManagerDiscordApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260609163944_AddLinkshellEventBoardTheme")]
+    partial class AddLinkshellEventBoardTheme
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1603,63 +1606,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("Linkshells");
                 });
 
-            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellChannelRoute", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ChannelId")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("ChannelName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("EventTypeFilter")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("LinkshellId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Name")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<bool>("PostAttendance")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PostAuctions")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PostEvents")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PostLoot")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PostTodBoard")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("TodBoardMessageId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LinkshellId");
-
-                    b.ToTable("LinkshellChannelRoutes", (string)null);
-                });
-
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellDiscordChannel", b =>
                 {
                     b.Property<int>("Id")
@@ -3153,17 +3099,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("AppUser");
                 });
 
-            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellChannelRoute", b =>
-                {
-                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
-                        .WithMany("ChannelRoutes")
-                        .HasForeignKey("LinkshellId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Linkshell");
-                });
-
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellDiscordChannel", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
@@ -3532,8 +3467,6 @@ namespace LinkshellManagerDiscordApp.Migrations
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Linkshell", b =>
                 {
                     b.Navigation("AppUserLinkshells");
-
-                    b.Navigation("ChannelRoutes");
 
                     b.Navigation("DiscordWebhooks");
 

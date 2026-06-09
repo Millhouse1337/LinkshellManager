@@ -91,7 +91,10 @@ public sealed record ActivityLinkshellSettingsDto(
     // back to Active after M consecutive credited ones.
     bool EnableActivityTracking,
     int InactiveAfterAbsences,
-    int ActiveAfterAttendances);
+    int ActiveAfterAttendances,
+    // Palette key for this linkshell's rendered event-board image (one of the
+    // EventBoardThemes keys: Crystal, Abyss, Ember, Verdant, Royal, Tome).
+    string EventBoardTheme);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -627,7 +630,10 @@ public sealed record ActivityUpdateLinkshellRequest(
     // a minimum of 1 server-side.
     bool? EnableActivityTracking = null,
     int? InactiveAfterAbsences = null,
-    int? ActiveAfterAttendances = null);
+    int? ActiveAfterAttendances = null,
+    // null/blank = leave unchanged. One of the EventBoardThemes keys; an unknown
+    // value is normalised to the default server-side.
+    string? EventBoardTheme = null);
 
 // Associate a linkshell with a Discord server (does NOT lock access). GuildId is
 // a server chosen from the eligible-guilds dropdown (the bot's servers the caller
@@ -714,11 +720,21 @@ public sealed record ActivityUpdateProfileRequest(
     bool[]? Alt1StrongJobs = null,
     bool[]? Alt2StrongJobs = null);
 
-// One purpose's channel binding (e.g. "HenmEvents" -> channel id). ChannelId
-// null/empty clears the binding for that purpose.
-public sealed record ActivityDiscordChannelBinding(string Purpose, string? ChannelId);
+// One user-defined channel route: a channel the bot posts the ticked post types
+// to. Id is null for a new route. EventTypeFilter (only meaningful when
+// PostEvents) is the list of event types this route handles; empty = catch-all.
+public sealed record ActivityChannelRouteInput(
+    int? Id,
+    string? Name,
+    string? ChannelId,
+    bool PostEvents,
+    bool PostLoot,
+    bool PostAuctions,
+    bool PostAttendance,
+    bool PostTodBoard,
+    IReadOnlyList<string>? EventTypeFilter);
 
-public sealed record ActivitySaveDiscordChannelsRequest(IReadOnlyList<ActivityDiscordChannelBinding>? Channels);
+public sealed record ActivitySaveChannelRoutesRequest(IReadOnlyList<ActivityChannelRouteInput>? Routes);
 
 public sealed record ActivityAuctionItemInput(
     int Id,

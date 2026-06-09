@@ -71,7 +71,7 @@
 
       @if (hasLinkshell()) {
         <div style="margin-top:4px">
-          <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px">
+          <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;align-items:center;text-align:center">
             <span style="font-weight:600;font-size:13px">Jobs</span>
             <span style="font-size:12px;opacity:.7">
               Level of each job (0–{{ profileJobMaxLevel }}). Shared with your linkshells and the addon's loot filter.
@@ -79,7 +79,7 @@
           </div>
 
           <!-- Character tabs: main always; an alt's tab appears once it's named. -->
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;justify-content:center">
             <button
               type="button"
               class="btn sm"
@@ -154,8 +154,8 @@
         {{
           (needsProfileSetup() ? 0 : 1) +
           ((activity.overview()?.linkshells?.length ?? 0) > 0 ? 1 : 0) +
-          (activity.overview()?.addonConfigured ? 1 : 0)
-        }}/3
+          (!activity.overview()?.addonGloballyDisabled && activity.overview()?.addonConfigured ? 1 : 0)
+        }}/{{ activity.overview()?.addonGloballyDisabled ? 2 : 3 }}
       </span>
     </div>
 
@@ -174,13 +174,15 @@
           <span>Linkshell membership unlocks invites, roster controls, and event management.</span>
         </div>
       </li>
-      <li [class.checklist__item--done]="activity.overview()?.addonConfigured === true">
-        <span class="checklist__marker">{{ activity.overview()?.addonConfigured ? 'Done' : '3' }}</span>
-        <div>
-          <strong>Set up the addon</strong>
-          <span>Pair the in-game addon to this account so kills, attendance, and loot drops post automatically.</span>
-        </div>
-      </li>
+      @if (!activity.overview()?.addonGloballyDisabled) {
+        <li [class.checklist__item--done]="activity.overview()?.addonConfigured === true">
+          <span class="checklist__marker">{{ activity.overview()?.addonConfigured ? 'Done' : '3' }}</span>
+          <div>
+            <strong>Set up the addon</strong>
+            <span>Pair the in-game addon to this account so kills, attendance, and loot drops post automatically.</span>
+          </div>
+        </li>
+      }
     </ul>
   </article>
   }

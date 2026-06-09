@@ -10,6 +10,8 @@ interface SlotSignupDraft {
   role: string;
   mainJob: string;
   subJob: string;
+  // When true, signing up also claims the party-leader spot (event board only).
+  asLeader: boolean;
 }
 
 // Shared interactive view of a single party setup's alliance -> party -> slot
@@ -49,6 +51,10 @@ export class PartySetupPanelComponent {
   // endpoints instead of the shared template. Keeps the Activity in sync with the
   // Discord board and the web event page.
   readonly eventId = input<number>(0);
+  // When true, this is a LIVE event's board: open slots stay claimable (late join
+  // into a slot), but a member can't drop their OWN slot mid-run — only an officer
+  // can Clear a slot. Combine with readOnly=false + eventId>0.
+  readonly live = input<boolean>(false);
 
   private readonly drafts = signal<Record<number, SlotSignupDraft>>({});
 
@@ -114,7 +120,7 @@ export class PartySetupPanelComponent {
   }
 
   protected draftFor(slotId: number): SlotSignupDraft {
-    return this.drafts()[slotId] ?? { role: '', mainJob: '', subJob: '' };
+    return this.drafts()[slotId] ?? { role: '', mainJob: '', subJob: '', asLeader: false };
   }
 
   protected setDraft(slotId: number, patch: Partial<SlotSignupDraft>): void {
@@ -174,7 +180,7 @@ export class PartySetupPanelComponent {
     return party.slots.some(s => s.signedUpIsPartyLeader === true);
   }
 
-  protected async signUp(slot: ActivityPartySetupSlot, asLeader = false): Promise<void> {
+  protected async signUp(slot: ActivityPartySetupSlot): Promise<void> {
     const draft = this.draftFor(slot.slotId);
     const picks = {
       role: this.needsRole(slot) ? (draft.role || null) : null,
@@ -182,10 +188,10 @@ export class PartySetupPanelComponent {
       subJob: this.needsSubJob(slot) ? (draft.subJob || null) : null
     };
     const ok = this.eventId() > 0
-      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, { ...picks, asLeader })
+      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader })
       : await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
     if (ok) {
-      this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '' });
+      this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
     }
   }
 

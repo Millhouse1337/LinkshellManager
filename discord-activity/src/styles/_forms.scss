@@ -762,6 +762,27 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+// Sectioned create/edit-event form: an uppercase header rule above each grouped
+// block (Event details / Schedule / Rewards / Details).
+.create-form__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+// Standalone toggle cells sit level with the adjacent inputs (not stretched).
+.create-form__grid > .tod-toggle {
+  align-self: end;
+  padding-bottom: 7px;
+}
+@media (max-width: 640px) {
+  .create-form__grid > .tod-toggle { align-self: start; padding-bottom: 0; }
+}
+
 // 3-column variant for forms that want a Title + Start + End style row.
 // Falls back to the same single-column stack as the parent at <900px so
 // each input has room to breathe instead of being squeezed to ~70px on

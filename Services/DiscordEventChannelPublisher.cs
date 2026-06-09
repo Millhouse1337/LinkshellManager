@@ -17,17 +17,20 @@ public sealed class DiscordEventChannelPublisher
     private readonly ApplicationDbContext _db;
     private readonly DiscordBotClient _bot;
     private readonly EventBoardPoster _poster;
+    private readonly ChannelRouteResolver _routes;
     private readonly ILogger<DiscordEventChannelPublisher> _logger;
 
     public DiscordEventChannelPublisher(
         ApplicationDbContext db,
         DiscordBotClient bot,
         EventBoardPoster poster,
+        ChannelRouteResolver routes,
         ILogger<DiscordEventChannelPublisher> logger)
     {
         _db = db;
         _bot = bot;
         _poster = poster;
+        _routes = routes;
         _logger = logger;
     }
 
@@ -51,6 +54,7 @@ public sealed class DiscordEventChannelPublisher
             // Load the linked party setup tree (when any) so the announcement can
             // render the interactive board instead of the ad-hoc job roster.
             var ev = await _db.Events
+                .Include(item => item.Linkshell)
                 .Include(item => item.PartySetup!)
                     .ThenInclude(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
                 .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
@@ -73,40 +77,40 @@ public sealed class DiscordEventChannelPublisher
                 {
                     return;
                 }
-                await _poster.EditAsync(ev.DiscordChannelId, ev.DiscordMessageId, ev, signups, slotSignups, cancellationToken);
+                await _poster.EditAsync(ev.DiscordChannelId, ev.DiscordMessageId, ev, signups, slotSignups, cancellationToken, ev.Linkshell?.EventBoardTheme);
                 _logger.LogInformation(
                     "Event {EventId} board updated in place (message {MessageId}).",
                     eventId, ev.DiscordMessageId);
                 return;
             }
 
-            var channel = await ResolveChannelAsync(ev.LinkshellId, ev.EventType, cancellationToken);
-            if (channel is null)
+            var channelId = await _routes.ResolveEventChannelIdAsync(ev.LinkshellId, ev.EventType, cancellationToken);
+            if (string.IsNullOrEmpty(channelId))
             {
                 _logger.LogInformation(
-                    "Event {EventId} not announced: linkshell {LinkshellId} has no Discord channel configured for " +
-                    "event type \"{EventType}\" and no general \"Other events\" channel. Set one under " +
-                    "Linkshell → Configurations → Discord channels.",
+                    "Event {EventId} not announced: linkshell {LinkshellId} has no Discord channel route that posts " +
+                    "events for type \"{EventType}\" (and no unfiltered event route). Set one under " +
+                    "Linkshell → Configurations → Discord channel routes.",
                     eventId, ev.LinkshellId, ev.EventType ?? "(none)");
                 return;
             }
 
-            var messageId = await _poster.PostAsync(channel.ChannelId, ev, signups, slotSignups, cancellationToken);
+            var messageId = await _poster.PostAsync(channelId, ev, signups, slotSignups, cancellationToken, ev.Linkshell?.EventBoardTheme);
             if (string.IsNullOrEmpty(messageId))
             {
                 _logger.LogWarning(
                     "Event {EventId} announce: the bot failed to post to channel {ChannelId} (linkshell {LinkshellId}). " +
                     "Check the bot is a member of the server and has the \"Send Messages\" permission in that channel.",
-                    eventId, channel.ChannelId, ev.LinkshellId);
+                    eventId, channelId, ev.LinkshellId);
                 return;
             }
 
-            ev.DiscordChannelId = channel.ChannelId;
+            ev.DiscordChannelId = channelId;
             ev.DiscordMessageId = messageId;
             await _db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(
                 "Event {EventId} announced to channel {ChannelId} (message {MessageId}).",
-                eventId, channel.ChannelId, messageId);
+                eventId, channelId, messageId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -116,25 +120,6 @@ public sealed class DiscordEventChannelPublisher
         {
             _logger.LogWarning(ex, "Event announce for event {EventId} failed.", eventId);
         }
-    }
-
-    // The channel for the event's type, falling back to the general "Other
-    // events" channel when no type-specific one is set.
-    private async Task<LinkshellDiscordChannel?> ResolveChannelAsync(
-        int linkshellId, string? eventType, CancellationToken cancellationToken)
-    {
-        var rows = await _db.LinkshellDiscordChannels
-            .AsNoTracking()
-            .Where(channel => channel.LinkshellId == linkshellId && channel.ChannelId != "")
-            .ToListAsync(cancellationToken);
-        if (rows.Count == 0)
-        {
-            return null;
-        }
-
-        var purpose = DiscordChannelPurposes.ForEventType(eventType);
-        return rows.FirstOrDefault(channel => channel.Purpose == purpose)
-            ?? rows.FirstOrDefault(channel => channel.Purpose == DiscordChannelPurposes.Events);
     }
 
     private async Task<List<EventSignupLine>> LoadSignupsAsync(int eventId, CancellationToken cancellationToken)

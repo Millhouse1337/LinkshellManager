@@ -16,15 +16,18 @@ public sealed class DiscordEventEndedPublisher
 
     private readonly ApplicationDbContext _db;
     private readonly DiscordBotClient _bot;
+    private readonly ChannelRouteResolver _routes;
     private readonly ILogger<DiscordEventEndedPublisher> _logger;
 
     public DiscordEventEndedPublisher(
         ApplicationDbContext db,
         DiscordBotClient bot,
+        ChannelRouteResolver routes,
         ILogger<DiscordEventEndedPublisher> logger)
     {
         _db = db;
         _bot = bot;
+        _routes = routes;
         _logger = logger;
     }
 
@@ -46,7 +49,7 @@ public sealed class DiscordEventEndedPublisher
                 return;
             }
 
-            var channelId = await ResolveChannelIdAsync(history.LinkshellId, history.EventType, cancellationToken);
+            var channelId = await _routes.ResolveEventChannelIdAsync(history.LinkshellId, history.EventType, cancellationToken);
             if (string.IsNullOrEmpty(channelId))
             {
                 _logger.LogInformation(
@@ -78,25 +81,6 @@ public sealed class DiscordEventEndedPublisher
         {
             _logger.LogWarning(ex, "Event-ended summary for history {HistoryId} failed.", eventHistoryId);
         }
-    }
-
-    // The channel for the event's type, falling back to the general "Other
-    // events" channel — same resolution as the announce path.
-    private async Task<string?> ResolveChannelIdAsync(int linkshellId, string? eventType, CancellationToken ct)
-    {
-        var rows = await _db.LinkshellDiscordChannels
-            .AsNoTracking()
-            .Where(channel => channel.LinkshellId == linkshellId && channel.ChannelId != "")
-            .ToListAsync(ct);
-        if (rows.Count == 0)
-        {
-            return null;
-        }
-
-        var purpose = DiscordChannelPurposes.ForEventType(eventType);
-        var match = rows.FirstOrDefault(channel => channel.Purpose == purpose)
-            ?? rows.FirstOrDefault(channel => channel.Purpose == DiscordChannelPurposes.Events);
-        return match?.ChannelId;
     }
 
     private static object BuildEmbed(EventHistory history)

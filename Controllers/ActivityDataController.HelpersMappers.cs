@@ -20,7 +20,7 @@ public sealed partial class ActivityDataController
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
                 Array.Empty<string>(), LinkshellTypes.Both, null, null, false,
-                false, 3, 2);
+                false, 3, 2, EventBoardThemes.Default);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -42,7 +42,8 @@ public sealed partial class ActivityDataController
             linkshell.LockToDiscordGuild,
             linkshell.EnableActivityTracking,
             linkshell.InactiveAfterAbsences,
-            linkshell.ActiveAfterAttendances);
+            linkshell.ActiveAfterAttendances,
+            EventBoardThemes.Resolve(linkshell.EventBoardTheme));
     }
 
     // Splits the pipe-separated storage form into a clean list of names

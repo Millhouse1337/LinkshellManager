@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FFXI — Themed Theme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --tank:#4a9eff; --heal:#3fcf6b; --supp:#f5c451; --dps:#f0556b;
+    --cinzel:"Cinzel",serif; --spectral:"Spectral",Georgia,serif;
+    /* Crystal (default) */
+    --page-bg:#05070d;
+    --bg-grad:radial-gradient(130% 90% at 50% -10%,#1a2138 0%,#0b0e1a 55%,#080a12 100%);
+    --accent:#d8b86a; --accent-bright:#f0d488; --accent-deep:#c9a554; --btn-text:#1a1408;
+    --eyebrow:#6fb7ff; --glow:rgba(111,183,255,.5); --title-shadow:0 2px 18px rgba(111,183,255,.25);
+    --txt:#f3ecda; --soft:#e9e2cf; --muted:#aeb6c9; --dim:#8a8f9e; --vacant:#6a6f82; --name:#c9d2e6;
+    --line:rgba(216,184,106,.12); --tint:rgba(216,184,106,.03); --slot-line:rgba(216,184,106,.06);
+  }
+  body[data-theme="tome"]{
+    --page-bg:#241c10;
+    --bg-grad:radial-gradient(130% 90% at 50% -10%,#f4e8cd 0%,#e8d6ad 58%,#dbc492 100%);
+    --accent:#8a3522; --accent-bright:#b04a2f; --accent-deep:#7a2a1a; --btn-text:#f6ead0;
+    --eyebrow:#9a4326; --glow:rgba(138,53,34,.35); --title-shadow:none;
+    --txt:#3a2c1a; --soft:#4a3826; --muted:#6b5740; --dim:#9a8662; --vacant:#b09a78; --name:#5a4226;
+    --line:rgba(122,46,34,.2); --tint:rgba(122,46,34,.05); --slot-line:rgba(122,46,34,.12);
+  }
+  body[data-theme="abyss"]{
+    --page-bg:#01070a;
+    --bg-grad:radial-gradient(130% 90% at 50% -10%,#063843 0%,#041c24 55%,#020a0d 100%);
+    --accent:#3fd9e6; --accent-bright:#7fe9f2; --accent-deep:#1fa8b8; --btn-text:#02181c;
+    --eyebrow:#3fd9e6; --glow:rgba(63,217,230,.5); --title-shadow:0 2px 18px rgba(63,217,230,.25);
+    --txt:#e3f7fa; --soft:#cdeef2; --muted:#8fb6bd; --dim:#5f8088; --vacant:#456066; --name:#bfeaf0;
+    --line:rgba(63,217,230,.14); --tint:rgba(63,217,230,.035); --slot-line:rgba(63,217,230,.07);
+  }
+  body[data-theme="ember"]{
+    --page-bg:#0a0503;
+    --bg-grad:radial-gradient(130% 90% at 50% -10%,#2c1308 0%,#170a05 55%,#0a0503 100%);
+    --accent:#f0883e; --accent-bright:#ffb066; --accent-deep:#d4661f; --btn-text:#1a0a02;
+    --eyebrow:#ff8a3c; --glow:rgba(240,136,62,.55); --title-shadow:0 2px 18px rgba(240,136,62,.3);
+    --txt:#f9e9d9; --soft:#f0dcc8; --muted:#c9a890; --dim:#9c7a60; --vacant:#6e5340; --name:#f0dcc8;
+    --line:rgba(240,136,62,.14); --tint:rgba(240,136,62,.04); --slot-line:rgba(240,136,62,.07);
+  }
+  body[data-theme="verdant"]{
+    --page-bg:#030a07;
+    --bg-grad:radial-gradient(130% 90% at 50% -10%,#0f2c23 0%,#07150f 55%,#030a07 100%);
+    --accent:#cda86a; --accent-bright:#e8c98c; --accent-deep:#b08f52; --btn-text:#14180a;
+    --eyebrow:#6fd8a8; --glow:rgba(111,216,168,.45); --title-shadow:0 2px 18px rgba(111,216,168,.22);
+    --txt:#e9f1e5; --soft:#d6e6d0; --muted:#9fb8a4; --dim:#6f8a74; --vacant:#4f6a54; --name:#cfe6d6;
+    --line:rgba(205,168,106,.14); --tint:rgba(205,168,106,.04); --slot-line:rgba(205,168,106,.07);
+  }
+  body[data-theme="royal"]{
+    --page-bg:#0a0514;
+    --bg-grad:radial-gradient(130% 90% at 50% -10%,#251636 0%,#150a24 55%,#0a0514 100%);
+    --accent:#c9a8f0; --accent-bright:#e3d2f7; --accent-deep:#a87fd6; --btn-text:#160a26;
+    --eyebrow:#c9a8f0; --glow:rgba(201,168,240,.5); --title-shadow:0 2px 18px rgba(201,168,240,.25);
+    --txt:#efe7f8; --soft:#e2d6f2; --muted:#b3a6c9; --dim:#857a9c; --vacant:#665c7c; --name:#e2d6f2;
+    --line:rgba(201,168,240,.14); --tint:rgba(201,168,240,.035); --slot-line:rgba(201,168,240,.07);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;padding:28px 32px 40px;background:var(--page-bg);font-family:var(--spectral);transition:background .3s;}
+
+  .theme-bar{max-width:1040px;margin:0 auto 18px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .theme-bar .tlab{font-family:var(--cinzel);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-right:4px;}
+  .tbtn{font-family:var(--cinzel);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+    padding:7px 13px;border-radius:2px;cursor:pointer;background:transparent;color:var(--muted);
+    border:1px solid var(--line);transition:all .2s;}
+  .tbtn:hover{color:var(--accent);border-color:var(--accent);}
+  .tbtn.active{color:var(--btn-text);background:linear-gradient(var(--accent-bright),var(--accent-deep));border-color:var(--accent-bright);}
+
+  .embed{max-width:1040px;margin:0 auto;position:relative;color:var(--txt);overflow:hidden;background:var(--bg-grad);transition:background .3s;}
+  .toprule{height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+  .pad{padding:26px 26px 28px;display:flex;flex-direction:column;gap:22px;}
+
+  .head{display:flex;align-items:flex-end;gap:16px;}
+  .swords{font-size:30px;filter:drop-shadow(0 0 8px var(--glow));}
+  .eyebrow{font-family:var(--cinzel);font-size:11px;font-weight:700;letter-spacing:6px;color:var(--eyebrow);}
+  .title{font-family:var(--cinzel);font-size:34px;font-weight:800;line-height:1;color:var(--txt);text-shadow:var(--title-shadow);}
+  .roster{margin-left:auto;text-align:right;}
+  .roster .lab{font-family:var(--cinzel);font-size:11px;letter-spacing:2px;color:var(--dim);}
+  .roster .num{font-family:var(--cinzel);font-size:22px;font-weight:700;color:var(--accent);white-space:nowrap;}
+  .roster .num small{color:var(--dim);}
+
+  .tiles{display:flex;gap:2px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .tile{flex:1;padding:11px 16px;background:var(--tint);border-left:2px solid var(--accent);}
+  .tile:first-child{border-left:none;}
+  .tile .lab{font-family:var(--cinzel);font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;}
+  .tile .val{font-size:15px;font-weight:600;color:var(--soft);margin-top:4px;display:flex;align-items:center;gap:7px;}
+  .tile .val .rel{font-style:italic;color:var(--dim);font-weight:400;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;}
+  .legend .item{display:inline-flex;align-items:center;gap:8px;}
+  .legend .name{font-family:var(--cinzel);font-size:11px;letter-spacing:1px;color:var(--muted);}
+
+  .gem{position:relative;display:inline-block;flex-shrink:0;transform:rotate(45deg);width:16px;height:16px;}
+  .gem.sm{width:11px;height:11px;}
+  .gem .face{position:absolute;inset:0;border-radius:3px;}
+  .gem.empty .face{background:transparent!important;border-width:1.5px;border-style:dashed;opacity:.6;box-shadow:none!important;}
+  .gem .spark{position:absolute;left:18%;top:18%;width:32%;height:32%;background:rgba(255,255,255,.7);border-radius:1px;}
+  .gem.empty .spark{display:none;}
+  .g-tank .face{background:linear-gradient(135deg,var(--tank),#4a9eff99);border:1px solid var(--tank);box-shadow:0 0 9px rgba(74,158,255,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-heal .face{background:linear-gradient(135deg,var(--heal),#3fcf6b99);border:1px solid var(--heal);box-shadow:0 0 9px rgba(63,207,107,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-supp .face{background:linear-gradient(135deg,var(--supp),#f5c45199);border:1px solid var(--supp);box-shadow:0 0 9px rgba(245,196,81,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-dps  .face{background:linear-gradient(135deg,var(--dps),#f0556b99);border:1px solid var(--dps);box-shadow:0 0 9px rgba(240,85,107,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .b-tank{border-color:var(--tank);} .b-heal{border-color:var(--heal);} .b-supp{border-color:var(--supp);} .b-dps{border-color:var(--dps);}
+
+  .parties{display:flex;gap:18px;}
+  .party{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}
+  .ptitle{display:flex;align-items:center;gap:10px;margin-bottom:2px;}
+  .ptitle .nm{font-family:var(--cinzel);font-size:15px;font-weight:700;letter-spacing:2px;color:var(--accent);text-transform:uppercase;white-space:nowrap;}
+  .ptitle .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--accent),transparent);opacity:.5;}
+  .ptitle .cnt{font-family:var(--cinzel);font-size:12px;letter-spacing:1px;color:var(--dim);}
+  .ptitle .cnt.full{color:var(--heal);}
+  .pbar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-bottom:2px;}
+  .pbar>i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent-deep),var(--accent-bright));box-shadow:0 0 8px var(--glow);}
+  .pbar.full>i{background:linear-gradient(90deg,#3fcf6b,#8fe0a6);box-shadow:0 0 8px rgba(63,207,107,.45);}
+
+  .slot{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slot-line);}
+  .slot .combo{font-family:var(--cinzel);font-size:12.5px;font-weight:600;letter-spacing:.5px;color:var(--soft);white-space:nowrap;flex-shrink:0;}
+  .slot.empty .combo{color:var(--vacant);}
+  .slot .who{font-size:13.5px;font-style:italic;color:var(--name);display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;}
+  .slot .crown{color:var(--accent);font-style:normal;}
+  .slot .vacant{font-family:var(--cinzel);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;opacity:.8;}
+  .v-tank{color:var(--tank);} .v-heal{color:var(--heal);} .v-supp{color:var(--supp);} .v-dps{color:var(--dps);}
+
+  .foot{padding-top:18px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:16px;align-items:center;}
+  .help{font-size:12.5px;font-style:italic;color:var(--dim);text-align:center;}
+  .btns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+  .btn{font-family:var(--cinzel);font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:11px 18px;cursor:pointer;border-radius:2px;white-space:nowrap;}
+  .btn-primary{color:var(--btn-text);background:linear-gradient(var(--accent-bright),var(--accent-deep));border:1px solid var(--accent-bright);box-shadow:0 0 16px var(--glow);}
+  .btn-ghost{color:var(--accent);background:var(--tint);border:1px solid var(--accent);}
+  .btn-ghost:hover{filter:brightness(1.15);}
+</style>
+</head>
+<body data-theme="crystal">
+
+  <div class="theme-bar">
+    <span class="tlab">Theme</span>
+    <button class="tbtn" data-set="crystal">Crystal</button>
+    <button class="tbtn" data-set="tome">Tome</button>
+    <button class="tbtn" data-set="abyss">Abyss</button>
+    <button class="tbtn" data-set="ember">Ember</button>
+    <button class="tbtn" data-set="verdant">Verdant</button>
+    <button class="tbtn" data-set="royal">Royal</button>
+  </div>
+
+  <div class="embed">
+    <div class="toprule"></div>
+    <div class="pad">
+
+      <div class="head">
+        <span class="swords">⚔️</span>
+        <div>
+          <div class="eyebrow">SKY</div>
+          <div class="title">Sky</div>
+        </div>
+        <div class="roster">
+          <div class="lab">ROSTER</div>
+          <div class="num">11<small> / 18</small></div>
+        </div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><div class="lab">Starts</div><div class="val">June 8, 2026 · 4:45 PM</div></div>
+        <div class="tile"><div class="lab">Status</div><div class="val"><span class="rel">20 seconds ago</span></div></div>
+        <div class="tile"><div class="lab">Reward</div><div class="val">100 DKP/hr</div></div>
+        <div class="tile"><div class="lab">Location</div><div class="val">Sky</div></div>
+      </div>
+
+      <div class="legend">
+        <span class="item"><span class="gem sm filled g-tank"><span class="face"></span><span class="spark"></span></span><span class="name">Tank</span></span>
+        <span class="item"><span class="gem sm filled g-heal"><span class="face"></span><span class="spark"></span></span><span class="name">Healer</span></span>
+        <span class="item"><span class="gem sm filled g-supp"><span class="face"></span><span class="spark"></span></span><span class="name">Support</span></span>
+        <span class="item"><span class="gem sm filled g-dps"><span class="face"></span><span class="spark"></span></span><span class="name">DPS</span></span>
+      </div>
+
+      <div class="parties">
+
+        <div class="party">
+          <div class="ptitle"><span class="nm">Party 1</span><span class="rule"></span><span class="cnt">4 / 6</span></div>
+          <div class="pbar"><i style="width:67%"></i></div>
+          <div class="slot"><span class="gem filled g-tank"><span class="face"></span><span class="spark"></span></span><span class="combo">PLD/NIN</span><span class="who"><span class="crown">♛</span>Ashryn</span></div>
+          <div class="slot"><span class="gem filled g-heal"><span class="face"></span><span class="spark"></span></span><span class="combo">WHM/BLM</span><span class="who">Mireille</span></div>
+          <div class="slot"><span class="gem filled g-supp"><span class="face"></span><span class="spark"></span></span><span class="combo">BRD/WHM</span><span class="who">Lyralei</span></div>
+          <div class="slot empty"><span class="gem empty b-dps"><span class="face"></span></span><span class="combo">WAR/NIN</span><span class="vacant v-dps">· vacant ·</span></div>
+          <div class="slot"><span class="gem filled g-dps"><span class="face"></span><span class="spark"></span></span><span class="combo">MNK/WAR</span><span class="who">Kaltern</span></div>
+          <div class="slot empty"><span class="gem empty b-dps"><span class="face"></span></span><span class="combo">MNK/WAR</span><span class="vacant v-dps">· vacant ·</span></div>
+        </div>
+
+        <div class="party">
+          <div class="ptitle"><span class="nm">Party 2</span><span class="rule"></span><span class="cnt">4 / 6</span></div>
+          <div class="pbar"><i style="width:67%"></i></div>
+          <div class="slot"><span class="gem filled g-tank"><span class="face"></span><span class="spark"></span></span><span class="combo">NIN/WAR</span><span class="who">Shion</span></div>
+          <div class="slot empty"><span class="gem empty b-heal"><span class="face"></span></span><span class="combo">WHM/BLM</span><span class="vacant v-heal">· vacant ·</span></div>
+          <div class="slot"><span class="gem filled g-supp"><span class="face"></span><span class="spark"></span></span><span class="combo">BRD/NIN</span><span class="who">Veyl</span></div>
+          <div class="slot"><span class="gem filled g-dps"><span class="face"></span><span class="spark"></span></span><span class="combo">WAR/NIN</span><span class="who">Borghild</span></div>
+          <div class="slot empty"><span class="gem empty b-dps"><span class="face"></span></span><span class="combo">DRG/RDM</span><span class="vacant v-dps">· vacant ·</span></div>
+          <div class="slot"><span class="gem filled g-dps"><span class="face"></span><span class="spark"></span></span><span class="combo">SAM/THF</span><span class="who">Tsukiko</span></div>
+        </div>
+
+        <div class="party">
+          <div class="ptitle"><span class="nm">Party 3</span><span class="rule"></span><span class="cnt">3 / 6</span></div>
+          <div class="pbar"><i style="width:50%"></i></div>
+          <div class="slot"><span class="gem filled g-dps"><span class="face"></span><span class="spark"></span></span><span class="combo">BLM/RDM</span><span class="who">Eldris</span></div>
+          <div class="slot"><span class="gem filled g-dps"><span class="face"></span><span class="spark"></span></span><span class="combo">BLM/RDM</span><span class="who">Noctis</span></div>
+          <div class="slot empty"><span class="gem empty b-dps"><span class="face"></span></span><span class="combo">BLM/RDM</span><span class="vacant v-dps">· vacant ·</span></div>
+          <div class="slot empty"><span class="gem empty b-dps"><span class="face"></span></span><span class="combo">SMN/WHM</span><span class="vacant v-dps">· vacant ·</span></div>
+          <div class="slot empty"><span class="gem empty b-dps"><span class="face"></span></span><span class="combo">SMN/WHM</span><span class="vacant v-dps">· vacant ·</span></div>
+          <div class="slot"><span class="gem filled g-supp"><span class="face"></span><span class="spark"></span></span><span class="combo">BRD/WHM</span><span class="who">Ysolde</span></div>
+        </div>
+
+      </div>
+
+      <div class="foot">
+        <div class="help">Sign up to claim a slot · Sign Up (No Slot) for attendance · Withdraw to drop out</div>
+        <div class="btns">
+          <button class="btn btn-primary">Sign Up</button>
+          <button class="btn btn-primary">♛ Sign Up as Party Leader</button>
+          <button class="btn btn-ghost">Sign Up (No Slot)</button>
+          <button class="btn btn-ghost">Withdraw</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var KEY='ffxi-embed-theme';
+      var body=document.body, btns=[].slice.call(document.querySelectorAll('.tbtn'));
+      function apply(name){
+        body.setAttribute('data-theme',name);
+        btns.forEach(function(b){ b.classList.toggle('active', b.dataset.set===name); });
+        try{ localStorage.setItem(KEY,name); }catch(e){}
+      }
+      btns.forEach(function(b){ b.addEventListener('click',function(){ apply(b.dataset.set); }); });
+      var saved; try{ saved=localStorage.getItem(KEY); }catch(e){}
+      apply(saved||'crystal');
+    })();
+  </script>
+</body>
+</html>

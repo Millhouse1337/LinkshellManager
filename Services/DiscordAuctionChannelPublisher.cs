@@ -1,45 +1,38 @@
 using System.Text;
-using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Posts auction lifecycle embeds to every webhook flagged PostAuctions for
-// the auction's linkshell (replaces the old Discord-bot per-auction-channel
-// feature — no bot token, no channel create/delete):
+// Posts auction lifecycle embeds to the linkshell's Auctions channel route via
+// the bot (so the embed can carry "Bid: {item}" buttons + an "open in app" link):
 //  • Create — an "auction opened" embed (items + start/end + creator).
+//  • Update — a fresh "new bid" card at the bottom of the channel.
 //  • Close  — the final results embed (winner + DKP per item).
-// Best-effort per channel: a failed post is logged and dropped; the auction
-// itself is unaffected. Never throws to the caller. Mirrors
-// DiscordDkpSpendPublisher's webhook delivery.
+// Best-effort: a failed post is logged and dropped; the auction itself is
+// unaffected. Never throws to the caller. No-op when no Auctions route is set or
+// the bot isn't configured.
 public sealed class DiscordAuctionChannelPublisher
 {
     private const int CreateColor = 0x5865F2; // Blurple.
     private const int ClosedColor = 0x2ECC71; // Green.
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private readonly ApplicationDbContext _db;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ChannelRouteResolver _routes;
     private readonly IConfiguration _configuration;
     private readonly DiscordBotClient _bot;
     private readonly ILogger<DiscordAuctionChannelPublisher> _logger;
 
     public DiscordAuctionChannelPublisher(
         ApplicationDbContext db,
-        IHttpClientFactory httpClientFactory,
+        ChannelRouteResolver routes,
         IConfiguration configuration,
         DiscordBotClient bot,
         ILogger<DiscordAuctionChannelPublisher> logger)
     {
         _db = db;
-        _httpClientFactory = httpClientFactory;
+        _routes = routes;
         _configuration = configuration;
         _bot = bot;
         _logger = logger;
@@ -69,7 +62,7 @@ public sealed class DiscordAuctionChannelPublisher
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Auction webhook job {Kind} for entity {EntityId} failed.", job.Kind, job.EntityId);
+                "Auction channel job {Kind} for entity {EntityId} failed.", job.Kind, job.EntityId);
         }
     }
 
@@ -150,36 +143,24 @@ public sealed class DiscordAuctionChannelPublisher
         await DispatchAsync(history.LinkshellId, BuildClosedEmbed(history), BuildLinkButton("View results in app"), ct);
     }
 
-    // Prefer the bot-posted Auctions channel (so the embed can carry a "Bid in
-    // app" / "View results" link button); fall back to the legacy PostAuctions
-    // webhooks when no Auctions channel is configured. One or the other, never
-    // both, so an officer who sets up the new channel doesn't get double posts.
-    // Returns the (channelId, messageId) when posted via the bot so the caller can
-    // persist them for later edits; (null, null) when it fell back to webhooks.
+    // Posts to the linkshell's Auctions channel route via the bot (so the embed
+    // can carry the bid + link buttons). Returns the (channelId, messageId) so the
+    // caller can persist them for later in-place edits; (null, null) when no
+    // Auctions route is configured or the bot isn't available.
     private async Task<(string? ChannelId, string? MessageId)> DispatchAsync(
         int linkshellId, object embed, object[]? components, CancellationToken ct)
     {
-        var channelId = await _db.LinkshellDiscordChannels
-            .AsNoTracking()
-            .Where(channel => channel.LinkshellId == linkshellId
-                && channel.Purpose == DiscordChannelPurposes.Auctions
-                && channel.ChannelId != "")
-            .Select(channel => channel.ChannelId)
-            .FirstOrDefaultAsync(ct);
-
-        if (!string.IsNullOrEmpty(channelId) && _bot.IsConfigured)
+        var channelId = await _routes.ResolveChannelIdAsync(linkshellId, ChannelPostTypes.Auctions, ct);
+        if (string.IsNullOrEmpty(channelId) || !_bot.IsConfigured)
         {
-            object payload = components is null || components.Length == 0
-                ? new { embeds = new[] { embed }, allowed_mentions = new { parse = Array.Empty<string>() } }
-                : new { embeds = new[] { embed }, components, allowed_mentions = new { parse = Array.Empty<string>() } };
-            var messageId = await _bot.PostMessageAsync(channelId, payload, ct);
-            return (channelId, messageId);
+            return (null, null);
         }
 
-        // Webhook fallback can't carry components (Discord strips them); post the
-        // embed only.
-        await PostToWebhooksAsync(linkshellId, embed, ct);
-        return (null, null);
+        object payload = components is null || components.Length == 0
+            ? new { embeds = new[] { embed }, allowed_mentions = new { parse = Array.Empty<string>() } }
+            : new { embeds = new[] { embed }, components, allowed_mentions = new { parse = Array.Empty<string>() } };
+        var messageId = await _bot.PostMessageAsync(channelId, payload, ct);
+        return (channelId, messageId);
     }
 
     // The "auction opened" components: a "Bid: {item}" button per item (each
@@ -237,68 +218,6 @@ public sealed class DiscordAuctionChannelPublisher
                 },
             },
         };
-    }
-
-    // Loads every Auctions-flagged webhook for the linkshell and posts the
-    // embed to each. No-op when none configured (the feature is "off").
-    private async Task PostToWebhooksAsync(int linkshellId, object embed, CancellationToken ct)
-    {
-        var webhooks = await _db.LinkshellDiscordWebhooks
-            .AsNoTracking()
-            .Where(w => w.LinkshellId == linkshellId
-                        && w.PostAuctions
-                        && w.Url != null && w.Url != "")
-            .OrderBy(w => w.Id)
-            .ToListAsync(ct);
-        if (webhooks.Count == 0)
-        {
-            return;
-        }
-
-        var payload = new
-        {
-            username = "LSM",
-            embeds = new[] { embed },
-            allowed_mentions = new { parse = Array.Empty<string>() },
-        };
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
-
-        var client = _httpClientFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(15);
-
-        foreach (var webhook in webhooks)
-        {
-            var url = webhook.Url?.Trim();
-            if (string.IsNullOrEmpty(url) || !IsDiscordWebhookUrl(url))
-            {
-                _logger.LogWarning(
-                    "Linkshell {LinkshellId} auctions webhook \"{Name}\" has a non-Discord URL; skipping.",
-                    linkshellId, webhook.Name ?? "(unnamed)");
-                continue;
-            }
-            try
-            {
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = await client.PostAsync(url, content, ct);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var body = await response.Content.ReadAsStringAsync(ct);
-                    _logger.LogWarning(
-                        "Auction post returned {Status} for linkshell {LinkshellId} webhook \"{Name}\": {Body}",
-                        (int)response.StatusCode, linkshellId, webhook.Name ?? "(unnamed)", Truncate(body, 300));
-                }
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "Failed posting auction embed for linkshell {LinkshellId} webhook \"{Name}\".",
-                    linkshellId, webhook.Name ?? "(unnamed)");
-            }
-        }
     }
 
     private object BuildCreateEmbed(Auction auction, string footerText = "Auction opened")
@@ -401,12 +320,6 @@ public sealed class DiscordAuctionChannelPublisher
             timestamp = DateTime.UtcNow.ToString("o"),
         };
     }
-
-    private static bool IsDiscordWebhookUrl(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri)
-        && uri.Scheme == Uri.UriSchemeHttps
-        && uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase)
-        && uri.AbsolutePath.Contains("/api/webhooks/", StringComparison.OrdinalIgnoreCase);
 
     private string? BuildAppLink()
     {

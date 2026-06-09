@@ -39,6 +39,16 @@ export class ActivityQueuePanelComponent {
   private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
   protected editingEventId: number | null = null;
   protected isEditingLiveEvent = false;
+  // The event's party setup as it was when the edit form opened. Used to detect
+  // a setup change on save so we can warn that it clears the existing slot
+  // signups (they're keyed to the old setup's slots). null = had no setup.
+  private editingOriginalPartySetupId: number | null = null;
+
+  // Promise-based confirm dialog (window.confirm is suppressed in the Discord
+  // Activity iframe). requestConfirm() resolves true/false when the user picks.
+  protected readonly confirmModalOpen = signal(false);
+  protected confirmMessage = '';
+  private confirmResolver: ((ok: boolean) => void) | null = null;
   protected readonly createModel: ActivityCreateEventInput = {
     linkshellId: 0,
     eventName: '',
@@ -305,12 +315,28 @@ export class ActivityQueuePanelComponent {
     this.eventTypeError = false;
     this.createModel.eventType = eventType;
 
+    const nextPartySetupId = this.partySetupNotSpecified ? null : (this.createModel.partySetupId ?? null);
+
+    // Editing an event that already had a party setup, and the setup is being
+    // changed/removed: the current slot signups belong to the old setup's slots.
+    // Saving moves those members to "no slot" attendance on the new board (rather
+    // than dropping them). Warn and let the user back out.
+    if (this.editingEventId
+        && this.editingOriginalPartySetupId !== null
+        && nextPartySetupId !== this.editingOriginalPartySetupId) {
+      const ok = await this.requestConfirm(
+        'Changing the party setup will move everyone currently signed up to “no slot” attendance on the new board. Continue?');
+      if (!ok) {
+        return;
+      }
+    }
+
     this.isSubmittingCreate = true;
 
     try {
       const payload: ActivityCreateEventInput = {
         ...this.createModel,
-        partySetupId: this.partySetupNotSpecified ? null : (this.createModel.partySetupId ?? null)
+        partySetupId: nextPartySetupId
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -366,6 +392,7 @@ export class ActivityQueuePanelComponent {
     this.durationNotSpecified = event.duration == null;
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
     this.createModel.partySetupId = event.partySetupId ?? null;
+    this.editingOriginalPartySetupId = event.partySetupId ?? null;
     this.partySetupNotSpecified = event.partySetupId == null;
     this.createModel.autoStart = event.autoStart ?? false;
     this.createModel.countsTowardActive = event.countsTowardActive ?? true;
@@ -439,6 +466,27 @@ export class ActivityQueuePanelComponent {
     this.createModel.autoStart = false;
     this.createModel.countsTowardActive = true;
     this.isEditingLiveEvent = false;
+    this.editingOriginalPartySetupId = null;
+  }
+
+  // Opens the confirm dialog and resolves once the user chooses. Any pending
+  // confirm is rejected (false) first so a stale promise can't dangle.
+  private requestConfirm(message: string): Promise<boolean> {
+    this.confirmResolver?.(false);
+    this.confirmMessage = message;
+    this.confirmModalOpen.set(true);
+    this.cdr.markForCheck();
+    return new Promise<boolean>(resolve => {
+      this.confirmResolver = resolve;
+    });
+  }
+
+  protected resolveConfirm(ok: boolean): void {
+    this.confirmModalOpen.set(false);
+    const resolve = this.confirmResolver;
+    this.confirmResolver = null;
+    resolve?.(ok);
+    this.cdr.markForCheck();
   }
 
   // ----- Inline PartySetup slot tree (members expand a queued event to sign

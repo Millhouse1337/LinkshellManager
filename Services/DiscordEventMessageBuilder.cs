@@ -27,10 +27,11 @@ public static class DiscordEventMessageBuilder
     public const string JobSelectPrefix = "evt:job:";
     public const string WithdrawPrefix = "evt:withdraw:";
     // Party-setup board interactions:
-    //   evt:pssignup:{eventId}        — board button → ephemeral slot picker
-    //   evt:psclaim:{eventId}         — picker select (value = slotId) → leader choice/claim
-    //   evt:psgo:{eventId}:{slotId}:{N|L} — Claim / Claim-as-leader buttons
-    //   evt:psleave:{eventId}         — board button → leave my slot + attendance
+    //   evt:pssignup:{eventId}        — "Sign Up" button → ephemeral slot picker
+    //   evt:psLsignup:{eventId}       — "Sign Up as Party Leader" → leader slot picker
+    //   evt:psclaim:{eventId}         — picker select (value = slotId) → claim
+    //   evt:psLclaim:{eventId}        — leader picker select → claim as leader
+    //   evt:psleave:{eventId}         — "Withdraw" button → leave my slot + attendance
     // Job-pick wizard — ephemeral selects shown (one at a time) when the chosen
     // slot doesn't pin the role/job; each custom_id carries the picks so far:
     //   evt:pswr:{eventId}:{slotId}                 — role select
@@ -39,11 +40,6 @@ public static class DiscordEventMessageBuilder
     public const string PartySlotSignUpPrefix = "evt:pssignup:";
     public const string PartySlotClaimPrefix = "evt:psclaim:";
     public const string PartySlotLeavePrefix = "evt:psleave:";
-    // After a slot is chosen from the picker, the member confirms with one of two
-    // buttons: claim it normally, or claim it as the party leader (the leader button
-    // is only offered when the slot's party has no leader yet). Tail format:
-    //   evt:psgo:{eventId}:{slotId}:{N|L}   (N = normal, L = as leader)
-    public const string PartySlotGoPrefix = "evt:psgo:";
     // General attendance on a party-board event: join the roster WITHOUT claiming
     // a slot (overflow / "I'm coming"). Backed by AppUserEvent, same as the
     // attendance roster used for DKP at close.
@@ -103,17 +99,41 @@ public static class DiscordEventMessageBuilder
     }
 
     // The party board as a rendered-PNG message: the image (uploaded as files[0],
-    // referenced here as attachments:[{id:0,...}]) plus the three board buttons.
-    // `embeds` is cleared so an edit from the embed fallback drops its embed.
-    public static object BuildBoardImageMessage(int eventId, string fileName)
+    // referenced here as attachments:[{id:0,...}]) plus the board buttons. `embeds`
+    // is cleared so an edit from the embed fallback drops its embed.
+    //
+    // `content` carries the start time as a Discord timestamp (<t:unix:…>) so it
+    // renders in EACH viewer's own local timezone — the baked PNG can't do per-user
+    // time (one shared image renders identically for everyone), so the time is NOT
+    // drawn into the image at all; it lives in the message text above it. Empty when
+    // the event has no start time.
+    public static object BuildBoardImageMessage(Event ev, string fileName)
     {
         return new
         {
+            content = BuildBoardContentLine(ev),
             embeds = Array.Empty<object>(),
             attachments = new object[] { new { id = 0, filename = fileName } },
-            components = BuildBoardComponents(eventId),
+            components = BuildBoardComponents(ev.Id),
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
+    }
+
+    // The big "when" header shown ABOVE the image: a Discord `#` heading (large
+    // text) with the localized full date/time, and the relative time as subtext
+    // (`-#`). Both use Discord timestamp markup so every viewer sees their own
+    // timezone. Empty when the event has no scheduled time (Discord accepts empty
+    // content alongside an attachment).
+    private static string BuildBoardContentLine(Event ev)
+    {
+        var when = ev.CommencementStartTime ?? ev.StartTime;
+        if (when is null)
+        {
+            return string.Empty;
+        }
+        var unix = ((DateTimeOffset)DateTime.SpecifyKind(when.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        var label = ev.CommencementStartTime is not null ? "Started" : "Starts";
+        return $"# 🕒 Event Start Time: <t:{unix}:f>\n-# {label} · <t:{unix}:R>";
     }
 
     // Action rows for the ephemeral "pick a slot" message shown when someone hits
@@ -396,14 +416,15 @@ public static class DiscordEventMessageBuilder
             description = string.IsNullOrWhiteSpace(ev.Details) ? null : Truncate(Escape(ev.Details!.Trim()), 1500),
             color = EmbedColor,
             fields = fields.ToArray(),
-            footer = new { text = "Sign Up to claim a slot · Join (no slot) for attendance · Leave event to drop out" },
+            footer = new { text = "Sign Up (or as Party Leader 👑) to claim a slot · Sign Up (No Slot) for attendance · Withdraw to drop out" },
         };
     }
 
-    // Board components: "Sign Up" (opens the ephemeral slot picker, where the
-    // leader option is offered after a slot is chosen if its party has no leader
-    // yet), "Join (no slot)" for attendance-only, and "Leave event". Three buttons,
-    // shown below the board image (or embed fallback).
+    // Board components: "Sign Up" and "Sign Up as Party Leader" both open the
+    // ephemeral slot picker — the same flow, except the leader path marks the
+    // claimed slot as the party's leader (👑) on the rendered board. "Sign Up (No
+    // Slot)" is attendance-only, "Withdraw" drops out. Four buttons, shown below the
+    // board image (or embed fallback). Discord allows up to five buttons per row.
     private static object[] BuildBoardComponents(int eventId)
     {
         return new object[]
@@ -423,15 +444,22 @@ public static class DiscordEventMessageBuilder
                     new
                     {
                         type = 2, // button
+                        style = 1, // primary — same flow, claims the slot as leader
+                        label = "👑 Sign Up as Party Leader",
+                        custom_id = $"{PartySlotLeaderSignUpPrefix}{eventId}",
+                    },
+                    new
+                    {
+                        type = 2, // button
                         style = 2, // secondary — general attendance, no party slot
-                        label = "Join (no slot)",
+                        label = "Sign Up (No Slot)",
                         custom_id = $"{PartyJoinEventPrefix}{eventId}",
                     },
                     new
                     {
                         type = 2, // button
                         style = 2, // secondary — drops both the slot AND general attendance
-                        label = "Leave event",
+                        label = "Withdraw",
                         custom_id = $"{PartySlotLeavePrefix}{eventId}",
                     },
                 },

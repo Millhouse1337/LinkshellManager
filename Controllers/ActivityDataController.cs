@@ -33,6 +33,7 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly ILogger<ActivityDataController> _logger;
     private readonly GlobalSettingsService _globalSettings;
     private readonly MemberActivityService _memberActivity;
+    private readonly ChannelRouteEditor _channelRoutes;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -48,7 +49,8 @@ public sealed partial class ActivityDataController : ControllerBase
         GoogleSheetsSyncService sheets,
         ILogger<ActivityDataController> logger,
         GlobalSettingsService globalSettings,
-        MemberActivityService memberActivity)
+        MemberActivityService memberActivity,
+        ChannelRouteEditor channelRoutes)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -64,6 +66,7 @@ public sealed partial class ActivityDataController : ControllerBase
         _logger = logger;
         _globalSettings = globalSettings;
         _memberActivity = memberActivity;
+        _channelRoutes = channelRoutes;
     }
 
     [HttpGet("antiforgery")]

@@ -49,142 +49,172 @@
         <button type="button" class="action-button action-button--secondary" (click)="closeCreateForm()">Close</button>
       </div>
 
-      <div class="create-form__grid">
-        <label>
-          <span>Linkshell</span>
-          <input type="text" [value]="createLinkshellName()" readonly
-            title="Set by the active linkshell — switch it in Configurations" />
-        </label>
-
-        <label>
-          <span>Event name</span>
-          <input [(ngModel)]="createModel.eventName" name="eventName" required />
-        </label>
-
-        <label>
-          <span>Event type</span>
-          <div class="tod-day-number-row">
-            <select [ngModel]="eventTypeSelection" (ngModelChange)="onEventTypeSelectionChange($event)"
-              name="eventTypeSelection" required>
-              <option value="" disabled>Select event type</option>
-              @for (option of eventTypeOptions; track option) {
-                <option [value]="option">{{ option }}</option>
-              }
-              <option value="Other">Other</option>
-            </select>
-            @if (eventTypeSelection === 'Other') {
-              <input [(ngModel)]="createModel.eventType" name="eventType"
-                placeholder="Specify event type" required />
-            }
-          </div>
-          @if (eventTypeError) {
-            <small class="form-error">Event type is required.</small>
-          }
-        </label>
-
-        <label>
-          <span>Location</span>
-          <input [(ngModel)]="createModel.eventLocation" name="eventLocation" />
-        </label>
-
-        <label>
-          <span>Start</span>
-          <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local"
-            (ngModelChange)="onStartTimeChange()" />
-        </label>
-
-        <label class="tod-toggle">
-          <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
-          <span>Auto start at start time</span>
-        </label>
-
-        <label class="tod-toggle">
-          <input type="checkbox" [(ngModel)]="createModel.countsTowardActive" name="countsTowardActive" />
-          <span>Counts toward active-member status</span>
-        </label>
-
-        <label>
-          <span>End</span>
-          <div class="tod-day-number-row">
-            @if (!endTimeNotSpecified) {
-              <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local"
-                (ngModelChange)="onEndTimeChange()" />
-            } @else {
-              <input value="Not specified" disabled />
-            }
-            <label class="tod-toggle">
-              <input type="checkbox" [ngModel]="endTimeNotSpecified"
-                (ngModelChange)="onEndTimeNotSpecifiedChange($event)" name="endTimeNotSpecified" />
-              <span>Not specified</span>
-            </label>
-          </div>
-        </label>
-
-        <label>
-          <span>Duration (hours)</span>
-          <div class="tod-day-number-row">
-            @if (!durationNotSpecified) {
-              <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25"
-                (ngModelChange)="onDurationChange()" />
-            } @else {
-              <input value="Not specified" disabled />
-            }
-            <label class="tod-toggle">
-              <input type="checkbox" [ngModel]="durationNotSpecified"
-                (ngModelChange)="onDurationNotSpecifiedChange($event)" name="durationNotSpecified" />
-              <span>Not specified</span>
-            </label>
-          </div>
-        </label>
-
-        @if (isDkpModeForSelectedLinkshell()) {
+      <div class="create-form__section">
+        <div class="create-form__section-title">Event details</div>
+        <div class="create-form__grid">
           <label>
-            <span>{{ createModel.eventType === 'HNM' ? 'DKP/window' : 'DKP/hour' }}</span>
-            <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
+            <span>Linkshell</span>
+            <input type="text" [value]="createLinkshellName()" readonly
+              title="Set by the active linkshell — switch it in Configurations" />
           </label>
-        }
+
+          <label>
+            <span>Event name</span>
+            <input [(ngModel)]="createModel.eventName" name="eventName" required />
+          </label>
+
+          <label>
+            <span>Event type</span>
+            <div class="tod-day-number-row">
+              <select [ngModel]="eventTypeSelection" (ngModelChange)="onEventTypeSelectionChange($event)"
+                name="eventTypeSelection" required>
+                <option value="" disabled>Select event type</option>
+                @for (option of eventTypeOptions; track option) {
+                  <option [value]="option">{{ option }}</option>
+                }
+                <option value="Other">Other</option>
+              </select>
+              @if (eventTypeSelection === 'Other') {
+                <input [(ngModel)]="createModel.eventType" name="eventType"
+                  placeholder="Specify event type" required />
+              }
+            </div>
+            @if (eventTypeError) {
+              <small class="form-error">Event type is required.</small>
+            }
+          </label>
+
+          <label>
+            <span>Location</span>
+            <input [(ngModel)]="createModel.eventLocation" name="eventLocation" />
+          </label>
+        </div>
       </div>
 
-      <label class="create-form__full">
-        <span>Details</span>
-        <textarea [(ngModel)]="createModel.details" name="details" rows="3"></textarea>
-      </label>
+      <div class="create-form__section">
+        <div class="create-form__section-title">Schedule</div>
+        <div class="create-form__grid">
+          <label>
+            <span>Start</span>
+            <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local"
+              (ngModelChange)="onStartTimeChange()" />
+          </label>
+
+          <label class="tod-toggle">
+            <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
+            <span>Auto start at start time</span>
+          </label>
+
+          <label>
+            <span>End</span>
+            <div class="tod-day-number-row">
+              @if (!endTimeNotSpecified) {
+                <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local"
+                  (ngModelChange)="onEndTimeChange()" />
+              } @else {
+                <input value="Not specified" disabled />
+              }
+              <label class="tod-toggle">
+                <input type="checkbox" [ngModel]="endTimeNotSpecified"
+                  (ngModelChange)="onEndTimeNotSpecifiedChange($event)" name="endTimeNotSpecified" />
+                <span>Not specified</span>
+              </label>
+            </div>
+          </label>
+
+          <label>
+            <span>Duration (hours)</span>
+            <div class="tod-day-number-row">
+              @if (!durationNotSpecified) {
+                <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25"
+                  (ngModelChange)="onDurationChange()" />
+              } @else {
+                <input value="Not specified" disabled />
+              }
+              <label class="tod-toggle">
+                <input type="checkbox" [ngModel]="durationNotSpecified"
+                  (ngModelChange)="onDurationNotSpecifiedChange($event)" name="durationNotSpecified" />
+                <span>Not specified</span>
+              </label>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="create-form__section">
+        <div class="create-form__section-title">Rewards &amp; member status</div>
+        <div class="create-form__grid">
+          <label class="tod-toggle">
+            <input type="checkbox" [(ngModel)]="createModel.countsTowardActive" name="countsTowardActive" />
+            <span>Counts toward active-member status</span>
+          </label>
+
+          @if (isDkpModeForSelectedLinkshell()) {
+            <label>
+              <span>{{ createModel.eventType === 'HNM' ? 'DKP/window' : 'DKP/hour' }}</span>
+              <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
+            </label>
+          }
+        </div>
+      </div>
+
+      <div class="create-form__section">
+        <div class="create-form__section-title">Details</div>
+        <label class="create-form__full">
+          <textarea [(ngModel)]="createModel.details" name="details" rows="3"></textarea>
+        </label>
+      </div>
 
       <div class="create-form__jobs">
-        <div class="panel__header">
-          <div class="panel__header-title-row">
-            <h3>Party Setup (Optional)</h3>
-            <div class="yesno-toggle" role="radiogroup" aria-label="Use a party setup">
-              <button type="button" class="yesno-toggle__btn"
-                [class.is-active]="!partySetupNotSpecified"
-                [attr.aria-checked]="!partySetupNotSpecified"
-                role="radio"
-                (click)="onPartySetupNotSpecifiedChange(false)">Yes</button>
-              <button type="button" class="yesno-toggle__btn"
-                [class.is-active]="partySetupNotSpecified"
-                [attr.aria-checked]="partySetupNotSpecified"
-                role="radio"
-                (click)="onPartySetupNotSpecifiedChange(true)">No</button>
+        <!-- Header (title + Yes/No) and the linked-setup dropdown share one
+             centered row; the hint + preview sit full-width below it. -->
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px 28px">
+          <div class="panel__header" style="margin:0">
+            <div class="panel__header-title-row">
+              <h3>Party Setup (Optional)</h3>
+              <div class="yesno-toggle" role="radiogroup" aria-label="Use a party setup">
+                <button type="button" class="yesno-toggle__btn"
+                  [class.is-active]="!partySetupNotSpecified"
+                  [attr.aria-checked]="!partySetupNotSpecified"
+                  role="radio"
+                  (click)="onPartySetupNotSpecifiedChange(false)">Yes</button>
+                <button type="button" class="yesno-toggle__btn"
+                  [class.is-active]="partySetupNotSpecified"
+                  [attr.aria-checked]="partySetupNotSpecified"
+                  role="radio"
+                  (click)="onPartySetupNotSpecifiedChange(true)">No</button>
+              </div>
             </div>
           </div>
+
+          @if (!partySetupNotSpecified) {
+            <label class="job-editor__details" style="min-width:260px;max-width:360px;margin:0">
+              <span>Linked party setup</span>
+              <select [(ngModel)]="createModel.partySetupId" name="partySetupId">
+                <option [ngValue]="null">— Select party setup —</option>
+                @for (setup of availablePartySetups(); track setup.id) {
+                  <option [ngValue]="setup.id">
+                    {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
+                  </option>
+                }
+              </select>
+            </label>
+          }
         </div>
 
         @if (!partySetupNotSpecified) {
-          <label class="job-editor__details">
-            <span>Linked party setup</span>
-            <select [(ngModel)]="createModel.partySetupId" name="partySetupId">
-              <option [ngValue]="null">— Select party setup —</option>
-              @for (setup of availablePartySetups(); track setup.id) {
-                <option [ngValue]="setup.id">
-                  {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
-                </option>
-              }
-            </select>
-          </label>
           @if (availablePartySetups().length === 0) {
-            <p class="ad-hoc-signup__hint">
+            <p class="ad-hoc-signup__hint" style="text-align:center">
               No party setups exist for this linkshell yet. Create one from the Party Setup tab first.
             </p>
+          }
+          @if (createModel.partySetupId) {
+            <!-- Template preview of the chosen setup's parties/slots (no names —
+                 sign-ups happen on the event once it's created). -->
+            <app-party-setup-panel
+              [setupId]="createModel.partySetupId"
+              [linkshellId]="createModel.linkshellId"
+              [templateOnly]="true" />
           }
         }
       </div>
@@ -514,5 +544,23 @@
         No queued events are visible yet. Join a linkshell with officer or leader access to manage the queue, or wait for a leader to post one.
       }
     </p>
+  }
+
+  <!-- Confirm dialog (window.confirm is suppressed in the Activity iframe).
+       Currently used to warn that changing a queued event's party setup clears
+       its existing slot signups. -->
+  @if (confirmModalOpen()) {
+    <div style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)"
+         (click)="resolveConfirm(false)">
+      <div style="max-width:420px;width:calc(100% - 32px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)"
+           (click)="$event.stopPropagation()">
+        <strong style="display:block;margin-bottom:8px">Change party setup?</strong>
+        <p class="muted" style="margin:0 0 16px;font-size:13px">{{ confirmMessage }}</p>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="action-button action-button--secondary" (click)="resolveConfirm(false)">Cancel</button>
+          <button type="button" class="action-button" (click)="resolveConfirm(true)">Move to no-slot &amp; save</button>
+        </div>
+      </div>
+    </div>
   }
 </article>

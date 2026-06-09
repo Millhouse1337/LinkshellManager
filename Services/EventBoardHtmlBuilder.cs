@@ -19,115 +19,127 @@ public static class EventBoardHtmlBuilder
         Event ev,
         PartySetup setup,
         IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
-        IReadOnlyList<EventSignupLine> generalSignups)
+        IReadOnlyList<EventSignupLine> generalSignups,
+        string? theme = null)
     {
         var parties = LabeledParties(setup).ToList();
         var totalSlots = parties.Sum(p => p.Party.Slots.Count);
         var filledSlots = parties.Sum(p => p.Party.Slots.Count(s => slotSignups.ContainsKey(s.Id)));
-        var pct = totalSlots > 0 ? (int)Math.Round(filledSlots * 100.0 / totalSlots) : 0;
 
         var sb = new StringBuilder();
+        // The :root block is split: the theme-independent half (role colours,
+        // fonts, the neutral --any) is fixed here; the per-theme palette half is
+        // injected from EventBoardThemes so a linkshell's chosen theme swaps the
+        // colours without touching any structural rule below.
         sb.Append("""
 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet"/>
 <style>
-  :root{--bg:#0a0b0f;--panel:rgba(255,255,255,.04);--panel-faint:rgba(255,255,255,.012);
-    --line:rgba(255,255,255,.06);--txt:#e7e9ee;--muted:#9aa0ad;--dim:#7c8290;
-    --tank:#4a9eff;--heal:#3fcf6b;--supp:#f5c451;--dps:#f0556b;--mono:"JetBrains Mono",ui-monospace,monospace;}
+  :root{
+    --tank:#4a9eff;--heal:#3fcf6b;--supp:#f5c451;--dps:#f0556b;
+    --cinzel:"Cinzel",serif;--spectral:"Spectral",Georgia,serif;
+    --any:#5f8088;
+""");
+        sb.Append(EventBoardThemes.PaletteFor(theme));
+        sb.Append("""
+  }
   *{box-sizing:border-box;}
-  body{margin:0;padding:0;background:#15171c;font-family:"Space Grotesk",system-ui,sans-serif;}
-  .embed{width:1000px;color:var(--txt);background:var(--bg);
-    background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
-                     linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:28px 28px;}
-  .strip{height:3px;background:linear-gradient(90deg,var(--tank),var(--supp),var(--dps));}
-  .pad{padding:22px 26px 24px;display:flex;flex-direction:column;gap:18px;}
-  .head{display:flex;align-items:center;gap:14px;}
-  .swords{font-size:26px;}
-  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:4px;color:var(--tank);}
-  .title{font-size:28px;font-weight:700;line-height:1;letter-spacing:-.5px;color:#fff;}
+  body{margin:0;padding:0;background:var(--page-bg);font-family:var(--spectral);}
+  .embed{width:1000px;position:relative;color:var(--txt);overflow:hidden;background:var(--bg-grad);}
+  .toprule{height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+  .pad{padding:26px 26px 28px;display:flex;flex-direction:column;gap:22px;}
+  .head{display:flex;align-items:flex-end;gap:16px;}
+  .swords{font-size:30px;filter:drop-shadow(0 0 8px var(--glow));}
+  .eyebrow{font-family:var(--cinzel);font-size:11px;font-weight:700;letter-spacing:6px;color:var(--eyebrow);}
+  .title{font-family:var(--cinzel);font-size:34px;font-weight:800;line-height:1;color:var(--txt);text-shadow:var(--title-shadow);}
   .roster{margin-left:auto;text-align:right;}
-  .roster .lab{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--dim);}
-  .roster .num{font-size:26px;font-weight:800;color:#fff;white-space:nowrap;}
-  .roster .num small{color:#5b606d;font-size:18px;}
-  .roster .pct{font-family:var(--mono);font-size:12px;color:var(--heal);margin-left:6px;}
-  .tiles{display:flex;gap:2px;}
-  .tile{flex:1;padding:10px 14px;background:rgba(255,255,255,.03);border-left:2px solid var(--tank);}
-  .tile .lab{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;}
-  .tile .val{font-size:15px;font-weight:700;color:#fff;margin-top:3px;}
-  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;}
-  .legend span.item{display:inline-flex;align-items:center;gap:6px;}
-  .legend .sw{width:10px;height:10px;display:inline-block;}
-  .legend .code{font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--muted);}
-  .legend .name{font-size:11px;color:#6b7180;}
-  .row{display:flex;gap:16px;}
-  .party{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;}
-  .party .ptitle{display:flex;align-items:center;justify-content:space-between;}
-  .party .ptitle .nm{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:1px;color:#fff;}
-  .party .ptitle .nm small{color:var(--dim);font-weight:400;}
-  .party .ptitle .cnt{font-family:var(--mono);font-size:11px;color:var(--muted);}
-  .party .ptitle .cnt.full{color:var(--heal);}
-  .bar{height:3px;background:rgba(255,255,255,.07);}
-  .bar>i{display:block;height:100%;background:var(--tank);}
-  .bar.full>i{background:var(--heal);}
-  .slots{display:flex;flex-direction:column;gap:4px;margin-top:2px;}
-  .slot{display:flex;background:var(--panel-faint);border:1px solid var(--line);}
-  .slot.on{background:var(--panel);}
-  .slot .accent{width:3px;flex-shrink:0;}
-  .slot .accent.empty{opacity:.55;}
-  .slot .meat{flex:1;padding:6px 8px 6px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
-  .slot .combo{font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.5px;color:#6b7180;white-space:nowrap;}
-  .slot.on .combo{color:#fff;}
-  .slot .who{font-size:11.5px;color:#565c6b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .slot.on .who{color:#aab0bd;}
-  .slot .open{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;}
-  .lead{color:var(--supp);}
-  .bg-tank{background:var(--tank);} .bg-heal{background:var(--heal);} .bg-supp{background:var(--supp);} .bg-dps{background:var(--dps);} .bg-any{background:#5b606d;}
-  .r-tank{color:var(--tank);} .r-heal{color:var(--heal);} .r-supp{color:var(--supp);} .r-dps{color:var(--dps);} .r-any{color:#7c8290;}
-  .foot{padding-top:14px;border-top:1px solid rgba(255,255,255,.08);}
-  .help{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.5px;}
-</style></head><body><div class="embed"><div class="strip"></div><div class="pad">
+  .roster .lab{font-family:var(--cinzel);font-size:11px;letter-spacing:2px;color:var(--dim);}
+  .roster .num{font-family:var(--cinzel);font-size:22px;font-weight:700;color:var(--accent);white-space:nowrap;}
+  .roster .num small{color:var(--dim);}
+  .tiles{display:flex;gap:2px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .tile{flex:1;padding:11px 16px;background:var(--tint);border-left:2px solid var(--accent);}
+  .tile:first-child{border-left:none;}
+  .tile .lab{font-family:var(--cinzel);font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;}
+  .tile .val{font-size:15px;font-weight:600;color:var(--soft);margin-top:4px;display:flex;align-items:center;gap:7px;}
+  .tile .val .rel{font-style:italic;color:var(--dim);font-weight:400;}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;}
+  .legend .item{display:inline-flex;align-items:center;gap:8px;}
+  .legend .name{font-family:var(--cinzel);font-size:11px;letter-spacing:1px;color:var(--muted);}
+  /* gem marker */
+  .gem{position:relative;display:inline-block;flex-shrink:0;transform:rotate(45deg);width:16px;height:16px;}
+  .gem.sm{width:11px;height:11px;}
+  .gem .face{position:absolute;inset:0;border-radius:3px;}
+  .gem.empty .face{background:transparent!important;border-width:1.5px;border-style:dashed;opacity:.6;box-shadow:none!important;}
+  .gem .spark{position:absolute;left:18%;top:18%;width:32%;height:32%;background:rgba(255,255,255,.7);border-radius:1px;}
+  .gem.empty .spark{display:none;}
+  .g-tank .face{background:linear-gradient(135deg,var(--tank),#4a9eff99);border:1px solid var(--tank);box-shadow:0 0 9px rgba(74,158,255,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-heal .face{background:linear-gradient(135deg,var(--heal),#3fcf6b99);border:1px solid var(--heal);box-shadow:0 0 9px rgba(63,207,107,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-supp .face{background:linear-gradient(135deg,var(--supp),#f5c45199);border:1px solid var(--supp);box-shadow:0 0 9px rgba(245,196,81,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-dps  .face{background:linear-gradient(135deg,var(--dps),#f0556b99);border:1px solid var(--dps);box-shadow:0 0 9px rgba(240,85,107,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
+  .g-any  .face{background:linear-gradient(135deg,var(--any),#5f808899);border:1px solid var(--any);box-shadow:0 0 9px rgba(95,128,136,.4),inset 1px 1px 2px rgba(255,255,255,.3);}
+  .b-tank{border-color:var(--tank);} .b-heal{border-color:var(--heal);} .b-supp{border-color:var(--supp);} .b-dps{border-color:var(--dps);} .b-any{border-color:var(--any);}
+  .parties{display:flex;gap:18px;}
+  .party{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}
+  .ptitle{display:flex;align-items:center;gap:10px;margin-bottom:2px;}
+  .ptitle .nm{font-family:var(--cinzel);font-size:15px;font-weight:700;letter-spacing:2px;color:var(--accent);text-transform:uppercase;white-space:nowrap;}
+  .ptitle .nm small{font-size:11px;letter-spacing:1px;color:var(--dim);font-weight:600;}
+  .ptitle .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--accent),transparent);opacity:.5;}
+  .ptitle .cnt{font-family:var(--cinzel);font-size:12px;letter-spacing:1px;color:var(--dim);}
+  .ptitle .cnt.full{color:var(--heal);}
+  .pbar{height:4px;border-radius:2px;background:var(--line);overflow:hidden;margin-bottom:2px;}
+  .pbar>i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent-deep),var(--accent-bright));box-shadow:0 0 8px var(--glow);}
+  .pbar.full>i{background:linear-gradient(90deg,#3fcf6b,#8fe0a6);box-shadow:0 0 8px rgba(63,207,107,.45);}
+  .slot{display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slot-line);}
+  .slot .combo{font-family:var(--cinzel);font-size:12.5px;font-weight:600;letter-spacing:.5px;color:var(--soft);white-space:nowrap;flex-shrink:0;}
+  .slot.empty .combo{color:var(--vacant);}
+  .slot .who{font-size:13.5px;font-style:italic;color:var(--name);display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .slot .crown{color:var(--accent);font-style:normal;}
+  .slot .vacant{font-family:var(--cinzel);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;opacity:.8;}
+  .v-tank{color:var(--tank);} .v-heal{color:var(--heal);} .v-supp{color:var(--supp);} .v-dps{color:var(--dps);} .v-any{color:var(--muted);}
+  .foot{padding-top:18px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px;align-items:center;}
+  .help{font-size:12.5px;font-style:italic;color:var(--dim);text-align:center;}
+</style></head><body><div class="embed"><div class="toprule"></div><div class="pad">
 """);
 
         // Header
         var eyebrow = string.IsNullOrWhiteSpace(ev.EventType)
             ? "EVENT"
-            : $"{Enc(ev.EventType!.Trim().ToUpperInvariant())} // EVENT";
+            : Enc(ev.EventType!.Trim().ToUpperInvariant());
         sb.Append($"""
 <div class="head"><span class="swords">&#9876;&#65039;</span><div>
 <div class="eyebrow">{eyebrow}</div><div class="title">{Enc((ev.EventName ?? $"Event #{ev.Id}").Trim())}</div></div>
-<div class="roster"><div class="lab">ROSTER FILL</div>
-<div><span class="num">{filledSlots}<small>/{totalSlots}</small></span><span class="pct">{pct}%</span></div></div></div>
+<div class="roster"><div class="lab">ROSTER</div>
+<div class="num">{filledSlots}<small> / {totalSlots}</small></div></div></div>
 """);
 
-        // Stat tiles
-        var startsVal = ev.CommencementStartTime is { } c ? FormatLocal(c) : (ev.StartTime is { } s ? FormatLocal(s) : "TBD");
-        var startsLab = ev.CommencementStartTime is not null ? "Started" : "Starts";
+        // Stat tiles. The start time is deliberately NOT shown here — a baked image
+        // can't localize per viewer, so the time lives above the image as a Discord
+        // timestamp (BuildBoardImageMessage) that renders in each user's timezone.
         var status = ev.CommencementStartTime is not null ? "Live" : "Queued";
         var reward = ev.DkpPerHour is { } dkp ? $"{Enc(dkp.ToString())} DKP/hr" : "&mdash;";
         var location = string.IsNullOrWhiteSpace(ev.EventLocation) ? "&mdash;" : Enc(ev.EventLocation!.Trim());
         sb.Append($"""
 <div class="tiles">
-<div class="tile" style="border-left-color:var(--tank)"><div class="lab">{startsLab}</div><div class="val">{Enc(startsVal)}</div></div>
-<div class="tile" style="border-left-color:var(--dim)"><div class="lab">Status</div><div class="val">{status}</div></div>
-<div class="tile" style="border-left-color:var(--supp)"><div class="lab">Reward</div><div class="val">{reward}</div></div>
-<div class="tile" style="border-left-color:var(--dps)"><div class="lab">Location</div><div class="val">{location}</div></div></div>
+<div class="tile"><div class="lab">Status</div><div class="val">{status}</div></div>
+<div class="tile"><div class="lab">Reward</div><div class="val">{reward}</div></div>
+<div class="tile"><div class="lab">Location</div><div class="val">{location}</div></div></div>
 """);
 
         // Legend
         sb.Append("""
 <div class="legend">
-<span class="item"><span class="sw bg-tank"></span><span class="code">TANK</span><span class="name">Tank</span></span>
-<span class="item"><span class="sw bg-heal"></span><span class="code">HEAL</span><span class="name">Healer</span></span>
-<span class="item"><span class="sw bg-supp"></span><span class="code">SUPP</span><span class="name">Support</span></span>
-<span class="item"><span class="sw bg-dps"></span><span class="code">DPS</span><span class="name">Melee / Caster</span></span></div>
+<span class="item"><span class="gem sm g-tank"><span class="face"></span><span class="spark"></span></span><span class="name">Tank</span></span>
+<span class="item"><span class="gem sm g-heal"><span class="face"></span><span class="spark"></span></span><span class="name">Healer</span></span>
+<span class="item"><span class="gem sm g-supp"><span class="face"></span><span class="spark"></span></span><span class="name">Support</span></span>
+<span class="item"><span class="gem sm g-dps"><span class="face"></span><span class="spark"></span></span><span class="name">DPS</span></span></div>
 """);
 
         // Parties — 3 per row.
         foreach (var chunk in parties.Chunk(3))
         {
-            sb.Append("<div class=\"row\">");
+            sb.Append("<div class=\"parties\">");
             foreach (var (party, name, alliance) in chunk)
             {
                 AppendParty(sb, party, name, alliance, slotSignups);
@@ -154,7 +166,7 @@ public static class EventBoardHtmlBuilder
             sb.Append($"""<div class="help">ALSO ATTENDING &mdash; NO SLOT ({extra.Count}): {names}</div>""");
         }
 
-        sb.Append("""<div class="foot"><div class="help">SIGN UP to claim a slot &middot; JOIN (NO SLOT) for attendance &middot; LEAVE EVENT to drop out</div></div>""");
+        sb.Append("""<div class="foot"><div class="help">Sign up to claim a slot &middot; Sign Up as Party Leader for the crown &#9819; &middot; Sign Up (No Slot) for attendance &middot; Withdraw to drop out</div></div>""");
         sb.Append("</div></div></body></html>");
         return sb.ToString();
     }
@@ -170,26 +182,25 @@ public static class EventBoardHtmlBuilder
 
         sb.Append("<div class=\"party\">");
         var small = string.IsNullOrWhiteSpace(alliance) ? string.Empty : $" <small>&middot; {Enc(alliance!.ToUpperInvariant())}</small>";
-        sb.Append($"""<div class="ptitle"><span class="nm">{Enc(name)}{small}</span><span class="cnt{(full ? " full" : string.Empty)}">{filled}/{slots.Count}</span></div>""");
-        sb.Append($"""<div class="bar{(full ? " full" : string.Empty)}"><i style="width:{pctWidth}%"></i></div>""");
-        sb.Append("<div class=\"slots\">");
+        sb.Append($"""<div class="ptitle"><span class="nm">{Enc(name)}{small}</span><span class="rule"></span><span class="cnt{(full ? " full" : string.Empty)}">{filled} / {slots.Count}</span></div>""");
+        sb.Append($"""<div class="pbar{(full ? " full" : string.Empty)}"><i style="width:{pctWidth}%"></i></div>""");
         foreach (var slot in slots)
         {
             slotSignups.TryGetValue(slot.Id, out var signup);
             var roleClass = RoleClass(signup is not null && !string.IsNullOrWhiteSpace(signup.Role) ? signup.Role : slot.Role);
             if (signup is not null)
             {
-                var crown = signup.IsPartyLeader ? "<span class=\"lead\">&#9733;</span> " : string.Empty;
+                var crown = signup.IsPartyLeader ? "<span class=\"crown\">&#9819;</span>" : string.Empty;
                 var combo = Enc(SignedUpCombo(signup, slot));
-                sb.Append($"""<div class="slot on"><div class="accent bg-{roleClass}"></div><div class="meat"><div class="info"><div class="combo">{combo}</div><div class="who">{crown}{Enc(signup.CharacterName ?? "Member")}</div></div></div></div>""");
+                sb.Append($"""<div class="slot"><span class="gem g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="combo">{combo}</span><span class="who">{crown}{Enc(signup.CharacterName ?? "Member")}</span></div>""");
             }
             else
             {
                 var combo = Enc(SlotCombo(slot));
-                sb.Append($"""<div class="slot"><div class="accent empty bg-{roleClass}"></div><div class="meat"><div class="info"><div class="combo">{combo}</div><div class="who"><span class="open r-{roleClass}">OPEN</span></div></div></div></div>""");
+                sb.Append($"""<div class="slot empty"><span class="gem empty b-{roleClass}"><span class="face"></span></span><span class="combo">{combo}</span><span class="vacant v-{roleClass}">&middot; vacant &middot;</span></div>""");
             }
         }
-        sb.Append("</div></div>");
+        sb.Append("</div>");
     }
 
     // (party, partyName, allianceName-or-null) in board order. Alliance name is
@@ -249,14 +260,6 @@ public static class EventBoardHtmlBuilder
             return slot.Role!;
         }
         return "ANY";
-    }
-
-    private static string FormatLocal(DateTime utc)
-    {
-        // The board has no per-viewer timezone (it's a baked image), so show UTC
-        // explicitly rather than implying the server's local time.
-        var u = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
-        return u.ToString("MMM d, yyyy · h:mm tt") + " UTC";
     }
 
     private static string Enc(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);

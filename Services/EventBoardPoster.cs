@@ -23,32 +23,36 @@ public sealed class EventBoardPoster
     }
 
     // Posts a new board, returning the new message id (or null on failure).
+    // boardTheme is the linkshell's chosen palette key (null → default).
     public Task<string?> PostAsync(
         string channelId, Event ev, IReadOnlyList<EventSignupLine> signups,
-        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups, CancellationToken cancellationToken)
-        => SendAsync(channelId, null, ev, signups, slotSignups, cancellationToken);
+        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups, CancellationToken cancellationToken,
+        string? boardTheme = null)
+        => SendAsync(channelId, null, ev, signups, slotSignups, boardTheme, cancellationToken);
 
     // Edits the existing board message in place. Returns false on failure.
     public async Task<bool> EditAsync(
         string channelId, string messageId, Event ev, IReadOnlyList<EventSignupLine> signups,
-        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups, CancellationToken cancellationToken)
-        => await SendAsync(channelId, messageId, ev, signups, slotSignups, cancellationToken) is not null;
+        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups, CancellationToken cancellationToken,
+        string? boardTheme = null)
+        => await SendAsync(channelId, messageId, ev, signups, slotSignups, boardTheme, cancellationToken) is not null;
 
     // messageId null → post; non-null → edit. Returns the message id on success.
     private async Task<string?> SendAsync(
         string channelId, string? messageId, Event ev, IReadOnlyList<EventSignupLine> signups,
-        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups, CancellationToken cancellationToken)
+        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups, string? boardTheme,
+        CancellationToken cancellationToken)
     {
         // Party board → render the image; on any render failure, fall through to the
         // text embed so the post/edit still happens.
         if (ev.PartySetup is not null && slotSignups is not null)
         {
-            var html = EventBoardHtmlBuilder.Build(ev, ev.PartySetup, slotSignups, signups);
+            var html = EventBoardHtmlBuilder.Build(ev, ev.PartySetup, slotSignups, signups, boardTheme);
             var png = await _renderer.RenderAsync(html, cancellationToken);
             if (png is not null)
             {
                 var fileName = $"event-{ev.Id}-board.png";
-                var payload = DiscordEventMessageBuilder.BuildBoardImageMessage(ev.Id, fileName);
+                var payload = DiscordEventMessageBuilder.BuildBoardImageMessage(ev, fileName);
                 if (messageId is null)
                 {
                     return await _bot.PostMessageWithImageAsync(channelId, payload, png, fileName, cancellationToken);

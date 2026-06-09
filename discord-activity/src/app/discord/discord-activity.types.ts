@@ -137,6 +137,9 @@ export interface ActivityLinkshellSettings {
   // Optional, separate access lock. When true, the Activity can only open this
   // linkshell from discordGuildId. False by default (associated but not locked).
   lockToDiscordGuild: boolean;
+  // Palette key for this linkshell's rendered event-board image. One of the
+  // EVENT_BOARD_THEMES keys (Crystal, Abyss, Ember, Verdant, Royal, Tome).
+  eventBoardTheme: string;
 }
 
 // One Discord server the caller can lock a linkshell to (the bot is in it and so
@@ -306,28 +309,49 @@ export interface ActivityRevenueInput {
   occurredAt?: string | null;
 }
 
-// Phase 2 "bot posts to channel" config (mirrors the web Customize card).
+// Discord channel-routes config (mirrors the web Customize card). Officers add
+// named routes, pick a channel, and tick which post types the bot posts there.
 export interface ActivityDiscordChannelOption {
   id: string;
   name: string;
 }
 
-export interface ActivityDiscordChannelRow {
-  purpose: string;
+export interface ActivityChannelPostType {
+  key: string;
   label: string;
-  channelId?: string | null;
-  channelName?: string | null;
 }
 
-export interface ActivityDiscordChannelsResponse {
+export interface ActivityChannelRoute {
+  id: number;
+  name?: string | null;
+  channelId: string;
+  channelName?: string | null;
+  postEvents: boolean;
+  postLoot: boolean;
+  postAuctions: boolean;
+  postAttendance: boolean;
+  postTodBoard: boolean;
+  eventTypeFilter: string[];
+}
+
+export interface ActivityChannelRoutesResponse {
   guildConfigured: boolean;
   availableChannels: ActivityDiscordChannelOption[];
-  channels: ActivityDiscordChannelRow[];
+  postTypes: ActivityChannelPostType[];
+  eventTypes: string[];
+  routes: ActivityChannelRoute[];
 }
 
-export interface ActivityDiscordChannelBindingInput {
-  purpose: string;
+export interface ActivityChannelRouteInput {
+  id: number | null;
+  name: string | null;
   channelId: string | null;
+  postEvents: boolean;
+  postLoot: boolean;
+  postAuctions: boolean;
+  postAttendance: boolean;
+  postTodBoard: boolean;
+  eventTypeFilter: string[];
 }
 
 export interface ActivityLinkshellDetail {

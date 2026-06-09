@@ -172,6 +172,42 @@
   flex-wrap: wrap;
 }
 
+/* "Leader [Yes|No]" segmented toggle shown before Sign up on an event board. */
+.ps-leader-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.ps-leader-toggle__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.yesno {
+  display: inline-flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-elev);
+}
+.yesno__btn {
+  border: 0;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.yesno__btn:hover { color: var(--fg); }
+.yesno__btn.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* Modern dropdowns: native chrome stripped, inlined SVG chevron, accent
    focus ring. Each select takes a fair share of the row. */
 .ps-signup select {

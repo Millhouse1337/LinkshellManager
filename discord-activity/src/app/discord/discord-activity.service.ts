@@ -24,8 +24,8 @@ import type {
   ActivityCreateEventInput,
   ActivityCreateLinkshellInput,
   ActivityCreateTodInput,
-  ActivityDiscordChannelBindingInput,
-  ActivityDiscordChannelsResponse,
+  ActivityChannelRouteInput,
+  ActivityChannelRoutesResponse,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
   ActivityHistory,
@@ -777,14 +777,14 @@ export class DiscordActivityService {
   loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
   clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
-  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
+  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null; eventBoardTheme?: string | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
   loadEligibleGuilds(): Promise<ActivityGuildOption[]> { return this.linkshellService.loadEligibleGuilds(); }
   setLinkshellGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.setLinkshellGuild(linkshellId, guildId, guildName); }
   clearLinkshellGuild(linkshellId: number): Promise<boolean> { return this.linkshellService.clearLinkshellGuild(linkshellId); }
   setLinkshellGuildLock(linkshellId: number, locked: boolean): Promise<boolean> { return this.linkshellService.setLinkshellGuildLock(linkshellId, locked); }
-  loadDiscordChannels(linkshellId: number): Promise<ActivityDiscordChannelsResponse | null> { return this.linkshellService.loadDiscordChannels(linkshellId); }
-  saveDiscordChannels(linkshellId: number, channels: ActivityDiscordChannelBindingInput[]): Promise<boolean> { return this.linkshellService.saveDiscordChannels(linkshellId, channels); }
+  loadDiscordChannels(linkshellId: number): Promise<ActivityChannelRoutesResponse | null> { return this.linkshellService.loadDiscordChannels(linkshellId); }
+  saveDiscordChannels(linkshellId: number, routes: ActivityChannelRouteInput[]): Promise<boolean> { return this.linkshellService.saveDiscordChannels(linkshellId, routes); }
   // Discord guild id the Activity is launched in (null on web). Drives the
   // "lock to this server" config card.
   currentGuildId(): string | null { return this.auth.discordGuildId(); }

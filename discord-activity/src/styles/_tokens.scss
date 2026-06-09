@@ -61,6 +61,60 @@ select {
   font-family: var(--font-sans);
 }
 
+// Base theming for text-like inputs, textareas and selects so EVERY form control
+// matches the app without needing a per-context wrapper class. Low specificity
+// (element selectors) on purpose: any class-based rule (e.g. .customize-form__field
+// select) still wins. Checkboxes/radios are excluded — they're styled per use.
+input:not([type]),
+input[type="text"],
+input[type="number"],
+input[type="url"],
+input[type="email"],
+input[type="search"],
+input[type="password"],
+input[type="tel"],
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"],
+textarea,
+select {
+  height: 34px;
+  padding: 0 10px;
+  color: var(--fg);
+  background-color: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+
+  &::placeholder { color: var(--fg-3); }
+  &:hover { border-color: var(--border-hot); }
+  &:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-weak); }
+}
+
+textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+// Drop the native OS dropdown chrome and use an inlined SVG chevron so selects
+// match the rest of the form fields everywhere (not just in .customize-form__field).
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 8px;
+
+  option { background: var(--surface); color: var(--fg); }
+}
+
 * {
   box-sizing: border-box;
 }

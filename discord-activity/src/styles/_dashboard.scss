@@ -9,6 +9,19 @@
   .panel-tab .dash-row { grid-template-columns: 1fr; }
 }
 
+// Equal-height variant: both cards stretch to the taller one, and an empty card
+// (e.g. "No upcoming events scheduled") fills the column instead of collapsing.
+.panel-tab .dash-row--stretch { align-items: stretch; }
+.panel-tab .dash-row--stretch > .card { display: flex; flex-direction: column; }
+.panel-tab .dash-row--stretch > .card > .news-list,
+.panel-tab .dash-row--stretch > .card > .upcoming-list { flex: 1 0 auto; }
+.panel-tab .dash-row--stretch > .card > .empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ===== Upcoming Events list ===== */
 .panel-tab .upcoming-list {
   display: flex;

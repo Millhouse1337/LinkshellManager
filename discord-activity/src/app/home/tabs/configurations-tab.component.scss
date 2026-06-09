@@ -75,3 +75,174 @@
   border-top: 1px solid var(--border, rgba(255,255,255,0.08));
   padding-top: 12px;
 }
+
+/* ---- Discord server + channel-routes polish ---- */
+// Two-column "Server | Lock access" layout for the Discord server card.
+.discord-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(290px, 1fr);
+  gap: 14px;
+}
+.discord-inner {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  // Center the panel's content rather than letting it hug the left edge.
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.discord-inner > h4 {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--fg-1);
+}
+// The server select sits as a comfortably-wide centered block.
+.discord-inner .route-field {
+  width: 100%;
+  max-width: 360px;
+}
+
+// Status pills (Server set / Not locked / Locked).
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pill.is-success { background: var(--success-weak); color: var(--success); }
+.pill.is-muted   { background: rgba(255, 255, 255, 0.06); color: var(--fg-2); }
+
+// One channel route: main controls + an optional event-type side panel.
+.route-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  gap: 18px;
+  align-items: start;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 10px;
+}
+.route-card.is-compact { grid-template-columns: minmax(0, 1fr); }
+// A persisted, unedited route gets a slight green tint so it's obvious what's saved.
+.route-card.is-saved {
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(74, 222, 128, 0.045);
+}
+
+.route-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.route-top  { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+
+.route-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  > span { font-size: 12px; color: var(--fg-2); font-weight: 600; }
+  select, input { width: 100%; }
+}
+.route-field.grow { flex: 1 1 200px; }
+.route-remove { margin-bottom: 2px; white-space: nowrap; }
+
+.post-types { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; }
+// Per-route save button sits at the right end of the post-types row.
+.route-save { margin-left: auto; }
+.route-save.is-saved {
+  color: var(--success);
+  border-color: rgba(74, 222, 128, 0.4);
+  background: var(--success-weak);
+  cursor: default;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--fg-1);
+  cursor: pointer;
+}
+
+// Custom checkbox, scoped to these cards so app toggles/checkboxes elsewhere
+// are untouched.
+.check input[type="checkbox"],
+.event-filter input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: 1px solid var(--border-hot);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.12s ease, border-color 0.12s ease;
+
+  &:checked {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  }
+  &:checked::after {
+    content: "✓";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #0a0a0b;
+    font-size: 12px;
+    font-weight: 800;
+  }
+}
+
+.event-filter {
+  border-left: 1px solid var(--border);
+  padding-left: 18px;
+
+  h4 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg-1);
+    span { color: var(--fg-3); font-weight: 500; font-style: italic; }
+  }
+}
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px 14px;
+}
+
+.routes-footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+// Keep any validation error on the left while the action buttons stay right.
+.routes-footer .routes-error { margin-right: auto; }
+.routes-error { color: var(--danger); font-size: 12px; }
+
+@media (max-width: 760px) {
+  .discord-grid { grid-template-columns: 1fr; }
+  .route-card, .route-card.is-compact { grid-template-columns: 1fr; }
+  .event-filter {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 14px;
+  }
+}

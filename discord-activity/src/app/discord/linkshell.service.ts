@@ -5,8 +5,8 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityCreateLinkshellInput,
-  ActivityDiscordChannelBindingInput,
-  ActivityDiscordChannelsResponse,
+  ActivityChannelRouteInput,
+  ActivityChannelRoutesResponse,
   ActivityDkpRoundingIncrement,
   ActivityGuildOption,
   ActivityJobsRoster,
@@ -99,6 +99,8 @@ export class LinkshellService {
       // null = leave unchanged; "" = clear association; digits = associate with
       // that Discord server (does NOT lock — use setLinkshellGuildLock for that).
       discordGuildId?: string | null;
+      // null/blank = leave unchanged. One of the EVENT_BOARD_THEMES keys.
+      eventBoardTheme?: string | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -125,7 +127,8 @@ export class LinkshellService {
         activeAfterAttendances: input.activeAfterAttendances ?? null,
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
         linkshellType: input.linkshellType ?? null,
-        discordGuildId: input.discordGuildId ?? null
+        discordGuildId: input.discordGuildId ?? null,
+        eventBoardTheme: input.eventBoardTheme ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');
@@ -229,12 +232,12 @@ export class LinkshellService {
 
   // Phase 2 channel config: load the linkshell's channel bindings + the bot's
   // available channels (mirrors the web Customize "Discord Channels" card).
-  async loadDiscordChannels(linkshellId: number): Promise<ActivityDiscordChannelsResponse | null> {
+  async loadDiscordChannels(linkshellId: number): Promise<ActivityChannelRoutesResponse | null> {
     this.busyDiscordChannels.set(true);
     this.auth.setActionError(null);
     try {
       const accessToken = this.auth.currentAccessToken();
-      return await this.http.fetchActivityJson<ActivityDiscordChannelsResponse>(
+      return await this.http.fetchActivityJson<ActivityChannelRoutesResponse>(
         `/api/activity/linkshells/${linkshellId}/discord-channels`,
         accessToken
       );
@@ -247,13 +250,13 @@ export class LinkshellService {
   }
 
   async saveDiscordChannels(
-    linkshellId: number, channels: ActivityDiscordChannelBindingInput[]): Promise<boolean> {
+    linkshellId: number, routes: ActivityChannelRouteInput[]): Promise<boolean> {
     this.busyDiscordChannels.set(true);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
     try {
       await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/discord-channels`, { channels });
+        `/api/activity/linkshells/${linkshellId}/discord-channels`, { routes });
       this.auth.setActionMessage('Discord channels updated.');
       return true;
     } catch (error) {

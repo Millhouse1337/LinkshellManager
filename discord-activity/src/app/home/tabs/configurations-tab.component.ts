@@ -12,6 +12,22 @@ import {
 } from '../../discord/discord-activity.service';
 import { TOD_BUILT_IN_MONSTER_GROUPS } from '../activity-home.types';
 
+// One editable Discord channel route row. id is null for an unsaved route.
+interface RouteDraft {
+  id: number | null;
+  name: string;
+  channelId: string;
+  postEvents: boolean;
+  postLoot: boolean;
+  postAuctions: boolean;
+  postAttendance: boolean;
+  postTodBoard: boolean;
+  eventTypeFilter: string[];
+  // false once persisted + unchanged (drives the green "saved" state); true for a
+  // new row or any edited field until the next successful save.
+  dirty: boolean;
+}
+
 @Component({
   selector: 'app-configurations-tab',
   imports: [CommonModule, FormsModule],
@@ -440,6 +456,8 @@ export class ConfigurationsTabComponent {
     activeAfterAttendances: number;
     // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
     linkshellType: string;
+    // Palette key for the rendered event-board image (one of EVENT_BOARD_THEMES).
+    eventBoardTheme: string;
     // Lower-cased names of monsters the linkshell wants hidden from the
     // ToD Tracker. Lower-case for comparison stability — re-cased to the
     // canonical built-in label on save.
@@ -460,16 +478,32 @@ export class ConfigurationsTabComponent {
     inactiveAfterAbsences: 3,
     activeAfterAttendances: 2,
     linkshellType: 'Both',
+    eventBoardTheme: 'Crystal',
     hiddenTodMonsters: new Set<string>()
   };
 
   protected readonly todMonsterGroups = TOD_BUILT_IN_MONSTER_GROUPS;
+
+  // Event-board image palettes (mirrors the server-side EventBoardThemes). The
+  // swatch colours are shown in the picker; the key is what gets persisted.
+  protected readonly eventBoardThemes: ReadonlyArray<{ key: string; label: string; bg: string; accent: string }> = [
+    { key: 'Crystal', label: 'Crystal', bg: '#0b0e1a', accent: '#d8b86a' },
+    { key: 'Abyss', label: 'Abyss', bg: '#041c24', accent: '#3fd9e6' },
+    { key: 'Ember', label: 'Ember', bg: '#170a05', accent: '#f0883e' },
+    { key: 'Verdant', label: 'Verdant', bg: '#07150f', accent: '#cda86a' },
+    { key: 'Royal', label: 'Royal', bg: '#150a24', accent: '#c9a8f0' },
+    { key: 'Tome', label: 'Tome', bg: '#e8d6ad', accent: '#8a3522' }
+  ];
 
   // Per-group expand/collapse state for the "Hide ToD Mobs" picker.
   // Keyed by group.label, defaulting all sections to collapsed so the
   // panel is compact on first open. Officers expand only the groups they
   // care about toggling.
   protected todHideGroupExpanded: Record<string, boolean> = {};
+
+  // The whole "Hide ToD Mobs" section is collapsed by default — most officers
+  // never touch it, so it shouldn't take up space on open.
+  protected todHideSectionOpen = false;
 
   protected toggleTodHideGroup(label: string): void {
     this.todHideGroupExpanded[label] = !this.todHideGroupExpanded[label];
@@ -582,48 +616,114 @@ export class ConfigurationsTabComponent {
     await this.activity.setLinkshellGuildLock(id, !this.isGuildLocked());
   }
 
-  // ----- Discord channels (bot posts events/auctions/loot here) -----
+  // ----- Discord channel routes (bot posts each kind of content to a channel) -----
   protected readonly discordChannelsAvailable = signal<{ id: string; name: string }[]>([]);
-  protected readonly discordChannelRows = signal<{ purpose: string; label: string; channelId: string }[]>([]);
   protected readonly discordGuildConfigured = signal(false);
+  protected readonly channelPostTypes = signal<{ key: string; label: string }[]>([]);
+  protected readonly channelEventTypes = signal<string[]>([]);
+  // Plain mutable drafts so the template can two-way bind checkboxes; mutated
+  // in place + structural add/remove happen in zone-run click handlers.
+  protected channelRoutes: RouteDraft[] = [];
 
   protected async loadDiscordChannels(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id || !this.canCustomizeSelectedLinkshell()) {
-      this.discordChannelRows.set([]);
+      this.channelRoutes = [];
       this.discordChannelsAvailable.set([]);
       this.discordGuildConfigured.set(false);
+      this.channelPostTypes.set([]);
+      this.channelEventTypes.set([]);
       return;
     }
     const data = await this.activity.loadDiscordChannels(id);
     if (data) {
       this.discordChannelsAvailable.set(data.availableChannels);
       this.discordGuildConfigured.set(data.guildConfigured);
-      this.discordChannelRows.set(
-        data.channels.map(channel => ({
-          purpose: channel.purpose,
-          label: channel.label,
-          channelId: channel.channelId ?? ''
-        }))
-      );
+      this.channelPostTypes.set(data.postTypes);
+      this.channelEventTypes.set(data.eventTypes);
+      this.channelRoutes = data.routes.map(route => ({
+        id: route.id,
+        name: route.name ?? '',
+        channelId: route.channelId,
+        postEvents: route.postEvents,
+        postLoot: route.postLoot,
+        postAuctions: route.postAuctions,
+        postAttendance: route.postAttendance,
+        postTodBoard: route.postTodBoard,
+        eventTypeFilter: [...route.eventTypeFilter],
+        dirty: false
+      }));
     }
   }
 
-  protected onDiscordChannelChange(purpose: string, channelId: string): void {
-    this.discordChannelRows.update(rows =>
-      rows.map(row => (row.purpose === purpose ? { ...row, channelId } : row))
-    );
+  protected addRoute(): void {
+    this.channelRoutes = [
+      ...this.channelRoutes,
+      {
+        id: null, name: '', channelId: '',
+        postEvents: false, postLoot: false, postAuctions: false,
+        postAttendance: false, postTodBoard: false, eventTypeFilter: [],
+        dirty: true
+      }
+    ];
+  }
+
+  protected removeRoute(route: RouteDraft): void {
+    this.channelRoutes = this.channelRoutes.filter(r => r !== route);
+  }
+
+  // Flags a route as having unsaved edits (clears its green "saved" state).
+  protected markRouteDirty(route: RouteDraft): void {
+    route.dirty = true;
+  }
+
+  // A route is "saved" (green) when it's persisted and has no pending edits.
+  protected isRouteSaved(route: RouteDraft): boolean {
+    return route.id !== null && !route.dirty;
+  }
+
+  protected isEventTypeOn(route: RouteDraft, type: string): boolean {
+    return route.eventTypeFilter.includes(type);
+  }
+
+  protected toggleEventType(route: RouteDraft, type: string, on: boolean): void {
+    route.eventTypeFilter = on
+      ? [...route.eventTypeFilter, type]
+      : route.eventTypeFilter.filter(t => t !== type);
+    route.dirty = true;
+  }
+
+  // Mirrors the server's "one route per non-event post type" rule so a bad save
+  // is caught before the round-trip.
+  protected channelRoutesError(): string | null {
+    const count = (pick: (r: RouteDraft) => boolean) =>
+      this.channelRoutes.filter(r => r.channelId && pick(r)).length;
+    if (count(r => r.postLoot) > 1) return 'Only one route can post Loot.';
+    if (count(r => r.postAuctions) > 1) return 'Only one route can post Auctions.';
+    if (count(r => r.postAttendance) > 1) return 'Only one route can post Attendance.';
+    if (count(r => r.postTodBoard) > 1) return 'Only one route can post the ToD board.';
+    return null;
   }
 
   protected async saveDiscordChannels(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;
+    if (this.channelRoutesError()) return;
     if (!(await this.confirmChange())) return;
-    const bindings = this.discordChannelRows().map(row => ({
-      purpose: row.purpose,
-      channelId: row.channelId ? row.channelId : null
-    }));
-    const ok = await this.activity.saveDiscordChannels(id, bindings);
+    const routes = this.channelRoutes
+      .filter(r => r.channelId)
+      .map(r => ({
+        id: r.id,
+        name: r.name ? r.name : null,
+        channelId: r.channelId,
+        postEvents: r.postEvents,
+        postLoot: r.postLoot,
+        postAuctions: r.postAuctions,
+        postAttendance: r.postAttendance,
+        postTodBoard: r.postTodBoard,
+        eventTypeFilter: r.eventTypeFilter
+      }));
+    const ok = await this.activity.saveDiscordChannels(id, routes);
     if (ok) {
       await this.loadDiscordChannels();
     }
@@ -649,6 +749,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.inactiveAfterAbsences = settings.inactiveAfterAbsences || 3;
     this.customizeDraft.activeAfterAttendances = settings.activeAfterAttendances || 2;
     this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
+    this.customizeDraft.eventBoardTheme = settings.eventBoardTheme || 'Crystal';
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
     this.customizeDraft.hiddenTodMonsters = new Set(
@@ -718,7 +819,8 @@ export class ConfigurationsTabComponent {
         inactiveAfterAbsences: this.customizeDraft.inactiveAfterAbsences,
         activeAfterAttendances: this.customizeDraft.activeAfterAttendances,
         hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
-        linkshellType: this.customizeDraft.linkshellType
+        linkshellType: this.customizeDraft.linkshellType,
+        eventBoardTheme: this.customizeDraft.eventBoardTheme
         // The Discord server is set via the dedicated "Discord server" card
         // (setLinkshellGuild / clearLinkshellGuild), not the main save.
       });

@@ -18,6 +18,7 @@ public class LinkshellController : Controller
     private readonly GlobalSettingsService _globalSettings;
     private readonly DiscordIdentityService _discordIdentity;
     private readonly DiscordBotClient _discordBot;
+    private readonly Services.ChannelRouteEditor _channelRoutes;
 
     public LinkshellController(
         ApplicationDbContext context,
@@ -25,7 +26,8 @@ public class LinkshellController : Controller
         Services.DiscordTodBoardQueue todBoardQueue,
         GlobalSettingsService globalSettings,
         DiscordIdentityService discordIdentity,
-        DiscordBotClient discordBot)
+        DiscordBotClient discordBot,
+        Services.ChannelRouteEditor channelRoutes)
     {
         _context = context;
         _userManager = userManager;
@@ -33,6 +35,7 @@ public class LinkshellController : Controller
         _globalSettings = globalSettings;
         _discordIdentity = discordIdentity;
         _discordBot = discordBot;
+        _channelRoutes = channelRoutes;
     }
     public async Task<IActionResult> Index()
     {
@@ -385,20 +388,6 @@ public class LinkshellController : Controller
             target,
             manageableLinkshells,
             CanRole(roles, membership?.Rank, role => role.CanManageRoles));
-        vm.DiscordWebhooks = await _context.LinkshellDiscordWebhooks
-            .Where(w => w.LinkshellId == target.Id)
-            .OrderBy(w => w.Id)
-            .Select(w => new DiscordWebhookInput
-            {
-                Name = w.Name,
-                Url = w.Url,
-                PostTodBoard = w.PostTodBoard,
-                PostDkpSpendLog = w.PostDkpSpendLog,
-                PostAttendanceSnapshot = w.PostAttendanceSnapshot,
-                PostAuctions = w.PostAuctions,
-            })
-            .ToListAsync();
-        EnsureWebhookRow(vm);
         vm.DiscordGuildId = target.DiscordGuildId;
         vm.DiscordGuildName = target.DiscordGuildName;
         vm.GuildLocked = target.LockToDiscordGuild;
@@ -447,24 +436,6 @@ public class LinkshellController : Controller
             ModelState.AddModelError(nameof(model.DkpRoundingIncrement), "Invalid DKP rounding increment.");
         }
 
-        // Discord webhooks are optional; each row with a URL must point at a
-        // real Discord webhook endpoint so a typo can't silently swallow
-        // posts. Rows with a blank URL are ignored (treated as "remove").
-        model.DiscordWebhooks ??= new List<DiscordWebhookInput>();
-        for (var i = 0; i < model.DiscordWebhooks.Count; i++)
-        {
-            var url = model.DiscordWebhooks[i].Url?.Trim();
-            if (string.IsNullOrEmpty(url))
-            {
-                continue;
-            }
-            if (!IsValidDiscordWebhookUrl(url))
-            {
-                ModelState.AddModelError($"DiscordWebhooks[{i}].Url",
-                    "Enter a valid Discord channel webhook URL (https://discord.com/api/webhooks/...), or clear the row.");
-            }
-        }
-
         if (!ModelState.IsValid)
         {
             var manageable = await _context.AppUserLinkshells
@@ -478,13 +449,15 @@ public class LinkshellController : Controller
             model.LinkshellName = linkshell.LinkshellName;
             var roles = await EnsureDefaultRolesAsync(linkshell.Id, HttpContext.RequestAborted);
             model.CanManageRoles = CanRole(roles, membership?.Rank, role => role.CanManageRoles);
-            EnsureWebhookRow(model);
             return View(model);
         }
 
         linkshell.LinkshellType = LinkshellTypes.Normalize(model.LinkshellType);
         linkshell.LootStructure = model.LootStructure!;
         linkshell.DkpRoundingIncrement = model.DkpRoundingIncrement!;
+        // Resolve normalises to a known theme key (or the default), so an unknown
+        // posted value can never reach the renderer.
+        linkshell.EventBoardTheme = EventBoardThemes.Resolve(model.EventBoardTheme);
         linkshell.EnableEndgame  = model.EnableEndgame;
         linkshell.EnableHnmSection = model.EnableHnmSection;
         linkshell.EnableMissions = model.EnableMissions;
@@ -505,66 +478,6 @@ public class LinkshellController : Controller
                 .Select(name => name?.Trim())
                 .Where(name => !string.IsNullOrEmpty(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase));
-        // Upsert by URL so an existing webhook's TodBoardMessageId survives an
-        // edit (otherwise a blunt delete+recreate would orphan the live board
-        // message and post a duplicate). Rows whose URL is gone are deleted;
-        // unchanged URLs keep their Id + board message id and just refresh
-        // Name / PostTodBoard; new URLs are added.
-        var existingWebhooks = await _context.LinkshellDiscordWebhooks
-            .Where(w => w.LinkshellId == linkshell.Id)
-            .ToListAsync();
-        var keptUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in model.DiscordWebhooks)
-        {
-            var url = row.Url?.Trim();
-            if (string.IsNullOrEmpty(url))
-            {
-                continue;
-            }
-            keptUrls.Add(url);
-            var name = row.Name?.Trim();
-            // The UI is a single-purpose dropdown now; fan it back out to the
-            // Post* booleans the DB model / publishers still use. One purpose
-            // per channel (or none).
-            var purpose = row.Purpose?.Trim();
-            var postAttendanceSnapshot = string.Equals(
-                purpose, DiscordWebhookInput.PurposeDkpTracking, StringComparison.OrdinalIgnoreCase);
-            var postTodBoard = string.Equals(
-                purpose, DiscordWebhookInput.PurposePopTracker, StringComparison.OrdinalIgnoreCase);
-            var postDkpSpendLog = string.Equals(
-                purpose, DiscordWebhookInput.PurposeSpentPoints, StringComparison.OrdinalIgnoreCase);
-            var postAuctions = string.Equals(
-                purpose, DiscordWebhookInput.PurposeAuctions, StringComparison.OrdinalIgnoreCase);
-            var existing = existingWebhooks
-                .FirstOrDefault(w => string.Equals(w.Url, url, StringComparison.OrdinalIgnoreCase));
-            if (existing is not null)
-            {
-                existing.Name = string.IsNullOrEmpty(name) ? null : name;
-                existing.PostTodBoard = postTodBoard;
-                existing.PostDkpSpendLog = postDkpSpendLog;
-                existing.PostAttendanceSnapshot = postAttendanceSnapshot;
-                existing.PostAuctions = postAuctions;
-            }
-            else
-            {
-                _context.LinkshellDiscordWebhooks.Add(new LinkshellDiscordWebhook
-                {
-                    LinkshellId = linkshell.Id,
-                    Name = string.IsNullOrEmpty(name) ? null : name,
-                    Url = url,
-                    PostTodBoard = postTodBoard,
-                    PostDkpSpendLog = postDkpSpendLog,
-                    PostAttendanceSnapshot = postAttendanceSnapshot,
-                    PostAuctions = postAuctions,
-                    CreatedAtUtc = DateTime.UtcNow,
-                });
-            }
-        }
-        var removed = existingWebhooks
-            .Where(w => !keptUrls.Contains(w.Url))
-            .ToList();
-        _context.LinkshellDiscordWebhooks.RemoveRange(removed);
-
         await _context.SaveChangesAsync();
 
         // Enabling tracking or changing the thresholds can change who's Inactive →
@@ -763,10 +676,6 @@ public class LinkshellController : Controller
         var guildForChannels = target.DiscordGuildId;
         vm.DiscordChannelGuildId = guildForChannels;
 
-        var existing = await _context.LinkshellDiscordChannels
-            .Where(channel => channel.LinkshellId == target.Id)
-            .ToListAsync(cancellationToken);
-
         if (!string.IsNullOrWhiteSpace(guildForChannels))
         {
             var available = await _discordBot.ListTextChannelsAsync(guildForChannels, cancellationToken);
@@ -778,25 +687,31 @@ public class LinkshellController : Controller
             }
         }
 
-        vm.DiscordChannels = DiscordChannelPurposes.All
-            .Select(purpose =>
+        vm.ChannelRoutes = await _context.LinkshellChannelRoutes
+            .AsNoTracking()
+            .Where(route => route.LinkshellId == target.Id)
+            .OrderBy(route => route.Id)
+            .Select(route => new ChannelRouteInput
             {
-                var row = existing.FirstOrDefault(channel => channel.Purpose == purpose);
-                return new DiscordChannelConfigRow
-                {
-                    Purpose = purpose,
-                    Label = DiscordChannelPurposes.Label(purpose),
-                    ChannelId = row?.ChannelId,
-                    ChannelName = row?.ChannelName
-                };
+                Id = route.Id,
+                Name = route.Name,
+                ChannelId = route.ChannelId,
+                PostEvents = route.PostEvents,
+                PostLoot = route.PostLoot,
+                PostAuctions = route.PostAuctions,
+                PostAttendance = route.PostAttendance,
+                PostTodBoard = route.PostTodBoard,
+                EventTypeFilter = (route.EventTypeFilter ?? string.Empty)
+                    .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList(),
             })
-            .ToList();
+            .ToListAsync(cancellationToken);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveDiscordChannels(
-        int linkshellId, [FromForm] Dictionary<string, string>? channelIds)
+        int linkshellId, [FromForm] List<ChannelRouteInput>? channelRoutes)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
@@ -816,55 +731,21 @@ public class LinkshellController : Controller
             return NotFound();
         }
 
-        channelIds ??= new Dictionary<string, string>();
-
         var guildForChannels = linkshell.DiscordGuildId;
         var available = string.IsNullOrWhiteSpace(guildForChannels)
             ? null
             : await _discordBot.ListTextChannelsAsync(guildForChannels, HttpContext.RequestAborted);
 
-        var existing = await _context.LinkshellDiscordChannels
-            .Where(channel => channel.LinkshellId == linkshellId)
-            .ToListAsync();
+        var edits = (channelRoutes ?? new List<ChannelRouteInput>())
+            .Select(r => new Services.ChannelRouteEdit(
+                r.Id == 0 ? null : r.Id, r.Name, r.ChannelId,
+                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard,
+                r.EventTypeFilter))
+            .ToList();
 
-        foreach (var purpose in DiscordChannelPurposes.All)
-        {
-            channelIds.TryGetValue(purpose, out var raw);
-            var chosen = raw?.Trim();
-            var row = existing.FirstOrDefault(channel => channel.Purpose == purpose);
-
-            // Empty / non-snowflake clears the binding for that purpose.
-            var valid = !string.IsNullOrEmpty(chosen) && chosen!.Length <= 20 && chosen.All(char.IsDigit);
-            if (!valid)
-            {
-                if (row is not null)
-                {
-                    _context.LinkshellDiscordChannels.Remove(row);
-                }
-                continue;
-            }
-
-            var name = available?.FirstOrDefault(channel => channel.Id == chosen)?.Name;
-            if (row is not null)
-            {
-                row.ChannelId = chosen!;
-                row.ChannelName = name;
-            }
-            else
-            {
-                _context.LinkshellDiscordChannels.Add(new LinkshellDiscordChannel
-                {
-                    LinkshellId = linkshellId,
-                    Purpose = purpose,
-                    ChannelId = chosen!,
-                    ChannelName = name,
-                    CreatedAtUtc = DateTime.UtcNow
-                });
-            }
-        }
-
-        await _context.SaveChangesAsync();
-        TempData["CustomizeSaved"] = "Discord channels updated.";
+        var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, HttpContext.RequestAborted);
+        TempData[error is null ? "CustomizeSaved" : "CustomizeError"] =
+            error ?? "Discord channels updated.";
         return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 
@@ -877,6 +758,7 @@ public class LinkshellController : Controller
             LinkshellType         = LinkshellTypes.Normalize(target.LinkshellType),
             LootStructure         = target.LootStructure,
             DkpRoundingIncrement  = target.DkpRoundingIncrement,
+            EventBoardTheme       = EventBoardThemes.Resolve(target.EventBoardTheme),
             EnableEndgame         = target.EnableEndgame,
             EnableHnmSection      = target.EnableHnmSection,
             EnableMissions        = target.EnableMissions,
@@ -895,25 +777,6 @@ public class LinkshellController : Controller
             CanManageRoles        = canManageRoles,
             ManageableLinkshells  = manageableLinkshells.ToList()
         };
-
-    // Discord webhook URL must point at a real Discord webhook endpoint so a
-    // typo can't silently swallow snapshot posts.
-    private static bool IsValidDiscordWebhookUrl(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri)
-        && uri.Scheme == Uri.UriSchemeHttps
-        && uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase)
-        && uri.AbsolutePath.Contains("/api/webhooks/", StringComparison.OrdinalIgnoreCase);
-
-    // The editor always shows at least one (blank) webhook row so there's
-    // somewhere to type the first URL.
-    private static void EnsureWebhookRow(LinkshellCustomizeViewModel model)
-    {
-        model.DiscordWebhooks ??= new List<DiscordWebhookInput>();
-        if (model.DiscordWebhooks.Count == 0)
-        {
-            model.DiscordWebhooks.Add(new DiscordWebhookInput());
-        }
-    }
 
     private async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(
         int linkshellId,

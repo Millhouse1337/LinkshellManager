@@ -246,9 +246,6 @@ builder.Services.AddHostedService<DiscordWebhookBackgroundService>();
 builder.Services.AddSingleton<DiscordTodBoardQueue>();
 builder.Services.AddScoped<DiscordTodBoardPublisher>();
 builder.Services.AddHostedService<DiscordTodBoardBackgroundService>();
-builder.Services.AddSingleton<DiscordDkpSpendQueue>();
-builder.Services.AddScoped<DiscordDkpSpendPublisher>();
-builder.Services.AddHostedService<DiscordDkpSpendBackgroundService>();
 builder.Services.AddSingleton<DiscordAuctionChannelQueue>();
 builder.Services.AddScoped<DiscordAuctionChannelPublisher>();
 builder.Services.AddHostedService<DiscordAuctionChannelBackgroundService>();
@@ -261,6 +258,14 @@ builder.Services.AddSingleton<DiscordEventChannelQueue>();
 // is launched once and reused. EventBoardPoster picks image-or-text-fallback.
 builder.Services.AddSingleton<EventBoardImageRenderer>();
 builder.Services.AddScoped<EventBoardPoster>();
+// Resolves which channel each kind of post goes to, from a linkshell's
+// user-defined LinkshellChannelRoutes. Injected into every Discord publisher.
+builder.Services.AddScoped<ChannelRouteResolver>();
+// Shared save logic for the channel-routes config (Activity + web).
+builder.Services.AddScoped<ChannelRouteEditor>();
+// One-time idempotent backfill of legacy LinkshellDiscordChannel rows into the
+// new routes table. Safe to keep until the legacy table is dropped.
+builder.Services.AddHostedService<ChannelRouteBackfillService>();
 // Best-effort: downloads the Chromium binary on boot so the image board works
 // without a manual `playwright install` (opt out with LSM_PLAYWRIGHT_AUTOINSTALL=0).
 builder.Services.AddHostedService<PlaywrightBrowserInstaller>();

@@ -15,17 +15,20 @@ public sealed class DiscordLootChannelPublisher
 
     private readonly ApplicationDbContext _db;
     private readonly DiscordBotClient _bot;
+    private readonly ChannelRouteResolver _routes;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DiscordLootChannelPublisher> _logger;
 
     public DiscordLootChannelPublisher(
         ApplicationDbContext db,
         DiscordBotClient bot,
+        ChannelRouteResolver routes,
         IConfiguration configuration,
         ILogger<DiscordLootChannelPublisher> logger)
     {
         _db = db;
         _bot = bot;
+        _routes = routes;
         _configuration = configuration;
         _logger = logger;
     }
@@ -47,10 +50,10 @@ public sealed class DiscordLootChannelPublisher
                 return;
             }
 
-            var channelId = await ResolveLootChannelIdAsync(loot.LinkshellId, cancellationToken);
+            var channelId = await _routes.ResolveChannelIdAsync(loot.LinkshellId, ChannelPostTypes.Loot, cancellationToken);
             if (channelId is null)
             {
-                return; // No Loot channel configured.
+                return; // No Loot route configured.
             }
 
             var payload = BuildPayload(loot);
@@ -98,18 +101,6 @@ public sealed class DiscordLootChannelPublisher
         }
         var context = row.Event?.EventName ?? row.EventHistory?.EventName;
         return new LootLine(linkshellId, row.ItemName, row.ItemWinner, row.WinningDkpSpent, context);
-    }
-
-    private async Task<string?> ResolveLootChannelIdAsync(int linkshellId, CancellationToken cancellationToken)
-    {
-        var channelId = await _db.LinkshellDiscordChannels
-            .AsNoTracking()
-            .Where(channel => channel.LinkshellId == linkshellId
-                && channel.Purpose == DiscordChannelPurposes.Loot
-                && channel.ChannelId != "")
-            .Select(channel => channel.ChannelId)
-            .FirstOrDefaultAsync(cancellationToken);
-        return string.IsNullOrEmpty(channelId) ? null : channelId;
     }
 
     private object BuildPayload(LootLine loot)

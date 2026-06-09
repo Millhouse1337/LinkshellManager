@@ -70,10 +70,20 @@
                               @for (j of subJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
                             </select>
                           }
-                          <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
                           @if (isEventBoard() && !partyHasLeader(party)) {
-                            <button type="button" class="btn sm ps-signup-btn" (click)="signUp(slot, true)" [disabled]="signUpDisabled(slot)" title="Claim this party's leader spot">👑 Leader</button>
+                            <span class="ps-leader-toggle" title="Claim this party's leader spot">
+                              <span class="ps-leader-toggle__label">Leader</span>
+                              <span class="yesno" role="group" aria-label="Sign up as party leader">
+                                <button type="button" class="yesno__btn"
+                                  [class.is-on]="draftFor(slot.slotId).asLeader"
+                                  (click)="setDraft(slot.slotId, { asLeader: true })">Yes</button>
+                                <button type="button" class="yesno__btn"
+                                  [class.is-on]="!draftFor(slot.slotId).asLeader"
+                                  (click)="setDraft(slot.slotId, { asLeader: false })">No</button>
+                              </span>
+                            </span>
                           }
+                          <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
                         </div>
                       }
                     } @else {
@@ -87,7 +97,7 @@
                           @if (signedUpJobs(slot)) { <span class="ps-jobs">{{ signedUpJobs(slot) }}</span> }
                         </span>
                         @if (!readOnly()) {
-                          @if (isMine(slot)) {
+                          @if (isMine(slot) && !live()) {
                             <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Withdraw</button>
                           } @else if (canManage()) {
                             <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Clear</button>

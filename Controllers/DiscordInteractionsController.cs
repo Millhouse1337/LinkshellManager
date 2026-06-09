@@ -2,11 +2,13 @@ using System.Text;
 using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Options;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -38,17 +40,27 @@ public sealed class DiscordInteractionsController : ControllerBase
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
     private readonly ILogger<DiscordInteractionsController> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly string _discordClientId;
+
+    // This component interaction's token, captured per request so a success
+    // handler can dismiss (delete) the ephemeral picker/wizard it lives on.
+    private string? _interactionToken;
 
     public DiscordInteractionsController(
         DiscordInteractionVerifier verifier,
         ApplicationDbContext db,
         DiscordEventChannelQueue eventQueue,
-        ILogger<DiscordInteractionsController> logger)
+        ILogger<DiscordInteractionsController> logger,
+        IHttpClientFactory httpClientFactory,
+        IOptions<DiscordOAuthOptions> discordOptions)
     {
         _verifier = verifier;
         _db = db;
         _eventQueue = eventQueue;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
+        _discordClientId = discordOptions.Value.ClientId;
     }
 
     [HttpPost("interactions")]
@@ -113,6 +125,10 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That action isn't recognized.");
         }
 
+        // Captured so a successful signup can silently dismiss the ephemeral
+        // picker/wizard it ran in (delete it) instead of leaving a confirmation.
+        _interactionToken = root.TryGetProperty("token", out var tokenEl) ? tokenEl.GetString() : null;
+
         var discordUserId = ResolveDiscordUserId(root);
         if (string.IsNullOrEmpty(discordUserId))
         {
@@ -146,37 +162,37 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandleWithdrawAsync(eventId, appUserId, cancellationToken);
         }
 
-        // Party-setup board "Sign Up" → an ephemeral picker of the OPEN slots. The
-        // leader option is offered after a slot is chosen (see HandleSlotChosenAsync).
+        // Board "Sign Up as Party Leader" → the OPEN-slot picker, restricted to
+        // parties with no leader yet; claiming marks the member as that party's
+        // leader. Checked before the normal "Sign Up" prefix (distinct strings, but
+        // the leader path is the more specific intent).
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotLeaderSignUpPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotLeaderSignUpPrefix);
+            return await HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: true, cancellationToken);
+        }
+
+        // Board "Sign Up" → an ephemeral picker of the OPEN slots; claiming joins as
+        // a regular member (no crown).
         if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotSignUpPrefix, StringComparison.Ordinal))
         {
             var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotSignUpPrefix);
-            return await HandlePartySlotSignUpAsync(eventId, appUserId, cancellationToken);
+            return await HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: false, cancellationToken);
         }
 
-        // Picker select → the member chose a slot. Offer "Claim / Claim as leader"
-        // when that slot's party has no leader yet, else claim straight away.
+        // Leader picker select → the member chose a slot to lead; claim it as leader
+        // (checked before the normal claim prefix — distinct strings).
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix);
+            return await HandlePartySlotClaimAsync(eventId, SelectedSlotId(data), appUserId, asLeader: true, cancellationToken);
+        }
+
+        // Picker select → the member chose a slot; claim it as a regular member.
         if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotClaimPrefix, StringComparison.Ordinal))
         {
             var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotClaimPrefix);
-            var slotId = data.TryGetProperty("values", out var slotValues)
-                && slotValues.ValueKind == JsonValueKind.Array
-                && slotValues.GetArrayLength() > 0
-                && int.TryParse(slotValues[0].GetString(), out var parsedSlotId)
-                ? parsedSlotId
-                : 0;
-            return await HandleSlotChosenAsync(eventId, slotId, appUserId, cancellationToken);
-        }
-
-        // "Claim" / "Claim as leader" buttons shown after a slot is chosen.
-        // Tail: {eventId}:{slotId}:{N|L}  (L = claim as party leader).
-        if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotGoPrefix, StringComparison.Ordinal))
-        {
-            var p = customId[DiscordEventMessageBuilder.PartySlotGoPrefix.Length..].Split(':');
-            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
-            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
-            var asLeader = p.Length > 2 && string.Equals(p[2], "L", StringComparison.Ordinal);
-            return await HandlePartySlotClaimAsync(eventId, slotId, appUserId, asLeader, cancellationToken);
+            return await HandlePartySlotClaimAsync(eventId, SelectedSlotId(data), appUserId, asLeader: false, cancellationToken);
         }
 
         if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotLeavePrefix, StringComparison.Ordinal))
@@ -185,7 +201,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandlePartySlotLeaveAsync(eventId, appUserId, cancellationToken);
         }
 
-        // "Join (no slot)" → open an ephemeral job-pick wizard (role optional, job
+        // "Sign Up (No Slot)" → open an ephemeral job-pick wizard (role optional, job
         // required) so the attendee still says what they're coming as.
         if (customId.StartsWith(DiscordEventMessageBuilder.PartyJoinEventPrefix, StringComparison.Ordinal))
         {
@@ -456,11 +472,12 @@ public sealed class DiscordInteractionsController : ControllerBase
         return await UpdatedEventMessageAsync(ev.Id, cancellationToken);
     }
 
-    // "Sign Up" on the board → an ephemeral message with a select of the OPEN slots
-    // (per-event). Picking one runs HandleSlotChosenAsync, which offers the leader
-    // option (when the party has none yet) before claiming.
+    // "Sign Up" / "Sign Up as Party Leader" on the board → an ephemeral message with
+    // a select of the OPEN slots (per-event). The leader path restricts the picker
+    // to leaderless parties (BuildSlotPickerComponents) and routes the select through
+    // the leader claim prefix. Picking a slot runs HandlePartySlotClaimAsync.
     private async Task<IActionResult> HandlePartySlotSignUpAsync(
-        int eventId, string appUserId, CancellationToken cancellationToken)
+        int eventId, string appUserId, bool asLeader, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -481,10 +498,12 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
-        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(eventId, ev.PartySetup, slotSignups);
+        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(eventId, ev.PartySetup, slotSignups, asLeader);
         if (picker.Length == 0)
         {
-            return Ephemeral("Every slot is taken right now.");
+            return Ephemeral(asLeader
+                ? "There's no party to lead right now — every party already has a leader (or has no open slots)."
+                : "Every slot is taken right now.");
         }
 
         return Ok(new
@@ -492,57 +511,11 @@ public sealed class DiscordInteractionsController : ControllerBase
             type = ResponseChannelMessage,
             data = new
             {
-                content = "Pick a slot to claim:",
+                content = asLeader ? "Pick a slot to claim as party leader 👑:" : "Pick a slot to claim:",
                 components = picker,
                 flags = EphemeralFlag
             }
         });
-    }
-
-    // Picker select → the member chose a slot. If the slot's party has no leader
-    // yet, replace the picker with a "Claim / 👑 Claim as leader" choice (so the
-    // two sign-up buttons are now one flow); otherwise claim it straight away.
-    private async Task<IActionResult> HandleSlotChosenAsync(
-        int eventId, int slotId, string appUserId, CancellationToken cancellationToken)
-    {
-        if (eventId <= 0 || slotId <= 0)
-        {
-            return Ephemeral("That slot isn't recognized.");
-        }
-
-        var slot = await _db.PartySetupSlots
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == slotId, cancellationToken);
-        if (slot is null)
-        {
-            return Ephemeral("That slot isn't recognized.");
-        }
-
-        var partyHasLeader = await _db.EventPartySlotSignups.AnyAsync(
-            s => s.EventId == eventId
-                 && s.IsPartyLeader
-                 && s.PartySetupSlot!.PartySetupPartyId == slot.PartySetupPartyId,
-            cancellationToken);
-        if (partyHasLeader)
-        {
-            // Party already has a leader → the leader option doesn't apply; claim it.
-            return await HandlePartySlotClaimAsync(eventId, slotId, appUserId, false, cancellationToken);
-        }
-
-        var go = DiscordEventMessageBuilder.PartySlotGoPrefix;
-        var choice = new object[]
-        {
-            new
-            {
-                type = 1, // action row
-                components = new object[]
-                {
-                    new { type = 2, style = 1, label = "Claim slot", custom_id = $"{go}{eventId}:{slotId}:N" },
-                    new { type = 2, style = 3, label = "👑 Claim as leader", custom_id = $"{go}{eventId}:{slotId}:L" },
-                }
-            }
-        };
-        return WizardStep("Claim this slot, or claim it as your party's leader 👑:", choice);
     }
 
     // Picker select → claim the chosen slot for THIS event. If the slot pins both
@@ -594,18 +567,21 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral(result.Error ?? "Couldn't claim that slot.");
         }
-        await DropNoSlotAttendanceAsync(ev, appUserId, cancellationToken);
+        if (!await TryCommitSlotClaimAsync(cancellationToken))
+        {
+            return Ephemeral("That slot was just taken by another member. Pick another open slot.");
+        }
+        // Pre-start: drop their no-slot attendance. Live: materialize the claim as a
+        // participation so a late joiner lands in the running event immediately.
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, appUserId, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         // Auto-promote earliest signup if the party just filled with no leader.
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
 
         // The select lives on the ephemeral picker; queue the board refresh (the
-        // image render runs off the 3s window) and replace the picker with a confirmation.
+        // image render runs off the 3s window) and silently dismiss the picker.
         _eventQueue.Enqueue(eventId);
-        var confirm = asLeader
-            ? $"✅ Signed up as party leader 👑: {DiscordEventMessageBuilder.SlotRequirement(slot)}."
-            : $"✅ Signed up: {DiscordEventMessageBuilder.SlotRequirement(slot)}.";
-        return EphemeralReplace(confirm);
+        return DismissPickerSilently();
     }
 
     // Drives the job-pick wizard: presents the next needed dropdown (role → main →
@@ -693,14 +669,37 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return WizardStep($"⚠️ {result.Error}", Array.Empty<object>());
         }
-        await DropNoSlotAttendanceAsync(ev, appUserId, cancellationToken);
+        if (!await TryCommitSlotClaimAsync(cancellationToken))
+        {
+            return WizardStep("⚠️ That slot was just taken by another member. Pick another open slot.", Array.Empty<object>());
+        }
+        // Pre-start: drop their no-slot attendance. Live: materialize the claim as a
+        // participation so a late joiner lands in the running event immediately.
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, appUserId, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
         _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
-        var confirm = asLeader
-            ? $"✅ Signed up as party leader 👑: {DiscordEventMessageBuilder.SlotRequirement(slot)}."
-            : $"✅ Signed up: {DiscordEventMessageBuilder.SlotRequirement(slot)}.";
-        return WizardStep(confirm, Array.Empty<object>());
+        return DismissPickerSilently();
+    }
+
+    // Commits a pending slot claim. ClaimSlotAsync's check-then-insert is a
+    // TOCTOU race: two members clicking the same open slot simultaneously can
+    // both pass the in-memory "is it free?" check, and the second commit then
+    // violates the unique (EventId, PartySetupSlotId) index. We translate that
+    // one race into a friendly "taken" outcome (false) instead of letting the
+    // DbUpdateException bubble to a 500 / Discord "interaction failed". Any other
+    // update failure is a real fault and is allowed to propagate.
+    private async Task<bool> TryCommitSlotClaimAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            return false;
+        }
     }
 
     private static object[] JobSelectRow(string prefix, string idTail, string placeholder, IReadOnlyList<string> jobs)
@@ -743,6 +742,10 @@ public sealed class DiscordInteractionsController : ControllerBase
             ? values[0].GetString()
             : null;
 
+    // The slot id from a picker select (value = slotId), or 0 if none/unparsable.
+    private static int SelectedSlotId(JsonElement data) =>
+        int.TryParse(SelectedValue(data), out var slotId) ? slotId : 0;
+
     private static string? NormalizeWizardValue(string? value) =>
         string.IsNullOrWhiteSpace(value) || value == "-"
         || value == DiscordEventMessageBuilder.PartyWizardNoSub
@@ -766,6 +769,13 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
+        // Once the event is live, members can't drop themselves from the board —
+        // only an officer can free a slot (from the website / Activity).
+        if (!EventPartySignupService.MemberCanWithdraw(ev))
+        {
+            return Ephemeral("The event is live — ask an officer to remove you.");
+        }
+
         var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, appUserId, cancellationToken);
 
         // Also drop their general-attendance row (the "Join (no slot)" roster).
@@ -787,9 +797,10 @@ public sealed class DiscordInteractionsController : ControllerBase
 
         await _db.SaveChangesAsync(cancellationToken);
         // The board is a rendered image — queue the refresh (render runs off the 3s
-        // window) and acknowledge privately rather than editing it in the response.
+        // window) and silently acknowledge the click (no confirmation message); the
+        // refreshed board is the feedback.
         _eventQueue.Enqueue(eventId);
-        return Ephemeral("✅ You've left the event.");
+        return Ok(new { type = ResponseDeferredUpdate });
     }
 
     // "Join (no slot)" button on the board → a NEW ephemeral wizard message (so the
@@ -824,7 +835,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             type = ResponseChannelMessage,
             data = new
             {
-                content = "Join (no slot) — pick your role (optional):",
+                content = "Sign Up (No Slot) — pick your role (optional):",
                 components = SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions),
                 flags = EphemeralFlag
             }
@@ -868,7 +879,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                 .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
                 .ToArray();
             return WizardStep(
-                "Join (no slot) — pick your role (optional):",
+                "Sign Up (No Slot) — pick your role (optional):",
                 SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions));
         }
 
@@ -925,29 +936,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, leftPartyId, cancellationToken);
         _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
-
-        var jobLabel = NormalizeWizardValue(main) ?? "your job";
-        var subLabel = NormalizeWizardValue(sub) is { } chosenSub ? $"/{chosenSub}" : string.Empty;
-        return WizardStep($"✅ Joined (no slot) as {jobLabel}{subLabel}.", Array.Empty<object>());
-    }
-
-    // One identity per event: when a member takes a real party slot, drop any
-    // "no slot" attendance row they hold — but only before the event commences, so
-    // a live participant is never removed mid-event. Does NOT commit (the caller's
-    // SaveChanges covers it).
-    private async Task DropNoSlotAttendanceAsync(Event ev, string appUserId, CancellationToken cancellationToken)
-    {
-        if (ev.CommencementStartTime is not null)
-        {
-            return;
-        }
-        var rows = await _db.AppUserEvents
-            .Where(p => p.EventId == ev.Id && p.AppUserId == appUserId)
-            .ToListAsync(cancellationToken);
-        if (rows.Count > 0)
-        {
-            _db.AppUserEvents.RemoveRange(rows);
-        }
+        return DismissPickerSilently();
     }
 
     // Loads an event with its party-setup tree (for the picker + board render).
@@ -960,10 +949,42 @@ public sealed class DiscordInteractionsController : ControllerBase
             .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
     }
 
-    // Replaces the ephemeral picker (the message the select was on) with a
-    // confirmation, clearing its components.
-    private IActionResult EphemeralReplace(string message) =>
-        Ok(new { type = ResponseUpdateMessage, data = new { content = message, components = Array.Empty<object>() } });
+    // Successful signup terminating an ephemeral picker/wizard: acknowledge the
+    // select with a no-op deferred update (no visible confirmation) and delete
+    // the ephemeral message it ran in, so the channel isn't left with a "✅ Signed
+    // up" note. The board itself (refreshed via the queue) is the real feedback.
+    // The delete runs after the response flushes so the interaction is acked
+    // first (Discord requires the callback before a followup on the token).
+    private IActionResult DismissPickerSilently()
+    {
+        var token = _interactionToken;
+        if (!string.IsNullOrEmpty(token))
+        {
+            HttpContext.Response.OnCompleted(() => DeleteOriginalEphemeralAsync(token));
+        }
+        return Ok(new { type = ResponseDeferredUpdate });
+    }
+
+    // DELETE the interaction's original (ephemeral) message via the webhook the
+    // interaction token authorizes. Best-effort: a failure just leaves the
+    // picker in place, so it's logged but never surfaced.
+    private async Task DeleteOriginalEphemeralAsync(string token)
+    {
+        if (string.IsNullOrEmpty(_discordClientId))
+        {
+            return;
+        }
+        try
+        {
+            using var client = _httpClientFactory.CreateClient();
+            await client.DeleteAsync(
+                $"https://discord.com/api/v10/webhooks/{_discordClientId}/{token}/messages/@original");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to dismiss the ephemeral signup picker.");
+        }
+    }
 
     // type-7 UPDATE_MESSAGE that refreshes the board/ad-hoc message the user
     // clicked — used for actions whose button lives ON the board (e.g. Leave).

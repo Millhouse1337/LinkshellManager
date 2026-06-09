@@ -82,6 +82,14 @@ public class Linkshell
 
     public bool EnableEvents { get; set; } = true;
 
+    // Colour palette used when this linkshell's event signup board is rendered
+    // to a PNG for Discord (see EventBoardThemes / EventBoardHtmlBuilder). One of
+    // the EventBoardThemes keys (Crystal, Abyss, Ember, Verdant, Royal, Tome);
+    // an unknown value falls back to the default at render time. Edited from the
+    // Customize panel + the Discord Activity Configurations card.
+    [MaxLength(16)]
+    public string EventBoardTheme { get; set; } = "Crystal";
+
     public bool EnableDkp { get; set; } = true;
 
     public bool EnableItems { get; set; } = true;
@@ -163,6 +171,11 @@ public class Linkshell
     // posted to each of these as a party-grouped embed. Empty = Discord
     // posting disabled. (Replaces the former single DiscordWebhookUrl column.)
     public ICollection<LinkshellDiscordWebhook> DiscordWebhooks { get; set; } = new List<LinkshellDiscordWebhook>();
+
+    // User-defined Discord channel routes: which channels the bot posts each kind
+    // of content to (events/loot/auctions/attendance/ToD). Replaces the fixed
+    // LinkshellDiscordChannel purposes and the webhook post-type flags.
+    public ICollection<LinkshellChannelRoute> ChannelRoutes { get; set; } = new List<LinkshellChannelRoute>();
 
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 

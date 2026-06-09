@@ -83,16 +83,19 @@
                   type="button"
                   class="action-button action-button--secondary"
                   (click)="toggleLiveEventPartySetupExpanded(event.id, event.partySetupId, event.linkshellId)">
-                  {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View Party Setup' }}
+                  {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View / Join Party Setup' }}
                 </button>
               </div>
 
               @if (isLiveEventPartySetupExpanded(event.id)) {
+                <!-- Live board is interactive: open slots are claimable (late join into
+                     a slot); members can't drop their own slot mid-run (officer Clear only). -->
                 <app-party-setup-panel
                   [setupId]="event.partySetupId"
                   [linkshellId]="event.linkshellId"
                   [eventId]="event.id"
-                  [readOnly]="true" />
+                  [readOnly]="false"
+                  [live]="true" />
               }
             }
 

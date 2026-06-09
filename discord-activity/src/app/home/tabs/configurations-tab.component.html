@@ -9,7 +9,38 @@
             </div>
           }
         </div>
+        <div class="section-head-right">
+          <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">+ New Linkshell</button>
+        </div>
       </div>
+
+      <!-- Create-a-linkshell popup, opened from the header button above. -->
+      @if (showCreateLinkshellForm()) {
+        <div class="addon-modal-backdrop" (click)="toggleCreateLinkshellForm()">
+          <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
+            <div class="addon-modal-header">
+              <strong>Create a New Linkshell</strong>
+              <button type="button" class="btn ghost sm" (click)="toggleCreateLinkshellForm()" aria-label="Close">✕</button>
+            </div>
+            <form class="addon-modal-body" (submit)="$event.preventDefault(); submitCreateLinkshell()">
+              <p class="muted" style="font-size:12px">Start a brand new linkshell and invite members.</p>
+              <label class="addon-modal-field">
+                <span>Name</span>
+                <input type="text" name="newLinkshellName" [(ngModel)]="newLinkshellName" required />
+              </label>
+              <label class="addon-modal-field">
+                <span>Details</span>
+                <textarea name="newLinkshellDetails" [(ngModel)]="newLinkshellDetails" rows="2"
+                  placeholder="Brief description, focus, or schedule"></textarea>
+              </label>
+              <div class="addon-modal-footer">
+                <button type="button" class="btn ghost sm" (click)="toggleCreateLinkshellForm()">Cancel</button>
+                <button type="submit" class="btn primary sm">Create linkshell</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      }
 
       @if (dashboardLinkshells().length > 0) {
         <div class="card">
@@ -39,35 +70,6 @@
           </form>
         </div>
       }
-
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Create a New Linkshell</div>
-          <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">
-            {{ showCreateLinkshellForm() ? 'Cancel' : '+ New Linkshell' }}
-          </button>
-        </div>
-        @if (showCreateLinkshellForm()) {
-          <form class="inline-form" (submit)="$event.preventDefault(); submitCreateLinkshell()">
-            <label>
-              <span>Name</span>
-              <input type="text" name="newLinkshellName" [(ngModel)]="newLinkshellName" required />
-            </label>
-            <label>
-              <span>Details</span>
-              <textarea name="newLinkshellDetails" [(ngModel)]="newLinkshellDetails" rows="2" placeholder="Brief description, focus, or schedule"></textarea>
-            </label>
-            <div class="inline-form__actions">
-              <button type="submit" class="btn primary sm">Create linkshell</button>
-              <button type="button" class="btn ghost sm" (click)="toggleCreateLinkshellForm()">Cancel</button>
-            </div>
-          </form>
-        } @else {
-          <div class="empty-state empty-state--compact">
-            <div class="empty-state-desc">Start a brand new linkshell and invite members.</div>
-          </div>
-        }
-      </div>
 
       <div class="card">
         <div class="card-head">
@@ -157,12 +159,6 @@
               </section>
             </div>
 
-            <div class="customize-form__actions">
-              <button type="submit" class="btn primary" [disabled]="!customizeDirty">
-                {{ customizeDirty ? 'Save changes' : 'Saved' }}
-              </button>
-            </div>
-
             <div style="display:flex;gap:24px 72px;flex-wrap:wrap;align-items:flex-start;justify-content:center">
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
                 <div class="customize-form__section" style="flex:0 0 260px">
@@ -178,6 +174,26 @@
                   </label>
                 </div>
               }
+
+              <div class="customize-form__section" style="flex:0 0 280px">
+                <strong>Event board theme</strong>
+                <p class="muted">Colour palette for the event signup board image posted to Discord.</p>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
+                  @for (theme of eventBoardThemes; track theme.key) {
+                    <label class="customize-form__option" style="align-items:center;gap:8px;padding:8px;border-radius:10px;border:1px solid"
+                      [style.border-color]="customizeDraft.eventBoardTheme === theme.key ? theme.accent : 'var(--border, rgba(255,255,255,0.12))'">
+                      <input type="radio" name="eventBoardThemeDraft" [value]="theme.key"
+                        [ngModel]="customizeDraft.eventBoardTheme"
+                        (ngModelChange)="customizeDraft.eventBoardTheme = $event; onCustomizeFieldChange()" />
+                      <span style="width:26px;height:26px;border-radius:7px;flex-shrink:0"
+                        [style.background]="theme.bg"
+                        [style.border]="'2px solid ' + theme.accent"
+                        [style.box-shadow]="'0 0 8px ' + theme.accent"></span>
+                      <strong>{{ theme.label }}</strong>
+                    </label>
+                  }
+                </div>
+              </div>
 
               <div class="customize-form__section" style="flex:0 1 auto;min-width:280px">
                 <strong>Feature toggles</strong>
@@ -233,16 +249,14 @@
                 </label>
               </div>
               </div>
-            </div>
 
-            <div class="customize-form__row" style="margin-top:24px">
-              <div class="customize-form__row-label" style="font-weight:600;font-size:13px;color:var(--fg);margin-bottom:4px">Member Activity Tracking</div>
-              <div class="customize-form__row-body">
-                <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
+              <div class="customize-form__section" style="flex:0 0 280px">
+                <strong>Member Activity Tracking</strong>
+                <p class="muted">
                   Show an Active/Inactive badge per member based on event attendance. A member goes
                   <strong>Inactive</strong> after N consecutive absences from events that count, and back to
                   <strong>Active</strong> after M consecutive credited attendances.
-                </div>
+                </p>
                 <label class="customize-form__toggle" style="margin-bottom:10px">
                   <input type="checkbox" name="enableActivityTrackingDraft"
                     [ngModel]="customizeDraft.enableActivityTracking"
@@ -269,7 +283,15 @@
             </div>
 
             <div class="customize-form__row" style="margin-top:24px">
-              <div class="customize-form__row-label" style="font-weight:600;font-size:13px;color:var(--fg);margin-bottom:4px">Hide ToD Mobs</div>
+              <button type="button"
+                      (click)="todHideSectionOpen = !todHideSectionOpen"
+                      [attr.aria-expanded]="todHideSectionOpen ? 'true' : 'false'"
+                      style="width:100%;display:flex;align-items:center;gap:8px;padding:0;background:transparent;border:0;color:var(--fg);font:inherit;font-weight:600;font-size:13px;text-align:left;cursor:pointer;margin-bottom:4px">
+                <span style="display:inline-block;width:10px;font-size:10px;transition:transform 0.15s ease;color:var(--fg-3)"
+                      [style.transform]="todHideSectionOpen ? 'rotate(90deg)' : 'rotate(0deg)'">▶</span>
+                <span>Hide ToD Mobs</span>
+              </button>
+              @if (todHideSectionOpen) {
               <div class="customize-form__row-body">
                 <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
                   Toggle a monster on to hide it from the Tracked Windows panel on the Dashboard and ToDs tab.
@@ -303,6 +325,7 @@
                   </div>
                 }
               </div>
+              }
             </div>
 
             <div class="customize-form__actions">
@@ -332,105 +355,110 @@
               it — that's the separate lock below.
             </p>
 
-            <!-- Current server state -->
-            @if (setGuildId()) {
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-                <span class="tag success">Server set</span>
-                <span><strong>{{ setGuildName() || 'a Discord server' }}</strong></span>
-              </div>
-            } @else {
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-                <span class="tag">No server set</span>
-              </div>
-            }
+            <div class="discord-grid">
+              <!-- Server: set / change / clear -->
+              <div class="discord-inner">
+                <h4>Server</h4>
 
-            <!-- Set / change / clear server -->
-            @if (!canChangeGuildHere()) {
-              <p class="muted" style="font-size:12px">
-                This linkshell is locked to a different server. Open the Activity in that server to
-                change or clear it.
-              </p>
-            } @else if (eligibleGuilds().length > 0) {
-              <label class="customize-form__field" style="max-width:360px">
-                <span>Discord server</span>
-                <select name="guildSetSelect" [(ngModel)]="guildLockSelection">
-                  @for (guild of eligibleGuilds(); track guild.id) {
-                    <option [value]="guild.id">{{ guild.name }}</option>
-                  }
-                </select>
-              </label>
-              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-                <button type="button" class="btn primary" (click)="setSelectedGuild()"
-                  [disabled]="!guildLockSelection || activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                  {{ setGuildId() ? 'Change server' : 'Set server' }}
-                </button>
                 @if (setGuildId()) {
-                  <button type="button" class="btn ghost" (click)="clearGuild()"
-                    [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                    Clear server
-                  </button>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+                    <span class="pill is-success">✓ Server set</span>
+                    <span><strong>{{ setGuildName() || 'a Discord server' }}</strong></span>
+                  </div>
+                } @else {
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+                    <span class="pill is-muted">No server set</span>
+                  </div>
+                }
+
+                @if (!canChangeGuildHere()) {
+                  <p class="muted" style="font-size:12px">
+                    This linkshell is locked to a different server. Open the Activity in that server to
+                    change or clear it.
+                  </p>
+                } @else if (eligibleGuilds().length > 0) {
+                  <label class="route-field" style="max-width:360px">
+                    <span>Discord server</span>
+                    <select name="guildSetSelect" [(ngModel)]="guildLockSelection">
+                      @for (guild of eligibleGuilds(); track guild.id) {
+                        <option [value]="guild.id">{{ guild.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                    <button type="button" class="btn primary" (click)="setSelectedGuild()"
+                      [disabled]="!guildLockSelection || activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                      {{ setGuildId() ? 'Change server' : 'Set server' }}
+                    </button>
+                    @if (setGuildId()) {
+                      <button type="button" class="btn ghost" (click)="clearGuild()"
+                        [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                        Clear server
+                      </button>
+                    }
+                  </div>
+                  <p class="muted" style="font-size:12px;margin-top:10px">
+                    Only servers the LSM bot and you are both in are listed.
+                  </p>
+                } @else if (currentGuildId()) {
+                  <label class="route-field" style="max-width:360px">
+                    <span>Discord server name</span>
+                    <input type="text" name="guildSetName" maxlength="256"
+                      placeholder="e.g. My Linkshell Server"
+                      [(ngModel)]="guildLockNameDraft" />
+                  </label>
+                  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                    <button type="button" class="btn primary" (click)="setToCurrentGuild()"
+                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                      Set to this server
+                    </button>
+                    @if (setGuildId()) {
+                      <button type="button" class="btn ghost" (click)="clearGuild()"
+                        [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                        Clear server
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  <div class="empty-state empty-state--compact">
+                    <div class="empty-state-desc">
+                      No servers available — make sure the LSM bot is in your Discord server, then reopen this page.
+                    </div>
+                  </div>
                 }
               </div>
-              <p class="muted" style="font-size:12px;margin-top:8px">
-                Only servers the LSM bot and you are both in are listed.
-              </p>
-            } @else if (currentGuildId()) {
-              <label class="customize-form__field" style="max-width:360px">
-                <span>Discord server name</span>
-                <input type="text" name="guildSetName" maxlength="256"
-                  placeholder="e.g. My Linkshell Server"
-                  [(ngModel)]="guildLockNameDraft" />
-              </label>
-              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-                <button type="button" class="btn primary" (click)="setToCurrentGuild()"
-                  [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                  Set to this server
-                </button>
-                @if (setGuildId()) {
-                  <button type="button" class="btn ghost" (click)="clearGuild()"
-                    [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                    Clear server
-                  </button>
-                }
-              </div>
-            } @else {
-              <div class="empty-state empty-state--compact">
-                <div class="empty-state-desc">
-                  No servers available — make sure the LSM bot is in your Discord server, then reopen this page.
-                </div>
-              </div>
-            }
 
-            <!-- Separate access lock -->
-            <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:14px;padding-top:12px">
-              <strong>Lock access to this server</strong>
-              <p class="muted" style="font-size:12px">
-                Optional. When on, members can only open this linkshell from the set Discord server.
-                Leave off to let members view it from anywhere (the default).
-              </p>
-              @if (!setGuildId()) {
-                <span class="tag">Set a server above to enable the lock.</span>
-              } @else if (!canToggleGuildLockHere()) {
-                <p class="muted" style="font-size:12px">
-                  Open the Activity in this linkshell's Discord server to change the lock.
+              <!-- Separate access lock -->
+              <div class="discord-inner">
+                <h4>Lock access to this server</h4>
+                <p class="muted" style="font-size:12px;margin-bottom:12px">
+                  Optional. When on, members can only open this linkshell from the set Discord server.
+                  Leave off to let members view it from anywhere (the default).
                 </p>
-              } @else {
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
-                  @if (isGuildLocked()) {
-                    <span class="tag success">Locked</span>
-                    <button type="button" class="btn warn" (click)="toggleGuildLock()"
-                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                      Unlock (allow any server)
-                    </button>
-                  } @else {
-                    <span class="tag">Not locked</span>
-                    <button type="button" class="btn primary" (click)="toggleGuildLock()"
-                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
-                      Lock to this server
-                    </button>
-                  }
-                </div>
-              }
+                @if (!setGuildId()) {
+                  <span class="pill is-muted">Set a server above to enable the lock.</span>
+                } @else if (!canToggleGuildLockHere()) {
+                  <p class="muted" style="font-size:12px">
+                    Open the Activity in this linkshell's Discord server to change the lock.
+                  </p>
+                } @else {
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    @if (isGuildLocked()) {
+                      <span class="pill is-success">🔒 Locked</span>
+                      <button type="button" class="btn warn" (click)="toggleGuildLock()"
+                        [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                        Unlock (allow any server)
+                      </button>
+                    } @else {
+                      <span class="pill is-muted">🔒 Not locked</span>
+                      <button type="button" class="btn primary" (click)="toggleGuildLock()"
+                        [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">
+                        Lock to this server
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
             </div>
           </div>
         </div>
@@ -446,9 +474,9 @@
           </div>
           <div class="card-body">
             <p class="muted">
-              The bot posts announcements here so members can sign up to a job right in Discord.
-              HENM events go to the HENM channel, KSNM to the KSNM channel, everything else to
-              "Other events"; auctions and loot post to their own channels.
+              Add a route for each channel the bot should post to, then tick which kinds of post it
+              receives. Combine several into one channel, or give each its own. Events can optionally
+              be limited to specific event types (an unfiltered event route catches the rest).
             </p>
 
             @if (!discordGuildConfigured()) {
@@ -458,34 +486,88 @@
               </p>
             }
 
-            @for (row of discordChannelRows(); track row.purpose) {
-              <label class="customize-form__field" style="max-width:420px;margin-bottom:8px">
-                <span>{{ row.label }}</span>
-                @if (discordChannelsAvailable().length > 0) {
-                  <select [name]="'chan_' + row.purpose"
-                    [ngModel]="row.channelId"
-                    (ngModelChange)="onDiscordChannelChange(row.purpose, $event)">
-                    <option value="">— none —</option>
-                    @for (channel of discordChannelsAvailable(); track channel.id) {
-                      <option [value]="channel.id">#{{ channel.name }}</option>
+            @for (route of channelRoutes; track $index) {
+              <div class="route-card" [class.is-compact]="!route.postEvents" [class.is-saved]="isRouteSaved(route)">
+                <div class="route-main">
+                  <div class="route-top">
+                    <label class="route-field grow">
+                      <span>Name <em style="font-style:italic;color:var(--fg-3);font-weight:500">(optional)</em></span>
+                      <input type="text" maxlength="64" placeholder="e.g. Sky alerts"
+                        [name]="'rname_' + $index" [(ngModel)]="route.name" (ngModelChange)="markRouteDirty(route)" />
+                    </label>
+                    <label class="route-field grow">
+                      <span>Channel</span>
+                      @if (discordChannelsAvailable().length > 0) {
+                        <select [name]="'rchan_' + $index" [(ngModel)]="route.channelId" (ngModelChange)="markRouteDirty(route)">
+                          <option value="">— pick a channel —</option>
+                          @for (channel of discordChannelsAvailable(); track channel.id) {
+                            <option [value]="channel.id">#{{ channel.name }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input type="text" inputmode="numeric" maxlength="20" placeholder="Channel ID"
+                          [name]="'rchan_' + $index" [(ngModel)]="route.channelId" (ngModelChange)="markRouteDirty(route)" />
+                      }
+                    </label>
+                    <button type="button" class="btn ghost sm route-remove" (click)="removeRoute(route)">Remove</button>
+                  </div>
+
+                  <div class="post-types">
+                    @for (pt of channelPostTypes(); track pt.key) {
+                      <label class="check">
+                        @switch (pt.key) {
+                          @case ('Events') { <input type="checkbox" [name]="'pe_' + $index" [(ngModel)]="route.postEvents" (ngModelChange)="markRouteDirty(route)" /> }
+                          @case ('Loot') { <input type="checkbox" [name]="'pl_' + $index" [(ngModel)]="route.postLoot" (ngModelChange)="markRouteDirty(route)" /> }
+                          @case ('Auctions') { <input type="checkbox" [name]="'pa_' + $index" [(ngModel)]="route.postAuctions" (ngModelChange)="markRouteDirty(route)" /> }
+                          @case ('Attendance') { <input type="checkbox" [name]="'pt_' + $index" [(ngModel)]="route.postAttendance" (ngModelChange)="markRouteDirty(route)" /> }
+                          @case ('TodBoard') { <input type="checkbox" [name]="'pd_' + $index" [(ngModel)]="route.postTodBoard" (ngModelChange)="markRouteDirty(route)" /> }
+                        }
+                        <span>{{ pt.label }}</span>
+                      </label>
                     }
-                  </select>
-                } @else {
-                  <input type="text" inputmode="numeric" maxlength="20"
-                    placeholder="Channel ID (or leave blank)"
-                    [name]="'chan_' + row.purpose"
-                    [ngModel]="row.channelId"
-                    (ngModelChange)="onDiscordChannelChange(row.purpose, $event)" />
+                    <!-- Per-route save: shows green "Saved" once persisted, "Save route" when edited. -->
+                    <button type="button" class="btn sm route-save"
+                      [class.primary]="!isRouteSaved(route)"
+                      [class.is-saved]="isRouteSaved(route)"
+                      [disabled]="!route.channelId || isRouteSaved(route) || activity.busyDiscordChannels() || !!channelRoutesError()"
+                      (click)="saveDiscordChannels()">
+                      {{ isRouteSaved(route) ? '✓ Saved' : 'Save route' }}
+                    </button>
+                  </div>
+                </div>
+
+                @if (route.postEvents) {
+                  <div class="event-filter">
+                    <h4>Event types <span>(leave all unchecked = all events)</span></h4>
+                    <div class="event-grid">
+                      @for (et of channelEventTypes(); track et) {
+                        <label class="check">
+                          <input type="checkbox"
+                            [checked]="isEventTypeOn(route, et)"
+                            (change)="toggleEventType(route, et, $any($event.target).checked)" />
+                          <span>{{ et }}</span>
+                        </label>
+                      }
+                    </div>
+                  </div>
                 }
-              </label>
+              </div>
             }
 
-            <div style="margin-top:10px">
+            <div class="routes-footer">
+              <button type="button" class="btn ghost sm" (click)="addRoute()">+ Add route</button>
               <button type="button" class="btn primary" (click)="saveDiscordChannels()"
-                [disabled]="activity.busyDiscordChannels()">
+                [disabled]="activity.busyDiscordChannels() || !!channelRoutesError()">
                 {{ activity.busyDiscordChannels() ? 'Saving…' : 'Save channels' }}
               </button>
+              @if (channelRoutesError(); as err) {
+                <span class="routes-error">{{ err }}</span>
+              }
             </div>
+            <p class="muted" style="font-size:12px;margin-top:10px">
+              A specific event-type route wins over an unfiltered one; each of Loot / Auctions /
+              Attendance / ToD goes to its single assigned channel.
+            </p>
           </div>
         </div>
       }
@@ -708,6 +790,11 @@
   </div>
 }
 
+<!-- These modals render outside the main .panel-tab above, so wrap them in a
+     .panel-tab context (the fixed-position backdrops give it zero height) to
+     pick up the shared .btn / .btn.primary styling like the rest of the tab. -->
+<div class="panel-tab">
+
 <!-- Entry modal: confirm/choose which linkshell is about to be edited. -->
 @if (entryModalOpen() && dashboardLinkshells().length > 0) {
   <div class="addon-modal-backdrop">
@@ -759,3 +846,5 @@
     </div>
   </div>
 }
+
+</div>

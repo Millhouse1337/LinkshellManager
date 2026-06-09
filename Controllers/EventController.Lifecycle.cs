@@ -81,41 +81,6 @@ public partial class EventController
                     g => (IReadOnlyDictionary<int, EventPartySlotSignup>)g.ToDictionary(s => s.PartySetupSlotId, s => s));
             var emptySignups = (IReadOnlyDictionary<int, EventPartySlotSignup>)new Dictionary<int, EventPartySlotSignup>();
 
-            static PartySetupBoardViewModel BuildBoard(PartySetup ps, IReadOnlyDictionary<int, EventPartySlotSignup> sign) => new()
-            {
-                Id = ps.Id,
-                Name = ps.Name,
-                Alliances = ps.Alliances.OrderBy(a => a.SortOrder).Select(a => new PartySetupAllianceView
-                {
-                    Name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
-                    Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
-                    {
-                        Name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
-                        Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s =>
-                        {
-                            sign.TryGetValue(s.Id, out var su);
-                            return new PartySetupSlotView
-                            {
-                                SlotId = s.Id,
-                                Position = s.SortOrder + 1,
-                                RequirementType = s.RequirementType,
-                                Role = s.Role,
-                                MainJob = s.MainJob,
-                                SubJob = s.SubJob,
-                                Label = s.Label,
-                                IsPartyLeader = s.IsPartyLeader,
-                                SignedUpAppUserId = su?.AppUserId,
-                                SignedUpCharacterName = su?.CharacterName,
-                                SignedUpIsPartyLeader = su?.IsPartyLeader ?? false,
-                                SignedUpRole = su?.Role,
-                                SignedUpMainJob = su?.MainJob,
-                                SignedUpSubJob = su?.SubJob
-                            };
-                        }).ToList()
-                    }).ToList()
-                }).ToList()
-            };
-
             foreach (var evt in events.Where(e => e.PartySetupId.HasValue))
             {
                 if (!templatesById.TryGetValue(evt.PartySetupId!.Value, out var template))
@@ -123,7 +88,7 @@ public partial class EventController
                     continue;
                 }
                 signupsByEvent.TryGetValue(evt.Id, out var sign);
-                boardsByEvent[evt.Id] = BuildBoard(template, sign ?? emptySignups);
+                boardsByEvent[evt.Id] = BuildPartySetupBoard(template, sign ?? emptySignups);
             }
         }
 
@@ -313,7 +278,23 @@ public partial class EventController
         if (!result.Success)
         {
             TempData["Error"] = result.Error;
+            return SafeLocalRedirect(returnUrl);
         }
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // A simultaneous claim won this slot first and tripped the unique
+            // (EventId, PartySetupSlotId) index. Surface the friendly message
+            // instead of a 500.
+            TempData["Error"] = "That slot was just taken by another member. Pick another open slot.";
+            return SafeLocalRedirect(returnUrl);
+        }
+        // Pre-start: drop their no-slot attendance. Live: materialize the claim as a
+        // participation so a late joiner lands in the running event immediately.
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_context, eventEntity, user.Id, HttpContext.RequestAborted);
         await _context.SaveChangesAsync();
         // Auto-promote earliest signup if the party just filled with no leader.
         await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, slot.PartySetupPartyId, HttpContext.RequestAborted);
@@ -321,10 +302,53 @@ public partial class EventController
         return SafeLocalRedirect(returnUrl);
     }
 
-    // Drop the member's slot in this event.
+    // Builds a per-event party board (the template tree with this event's slot
+    // signups overlaid). Shared by the queued Index view and the live Start view so
+    // both render the same alliance → party → slot board. `sign` maps slot id → the
+    // event's signup for that slot.
+    internal static PartySetupBoardViewModel BuildPartySetupBoard(
+        PartySetup ps, IReadOnlyDictionary<int, EventPartySlotSignup> sign) => new()
+    {
+        Id = ps.Id,
+        Name = ps.Name,
+        Alliances = ps.Alliances.OrderBy(a => a.SortOrder).Select(a => new PartySetupAllianceView
+        {
+            Name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
+            Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
+            {
+                Name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
+                Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s =>
+                {
+                    sign.TryGetValue(s.Id, out var su);
+                    return new PartySetupSlotView
+                    {
+                        SlotId = s.Id,
+                        Position = s.SortOrder + 1,
+                        RequirementType = s.RequirementType,
+                        Role = s.Role,
+                        MainJob = s.MainJob,
+                        SubJob = s.SubJob,
+                        Label = s.Label,
+                        IsPartyLeader = s.IsPartyLeader,
+                        SignedUpAppUserId = su?.AppUserId,
+                        SignedUpCharacterName = su?.CharacterName,
+                        SignedUpIsPartyLeader = su?.IsPartyLeader ?? false,
+                        SignedUpRole = su?.Role,
+                        SignedUpMainJob = su?.MainJob,
+                        SignedUpSubJob = su?.SubJob
+                    };
+                }).ToList()
+            }).ToList()
+        }).ToList()
+    };
+
+    // Drop a party slot in this event. With no slotId, the caller drops their own
+    // slot (pre-start only). With a slotId (officer "Clear" on the live board), an
+    // officer frees that slot — and, once the event is live, that also removes the
+    // member's participation so the board and the DKP roster stay consistent.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> WithdrawPartySlot(int eventId, string? returnUrl)
+    public async Task<IActionResult> WithdrawPartySlot(int eventId, int? slotId, string? returnUrl)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -338,12 +362,39 @@ public partial class EventController
             return NotFound();
         }
 
-        var leftPartyId = await EventPartySignupService.LeaveAsync(_context, eventId, user.Id, HttpContext.RequestAborted);
-        if (leftPartyId is not null)
+        var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
+        var isOfficer = CanManageLinkshell(membership);
+
+        var signup = slotId is { } sid
+            ? await _context.EventPartySlotSignups.Include(s => s.PartySetupSlot)
+                .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == sid)
+            : await _context.EventPartySlotSignups.Include(s => s.PartySetupSlot)
+                .FirstOrDefaultAsync(s => s.EventId == eventId && s.AppUserId == user.Id);
+        if (signup is null)
         {
-            await _context.SaveChangesAsync();
-            await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, leftPartyId, HttpContext.RequestAborted);
+            return SafeLocalRedirect(returnUrl);
         }
+
+        var isHolder = signup.AppUserId == user.Id;
+        // Once live, only an officer can clear a slot — no member self-withdraw mid-run.
+        if (!EventPartySignupService.MemberCanWithdraw(eventEntity) && !isOfficer)
+        {
+            TempData["Error"] = "The event is live — ask an officer to free your slot.";
+            return SafeLocalRedirect(returnUrl);
+        }
+        if (!isHolder && !isOfficer)
+        {
+            return Forbid();
+        }
+
+        var affectedPartyId = signup.PartySetupSlot?.PartySetupPartyId;
+        _context.EventPartySlotSignups.Remove(signup);
+        if (eventEntity.CommencementStartTime is not null && signup.AppUserId is not null)
+        {
+            await EventPartySignupService.RemoveParticipationAsync(_context, eventId, signup.AppUserId, HttpContext.RequestAborted);
+        }
+        await _context.SaveChangesAsync();
+        await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, affectedPartyId, HttpContext.RequestAborted);
 
         return SafeLocalRedirect(returnUrl);
     }

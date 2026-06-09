@@ -100,6 +100,21 @@ public sealed partial class ActivityDataController
             _dbContext, eventId, slot, appUser.Id, characterName, request.Role, request.MainJob, request.SubJob,
             cancellationToken, request.AsLeader);
         if (!result.Success) return BadRequest(new { error = result.Error });
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Lost the race: another member's claim for this slot committed first
+            // and tripped the unique (EventId, PartySetupSlotId) index. Report it
+            // as a conflict rather than a 500 so the client shows "slot taken".
+            return Conflict(new { error = "That slot was just taken by another member. Pick another open slot." });
+        }
+
+        // Pre-start: drop their no-slot attendance. Live: materialize the claim as a
+        // participation so a late joiner lands in the running event immediately.
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_dbContext, ev, appUser.Id, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Auto-promote the earliest signup to leader if the party just filled
@@ -127,13 +142,25 @@ public sealed partial class ActivityDataController
         if (signup is not null)
         {
             // The holder can drop their own slot; an officer with CanManageParties
-            // can clear anyone's.
+            // can clear anyone's. Once the event is LIVE, only an officer can clear
+            // a slot — members can't self-withdraw mid-run.
+            var isOfficer = await CanAsync(membership, r => r.CanManageParties, cancellationToken);
             var isHolder = signup.AppUserId == appUser.Id;
-            if (!isHolder && !await CanAsync(membership, r => r.CanManageParties, cancellationToken))
+            if (ev.CommencementStartTime is not null && !isOfficer)
+            {
+                return BadRequest(new { error = "The event is live — ask an officer to free your slot." });
+            }
+            if (!isHolder && !isOfficer)
             {
                 return Forbid();
             }
             _dbContext.EventPartySlotSignups.Remove(signup);
+            // An officer clearing a slot mid-run also drops the live participation so
+            // the board and the DKP roster stay consistent.
+            if (ev.CommencementStartTime is not null && signup.AppUserId is not null)
+            {
+                await EventPartySignupService.RemoveParticipationAsync(_dbContext, eventId, signup.AppUserId, cancellationToken);
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 

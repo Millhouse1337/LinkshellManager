@@ -1,5 +1,6 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -26,7 +27,8 @@ public partial class EventController
             .Include(evt => evt.AttendanceWindows)
                 .ThenInclude(window => window.Attendees)
                     .ThenInclude(attendee => attendee.AppUserEvent)
-            .Include(evt => evt.PartySetup)
+            .Include(evt => evt.PartySetup!)
+                .ThenInclude(ps => ps!.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
             .FirstOrDefaultAsync(evt => evt.Id == eventId);
 
         if (eventToStart is null)
@@ -129,6 +131,23 @@ public partial class EventController
                 })
                 .ToList()
         };
+
+        // Overlay the per-event party board so the live view can show it interactively
+        // (open slots are claimable as a late join into a slot).
+        if (eventToStart.PartySetup is not null)
+        {
+            var signups = await EventPartySignupService.GetSignupsForEventAsync(_context, eventId, HttpContext.RequestAborted);
+            model.LinkedPartySetupBoard = BuildPartySetupBoard(eventToStart.PartySetup, signups);
+            model.CurrentUserOwnsLinkedPartySetupSlot = model.LinkedPartySetupBoard.Alliances
+                .SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+                .Any(s => s.SignedUpAppUserId == user.Id);
+        }
+
+        ViewBag.CurrentAppUserId = user.Id;
+        ViewBag.CanManageParties = CanManageLinkshell(membership);
+        ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
+        ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
+        ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
 
         return View(model);
     }

@@ -10,7 +10,6 @@ namespace LinkshellManagerDiscordApp.Data
         // Singleton queues; nullable + defaulted so design-time / reflection
         // construction of the context never fails when they aren't supplied.
         private readonly DiscordTodBoardQueue? _todBoardQueue;
-        private readonly DiscordDkpSpendQueue? _dkpSpendQueue;
         private readonly DiscordAuctionChannelQueue? _auctionChannelQueue;
         private readonly DiscordEventChannelQueue? _eventChannelQueue;
         private readonly DiscordEventEndedQueue? _eventEndedQueue;
@@ -24,7 +23,6 @@ namespace LinkshellManagerDiscordApp.Data
         public ApplicationDbContext(
             DbContextOptions<ApplicationDbContext> options,
             DiscordTodBoardQueue? todBoardQueue = null,
-            DiscordDkpSpendQueue? dkpSpendQueue = null,
             DiscordAuctionChannelQueue? auctionChannelQueue = null,
             DiscordEventChannelQueue? eventChannelQueue = null,
             DiscordLootChannelQueue? lootChannelQueue = null,
@@ -35,7 +33,6 @@ namespace LinkshellManagerDiscordApp.Data
             : base(options)
         {
             _todBoardQueue = todBoardQueue;
-            _dkpSpendQueue = dkpSpendQueue;
             _auctionChannelQueue = auctionChannelQueue;
             _eventChannelQueue = eventChannelQueue;
             _lootChannelQueue = lootChannelQueue;
@@ -78,45 +75,6 @@ namespace LinkshellManagerDiscordApp.Data
             foreach (var id in linkshellIds)
             {
                 _todBoardQueue.Enqueue(id);
-            }
-        }
-
-        // New DKP-spend ledger rows (any negative Amount — auction win,
-        // loot-edit, negative adjustment/audit). Captured pre-save as entity
-        // references because the db-generated Id isn't known until after the
-        // commit; the id is read and enqueued only on success so the DKP
-        // spend log fires from every spend path without per-controller wiring.
-        private List<DkpLedgerEntry> CollectAddedDkpSpends()
-        {
-            if (_dkpSpendQueue is null)
-            {
-                return new List<DkpLedgerEntry>();
-            }
-            var spends = new List<DkpLedgerEntry>();
-            foreach (var entry in ChangeTracker.Entries<DkpLedgerEntry>())
-            {
-                if (entry.State == EntityState.Added
-                    && entry.Entity.Amount < 0
-                    && entry.Entity.LinkshellId > 0)
-                {
-                    spends.Add(entry.Entity);
-                }
-            }
-            return spends;
-        }
-
-        private void EnqueueDkpSpends(IReadOnlyList<DkpLedgerEntry> spends)
-        {
-            if (_dkpSpendQueue is null)
-            {
-                return;
-            }
-            foreach (var spend in spends)
-            {
-                if (spend.Id > 0)
-                {
-                    _dkpSpendQueue.Enqueue(spend.Id);
-                }
             }
         }
 
@@ -688,7 +646,6 @@ namespace LinkshellManagerDiscordApp.Data
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             var affected = CollectChangedTodLinkshellIds();
-            var dkpSpends = CollectAddedDkpSpends();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var editedEvents = CollectEditedEvents();
@@ -701,7 +658,6 @@ namespace LinkshellManagerDiscordApp.Data
             var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             EnqueueTodBoardRefreshes(affected);
-            EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueEventPosts(editedEvents);
@@ -718,7 +674,6 @@ namespace LinkshellManagerDiscordApp.Data
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             var affected = CollectChangedTodLinkshellIds();
-            var dkpSpends = CollectAddedDkpSpends();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var editedEvents = CollectEditedEvents();
@@ -730,7 +685,6 @@ namespace LinkshellManagerDiscordApp.Data
             var liveChanges = CollectLiveChanges();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
-            EnqueueDkpSpends(dkpSpends);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueEventPosts(editedEvents);
@@ -789,6 +743,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
         public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
+        public DbSet<LinkshellChannelRoute> LinkshellChannelRoutes => Set<LinkshellChannelRoute>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -1313,6 +1268,21 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.TodBoardMessageId).HasMaxLength(32);
                 entity.HasOne(item => item.Linkshell)
                     .WithMany(linkshell => linkshell.DiscordWebhooks)
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => item.LinkshellId);
+            });
+
+            builder.Entity<LinkshellChannelRoute>(entity =>
+            {
+                entity.ToTable("LinkshellChannelRoutes");
+                entity.Property(item => item.Name).HasMaxLength(64);
+                entity.Property(item => item.ChannelId).HasMaxLength(20).IsRequired();
+                entity.Property(item => item.ChannelName).HasMaxLength(128);
+                entity.Property(item => item.EventTypeFilter).HasMaxLength(256);
+                entity.Property(item => item.TodBoardMessageId).HasMaxLength(32);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany(linkshell => linkshell.ChannelRoutes)
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => item.LinkshellId);

@@ -53,6 +53,20 @@
   position: relative;
   padding: 4px 14px 4px 36px;
 }
+// The Recent Activity card sits at the bottom of the dashboard; its filter tabs
+// (All/Kills/Claims/Events/Loot) have different row counts. Pin the feed to a
+// constant height with internal scroll so switching tabs never changes the page
+// height (no scroll jump / re-scroll). The empty state holds the same height.
+.panel-tab .activity-card .activity-feed {
+  height: 420px;
+  overflow-y: auto;
+}
+.panel-tab .activity-card .empty-state {
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .panel-tab .activity-feed::before {
   content: "";
   position: absolute;

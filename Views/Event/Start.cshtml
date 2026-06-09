@@ -186,6 +186,95 @@
             </div>
         }
 
+        @if (Model.LinkedPartySetupBoard is { } board)
+        {
+            var psReturnUrl = Url.Action("Start", "Event", new { eventId = Model.Event.Id });
+            var canManageParties = ViewBag.CanManageParties is true;
+            var roleOpts = ViewBag.SignUpRoleOptions as List<string> ?? jobTypeOptions.ToList();
+            var mainOpts = ViewBag.SignUpMainJobOptions as List<string> ?? mainJobOptions.ToList();
+            var subOpts = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList();
+            <div class="card" style="margin-top:16px">
+                <div class="card-head">
+                    <div class="card-title">Party Board</div>
+                    <span class="muted" style="font-size:12px">Claim an open slot to late-join into the party setup.</span>
+                </div>
+                <div class="event-ps-panel" style="padding:12px 16px">
+                    @if (!board.Alliances.Any())
+                    {
+                        <div class="event-ps-empty">This party setup has no alliances yet.</div>
+                    }
+                    @foreach (var alliance in board.Alliances)
+                    {
+                        <div class="event-ps-alliance-title">@alliance.Name</div>
+                        <div class="event-ps-party-grid">
+                            @foreach (var party in alliance.Parties)
+                            {
+                                <div class="event-ps-party">
+                                    <div class="event-ps-party__head"><span>@party.Name</span><span class="event-ps-party__count">@party.Slots.Count</span></div>
+                                    @{ var partyHasLeader = party.Slots.Any(s => s.SignedUpIsPartyLeader); }
+                                    @foreach (var slot in party.Slots)
+                                    {
+                                        var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
+                                        var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
+                                        var slotRequiresSub = !string.IsNullOrWhiteSpace(slot.SubJob);
+                                        <div class="event-ps-slot @(slot.IsPartyLeader ? "event-ps-slot--leader" : null)">
+                                            <div class="event-ps-slot__label">
+                                                @if (slot.IsPartyLeader) { <span class="event-ps-leader-tag" title="Party leader">Leader</span> }
+                                                <span>@slot.Display</span>
+                                            </div>
+                                            @if (slot.IsOpen)
+                                            {
+                                                <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@Model.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="returnUrl" value="@psReturnUrl" />
+                                                    @if (!slotRequiresRole)
+                                                    {
+                                                        <select name="role" required class="form-select"><option value="">Role…</option>@foreach (var r in roleOpts) { <option value="@r">@r</option> }</select>
+                                                    }
+                                                    @if (!slotRequiresMain)
+                                                    {
+                                                        <select name="mainJob" required class="form-select"><option value="">Main…</option>@foreach (var j in mainOpts) { <option value="@j">@j</option> }</select>
+                                                    }
+                                                    @if (!slotRequiresSub)
+                                                    {
+                                                        <select name="subJob" class="form-select"><option value="">Sub (opt)</option>@foreach (var j in subOpts) { <option value="@j">@j</option> }</select>
+                                                    }
+                                                    <button type="submit" name="asLeader" value="false" class="btn primary sm">Sign up</button>
+                                                    @if (!partyHasLeader)
+                                                    {
+                                                        <button type="submit" name="asLeader" value="true" class="btn sm" title="Claim this party's leader spot">👑 Leader</button>
+                                                    }
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <div class="event-ps-slot__controls">
+                                                    <span class="event-ps-chip @(slot.SignedUpAppUserId == currentUserId ? "event-ps-chip--mine" : null)">
+                                                        @if (slot.SignedUpIsPartyLeader) { <span title="Party leader">👑</span> }
+                                                        @slot.SignedUpCharacterName@(slot.SignedUpAppUserId == currentUserId ? " (you)" : "")
+                                                        @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay)) { <span class="muted">· @slot.SignedUpJobsDisplay</span> }
+                                                    </span>
+                                                    @if (canManageParties)
+                                                    {
+                                                        <form asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@Model.Event.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="returnUrl" value="@psReturnUrl" />
+                                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)" title="Free this slot (also removes them from the live roster)">Clear</button>
+                                                        </form>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    @if (!party.Slots.Any()) { <div class="event-ps-empty">No slots.</div> }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
         <div class="card" style="margin-top:16px">
             <div class="card-head">
                 <div class="card-title">Participants <span class="tag">@Model.AppUserEvents.Count</span></div>

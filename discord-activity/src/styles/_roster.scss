@@ -61,7 +61,7 @@
 }
 .panel-tab .ac-roster--with-actions .ac-roster-head,
 .panel-tab .ac-roster--with-actions .ac-roster-row {
-  grid-template-columns: 32px 1fr 110px 90px 90px 180px;
+  grid-template-columns: 32px 1fr 110px 90px 90px 272px;
 }
 .panel-tab .ac-roster--with-actions .ac-roster-actions {
   grid-column: auto;
@@ -72,6 +72,10 @@
   border-top: 0;
   justify-content: flex-end;
   flex-wrap: nowrap;
+}
+// Keep each action label on a single line (no "View / Profile" two-line wrap).
+.panel-tab .ac-roster--with-actions .ac-roster-actions .btn {
+  white-space: nowrap;
 }
 .panel-tab .ac-roster--with-actions .ac-roster-rank select {
   width: 100%;

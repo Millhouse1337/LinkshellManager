@@ -201,6 +201,34 @@
 
     <div class="card" style="margin-bottom:16px">
         <div class="card-head">
+            <div class="card-title">Event Board Theme</div>
+        </div>
+        <div style="padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:12px;color:var(--fg-3)">
+                Colour palette for the event signup board image posted to your Discord channel.
+                Applies the next time a board is posted or refreshed.
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+                @foreach (var theme in LinkshellManagerDiscordApp.Services.EventBoardThemes.All)
+                {
+                    var selected = string.Equals(Model.EventBoardTheme, theme.Key, StringComparison.OrdinalIgnoreCase);
+                    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid @(selected ? theme.SwatchAccent : "var(--border)");background:var(--surface)">
+                        <input type="radio" asp-for="EventBoardTheme" value="@theme.Key" style="margin:0" />
+                        <span style="width:34px;height:34px;border-radius:8px;flex-shrink:0;background:@theme.SwatchBg;border:2px solid @theme.SwatchAccent;box-shadow:0 0 10px @theme.SwatchAccent;display:flex;align-items:center;justify-content:center">
+                            <span style="width:12px;height:12px;border-radius:3px;transform:rotate(45deg);background:@theme.SwatchAccent"></span>
+                        </span>
+                        <strong style="font-size:13px">@theme.DisplayName</strong>
+                    </label>
+                }
+            </div>
+            <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
+                <button class="btn primary" type="submit">Save changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
             <div class="card-title">Hide ToD Mobs</div>
         </div>
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
@@ -229,77 +257,6 @@
         </div>
     </div>
 
-    <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-            <div class="card-title">Discord Integration</div>
-        </div>
-        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:12px;color:var(--fg-3)">
-                Add as many channels as you like and give each one a name, then tick what each
-                channel should receive. In Discord: Channel Settings &rarr; Integrations &rarr;
-                Webhooks &rarr; New Webhook &rarr; Copy URL.
-            </div>
-            <div id="discordWebhookRows" style="display:flex;flex-direction:column;gap:10px;max-width:680px">
-                @for (var i = 0; i < Model.DiscordWebhooks.Count; i++)
-                {
-                    <div class="discord-webhook-row" style="display:flex;gap:8px;align-items:flex-start">
-                        <div style="display:flex;flex-direction:column;gap:4px;width:170px">
-                            <input class="input" type="text" data-field="Name" name="DiscordWebhooks[@i].Name"
-                                   value="@Model.DiscordWebhooks[i].Name" placeholder="Name (e.g. Main LS)"
-                                   maxlength="64" autocomplete="off" />
-                        </div>
-                        <div style="display:flex;flex-direction:column;gap:4px;flex:1">
-                            <input class="input" type="url" data-field="Url" name="DiscordWebhooks[@i].Url"
-                                   value="@Model.DiscordWebhooks[i].Url"
-                                   placeholder="https://discord.com/api/webhooks/..." autocomplete="off" />
-                            @Html.ValidationMessage($"DiscordWebhooks[{i}].Url", new { @class = "text-danger", style = "font-size:12px" })
-                        </div>
-                        @{
-                            var wh = Model.DiscordWebhooks[i];
-                            var selectedPurpose = !string.IsNullOrEmpty(wh.Purpose)
-                                ? wh.Purpose!
-                                : DiscordWebhookInput.PurposeFor(
-                                    wh.PostAttendanceSnapshot, wh.PostTodBoard, wh.PostDkpSpendLog, wh.PostAuctions);
-                        }
-                        <select class="input" data-field="Purpose" name="DiscordWebhooks[@i].Purpose"
-                                style="width:170px;margin-top:0"
-                                title="What this channel receives">
-                            <option value="@DiscordWebhookInput.PurposeNone"
-                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeNone)">— No posts —</option>
-                            <option value="@DiscordWebhookInput.PurposeDkpTracking"
-                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeDkpTracking)">DKP Tracking</option>
-                            <option value="@DiscordWebhookInput.PurposePopTracker"
-                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposePopTracker)">Pop Tracker</option>
-                            <option value="@DiscordWebhookInput.PurposeSpentPoints"
-                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeSpentPoints)">Spent Points</option>
-                            <option value="@DiscordWebhookInput.PurposeAuctions"
-                                    selected="@(selectedPurpose == DiscordWebhookInput.PurposeAuctions)">Auctions</option>
-                        </select>
-                        <button type="button" class="btn ghost sm discord-webhook-remove"
-                                style="margin-top:5px" title="Remove this webhook">Remove</button>
-                    </div>
-                }
-            </div>
-            <div>
-                <button type="button" class="btn ghost sm" id="discordWebhookAdd">+ Add webhook</button>
-            </div>
-            <span style="color:var(--fg-3);font-size:12px">
-                Clear a row's URL (or Remove it) and save to delete that webhook. No webhooks = Discord posting disabled.
-                Each channel receives one thing — pick it from the dropdown.
-                <strong>DKP Tracking</strong> posts each <code>/lsm now</code> attendance snapshot
-                (party-grouped embed) to that channel.
-                <strong>Pop Tracker</strong> keeps a single, always-current ToD list in that channel
-                (one message that's edited in place whenever a ToD changes — never re-posted).
-                <strong>Spent Points</strong> posts every DKP spend (auction win, loot-edit, adjustment)
-                to that channel as it happens — one embed per batch of spends.
-                <strong>Auctions</strong> posts an embed when an auction opens and another with the
-                final results when it closes.
-            </span>
-            <div style="display:flex;justify-content:flex-end;margin-top:8px">
-                <button class="btn primary" type="submit">Save changes</button>
-            </div>
-        </div>
-    </div>
 
 </form>
 
@@ -408,33 +365,104 @@
     </div>
 </div>
 
-<!-- Discord Channels (Phase 2): the bot posts event/auction/loot announcements
-     DIRECTLY to these channels so they can carry interactive sign-up buttons
-     (unlike the webhook rows above, which Discord strips components from). -->
+<!-- Discord channel routes: the bot posts each kind of content to the channel(s)
+     you assign here. Combine several post types into one channel or split them. -->
+@{
+    var availableChannels = Model.AvailableChannels;
+    var eventTypes = LinkshellManagerDiscordApp.Models.EventTypeVocabulary.All;
+
+    async Task RouteRow(int i, LinkshellManagerDiscordApp.ViewModels.ChannelRouteInput r, bool isTemplate)
+    {
+        <div class="route-row" style="border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px">
+            <input type="hidden" data-field="Id" name="channelRoutes[@i].Id" value="@r.Id" />
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                <label class="field" style="flex:1 1 180px">
+                    <span>Name (optional)</span>
+                    <input class="input" type="text" maxlength="64" placeholder="e.g. Sky alerts"
+                           data-field="Name" name="channelRoutes[@i].Name" value="@r.Name" autocomplete="off" />
+                </label>
+                <label class="field" style="flex:1 1 200px">
+                    <span>Channel</span>
+                    @if (availableChannels.Count > 0)
+                    {
+                        <select class="form-select" data-field="ChannelId" name="channelRoutes[@i].ChannelId">
+                            <option value="">— pick a channel —</option>
+                            @foreach (var channel in availableChannels)
+                            {
+                                <option value="@channel.Id" selected="@(!isTemplate && channel.Id == r.ChannelId)">#@channel.Name</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="20"
+                               placeholder="Channel ID" autocomplete="off"
+                               data-field="ChannelId" name="channelRoutes[@i].ChannelId" value="@r.ChannelId" />
+                    }
+                </label>
+                <button type="button" class="btn ghost sm route-remove" style="margin-bottom:2px">Remove</button>
+            </div>
+
+            <div style="display:flex;gap:8px 16px;flex-wrap:wrap">
+                @foreach (var (prop, label, on) in new[]
+                {
+                    ("PostEvents", "Event posts", r.PostEvents),
+                    ("PostLoot", "Loot posts", r.PostLoot),
+                    ("PostAuctions", "Auction posts", r.PostAuctions),
+                    ("PostAttendance", "Attendance posts", r.PostAttendance),
+                    ("PostTodBoard", "ToD board", r.PostTodBoard),
+                })
+                {
+                    <label style="display:flex;align-items:center;gap:6px">
+                        <input type="checkbox" value="true" data-field="@prop" name="channelRoutes[@i].@prop"
+                               checked="@(!isTemplate && on)"
+                               @(prop == "PostEvents" ? "data-events-toggle" : "") />
+                        <input type="hidden" data-field="@prop" name="channelRoutes[@i].@prop" value="false" />
+                        <span>@label</span>
+                    </label>
+                }
+            </div>
+
+            <div class="route-event-types" style="@(!isTemplate && r.PostEvents ? "" : "display:none;")flex-direction:column;gap:4px">
+                <span style="font-size:12px;color:var(--fg-3)">Event types (none checked = all events):</span>
+                <div style="display:flex;gap:6px 14px;flex-wrap:wrap">
+                    @foreach (var et in eventTypes)
+                    {
+                        <label style="display:flex;align-items:center;gap:5px">
+                            <input type="checkbox" value="@et" data-field="EventTypeFilter" name="channelRoutes[@i].EventTypeFilter"
+                                   checked="@(!isTemplate && r.EventTypeFilter.Contains(et))" />
+                            <span>@et</span>
+                        </label>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
 <div class="card fade d2" id="discordChannelsCard" style="margin-bottom:16px">
     <div class="card-head">
-        <div class="card-title">Discord Channels (bot posts here)</div>
+        <div class="card-title">Discord channel routes</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:640px">
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:760px">
         <div style="font-size:12px;color:var(--fg-3)">
-            The LSM bot posts announcements here so members can sign up to a job right inside Discord.
-            <strong>HENM</strong> events post to the HENM channel, <strong>KSNM</strong> to the KSNM channel,
-            and everything else to <strong>Other events</strong>. Requires the bot to be in your server with
-            permission to send messages in the chosen channels.
+            Add a route for each channel the bot should post to, then tick which kinds of post it
+            receives. Combine several into one channel, or give each its own. Events can optionally be
+            limited to specific event types (an unfiltered event route catches the rest). Requires the
+            bot to be in your server with permission to send messages in the chosen channels.
         </div>
 
         @if (string.IsNullOrWhiteSpace(Model.DiscordChannelGuildId))
         {
             <div style="font-size:12px;color:var(--fg-3)">
-                Tip: lock this linkshell to a Discord server (above) so the bot can list your channels in a
-                dropdown. You can still paste channel IDs manually below.
+                Tip: set this linkshell's Discord server (above) so the bot can list your channels in a
+                dropdown. You can still paste channel IDs manually.
             </div>
         }
         else if (Model.AvailableChannels.Count == 0)
         {
             <div style="font-size:12px;color:var(--fg-3)">
                 Couldn't list channels automatically (make sure the LSM bot is in your server). Paste channel
-                IDs manually below — in Discord, with Developer Mode on, right-click a channel &rarr; Copy Channel ID.
+                IDs manually — in Discord, with Developer Mode on, right-click a channel &rarr; Copy Channel ID.
             </div>
         }
 
@@ -442,85 +470,65 @@
               style="display:flex;flex-direction:column;gap:10px">
             @Html.AntiForgeryToken()
             <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
-            @foreach (var row in Model.DiscordChannels)
-            {
-                <div class="field">
-                    <label>@row.Label</label>
-                    @if (Model.AvailableChannels.Count > 0)
-                    {
-                        <select class="form-select" name="channelIds[@row.Purpose]">
-                            <option value="">— none —</option>
-                            @foreach (var channel in Model.AvailableChannels)
-                            {
-                                <option value="@channel.Id" selected="@(channel.Id == row.ChannelId)">#@channel.Name</option>
-                            }
-                        </select>
-                    }
-                    else
-                    {
-                        <input class="input" type="text" name="channelIds[@row.Purpose]" value="@row.ChannelId"
-                               inputmode="numeric" pattern="[0-9]*" maxlength="20" autocomplete="off"
-                               placeholder="Channel ID (or leave blank)" />
-                    }
-                </div>
-            }
-            <div>
+            <div id="routeRows" style="display:flex;flex-direction:column;gap:10px">
+                @for (var i = 0; i < Model.ChannelRoutes.Count; i++)
+                {
+                    await RouteRow(i, Model.ChannelRoutes[i], false);
+                }
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+                <button type="button" class="btn ghost sm" id="routeAdd">+ Add route</button>
                 <button class="btn primary" type="submit">Save channels</button>
             </div>
         </form>
     </div>
 </div>
 
+<template id="routeRowTemplate">
+    @{ await RouteRow(0, new LinkshellManagerDiscordApp.ViewModels.ChannelRouteInput(), true); }
+</template>
+
 <script nonce="@Html.CspNonce()">
     (function () {
-        var rows = document.getElementById('discordWebhookRows');
-        var addBtn = document.getElementById('discordWebhookAdd');
-        if (!rows || !addBtn) { return; }
+        var rows = document.getElementById('routeRows');
+        var addBtn = document.getElementById('routeAdd');
+        var tpl = document.getElementById('routeRowTemplate');
+        if (!rows || !addBtn || !tpl) { return; }
 
-        // Renumber every row's bound fields (by data-field) so the model
-        // binder sees a contiguous DiscordWebhooks[0..n] collection after
-        // add/remove. Covers Name, Url and the Purpose <select>.
+        // Renumber every bound field so the model binder sees a contiguous
+        // channelRoutes[0..n] collection after add/remove.
         function reindex() {
-            var list = rows.querySelectorAll('.discord-webhook-row');
+            var list = rows.querySelectorAll('.route-row');
             for (var i = 0; i < list.length; i++) {
                 list[i].querySelectorAll('[data-field]').forEach(function (el) {
-                    var f = el.getAttribute('data-field');
-                    var prop = /Hidden$/.test(f) ? f.replace(/Hidden$/, '') : f;
-                    el.setAttribute('name', 'DiscordWebhooks[' + i + '].' + prop);
+                    el.setAttribute('name', 'channelRoutes[' + i + '].' + el.getAttribute('data-field'));
                 });
             }
         }
 
-        // Reset a cloned row to empty so an added webhook starts blank.
-        function resetRow(row) {
-            row.querySelectorAll('input').forEach(function (input) {
-                if (input.type === 'checkbox') { input.checked = false; }
-                else { input.value = ''; }
-            });
-            // The Purpose dropdown back to its first option ("— No posts —").
-            row.querySelectorAll('select').forEach(function (sel) { sel.selectedIndex = 0; });
-            row.querySelectorAll('.text-danger').forEach(function (el) { el.textContent = ''; });
+        // Show/hide a row's event-type picker with its "Event posts" checkbox.
+        function bindEventsToggle(row) {
+            var toggle = row.querySelector('[data-events-toggle]');
+            var picker = row.querySelector('.route-event-types');
+            if (!toggle || !picker) { return; }
+            var sync = function () { picker.style.display = toggle.checked ? 'flex' : 'none'; };
+            toggle.addEventListener('change', sync);
+            sync();
         }
 
+        rows.querySelectorAll('.route-row').forEach(bindEventsToggle);
+
         addBtn.addEventListener('click', function () {
-            var first = rows.querySelector('.discord-webhook-row');
-            if (!first) { return; }
-            var clone = first.cloneNode(true);
-            resetRow(clone);
+            var clone = tpl.content.firstElementChild.cloneNode(true);
             rows.appendChild(clone);
             reindex();
+            bindEventsToggle(clone);
         });
 
         rows.addEventListener('click', function (evt) {
-            var btn = evt.target.closest('.discord-webhook-remove');
+            var btn = evt.target.closest('.route-remove');
             if (!btn) { return; }
-            var list = rows.querySelectorAll('.discord-webhook-row');
-            if (list.length > 1) {
-                btn.closest('.discord-webhook-row').remove();
-            } else {
-                // Keep one row; clearing its URL + saving deletes the webhook.
-                resetRow(list[0]);
-            }
+            btn.closest('.route-row').remove();
             reindex();
         });
     })();

@@ -1,50 +1,48 @@
-using System.Net;
 using System.Text;
-using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Builds and maintains the live "ToD board": one Discord message per
-// board-enabled webhook that lists every ToD for the linkshell. The message
-// is POSTed once, its id stored, and every subsequent change PATCHes that
-// same message in place (never re-posts). Repop times use Discord's native
-// relative-timestamp markdown (<t:unix:R>) so the "in 4 hours" countdown
-// ticks on the client without us having to re-edit.
+// Builds and maintains the live "ToD board": one Discord message in the
+// linkshell's ToD channel route that lists every ToD. The message is POSTed
+// once, its id stored on the route, and every subsequent change edits that same
+// message in place (never re-posts). Repop times use Discord's native
+// relative-timestamp markdown (<t:unix:R>) so the "in 4 hours" countdown ticks
+// on the client without us having to re-edit.
 public sealed class DiscordTodBoardPublisher
 {
     private const int EmbedColor = 0x5865F2; // Discord blurple.
     private const int MaxDescription = 4000;  // Discord hard limit is 4096.
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private readonly ApplicationDbContext _db;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ChannelRouteResolver _routes;
+    private readonly DiscordBotClient _bot;
     private readonly ILogger<DiscordTodBoardPublisher> _logger;
 
     public DiscordTodBoardPublisher(
         ApplicationDbContext db,
-        IHttpClientFactory httpClientFactory,
+        ChannelRouteResolver routes,
+        DiscordBotClient bot,
         ILogger<DiscordTodBoardPublisher> logger)
     {
         _db = db;
-        _httpClientFactory = httpClientFactory;
+        _routes = routes;
+        _bot = bot;
         _logger = logger;
     }
 
     public async Task PublishAsync(int linkshellId, CancellationToken cancellationToken)
     {
-        // Tracked: we persist TodBoardMessageId back onto these rows.
-        var webhooks = await _db.LinkshellDiscordWebhooks
-            .Where(w => w.LinkshellId == linkshellId && w.PostTodBoard && w.Url != null && w.Url != "")
-            .OrderBy(w => w.Id)
-            .ToListAsync(cancellationToken);
-        if (webhooks.Count == 0)
+        if (!_bot.IsConfigured)
+        {
+            return;
+        }
+
+        // Tracked: we persist TodBoardMessageId back onto this route.
+        var route = await _routes.ResolveRouteAsync(linkshellId, ChannelPostTypes.TodBoard, cancellationToken);
+        if (route is null || string.IsNullOrEmpty(route.ChannelId))
         {
             return;
         }
@@ -138,7 +136,6 @@ public sealed class DiscordTodBoardPublisher
 
         var payload = new
         {
-            username = "LSM",
             embeds = new[]
             {
                 new
@@ -154,117 +151,37 @@ public sealed class DiscordTodBoardPublisher
             },
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
 
-        var client = _httpClientFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(15);
-
-        foreach (var webhook in webhooks)
+        // Edit the existing board in place; if the edit fails (message deleted,
+        // channel changed, etc.) drop the stale id and post a fresh one. The new
+        // id is persisted on the route so the next change edits it.
+        if (!string.IsNullOrEmpty(route.TodBoardMessageId))
         {
-            var baseUrl = webhook.Url?.Trim();
-            if (string.IsNullOrEmpty(baseUrl) || !IsDiscordWebhookUrl(baseUrl))
-            {
-                _logger.LogWarning(
-                    "Linkshell {LinkshellId} board webhook \"{Name}\" has a non-Discord URL; skipping.",
-                    linkshellId, webhook.Name ?? "(unnamed)");
-                continue;
-            }
-
-            try
-            {
-                var edited = false;
-                if (!string.IsNullOrEmpty(webhook.TodBoardMessageId))
-                {
-                    var editUrl = $"{baseUrl.TrimEnd('/')}/messages/{webhook.TodBoardMessageId}";
-                    using var editContent = new StringContent(json, Encoding.UTF8, "application/json");
-                    using var editResponse = await client.PatchAsync(editUrl, editContent, cancellationToken);
-                    if (editResponse.IsSuccessStatusCode)
-                    {
-                        edited = true;
-                    }
-                    else if (editResponse.StatusCode == HttpStatusCode.NotFound)
-                    {
-                        // The board message was deleted in Discord — drop the
-                        // stale id and fall through to post a fresh one.
-                        webhook.TodBoardMessageId = null;
-                    }
-                    else
-                    {
-                        var body = await editResponse.Content.ReadAsStringAsync(cancellationToken);
-                        _logger.LogWarning(
-                            "ToD board edit returned {Status} for linkshell {LinkshellId} webhook \"{Name}\": {Body}",
-                            (int)editResponse.StatusCode, linkshellId, webhook.Name ?? "(unnamed)", Truncate(body, 300));
-                    }
-                }
-
-                if (!edited && string.IsNullOrEmpty(webhook.TodBoardMessageId))
-                {
-                    // Append ?wait=true so Discord returns the created message
-                    // (we need its id for future in-place edits).
-                    var sep = baseUrl.Contains('?') ? '&' : '?';
-                    var createUrl = $"{baseUrl}{sep}wait=true";
-                    using var createContent = new StringContent(json, Encoding.UTF8, "application/json");
-                    using var createResponse = await client.PostAsync(createUrl, createContent, cancellationToken);
-                    if (!createResponse.IsSuccessStatusCode)
-                    {
-                        var body = await createResponse.Content.ReadAsStringAsync(cancellationToken);
-                        _logger.LogWarning(
-                            "ToD board post returned {Status} for linkshell {LinkshellId} webhook \"{Name}\": {Body}",
-                            (int)createResponse.StatusCode, linkshellId, webhook.Name ?? "(unnamed)", Truncate(body, 300));
-                        continue;
-                    }
-                    var responseJson = await createResponse.Content.ReadAsStringAsync(cancellationToken);
-                    var messageId = ExtractMessageId(responseJson);
-                    if (!string.IsNullOrEmpty(messageId))
-                    {
-                        webhook.TodBoardMessageId = messageId.Length > 32
-                            ? messageId[..32]
-                            : messageId;
-                        // Persist immediately so a later failure / retry edits
-                        // this message instead of posting a duplicate board.
-                        await _db.SaveChangesAsync(cancellationToken);
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            if (await _bot.EditMessageAsync(route.ChannelId, route.TodBoardMessageId, payload, cancellationToken))
             {
                 return;
             }
-            catch (Exception ex)
+            route.TodBoardMessageId = null;
+        }
+
+        var messageId = await _bot.PostMessageAsync(route.ChannelId, payload, cancellationToken);
+        if (string.IsNullOrEmpty(messageId))
+        {
+            _logger.LogWarning(
+                "ToD board for linkshell {LinkshellId}: the bot failed to post to channel {ChannelId} " +
+                "(check the bot is in the server with Send Messages).",
+                linkshellId, route.ChannelId);
+            // Persist the cleared id (if we nulled it above) so the next pass reposts.
+            if (_db.ChangeTracker.HasChanges())
             {
-                _logger.LogWarning(ex,
-                    "Failed updating ToD board for linkshell {LinkshellId} webhook \"{Name}\".",
-                    linkshellId, webhook.Name ?? "(unnamed)");
+                await _db.SaveChangesAsync(cancellationToken);
             }
+            return;
         }
 
-        // Persist any cleared (404) ids so a fresh post happens next pass.
-        if (_db.ChangeTracker.HasChanges())
-        {
-            await _db.SaveChangesAsync(cancellationToken);
-        }
+        route.TodBoardMessageId = messageId.Length > 32 ? messageId[..32] : messageId;
+        await _db.SaveChangesAsync(cancellationToken);
     }
-
-    private static string? ExtractMessageId(string responseJson)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(responseJson);
-            return doc.RootElement.TryGetProperty("id", out var idProp)
-                ? idProp.GetString()
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static bool IsDiscordWebhookUrl(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri)
-        && uri.Scheme == Uri.UriSchemeHttps
-        && uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase)
-        && uri.AbsolutePath.Contains("/api/webhooks/", StringComparison.OrdinalIgnoreCase);
 
     private static string EscapeMarkdown(string value) => value
         .Replace("\\", "\\\\")

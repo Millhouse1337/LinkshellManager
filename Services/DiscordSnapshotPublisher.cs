@@ -1,13 +1,14 @@
 using System.Text;
-using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Posts an attendance snapshot to the linkshell's configured Discord channel
-// webhook as a single embed with the roster grouped into parties of six
-// (FFXI alliance layout). No-op when the linkshell has no webhook URL.
+// Posts an attendance snapshot to the linkshell's Attendance channel route via
+// the bot as a single embed with the roster grouped into parties of six (FFXI
+// alliance layout). No-op when no Attendance route is set or the bot isn't
+// configured.
 public sealed class DiscordSnapshotPublisher
 {
     // FFXI party size; an alliance is three of these. Snapshot entries arrive
@@ -17,28 +18,30 @@ public sealed class DiscordSnapshotPublisher
     // Discord "blurple" so the embed reads as a first-party-ish card.
     private const int EmbedColor = 0x5865F2;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private readonly ApplicationDbContext _db;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ChannelRouteResolver _routes;
+    private readonly DiscordBotClient _bot;
     private readonly ILogger<DiscordSnapshotPublisher> _logger;
 
     public DiscordSnapshotPublisher(
         ApplicationDbContext db,
-        IHttpClientFactory httpClientFactory,
+        ChannelRouteResolver routes,
+        DiscordBotClient bot,
         ILogger<DiscordSnapshotPublisher> logger)
     {
         _db = db;
-        _httpClientFactory = httpClientFactory;
+        _routes = routes;
+        _bot = bot;
         _logger = logger;
     }
 
     public async Task PublishAsync(int snapshotId, CancellationToken cancellationToken)
     {
+        if (!_bot.IsConfigured)
+        {
+            return;
+        }
+
         var snapshot = await _db.AttendanceSnapshots
             .AsNoTracking()
             .Include(s => s.Entries)
@@ -48,19 +51,11 @@ public sealed class DiscordSnapshotPublisher
             return;
         }
 
-        // Snapshots are opt-in per channel via the "DKP Tracking" toggle
-        // (PostAttendanceSnapshot) — they no longer fan out to every webhook.
-        var webhooks = await _db.LinkshellDiscordWebhooks
-            .AsNoTracking()
-            .Where(w => w.LinkshellId == snapshot.LinkshellId
-                        && w.PostAttendanceSnapshot
-                        && w.Url != null && w.Url != "")
-            .OrderBy(w => w.Id)
-            .Select(w => new { w.Name, w.Url })
-            .ToListAsync(cancellationToken);
-        if (webhooks.Count == 0)
+        var channelId = await _routes.ResolveChannelIdAsync(
+            snapshot.LinkshellId, ChannelPostTypes.Attendance, cancellationToken);
+        if (string.IsNullOrEmpty(channelId))
         {
-            // No channel opted into snapshot posting -- nothing to do.
+            // No Attendance route configured -- nothing to do.
             return;
         }
 
@@ -71,52 +66,13 @@ public sealed class DiscordSnapshotPublisher
             .FirstOrDefaultAsync(cancellationToken);
 
         var payload = BuildPayload(snapshot, linkshellName);
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
-
-        var client = _httpClientFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(15);
-
-        // Fan out to every configured webhook. Each post is independent and
-        // best-effort: a failure is logged but NOT rethrown, because the
-        // background service retries the whole PublishAsync — rethrowing
-        // after some webhooks already succeeded would double-post to them
-        // (Discord webhooks are not idempotent).
-        foreach (var webhook in webhooks)
+        var messageId = await _bot.PostMessageAsync(channelId, payload, cancellationToken);
+        if (string.IsNullOrEmpty(messageId))
         {
-            var rawUrl = webhook.Url?.Trim();
-            if (string.IsNullOrEmpty(rawUrl)
-                || !Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri)
-                || uri.Scheme != Uri.UriSchemeHttps
-                || !uri.Host.EndsWith("discord.com", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning(
-                    "Linkshell {LinkshellId} webhook \"{WebhookName}\" has a non-Discord URL; skipping snapshot {SnapshotId} for it.",
-                    snapshot.LinkshellId, webhook.Name ?? "(unnamed)", snapshotId);
-                continue;
-            }
-
-            try
-            {
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = await client.PostAsync(uri, content, cancellationToken);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                    _logger.LogWarning(
-                        "Discord webhook \"{WebhookName}\" returned {Status} for snapshot {SnapshotId}: {Body}",
-                        webhook.Name ?? "(unnamed)", (int)response.StatusCode, snapshotId, Truncate(body, 300));
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "Failed posting snapshot {SnapshotId} to Discord webhook \"{WebhookName}\".",
-                    snapshotId, webhook.Name ?? "(unnamed)");
-            }
+            _logger.LogWarning(
+                "Attendance snapshot {SnapshotId}: the bot failed to post to channel {ChannelId} for linkshell " +
+                "{LinkshellId} (check the bot is in the server with Send Messages).",
+                snapshotId, channelId, snapshot.LinkshellId);
         }
     }
 
@@ -172,7 +128,6 @@ public sealed class DiscordSnapshotPublisher
 
         return new
         {
-            username = "LSM",
             embeds = new[]
             {
                 new
