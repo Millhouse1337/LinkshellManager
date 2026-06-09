@@ -98,7 +98,7 @@ $pw = & ssh @sshArgs $DropletHost "sudo journalctl -u lsmanager --since '5 min a
 if ($pw) {
     $pw | ForEach-Object { Write-Host "    $_" -ForegroundColor Green }
 } else {
-    Write-Host "    No Playwright log lines yet — Chromium may still be downloading on first boot." -ForegroundColor Yellow
+    Write-Host "    No Playwright log lines yet - Chromium may still be downloading on first boot." -ForegroundColor Yellow
     Write-Host "    Boards post as the text-embed fallback until it's ready. Re-check with:" -ForegroundColor Yellow
     Write-Host "      ssh $DropletHost 'sudo journalctl -u lsmanager | grep -i playwright'" -ForegroundColor Yellow
 }
