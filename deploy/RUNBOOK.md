@@ -228,14 +228,20 @@ sudo chown -R lsmanager:lsmanager /var/lib/lsmanager
 #    add this line yourself).
 echo 'PLAYWRIGHT_BROWSERS_PATH=/var/lib/lsmanager/ms-playwright' | sudo tee -a /etc/lsmanager/env
 
-# 3. Install the Chromium OS libraries (root/apt). On 24.04, some names need a "t64"
-#    suffix — if apt says "Unable to locate package libfoo", retry as "libfoot64".
+# 3. Install the Chromium OS libraries (root/apt). Ubuntu 24.04 renamed several
+#    packages with a "t64" suffix, and there libasound2 is a virtual package with
+#    no install candidate — so install each name, falling back to its t64 variant
+#    (a single `apt-get install` of the whole list would abort on the first such
+#    package and install nothing). This is exactly what setup-droplet.sh does.
 sudo apt-get update -y
-sudo apt-get install -y \
-  libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-  libatspi2.0-0 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 \
-  libxrandr2 libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 libcairo2 \
-  libasound2 libwayland-client0 fonts-liberation fonts-noto-color-emoji
+for lib in libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+           libdrm2 libatspi2.0-0 libx11-6 libxcomposite1 libxdamage1 libxext6 \
+           libxfixes3 libxrandr2 libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 \
+           libcairo2 libasound2 libwayland-client0 fonts-liberation fonts-noto-color-emoji; do
+  sudo apt-get install -y "$lib" 2>/dev/null \
+    || sudo apt-get install -y "${lib}t64" 2>/dev/null \
+    || echo "   (skipped $lib — not packaged on this release)"
+done
 
 # 4. Restart; the app downloads Chromium into the cache on first boot.
 sudo systemctl daemon-reload
