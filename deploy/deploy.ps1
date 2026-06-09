@@ -66,10 +66,22 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 Write-Host "==> Stopping service on droplet" -ForegroundColor Cyan
 Invoke-Ssh "sudo systemctl stop lsmanager || true"
 
-Write-Host "==> Syncing publish output to droplet" -ForegroundColor Cyan
-Invoke-Ssh "sudo rm -rf ${RemoteAppDir}.new && sudo mkdir -p ${RemoteAppDir}.new && sudo chown -R `$(id -u):`$(id -g) ${RemoteAppDir}.new"
-Invoke-Scp "$publishDir\*" "${RemoteAppDir}.new/"
-Invoke-Ssh "sudo chown -R lsmanager:lsmanager ${RemoteAppDir}.new && sudo rm -rf ${RemoteAppDir}.old && (sudo test -d ${RemoteAppDir} && sudo mv ${RemoteAppDir} ${RemoteAppDir}.old || true) && sudo mv ${RemoteAppDir}.new ${RemoteAppDir}"
+# Sync via a tarball, NOT `scp -r publish\*`: that glob skips dot-directories (so
+# the Playwright driver folder `.playwright` never copied) and scp from Windows
+# drops the Linux executable bit. `tar -C publish .` captures hidden entries, and
+# we restore +x on the node driver after extraction.
+Write-Host "==> Packaging publish output (tarball keeps .playwright + perms)" -ForegroundColor Cyan
+$tarball = Join-Path $repoRoot 'artifacts\publish.tar.gz'
+if (Test-Path $tarball) { Remove-Item -Force $tarball }
+& tar -czf $tarball -C $publishDir .
+if ($LASTEXITCODE -ne 0) { throw "tar failed packaging $publishDir" }
+
+Write-Host "==> Syncing to droplet" -ForegroundColor Cyan
+Invoke-Ssh "sudo rm -rf ${RemoteAppDir}.new /tmp/lsm-publish.tar.gz && sudo mkdir -p ${RemoteAppDir}.new"
+Invoke-Scp $tarball "/tmp/lsm-publish.tar.gz"
+# Extract, restore +x on the Playwright node driver (tar-from-Windows stores no
+# exec bit), chown to the service user, then swap the dir into place atomically.
+Invoke-Ssh "sudo tar -xzf /tmp/lsm-publish.tar.gz -C ${RemoteAppDir}.new && sudo chmod +x ${RemoteAppDir}.new/.playwright/node/*/node && sudo chmod +x ${RemoteAppDir}.new/LinkshellManagerDiscordApp 2>/dev/null; sudo chown -R lsmanager:lsmanager ${RemoteAppDir}.new && sudo rm -rf ${RemoteAppDir}.old && (sudo test -d ${RemoteAppDir} && sudo mv ${RemoteAppDir} ${RemoteAppDir}.old || true) && sudo mv ${RemoteAppDir}.new ${RemoteAppDir} && sudo rm -f /tmp/lsm-publish.tar.gz"
 
 Write-Host "==> Starting service" -ForegroundColor Cyan
 Invoke-Ssh "sudo systemctl start lsmanager"
