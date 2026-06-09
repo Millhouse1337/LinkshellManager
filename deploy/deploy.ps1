@@ -73,8 +73,35 @@ Invoke-Ssh "sudo chown -R lsmanager:lsmanager ${RemoteAppDir}.new && sudo rm -rf
 
 Write-Host "==> Starting service" -ForegroundColor Cyan
 Invoke-Ssh "sudo systemctl start lsmanager"
-Start-Sleep -Seconds 3
-Invoke-Ssh "sudo systemctl --no-pager --full status lsmanager | head -n 20"
+
+Write-Host "==> Verifying service health" -ForegroundColor Cyan
+# Hard check: the unit must come up 'active', else fail the deploy loudly with the
+# status + recent log so a crash-on-startup (e.g. a bad migration) is obvious.
+$active = ''
+for ($i = 0; $i -lt 6; $i++) {
+    Start-Sleep -Seconds 2
+    $active = (& ssh @sshArgs $DropletHost "systemctl is-active lsmanager" | Out-String).Trim()
+    if ($active -eq 'active') { break }
+}
+if ($active -ne 'active') {
+    Invoke-Ssh "sudo systemctl --no-pager --full status lsmanager | head -n 30"
+    throw "lsmanager is '$active' after deploy (expected 'active'). See the status above and 'journalctl -u lsmanager'."
+}
+Write-Host "    service is active." -ForegroundColor Green
+Invoke-Ssh "sudo systemctl --no-pager --full status lsmanager | head -n 12"
+
+# Soft check: surface the event-board image renderer status. The Chromium
+# auto-install runs on a background task and may still be downloading on a fresh
+# host, so this is informational only and never fails the deploy.
+Write-Host "==> Event-board image renderer (Playwright/Chromium)" -ForegroundColor Cyan
+$pw = & ssh @sshArgs $DropletHost "sudo journalctl -u lsmanager --since '5 min ago' --no-pager | grep -i -E 'playwright|chromium|board image' | tail -n 3"
+if ($pw) {
+    $pw | ForEach-Object { Write-Host "    $_" -ForegroundColor Green }
+} else {
+    Write-Host "    No Playwright log lines yet — Chromium may still be downloading on first boot." -ForegroundColor Yellow
+    Write-Host "    Boards post as the text-embed fallback until it's ready. Re-check with:" -ForegroundColor Yellow
+    Write-Host "      ssh $DropletHost ""sudo journalctl -u lsmanager | grep -i playwright""" -ForegroundColor Yellow
+}
 
 Write-Host "==> Done." -ForegroundColor Green
 Write-Host "Tail logs with: ssh $DropletHost 'sudo journalctl -u lsmanager -f'"

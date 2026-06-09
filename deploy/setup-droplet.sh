@@ -32,13 +32,38 @@ if ! dotnet --list-runtimes 2>/dev/null | grep -q '^Microsoft.AspNetCore.App 8\.
   apt-get install -y aspnetcore-runtime-8.0
 fi
 
+echo "==> Installing headless Chromium OS libraries (event-board image renderer)"
+# Playwright's bundled Chromium needs these shared libraries to launch headless.
+# The browser BINARY itself is downloaded by the app on boot into
+# PLAYWRIGHT_BROWSERS_PATH (see the env file below) — only these OS-level libs need
+# root/apt. Ubuntu 24.04 renamed several packages with a "t64" suffix (the time_t
+# transition), so try the plain name first, then the t64 variant; a lib that's
+# missing on this release is skipped (Chromium degrades gracefully — the board
+# falls back to a text embed). fonts-noto-color-emoji renders the ⚔️ header glyph;
+# fonts-liberation covers text if the Google Fonts CDN is unreachable.
+chromium_libs=(
+  libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2
+  libatspi2.0-0 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3
+  libxrandr2 libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 libcairo2
+  libasound2 libwayland-client0 fonts-liberation fonts-noto-color-emoji
+)
+for lib in "${chromium_libs[@]}"; do
+  apt-get install -y "$lib" 2>/dev/null \
+    || apt-get install -y "${lib}t64" 2>/dev/null \
+    || echo "   (skipped $lib — not packaged on this release)"
+done
+
 echo "==> Creating app user and directories"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --shell /usr/sbin/nologin --home "$APP_DIR" "$APP_USER"
 # /var/lib/lsmanager/keys is the persistent Data Protection key ring. It MUST
 # live outside $APP_DIR because the deploy script replaces $APP_DIR wholesale on
 # every release; keeping the keys here is what lets a Google Sheet connection
 # (and login sessions) survive redeploys.
-mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager /var/lib/lsmanager/keys
+# /var/lib/lsmanager/ms-playwright is the persistent Playwright browser cache
+# (Chromium). Like the key ring it lives outside $APP_DIR so it survives the
+# deploy script replacing $APP_DIR wholesale — otherwise Chromium would
+# re-download (~110 MB) on every release. It's a ReadWritePath in the systemd unit.
+mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager /var/lib/lsmanager/keys /var/lib/lsmanager/ms-playwright
 chown -R "$APP_USER:$APP_USER" "$APP_DIR" /var/log/lsmanager /var/lib/lsmanager
 chmod 700 /var/lib/lsmanager/keys
 
@@ -89,6 +114,11 @@ ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=${DB_NAME
 # Persistent Data Protection key ring (outside the deploy artifact dir) so
 # Google Sheet connections and login sessions survive redeploys.
 DataProtection__KeyRingPath=/var/lib/lsmanager/keys
+# Persistent Playwright browser cache (outside the deploy artifact dir) so the
+# headless Chromium that renders event-board images survives redeploys instead of
+# re-downloading on every release. The app auto-downloads Chromium here on first
+# boot; set LSM_PLAYWRIGHT_AUTOINSTALL=0 to disable that and manage it yourself.
+PLAYWRIGHT_BROWSERS_PATH=/var/lib/lsmanager/ms-playwright
 Discord__ClientId=REPLACE_ME
 Discord__ClientSecret=REPLACE_ME
 # Cloudflare IPv4 / IPv6 ranges (https://www.cloudflare.com/ips/).

@@ -257,6 +257,13 @@ builder.Services.AddHostedService<DiscordAuctionChannelBackgroundService>();
 builder.Services.AddScoped<DiscordBotClient>();
 builder.Services.AddSingleton<DiscordInteractionVerifier>();
 builder.Services.AddSingleton<DiscordEventChannelQueue>();
+// Renders the party board to a PNG (headless Chromium); singleton so the browser
+// is launched once and reused. EventBoardPoster picks image-or-text-fallback.
+builder.Services.AddSingleton<EventBoardImageRenderer>();
+builder.Services.AddScoped<EventBoardPoster>();
+// Best-effort: downloads the Chromium binary on boot so the image board works
+// without a manual `playwright install` (opt out with LSM_PLAYWRIGHT_AUTOINSTALL=0).
+builder.Services.AddHostedService<PlaywrightBrowserInstaller>();
 builder.Services.AddScoped<DiscordEventChannelPublisher>();
 builder.Services.AddHostedService<DiscordEventChannelBackgroundService>();
 // Posts an "event ended" summary (duration + per-attendee DKP) to the event's

@@ -36,10 +36,11 @@ ssh root@<DROPLET_IP> 'bash /tmp/setup-droplet.sh'
 
 The script:
 - installs .NET 8 ASP.NET Core runtime, nginx, ufw
+- installs the headless-Chromium OS libraries used to render event-board images
 - creates a `lsmanager` system user
 - enables ufw with 22/80/443 only
 - creates the `lsmanager` Postgres database + user with a random password
-- writes `/etc/lsmanager/env` with that connection string and placeholders for Discord secrets
+- writes `/etc/lsmanager/env` with that connection string, placeholders for Discord secrets, and a persistent Playwright browser-cache path
 
 At the end it prints the generated DB password - you shouldn't need to write it down (it's already in the env file), but note that it ran.
 
@@ -203,6 +204,54 @@ key ring then persists across all future deploys, so the connection sticks.
 > If Google still drops the connection after ~7 days, the OAuth consent screen in
 > Google Cloud Console is in **Testing** mode (refresh tokens expire in 7 days).
 > Publish it to **Production** to stop that — that's a Google-side limit, not app code.
+
+## One-time migration: Chromium for event-board images
+
+Party-setup events post their sign-up board to Discord as a **rendered PNG** (the
+"Esports HUD" — colour, 3 parties per row). Rendering uses headless Chromium via
+Playwright. Fresh bootstraps (`setup-droplet.sh`) now install the Chromium OS
+libraries, provision a persistent browser cache, and point the app at it
+automatically. **Existing droplets created before this change need a one-time
+fixup.** Until then nothing breaks — boards just post as the plain **text-embed
+fallback** instead of the image.
+
+```bash
+ssh root@<IP>
+
+# 1. Persistent browser cache (survives deploys, like the key ring; it's already a
+#    ReadWritePath in the shipped unit file). Without this, Chromium re-downloads
+#    (~110 MB) on every deploy.
+sudo mkdir -p /var/lib/lsmanager/ms-playwright
+sudo chown -R lsmanager:lsmanager /var/lib/lsmanager
+
+# 2. Point the app at it (setup-droplet.sh leaves an existing env file untouched, so
+#    add this line yourself).
+echo 'PLAYWRIGHT_BROWSERS_PATH=/var/lib/lsmanager/ms-playwright' | sudo tee -a /etc/lsmanager/env
+
+# 3. Install the Chromium OS libraries (root/apt). On 24.04, some names need a "t64"
+#    suffix — if apt says "Unable to locate package libfoo", retry as "libfoot64".
+sudo apt-get update -y
+sudo apt-get install -y \
+  libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+  libatspi2.0-0 libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 \
+  libxrandr2 libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 libcairo2 \
+  libasound2 libwayland-client0 fonts-liberation fonts-noto-color-emoji
+
+# 4. Restart; the app downloads Chromium into the cache on first boot.
+sudo systemctl daemon-reload
+sudo systemctl restart lsmanager
+```
+
+Verify after restart:
+
+```bash
+ssh root@<IP> 'sudo journalctl -u lsmanager | grep -i playwright'
+# "Playwright Chromium is installed — event boards will render as images." = good.
+# A render failure logs "falling back to the text board" with the cause.
+```
+
+> Opt out of the auto-download (e.g. to bake Chromium into a custom image) by
+> adding `LSM_PLAYWRIGHT_AUTOINSTALL=0` to `/etc/lsmanager/env`.
 
 ## Things to set up later (not blocking go-live)
 

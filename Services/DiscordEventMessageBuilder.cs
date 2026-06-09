@@ -8,11 +8,17 @@ namespace LinkshellManagerDiscordApp.Services;
 // One person signed up to an event (for rendering the Discord roster).
 public sealed record EventSignupLine(string CharacterName, string? JobName);
 
-// Builds the Discord message payload for an event announcement: an embed with the
-// event details + current signup roster, a job-pick select menu, and a Withdraw
-// button. The same payload shape is used both for the initial bot post
-// (POST /channels/{id}/messages) and for the interaction UPDATE_MESSAGE response
-// (type 7) that refreshes it after a click, so the message edits itself in place.
+// Builds the Discord message payloads for an event announcement.
+//
+// The PARTY board is posted as a rendered PNG (EventBoardHtmlBuilder +
+// EventBoardImageRenderer) carried by BuildBoardImageMessage — that's the only way
+// to get colour + bold + side-by-side columns. When the image renderer is
+// unavailable, Build() is the classic-embed fallback so events always post. Both
+// are classic messages (no Components V2 flag) so the board can be edited between
+// image and embed without Discord rejecting a flag toggle.
+//
+// The same payload shape is also used for the interaction UPDATE_MESSAGE response
+// (type 7) and for bot edits, so the message refreshes in place after a click.
 public static class DiscordEventMessageBuilder
 {
     private const int EmbedColor = 0x5865F2; // Blurple.
@@ -22,8 +28,9 @@ public static class DiscordEventMessageBuilder
     public const string WithdrawPrefix = "evt:withdraw:";
     // Party-setup board interactions:
     //   evt:pssignup:{eventId}        — board button → ephemeral slot picker
-    //   evt:psclaim:{eventId}         — picker select (value = slotId) → claim/wizard
-    //   evt:psleave:{eventId}         — board button → leave my slot
+    //   evt:psclaim:{eventId}         — picker select (value = slotId) → leader choice/claim
+    //   evt:psgo:{eventId}:{slotId}:{N|L} — Claim / Claim-as-leader buttons
+    //   evt:psleave:{eventId}         — board button → leave my slot + attendance
     // Job-pick wizard — ephemeral selects shown (one at a time) when the chosen
     // slot doesn't pin the role/job; each custom_id carries the picks so far:
     //   evt:pswr:{eventId}:{slotId}                 — role select
@@ -32,6 +39,11 @@ public static class DiscordEventMessageBuilder
     public const string PartySlotSignUpPrefix = "evt:pssignup:";
     public const string PartySlotClaimPrefix = "evt:psclaim:";
     public const string PartySlotLeavePrefix = "evt:psleave:";
+    // After a slot is chosen from the picker, the member confirms with one of two
+    // buttons: claim it normally, or claim it as the party leader (the leader button
+    // is only offered when the slot's party has no leader yet). Tail format:
+    //   evt:psgo:{eventId}:{slotId}:{N|L}   (N = normal, L = as leader)
+    public const string PartySlotGoPrefix = "evt:psgo:";
     // General attendance on a party-board event: join the roster WITHOUT claiming
     // a slot (overflow / "I'm coming"). Backed by AppUserEvent, same as the
     // attendance roster used for DKP at close.
@@ -50,25 +62,19 @@ public static class DiscordEventMessageBuilder
     public const string PartyJoinWizardSubPrefix = "evt:gjws:";
     public const string PartyWizardNoRole = "__norole__";
 
-    // Leader-path variants of the sign-up flow. Identical to the prefixes above
+    // Leader-path variants of the job-pick wizard. Identical to the prefixes above
     // except they additionally mark the claimed slot as that party's leader
     // (first-claim-wins). Separate prefixes keep the leader intent flowing through
-    // the picker → claim → job-pick wizard without re-encoding the tail:
-    //   evt:psLsignup:{eventId}   — board "Sign up as leader" button
-    //   evt:psLclaim:{eventId}    — leader slot picker select
-    //   evt:psLwr/psLwm/psLws:... — leader job-pick wizard steps (same tail format)
+    // the job-pick wizard without re-encoding the tail.
     public const string PartySlotLeaderSignUpPrefix = "evt:psLsignup:";
     public const string PartySlotClaimLeaderPrefix = "evt:psLclaim:";
     public const string PartyWizardLeaderRolePrefix = "evt:psLwr:";
     public const string PartyWizardLeaderMainPrefix = "evt:psLwm:";
     public const string PartyWizardLeaderSubPrefix = "evt:psLws:";
 
-    // When the event has a linked party setup, the message shows the board
-    // (parties -> slots -> who's in each) + a single "Sign Up" button (which opens
-    // an ephemeral slot picker) + "Leave my slot"; otherwise it's the ad-hoc
-    // job-pick select + Withdraw. `partySetup` must be loaded with
-    // Alliances -> Parties -> Slots; `slotSignups` are the per-EVENT signups keyed
-    // by slot id (so one event's roster never bleeds onto another).
+    // Classic-embed payload: the fallback for the party board (when the image
+    // renderer is unavailable) and the message for ad-hoc (no party setup) events.
+    // `attachments` is cleared so an edit from the image board drops its PNG.
     public static object Build(
         Event ev,
         IReadOnlyList<EventSignupLine> signups,
@@ -82,6 +88,7 @@ public static class DiscordEventMessageBuilder
             {
                 embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot, signups) },
                 components = BuildBoardComponents(ev.Id),
+                attachments = Array.Empty<object>(),
                 allowed_mentions = new { parse = Array.Empty<string>() },
             };
         }
@@ -90,6 +97,21 @@ public static class DiscordEventMessageBuilder
         {
             embeds = new[] { BuildEmbed(ev, signups) },
             components = BuildComponents(ev.Id),
+            attachments = Array.Empty<object>(),
+            allowed_mentions = new { parse = Array.Empty<string>() },
+        };
+    }
+
+    // The party board as a rendered-PNG message: the image (uploaded as files[0],
+    // referenced here as attachments:[{id:0,...}]) plus the three board buttons.
+    // `embeds` is cleared so an edit from the embed fallback drops its embed.
+    public static object BuildBoardImageMessage(int eventId, string fileName)
+    {
+        return new
+        {
+            embeds = Array.Empty<object>(),
+            attachments = new object[] { new { id = 0, filename = fileName } },
+            components = BuildBoardComponents(eventId),
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
     }
@@ -267,8 +289,7 @@ public static class DiscordEventMessageBuilder
         };
     }
 
-    // Event detail fields for the board embed. Full-width (not inline) so long
-    // values like the start timestamp don't wrap in a narrow 1/3-width column.
+    // Event detail fields for the board embed fallback.
     private static List<object> BuildEventDetailFields(Event ev)
     {
         var fields = new List<object>();
@@ -291,10 +312,9 @@ public static class DiscordEventMessageBuilder
         return fields;
     }
 
-    // Board embed: event details + one inline field per party listing each slot
-    // with a role-colored dot — claimed slots show the member + jobs (from the
-    // per-EVENT signup), open slots show the requirement. Inline fields lay the
-    // parties out side-by-side, echoing the in-app board.
+    // Board embed (the fallback when the image renderer is unavailable): event
+    // details + one field per party listing each slot with a role-colored dot —
+    // claimed slots show the member + jobs, open slots show the requirement.
     private static object BuildBoardEmbed(
         Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
         IReadOnlyList<EventSignupLine> generalSignups)
@@ -316,8 +336,6 @@ public static class DiscordEventMessageBuilder
             {
                 slotSignups.TryGetValue(slot.Id, out var signup);
                 var icon = RoleIcon(slot, signup);
-                // Crown the actual party leader (the per-event signup flagged as
-                // leader), not the template's designated-leader slot.
                 var crown = (signup?.IsPartyLeader ?? false) ? "👑 " : string.Empty;
                 string line;
                 if (signup is not null)
@@ -335,9 +353,6 @@ public static class DiscordEventMessageBuilder
             }
             if (sb.Length == 0) { sb.Append("_No slots_"); }
 
-            // Full-width (not inline) so member names + jobs get the whole embed
-            // width and don't wrap. Parties stack vertically; a Discord embed has
-            // a fixed width, so wider lines means fewer columns.
             fields.Add(new
             {
                 name = Truncate($"{label} ({filled}/{slots.Count})", 250),
@@ -346,9 +361,7 @@ public static class DiscordEventMessageBuilder
             });
         }
 
-        // General attendees (the AppUserEvent roster) who joined WITHOUT claiming a
-        // party slot — shown so "Join (no slot)" overflow is visible on the board.
-        // Slot-holders are excluded (they already appear in their party above).
+        // General attendees who joined WITHOUT a party slot (slot-holders excluded).
         var slotNames = new HashSet<string>(
             slotSignups.Values
                 .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
@@ -387,8 +400,10 @@ public static class DiscordEventMessageBuilder
         };
     }
 
-    // Board components: a single "Sign Up" button (opens the ephemeral slot
-    // picker) + "Leave my slot". Keeps the message clean regardless of setup size.
+    // Board components: "Sign Up" (opens the ephemeral slot picker, where the
+    // leader option is offered after a slot is chosen if its party has no leader
+    // yet), "Join (no slot)" for attendance-only, and "Leave event". Three buttons,
+    // shown below the board image (or embed fallback).
     private static object[] BuildBoardComponents(int eventId)
     {
         return new object[]
@@ -404,13 +419,6 @@ public static class DiscordEventMessageBuilder
                         style = 1, // primary
                         label = "Sign Up",
                         custom_id = $"{PartySlotSignUpPrefix}{eventId}",
-                    },
-                    new
-                    {
-                        type = 2, // button
-                        style = 3, // success (green) — stands out as the leader option
-                        label = "👑 Sign up as leader",
-                        custom_id = $"{PartySlotLeaderSignUpPrefix}{eventId}",
                     },
                     new
                     {
@@ -433,8 +441,7 @@ public static class DiscordEventMessageBuilder
 
     // Flattens the setup to its parties in board order, each with a display label
     // ("Party 1", a custom name, or "A2 · {name}" when there's more than one
-    // alliance). Used by both the embed fields and the slot buttons so they line
-    // up by the same party label.
+    // alliance). Used by the embed fields + the slot picker so they line up.
     private static IEnumerable<(PartySetupParty Party, string Label)> LabeledParties(PartySetup setup)
     {
         var alliances = setup.Alliances.OrderBy(a => a.SortOrder).ToList();
@@ -451,8 +458,8 @@ public static class DiscordEventMessageBuilder
     }
 
     // A role-colored dot for a slot: the signed-up role when filled, else the
-    // pinned role; job/any slots get a neutral dot. Used in both the embed lines
-    // and the picker option emoji.
+    // pinned role; job/any slots get a neutral dot. Used in the embed lines + the
+    // picker option emoji.
     private static string RoleIcon(PartySetupSlot slot, EventPartySlotSignup? signup)
     {
         var role = signup is not null && !string.IsNullOrWhiteSpace(signup.Role)
@@ -469,8 +476,8 @@ public static class DiscordEventMessageBuilder
         };
     }
 
-    // Compact slot requirement for a button: the role ("Tank"), the job
-    // ("WAR" / "WAR/NIN"), or "Any" — without the "Any " prefix the embed uses.
+    // Compact slot requirement for a picker option: the role ("Tank"), the job
+    // ("WAR" / "WAR/NIN"), or "Any".
     private static string SlotShortLabel(PartySetupSlot slot)
     {
         if (string.Equals(slot.RequirementType, PartySetupSlotRequirementTypes.Role, StringComparison.OrdinalIgnoreCase))

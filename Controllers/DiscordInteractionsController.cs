@@ -36,18 +36,18 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     private readonly DiscordInteractionVerifier _verifier;
     private readonly ApplicationDbContext _db;
-    private readonly DiscordBotClient _bot;
+    private readonly DiscordEventChannelQueue _eventQueue;
     private readonly ILogger<DiscordInteractionsController> _logger;
 
     public DiscordInteractionsController(
         DiscordInteractionVerifier verifier,
         ApplicationDbContext db,
-        DiscordBotClient bot,
+        DiscordEventChannelQueue eventQueue,
         ILogger<DiscordInteractionsController> logger)
     {
         _verifier = verifier;
         _db = db;
-        _bot = bot;
+        _eventQueue = eventQueue;
         _logger = logger;
     }
 
@@ -146,29 +146,37 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandleWithdrawAsync(eventId, appUserId, cancellationToken);
         }
 
-        // Party-setup board: "Sign Up" / "Sign up as leader" open the ephemeral
-        // slot picker (the leader variant additionally claims party leadership).
-        var isLeaderSignUp = customId.StartsWith(DiscordEventMessageBuilder.PartySlotLeaderSignUpPrefix, StringComparison.Ordinal);
-        if (isLeaderSignUp || customId.StartsWith(DiscordEventMessageBuilder.PartySlotSignUpPrefix, StringComparison.Ordinal))
+        // Party-setup board "Sign Up" → an ephemeral picker of the OPEN slots. The
+        // leader option is offered after a slot is chosen (see HandleSlotChosenAsync).
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotSignUpPrefix, StringComparison.Ordinal))
         {
-            var prefix = isLeaderSignUp ? DiscordEventMessageBuilder.PartySlotLeaderSignUpPrefix : DiscordEventMessageBuilder.PartySlotSignUpPrefix;
-            var eventId = ParseTrailingId(customId, prefix);
-            return await HandlePartySlotSignUpAsync(eventId, appUserId, isLeaderSignUp, cancellationToken);
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotSignUpPrefix);
+            return await HandlePartySlotSignUpAsync(eventId, appUserId, cancellationToken);
         }
 
-        // Picker select → claim the chosen slot (slot id is the selected value).
-        var isLeaderClaim = customId.StartsWith(DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix, StringComparison.Ordinal);
-        if (isLeaderClaim || customId.StartsWith(DiscordEventMessageBuilder.PartySlotClaimPrefix, StringComparison.Ordinal))
+        // Picker select → the member chose a slot. Offer "Claim / Claim as leader"
+        // when that slot's party has no leader yet, else claim straight away.
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotClaimPrefix, StringComparison.Ordinal))
         {
-            var prefix = isLeaderClaim ? DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix : DiscordEventMessageBuilder.PartySlotClaimPrefix;
-            var eventId = ParseTrailingId(customId, prefix);
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotClaimPrefix);
             var slotId = data.TryGetProperty("values", out var slotValues)
                 && slotValues.ValueKind == JsonValueKind.Array
                 && slotValues.GetArrayLength() > 0
                 && int.TryParse(slotValues[0].GetString(), out var parsedSlotId)
                 ? parsedSlotId
                 : 0;
-            return await HandlePartySlotClaimAsync(eventId, slotId, appUserId, isLeaderClaim, cancellationToken);
+            return await HandleSlotChosenAsync(eventId, slotId, appUserId, cancellationToken);
+        }
+
+        // "Claim" / "Claim as leader" buttons shown after a slot is chosen.
+        // Tail: {eventId}:{slotId}:{N|L}  (L = claim as party leader).
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotGoPrefix, StringComparison.Ordinal))
+        {
+            var p = customId[DiscordEventMessageBuilder.PartySlotGoPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            var asLeader = p.Length > 2 && string.Equals(p[2], "L", StringComparison.Ordinal);
+            return await HandlePartySlotClaimAsync(eventId, slotId, appUserId, asLeader, cancellationToken);
         }
 
         if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotLeavePrefix, StringComparison.Ordinal))
@@ -448,12 +456,11 @@ public sealed class DiscordInteractionsController : ControllerBase
         return await UpdatedEventMessageAsync(ev.Id, cancellationToken);
     }
 
-    // "Sign Up" / "Sign up as leader" on the board → an ephemeral message with a
-    // select of the OPEN slots (per-event). Picking one runs the claim (see
-    // HandlePartySlotClaimAsync). When asLeader, the picker is scoped to parties
-    // that don't already have a leader, and the claim marks them party leader.
+    // "Sign Up" on the board → an ephemeral message with a select of the OPEN slots
+    // (per-event). Picking one runs HandleSlotChosenAsync, which offers the leader
+    // option (when the party has none yet) before claiming.
     private async Task<IActionResult> HandlePartySlotSignUpAsync(
-        int eventId, string appUserId, bool asLeader, CancellationToken cancellationToken)
+        int eventId, string appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -474,12 +481,10 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
-        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(eventId, ev.PartySetup, slotSignups, asLeader);
+        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(eventId, ev.PartySetup, slotSignups);
         if (picker.Length == 0)
         {
-            return Ephemeral(asLeader
-                ? "Every party already has a leader (or is full)."
-                : "Every slot is taken right now.");
+            return Ephemeral("Every slot is taken right now.");
         }
 
         return Ok(new
@@ -487,11 +492,57 @@ public sealed class DiscordInteractionsController : ControllerBase
             type = ResponseChannelMessage,
             data = new
             {
-                content = asLeader ? "Pick a slot to claim as your party's leader:" : "Pick a slot to claim:",
+                content = "Pick a slot to claim:",
                 components = picker,
                 flags = EphemeralFlag
             }
         });
+    }
+
+    // Picker select → the member chose a slot. If the slot's party has no leader
+    // yet, replace the picker with a "Claim / 👑 Claim as leader" choice (so the
+    // two sign-up buttons are now one flow); otherwise claim it straight away.
+    private async Task<IActionResult> HandleSlotChosenAsync(
+        int eventId, int slotId, string appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0 || slotId <= 0)
+        {
+            return Ephemeral("That slot isn't recognized.");
+        }
+
+        var slot = await _db.PartySetupSlots
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == slotId, cancellationToken);
+        if (slot is null)
+        {
+            return Ephemeral("That slot isn't recognized.");
+        }
+
+        var partyHasLeader = await _db.EventPartySlotSignups.AnyAsync(
+            s => s.EventId == eventId
+                 && s.IsPartyLeader
+                 && s.PartySetupSlot!.PartySetupPartyId == slot.PartySetupPartyId,
+            cancellationToken);
+        if (partyHasLeader)
+        {
+            // Party already has a leader → the leader option doesn't apply; claim it.
+            return await HandlePartySlotClaimAsync(eventId, slotId, appUserId, false, cancellationToken);
+        }
+
+        var go = DiscordEventMessageBuilder.PartySlotGoPrefix;
+        var choice = new object[]
+        {
+            new
+            {
+                type = 1, // action row
+                components = new object[]
+                {
+                    new { type = 2, style = 1, label = "Claim slot", custom_id = $"{go}{eventId}:{slotId}:N" },
+                    new { type = 2, style = 3, label = "👑 Claim as leader", custom_id = $"{go}{eventId}:{slotId}:L" },
+                }
+            }
+        };
+        return WizardStep("Claim this slot, or claim it as your party's leader 👑:", choice);
     }
 
     // Picker select → claim the chosen slot for THIS event. If the slot pins both
@@ -543,13 +594,14 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral(result.Error ?? "Couldn't claim that slot.");
         }
+        await DropNoSlotAttendanceAsync(ev, appUserId, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         // Auto-promote earliest signup if the party just filled with no leader.
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
 
-        // The select lives on the ephemeral picker, so edit the board via the bot
-        // and replace the picker with a confirmation.
-        await EditBoardViaBotAsync(eventId, cancellationToken);
+        // The select lives on the ephemeral picker; queue the board refresh (the
+        // image render runs off the 3s window) and replace the picker with a confirmation.
+        _eventQueue.Enqueue(eventId);
         var confirm = asLeader
             ? $"✅ Signed up as party leader 👑: {DiscordEventMessageBuilder.SlotRequirement(slot)}."
             : $"✅ Signed up: {DiscordEventMessageBuilder.SlotRequirement(slot)}.";
@@ -641,9 +693,10 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return WizardStep($"⚠️ {result.Error}", Array.Empty<object>());
         }
+        await DropNoSlotAttendanceAsync(ev, appUserId, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
-        await EditBoardViaBotAsync(eventId, cancellationToken);
+        _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
         var confirm = asLeader
             ? $"✅ Signed up as party leader 👑: {DiscordEventMessageBuilder.SlotRequirement(slot)}."
             : $"✅ Signed up: {DiscordEventMessageBuilder.SlotRequirement(slot)}.";
@@ -724,12 +777,19 @@ public sealed class DiscordInteractionsController : ControllerBase
             _db.AppUserEvents.RemoveRange(attendance);
         }
 
-        if (leftPartyId is not null || attendance.Count > 0)
+        if (leftPartyId is null && attendance.Count == 0)
         {
-            await _db.SaveChangesAsync(cancellationToken);
+            // Leave lives on the shared board (the same button for everyone, which
+            // Discord can't hide/grey per-user), so a not-signed-up click just gets
+            // a private "nothing to leave" notice instead of refreshing the board.
+            return Ephemeral("You're not signed up for this event, so there's nothing to leave.");
         }
 
-        return await UpdatedEventMessageAsync(eventId, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        // The board is a rendered image — queue the refresh (render runs off the 3s
+        // window) and acknowledge privately rather than editing it in the response.
+        _eventQueue.Enqueue(eventId);
+        return Ephemeral("✅ You've left the event.");
     }
 
     // "Join (no slot)" button on the board → a NEW ephemeral wizard message (so the
@@ -847,6 +907,10 @@ public sealed class DiscordInteractionsController : ControllerBase
             _db.AppUserEvents.RemoveRange(existing);
         }
 
+        // One identity per event: joining "no slot" releases any party slot the
+        // member currently holds, so they're never both in a slot and "no slot".
+        var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, appUserId, cancellationToken);
+
         _db.AppUserEvents.Add(new AppUserEvent
         {
             AppUserId = appUserId,
@@ -859,11 +923,31 @@ public sealed class DiscordInteractionsController : ControllerBase
             StartTime = ev.CommencementStartTime,
         });
         await _db.SaveChangesAsync(cancellationToken);
-        await EditBoardViaBotAsync(eventId, cancellationToken);
+        await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, leftPartyId, cancellationToken);
+        _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
 
         var jobLabel = NormalizeWizardValue(main) ?? "your job";
         var subLabel = NormalizeWizardValue(sub) is { } chosenSub ? $"/{chosenSub}" : string.Empty;
         return WizardStep($"✅ Joined (no slot) as {jobLabel}{subLabel}.", Array.Empty<object>());
+    }
+
+    // One identity per event: when a member takes a real party slot, drop any
+    // "no slot" attendance row they hold — but only before the event commences, so
+    // a live participant is never removed mid-event. Does NOT commit (the caller's
+    // SaveChanges covers it).
+    private async Task DropNoSlotAttendanceAsync(Event ev, string appUserId, CancellationToken cancellationToken)
+    {
+        if (ev.CommencementStartTime is not null)
+        {
+            return;
+        }
+        var rows = await _db.AppUserEvents
+            .Where(p => p.EventId == ev.Id && p.AppUserId == appUserId)
+            .ToListAsync(cancellationToken);
+        if (rows.Count > 0)
+        {
+            _db.AppUserEvents.RemoveRange(rows);
+        }
     }
 
     // Loads an event with its party-setup tree (for the picker + board render).
@@ -874,24 +958,6 @@ public sealed class DiscordInteractionsController : ControllerBase
             .Include(item => item.PartySetup!)
                 .ThenInclude(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
             .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
-    }
-
-    // Edits the posted board message via the bot — used when the triggering
-    // interaction was on the ephemeral picker (so UPDATE_MESSAGE would hit the
-    // ephemeral, not the board). No-op if the board was never posted.
-    private async Task EditBoardViaBotAsync(int eventId, CancellationToken cancellationToken)
-    {
-        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
-        if (ev is null || ev.PartySetup is null
-            || string.IsNullOrEmpty(ev.DiscordChannelId) || string.IsNullOrEmpty(ev.DiscordMessageId))
-        {
-            return;
-        }
-
-        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
-        var payload = DiscordEventMessageBuilder.Build(
-            ev, Array.Empty<EventSignupLine>(), ev.PartySetup, slotSignups);
-        await _bot.EditMessageAsync(ev.DiscordChannelId, ev.DiscordMessageId, payload, cancellationToken);
     }
 
     // Replaces the ephemeral picker (the message the select was on) with a

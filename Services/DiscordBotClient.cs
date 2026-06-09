@@ -142,6 +142,95 @@ public sealed class DiscordBotClient
         }
     }
 
+    // Posts a message with a PNG attachment (the rendered event-board image) via
+    // multipart. `payload` must reference the file as attachments:[{id:0,...}];
+    // the file is uploaded as files[0]. Returns the new message id or null.
+    public async Task<string?> PostMessageWithImageAsync(
+        string channelId, object payload, byte[] image, string fileName, CancellationToken cancellationToken)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(channelId))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var client = CreateClient();
+            using var content = BuildMultipart(payload, image, fileName);
+            using var response = await client.PostAsync(
+                $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages", content, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning(
+                    "Discord image post to channel {ChannelId} failed: {Status} {Body}.",
+                    channelId, response.StatusCode, Truncate(body, 300));
+                return null;
+            }
+
+            var message = await response.Content.ReadFromJsonAsync<DiscordMessagePayload>(
+                cancellationToken: cancellationToken);
+            return message?.Id;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Unable to image-post to channel {ChannelId}.", channelId);
+            return null;
+        }
+    }
+
+    // Edits a message to carry a freshly-rendered PNG (replacing the prior image).
+    // Sets attachments:[{id:0,...}] so the old attachment is dropped. Returns false
+    // on failure.
+    public async Task<bool> EditMessageWithImageAsync(
+        string channelId, string messageId, object payload, byte[] image, string fileName,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(channelId) || string.IsNullOrWhiteSpace(messageId))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var client = CreateClient();
+            using var content = BuildMultipart(payload, image, fileName);
+            using var request = new HttpRequestMessage(
+                HttpMethod.Patch,
+                $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}")
+            {
+                Content = content
+            };
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning(
+                    "Discord image edit of message {MessageId} in channel {ChannelId} failed: {Status} {Body}.",
+                    messageId, channelId, response.StatusCode, Truncate(body, 300));
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Unable to image-edit message {MessageId} in channel {ChannelId}.", messageId, channelId);
+            return false;
+        }
+    }
+
+    // payload_json + files[0] for a single-image message/edit.
+    private MultipartFormDataContent BuildMultipart(object payload, byte[] image, string fileName)
+    {
+        var form = new MultipartFormDataContent();
+        var json = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
+        form.Add(json, "payload_json");
+        var file = new ByteArrayContent(image);
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        form.Add(file, "files[0]", fileName);
+        return form;
+    }
+
     // Edits an existing message in place (used to refresh an event's signup
     // roster). Returns false on failure.
     public async Task<bool> EditMessageAsync(
