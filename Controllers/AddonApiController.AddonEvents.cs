@@ -226,6 +226,7 @@ public sealed partial class AddonApiController
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
         var eventEntity = await _dbContext.Events
+            .Include(evt => evt.AppUserEvents)
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
 
         if (eventEntity is null)
@@ -246,8 +247,17 @@ public sealed partial class AddonApiController
         {
             eventEntity.CommencementStartTime = DateTime.UtcNow;
             eventEntity.StarterUserId ??= token.IssuedToAppUserId;
-            await _dbContext.SaveChangesAsync(cancellationToken);
         }
+
+        // Addon-started events must materialize event-board signups too, or those
+        // members only exist on the party board and never reach EventHistory.
+        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(_dbContext, eventEntity, cancellationToken);
+        foreach (var participation in eventEntity.AppUserEvents)
+        {
+            participation.StartTime ??= eventEntity.CommencementStartTime;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {

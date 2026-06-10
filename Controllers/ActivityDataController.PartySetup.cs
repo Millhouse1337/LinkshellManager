@@ -28,6 +28,7 @@ public sealed partial class ActivityDataController
     public sealed record ActivityPartySetupListRow(
         int Id,
         string Name,
+        string? EventType,
         string? AssignedMonsterName,
         int AllianceCount,
         int PartyCount,
@@ -74,6 +75,7 @@ public sealed partial class ActivityDataController
         int Id,
         int LinkshellId,
         string Name,
+        string? EventType,
         string? AssignedMonsterName,
         string? Notes,
         bool CanManage,
@@ -100,6 +102,7 @@ public sealed partial class ActivityDataController
             .Select(ps => new ActivityPartySetupListRow(
                 ps.Id,
                 ps.Name,
+                ps.EventType,
                 ps.AssignedMonsterName,
                 ps.Alliances.Count,
                 ps.Alliances.SelectMany(a => a.Parties).Count(),
@@ -168,6 +171,7 @@ public sealed partial class ActivityDataController
             partySetup.Id,
             partySetup.LinkshellId,
             partySetup.Name,
+            partySetup.EventType,
             partySetup.AssignedMonsterName,
             partySetup.Notes,
             canManage,
@@ -264,6 +268,7 @@ public sealed partial class ActivityDataController
     public sealed record ActivityPartySetupEditorRequest(
         int LinkshellId,
         string Name,
+        string? EventType,
         string? AssignedMonsterName,
         string? Notes,
         IReadOnlyList<ActivityPartySetupSlotInput> Slots);
@@ -282,7 +287,16 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
         if (!await CanAsync(membership, r => r.CanManageParties, cancellationToken)) return Forbid();
 
-        var validationError = ValidatePartySetupEditor(request);
+        var linkshellType = await _dbContext.Linkshells
+            .Where(ls => ls.Id == request.LinkshellId)
+            .Select(ls => ls.LinkshellType)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (linkshellType is null) return NotFound(new { error = "Linkshell not found." });
+
+        var normalizedLinkshellType = LinkshellTypes.Normalize(linkshellType);
+        var normalizedEventType = NormalizePartySetupEventType(request.EventType, normalizedLinkshellType);
+
+        var validationError = ValidatePartySetupEditor(request, normalizedLinkshellType, normalizedEventType);
         if (validationError is not null) return BadRequest(new { error = validationError });
 
         var now = DateTime.UtcNow;
@@ -290,7 +304,8 @@ public sealed partial class ActivityDataController
         {
             LinkshellId = request.LinkshellId,
             Name = request.Name.Trim(),
-            AssignedMonsterName = NormalizeMonster(request.AssignedMonsterName),
+            EventType = normalizedEventType,
+            AssignedMonsterName = IsHnmPartySetupType(normalizedEventType) ? NormalizeMonster(request.AssignedMonsterName) : null,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             CreatedByAppUserId = appUser.Id,
             CreatedByCharacterName = membership!.CharacterName,
@@ -322,7 +337,16 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, partySetup.LinkshellId, cancellationToken);
         if (!await CanAsync(membership, r => r.CanManageParties, cancellationToken)) return Forbid();
 
-        var validationError = ValidatePartySetupEditor(request);
+        var linkshellType = await _dbContext.Linkshells
+            .Where(ls => ls.Id == partySetup.LinkshellId)
+            .Select(ls => ls.LinkshellType)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (linkshellType is null) return NotFound(new { error = "Linkshell not found." });
+
+        var normalizedLinkshellType = LinkshellTypes.Normalize(linkshellType);
+        var normalizedEventType = NormalizePartySetupEventType(request.EventType, normalizedLinkshellType);
+
+        var validationError = ValidatePartySetupEditor(request, normalizedLinkshellType, normalizedEventType);
         if (validationError is not null) return BadRequest(new { error = validationError });
 
         // Replace the whole tree (mirrors PartySetupController.Edit). Cascade
@@ -330,7 +354,8 @@ public sealed partial class ActivityDataController
         _dbContext.PartySetupAlliances.RemoveRange(partySetup.Alliances);
 
         partySetup.Name = request.Name.Trim();
-        partySetup.AssignedMonsterName = NormalizeMonster(request.AssignedMonsterName);
+        partySetup.EventType = normalizedEventType;
+        partySetup.AssignedMonsterName = IsHnmPartySetupType(normalizedEventType) ? NormalizeMonster(request.AssignedMonsterName) : null;
         partySetup.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
         partySetup.UpdatedAt = DateTime.UtcNow;
         partySetup.Alliances = BuildPartyTreeFromFlat(request.Slots);
@@ -372,6 +397,10 @@ public sealed partial class ActivityDataController
         if (!await CanAsync(membership, r => r.CanManageParties, cancellationToken)) return Forbid();
 
         var trimmed = request.MonsterName?.Trim();
+        if (!IsHnmPartySetupType(partySetup.EventType))
+        {
+            return BadRequest(new { error = "Monster assignment only applies to HNM party setups." });
+        }
         if (!string.IsNullOrEmpty(trimmed) && !SupportedTodMonsters.Contains(trimmed))
         {
             return BadRequest(new { error = "That monster is not a supported ToD monster." });
@@ -389,19 +418,48 @@ public sealed partial class ActivityDataController
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
+    private static string? NormalizePartySetupEventType(string? eventType, string linkshellType)
+    {
+        if (LinkshellTypes.Normalize(linkshellType) == LinkshellTypes.HnmOnly)
+        {
+            return "HNM";
+        }
+
+        var trimmed = eventType?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    private static bool IsHnmPartySetupType(string? eventType)
+        => string.Equals(eventType?.Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+
     // Ports PartySetupController.NormalizeAndValidate to a single error string
     // (null = valid). The editor sends a RequirementType already derived from
     // the picks (Job > Role > Any), so this validates the same way the web form
     // does. FFXI caps: <=3 parties per alliance, <=6 slots per party.
-    private static string? ValidatePartySetupEditor(ActivityPartySetupEditorRequest request)
+    private static string? ValidatePartySetupEditor(
+        ActivityPartySetupEditorRequest request,
+        string linkshellType,
+        string? normalizedEventType)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return "A name is required.";
         }
 
+        if (string.IsNullOrWhiteSpace(normalizedEventType))
+        {
+            return "Select an event type.";
+        }
+
+        if (LinkshellTypes.Normalize(linkshellType) == LinkshellTypes.SkySeaDynamis && IsHnmPartySetupType(normalizedEventType))
+        {
+            return "HNM is not available for Sky/Sea/Dynamis linkshells.";
+        }
+
         var monster = request.AssignedMonsterName?.Trim();
-        if (!string.IsNullOrEmpty(monster) && !SupportedTodMonsters.Contains(monster))
+        if (IsHnmPartySetupType(normalizedEventType) &&
+            !string.IsNullOrEmpty(monster) &&
+            !SupportedTodMonsters.Contains(monster))
         {
             return "Select a supported ToD monster, or leave it unassigned.";
         }

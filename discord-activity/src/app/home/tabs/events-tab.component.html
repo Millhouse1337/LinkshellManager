@@ -54,6 +54,11 @@
                     (click)="openEditLiveEventForm(event)">
                     Edit Live Event
                   </button>
+                  <button type="button" class="btn sm event-card__edit"
+                    [disabled]="activity.busyEventId() === event.id || addMemberLoading(event.id)"
+                    (click)="toggleAddMember(event.id)">
+                    {{ isAddMemberExpanded(event.id) ? 'Hide Add Member' : 'Add a Member' }}
+                  </button>
                 }
               </div>
             </div>
@@ -72,19 +77,90 @@
             </button>
 
             @if (!isLiveEventCollapsed(event.id)) {
-            @if (event.partySetupId) {
-              <div class="jobs-needed-row">
-                <span class="jobs-needed-row__label">Party Setup:</span>
-                <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
-                @if (event.partySetupAssignedMonsterName) {
-                  <span class="num">· {{ event.partySetupAssignedMonsterName }}</span>
+            @if (canManageLinkshell(event.linkshellId) && isAddMemberExpanded(event.id)) {
+              <section class="event-section event-section--add-member">
+                <div class="event-section__header">
+                  <h3>Add a Member</h3>
+                  <span class="tag default num">{{ addMemberCandidates(event.id).length }}</span>
+                </div>
+
+                @if (addMemberLoading(event.id)) {
+                  <p class="notice">Loading linkshell members…</p>
+                } @else if (addMemberCandidates(event.id).length === 0) {
+                  <p class="notice">No linkshell members are available to add right now.</p>
+                } @else {
+                  <form class="loot-form live-add-member-form" (ngSubmit)="submitAddMember(event.id)">
+                    <div class="live-add-member-typeahead">
+                      <input type="text"
+                        [ngModel]="addMemberSearchDraft(event.id)"
+                        [name]="'addMemberUserSearch' + event.id"
+                        placeholder="Search members..."
+                        autocomplete="off"
+                        (ngModelChange)="setAddMemberSearchDraft(event.id, $event)"
+                        (focus)="openAddMemberTypeahead(event.id)"
+                        (blur)="closeAddMemberTypeahead()"
+                        (keydown.escape)="closeAddMemberTypeahead()" />
+
+                      @if (openAddMemberTypeaheadEventId() === event.id) {
+                        @if (filteredAddMemberCandidates(event.id); as matches) {
+                          @if (matches.length > 0) {
+                            <ul class="live-add-member-typeahead__menu" role="listbox">
+                              @for (candidate of matches; track candidate.appUserId) {
+                                <li role="option">
+                                  <button type="button"
+                                    class="live-add-member-typeahead__option"
+                                    (mousedown)="$event.preventDefault()"
+                                    (click)="chooseAddMemberCandidate(event.id, candidate)">
+                                    {{ addMemberCandidateLabel(candidate) }}
+                                  </button>
+                                </li>
+                              }
+                            </ul>
+                          }
+                        }
+                      }
+                    </div>
+                    <select [(ngModel)]="getAddMemberDraft(event.id).jobType" [name]="'addMemberRole' + event.id">
+                      <option value="">Select role</option>
+                      @for (role of jobTypeOptions; track role) {
+                        <option [value]="role">{{ role }}</option>
+                      }
+                    </select>
+                    <select [(ngModel)]="getAddMemberDraft(event.id).jobName" [name]="'addMemberMain' + event.id">
+                      <option value="">Select main job</option>
+                      @for (job of mainJobOptions; track job) {
+                        <option [value]="job">{{ job }}</option>
+                      }
+                    </select>
+                    <select [(ngModel)]="getAddMemberDraft(event.id).subJobName" [name]="'addMemberSub' + event.id">
+                      <option value="">Select sub job</option>
+                      @for (job of subJobOptions; track job) {
+                        <option [value]="job">{{ job }}</option>
+                      }
+                    </select>
+                    <button type="submit" class="btn primary sm live-add-member-form__submit" [disabled]="activity.busyEventId() === event.id">Add member</button>
+                  </form>
                 }
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  (click)="toggleLiveEventPartySetupExpanded(event.id, event.partySetupId, event.linkshellId)">
-                  {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View / Join Party Setup' }}
-                </button>
+              </section>
+            }
+
+            @if (event.partySetupId) {
+              <div class="jobs-needed-row live-party-setup-row">
+                <div class="live-party-setup-row__details">
+                  <span class="jobs-needed-row__label">Party Setup:</span>
+                  <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
+                  @if (event.partySetupAssignedMonsterName) {
+                    <span class="num">· {{ event.partySetupAssignedMonsterName }}</span>
+                  }
+                </div>
+                <div class="live-party-setup-row__action">
+                  <button
+                    type="button"
+                    class="action-button live-party-setup-row__button"
+                    (click)="toggleLiveEventPartySetupExpanded(event.id, event.partySetupId, event.linkshellId)">
+                    {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View / Join Party Setup' }}
+                  </button>
+                </div>
               </div>
 
               @if (isLiveEventPartySetupExpanded(event.id)) {
@@ -239,7 +315,7 @@
               @if (activeRoomParticipants(event).length === 0) {
                 <p class="notice">No verified attendees are active right now.</p>
               } @else {
-                <ul class="participant-list">
+                <ul class="participant-list participant-list--scroll">
                   @for (participant of activeRoomParticipants(event); track participant.id) {
                     <li>
                       <div class="participant-list__copy">
@@ -386,7 +462,7 @@
                   <input [(ngModel)]="getLootDraft(event.id).itemName" [name]="'lootItem' + event.id" placeholder="Item name" required />
                   <select [(ngModel)]="getLootDraft(event.id).itemWinner" [name]="'lootWinner' + event.id">
                     <option value="">Select event member</option>
-                    @for (participant of event.participants; track participant.id) {
+                    @for (participant of lootEligibleParticipants(event); track participant.id) {
                       @if (participant.characterName) {
                         <option [value]="participant.characterName">{{ participant.characterName }}</option>
                       }

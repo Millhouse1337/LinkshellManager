@@ -4,7 +4,9 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { datetimeLocalToUtcIso, formatActionError } from './discord-activity.helpers';
 import type {
+  ActivityAddEventMemberInput,
   ActivityCreateEventInput,
+  ActivityEventAddMemberCandidate,
   ActivityLootInput,
   ActivityQuickJoinInput
 } from './discord-activity.types';
@@ -56,6 +58,41 @@ export class EventService {
       this.auth.setActionMessage('Event signup removed.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Removing the event signup failed.'));
+    } finally {
+      this.busyEventId.set(null);
+    }
+  }
+
+  async loadAddMemberCandidates(eventId: number): Promise<ActivityEventAddMemberCandidate[]> {
+    this.auth.setActionError(null);
+
+    try {
+      return await this.http.fetchActivityJson<ActivityEventAddMemberCandidate[]>(
+        `/api/activity/events/${eventId}/add-member-candidates`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading event member candidates failed.'));
+      return [];
+    }
+  }
+
+  async addMemberToLiveEvent(eventId: number, input: ActivityAddEventMemberInput): Promise<void> {
+    this.busyEventId.set(eventId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/events/${eventId}/members`, {
+        appUserId: input.appUserId,
+        jobName: input.jobName,
+        subJobName: input.subJobName,
+        jobType: input.jobType
+      });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Member added to the live event.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Adding the member to the live event failed.'));
+      throw error;
     } finally {
       this.busyEventId.set(null);
     }

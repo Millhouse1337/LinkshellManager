@@ -54,7 +54,8 @@ export class PartySetupTabComponent {
   protected select(setupId: number): void {
     this.selectedId.set(setupId);
     this.confirmDeleteId.set(null);
-    this.assignDraft.set(this.list()?.items.find(item => item.id === setupId)?.assignedMonsterName ?? '');
+    const row = this.list()?.items.find(item => item.id === setupId) ?? null;
+    this.assignDraft.set(this.isHnmSetup(row) ? (row?.assignedMonsterName ?? '') : '');
   }
 
   protected clearSelection(): void {
@@ -71,6 +72,23 @@ export class PartySetupTabComponent {
       hour: 'numeric',
       minute: '2-digit'
     }).format(new Date(value));
+  }
+
+  protected isHnmSetup(row?: { eventType?: string | null } | null): boolean {
+    return (row?.eventType ?? '').trim().toUpperCase() === 'HNM';
+  }
+
+  protected formatSetupType(row: { eventType?: string | null; assignedMonsterName?: string | null }): string {
+    const eventType = (row.eventType ?? '').trim();
+    if (!eventType) {
+      return '—';
+    }
+
+    if (eventType.toUpperCase() === 'HNM' && row.assignedMonsterName) {
+      return `${eventType} · ${row.assignedMonsterName}`;
+    }
+
+    return eventType;
   }
 
   // ----- Officer actions -----

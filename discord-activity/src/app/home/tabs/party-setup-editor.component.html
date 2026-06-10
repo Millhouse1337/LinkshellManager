@@ -15,16 +15,37 @@
     <div class="pse-meta-grid">
       <label class="pse-field">
         <span class="pse-field-label">Name</span>
-        <input class="pse-input" [(ngModel)]="name" name="psName" maxlength="128"
-          placeholder="e.g. Nidhogg Standard" required />
+        <input class="pse-input" [(ngModel)]="name" name="psName" maxlength="128" required />
       </label>
-      <label class="pse-field">
-        <span class="pse-field-label">Assigned monster</span>
-        <select class="pse-input pse-select" [(ngModel)]="assignedMonster" name="psMonster">
-          <option value="">— Unassigned —</option>
-          @for (m of monsterOptions(); track m) { <option [value]="m">{{ m }}</option> }
-        </select>
-      </label>
+
+      @if (shouldShowEventTypeSelector()) {
+        <label class="pse-field">
+          <span class="pse-field-label">Event Type</span>
+          <select class="pse-input pse-select" [ngModel]="eventTypeSelection" name="psEventType"
+            (ngModelChange)="setEventTypeSelection($event)">
+            <option value="">Select event type</option>
+            @for (type of eventTypeOptions(); track type) { <option [value]="type">{{ type }}</option> }
+          </select>
+        </label>
+      }
+
+      @if (isOtherEventTypeSelected()) {
+        <label class="pse-field">
+          <span class="pse-field-label">Custom Event Type</span>
+          <input class="pse-input" [(ngModel)]="customEventType" name="psCustomEventType" maxlength="64" />
+        </label>
+      }
+
+      @if (shouldShowMonsterField()) {
+        <label class="pse-field">
+          <span class="pse-field-label">Monster</span>
+          <select class="pse-input pse-select" [(ngModel)]="assignedMonster" name="psMonster">
+            <option value="">— Unassigned —</option>
+            @for (m of monsterOptions(); track m) { <option [value]="m">{{ m }}</option> }
+          </select>
+        </label>
+      }
+
       <label class="pse-field pse-field--wide">
         <span class="pse-field-label">Notes (optional)</span>
         <input class="pse-input" [(ngModel)]="notes" name="psNotes" maxlength="1024"

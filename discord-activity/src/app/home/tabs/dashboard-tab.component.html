@@ -191,9 +191,8 @@
                 [(ngModel)]="dashboardRosterSearch"
                 name="dashboardRosterSearch" />
               <!--
-                App Sync filter: limits the roster to members who are both
-                app-admitted (appUserId set) and Active. Defaults ON; toggle
-                off to also see Pending / Unclaimed rows from the sheet.
+                App Sync filter: limits the roster to app-linked members only.
+                Active/Inactive status is displayed, but never used to filter.
               -->
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
                 <input
@@ -261,7 +260,11 @@
               <div class="news-list">
                 @for (item of dashboardNewsUpdates(); track item.when + '|' + item.title) {
                   <div class="news-row">
-                    <div class="news-thumb"></div>
+                    @if (item.iconPath) {
+                      <img class="news-thumb news-thumb--image" [src]="item.iconPath" [alt]="item.subtitle" />
+                    } @else {
+                      <div class="news-thumb"></div>
+                    }
                     <div class="news-main">
                       <div class="news-title">{{ item.title }}</div>
                       <div class="news-sub">{{ item.subtitle }}</div>

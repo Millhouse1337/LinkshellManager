@@ -420,6 +420,12 @@ export interface ActivityEventParticipant {
   statusLedger: ActivityStatusLedgerEntry[];
 }
 
+export interface ActivityEventAddMemberCandidate {
+  appUserId: string;
+  characterName: string;
+  rank?: string | null;
+}
+
 export interface ActivityLootEntry {
   id: number;
   itemName?: string | null;
@@ -881,6 +887,13 @@ export interface ActivityCreateEventInput {
   countsTowardActive?: boolean;
 }
 
+export interface ActivityAddEventMemberInput {
+  appUserId: string;
+  jobName: string;
+  subJobName: string;
+  jobType: string;
+}
+
 export interface ActivityCreateLinkshellInput {
   name: string;
   details?: string | null;
@@ -983,6 +996,7 @@ export interface DiscordRpcErrorLike {
 export interface ActivityPartySetupListRow {
   id: number;
   name: string;
+  eventType?: string | null;
   assignedMonsterName?: string | null;
   allianceCount: number;
   partyCount: number;
@@ -1037,6 +1051,7 @@ export interface ActivityPartySetupDetail {
   id: number;
   linkshellId: number;
   name: string;
+  eventType?: string | null;
   assignedMonsterName?: string | null;
   notes?: string | null;
   canManage: boolean;
@@ -1070,6 +1085,7 @@ export interface ActivityPartySetupSlotInput {
 export interface ActivityPartySetupEditorInput {
   linkshellId: number;
   name: string;
+  eventType?: string | null;
   assignedMonsterName?: string | null;
   notes?: string | null;
   slots: ActivityPartySetupSlotInput[];

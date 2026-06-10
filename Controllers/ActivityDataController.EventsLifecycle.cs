@@ -301,6 +301,11 @@ public sealed partial class ActivityDataController
         var isHybrid = lootStructure == "Hybrid";
         var roundingStep = DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement);
 
+        // The live event card can show party-board signups before they exist as
+        // persisted participants. Materialize any missing rows before writing
+        // EventHistory so channel signups are not dropped on close.
+        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(_dbContext, eventEntity, cancellationToken);
+
         var endTimeUtc = DateTime.UtcNow;
         var history = new EventHistory
         {

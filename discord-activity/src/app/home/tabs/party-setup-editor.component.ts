@@ -37,6 +37,8 @@ interface EditorAlliance {
   styleUrl: './party-setup-editor.component.scss'
 })
 export class PartySetupEditorComponent {
+  private static readonly BASE_EVENT_TYPE_OPTIONS = ['Sky', 'Sea', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
+
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetup = inject(PartySetupService);
 
@@ -48,12 +50,105 @@ export class PartySetupEditorComponent {
   protected readonly MAX_PARTIES = 3;
   protected readonly MAX_SLOTS = 6;
   protected readonly ANY_ROLE = 'Any Role';
+  protected readonly HNM_EVENT_TYPE = 'HNM';
+  protected readonly OTHER_EVENT_TYPE = 'Other';
 
   protected editingId: number | null = null;
   protected name = '';
+  protected eventTypeSelection = '';
+  protected customEventType = '';
   protected assignedMonster = '';
   protected notes = '';
   protected alliances: EditorAlliance[] = [];
+
+  protected linkshellType(): string {
+    const membership = (this.activity.overview()?.linkshells ?? []).find(link => link.id === this.linkshellId());
+    return membership?.settings?.linkshellType ?? 'Both';
+  }
+
+  protected isHnmOnlyLinkshell(): boolean {
+    return this.linkshellType() === 'HnmOnly';
+  }
+
+  protected allowsHnmEventType(): boolean {
+    return this.linkshellType() !== 'SkySeaDynamis';
+  }
+
+  protected shouldShowEventTypeSelector(): boolean {
+    return !this.isHnmOnlyLinkshell();
+  }
+
+  protected shouldShowMonsterField(): boolean {
+    return this.isHnmOnlyLinkshell() || this.eventTypeSelection === this.HNM_EVENT_TYPE;
+  }
+
+  protected eventTypeOptions(): string[] {
+    return [
+      ...PartySetupEditorComponent.BASE_EVENT_TYPE_OPTIONS,
+      ...(this.allowsHnmEventType() ? [this.HNM_EVENT_TYPE] : []),
+      this.OTHER_EVENT_TYPE
+    ];
+  }
+
+  protected isOtherEventTypeSelected(): boolean {
+    return this.eventTypeSelection === this.OTHER_EVENT_TYPE;
+  }
+
+  protected setEventTypeSelection(value: string): void {
+    this.eventTypeSelection = value;
+    if (value !== this.OTHER_EVENT_TYPE) {
+      this.customEventType = '';
+    }
+    if (value !== this.HNM_EVENT_TYPE) {
+      this.assignedMonster = '';
+    }
+  }
+
+  private resolvedEventType(): string {
+    if (this.isHnmOnlyLinkshell()) {
+      return this.HNM_EVENT_TYPE;
+    }
+
+    if (this.eventTypeSelection === this.OTHER_EVENT_TYPE) {
+      return this.customEventType.trim();
+    }
+
+    return this.eventTypeSelection.trim();
+  }
+
+  private applyEventType(eventType: string | null | undefined, assignedMonsterName?: string | null): void {
+    if (this.isHnmOnlyLinkshell()) {
+      this.eventTypeSelection = this.HNM_EVENT_TYPE;
+      this.customEventType = '';
+      this.assignedMonster = assignedMonsterName ?? '';
+      return;
+    }
+
+    const trimmed = (eventType ?? '').trim();
+    if (!trimmed && assignedMonsterName) {
+      this.eventTypeSelection = this.HNM_EVENT_TYPE;
+      this.customEventType = '';
+      this.assignedMonster = assignedMonsterName;
+      return;
+    }
+
+    if (!trimmed) {
+      this.eventTypeSelection = '';
+      this.customEventType = '';
+      this.assignedMonster = '';
+      return;
+    }
+
+    if (this.eventTypeOptions().includes(trimmed)) {
+      this.eventTypeSelection = trimmed;
+      this.customEventType = '';
+    } else {
+      this.eventTypeSelection = this.OTHER_EVENT_TYPE;
+      this.customEventType = trimmed;
+    }
+
+    this.assignedMonster = trimmed === this.HNM_EVENT_TYPE ? (assignedMonsterName ?? '') : '';
+  }
 
   protected monsterOptions(): string[] {
     return this.partySetup.list()?.monsterOptions ?? [];
@@ -74,7 +169,7 @@ export class PartySetupEditorComponent {
   openForCreate(): void {
     this.editingId = null;
     this.name = '';
-    this.assignedMonster = '';
+    this.applyEventType(null, null);
     this.notes = '';
     this.alliances = [this.newAlliance()];
     this.openDialog();
@@ -87,7 +182,7 @@ export class PartySetupEditorComponent {
 
     this.editingId = setupId;
     this.name = detail.name;
-    this.assignedMonster = detail.assignedMonsterName ?? '';
+    this.applyEventType(detail.eventType, detail.assignedMonsterName ?? null);
     this.notes = detail.notes ?? '';
     this.alliances = detail.alliances.map(alliance => ({
       name: alliance.name,
@@ -186,6 +281,14 @@ export class PartySetupEditorComponent {
       return;
     }
 
+    const eventType = this.resolvedEventType();
+    if (!eventType) {
+      this.activity.actionError.set(this.isOtherEventTypeSelected()
+        ? 'Enter a custom event type.'
+        : 'Select an event type.');
+      return;
+    }
+
     const slots: ActivityPartySetupSlotInput[] = [];
     this.alliances.forEach((alliance, allianceIndex) => {
       alliance.parties.forEach((party, partyIndex) => {
@@ -219,7 +322,8 @@ export class PartySetupEditorComponent {
     const input = {
       linkshellId: this.linkshellId(),
       name,
-      assignedMonsterName: this.assignedMonster || null,
+      eventType,
+      assignedMonsterName: this.shouldShowMonsterField() ? (this.assignedMonster || null) : null,
       notes: this.notes.trim() || null,
       slots
     };

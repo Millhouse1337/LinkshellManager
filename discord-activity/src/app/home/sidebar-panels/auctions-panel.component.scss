@@ -131,6 +131,24 @@ $auction-modal-bottom-offset-mobile: 0px;
   border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
 }
 
+// The item rows are the only part of the form that grows without bound,
+// so cap them in a dedicated scroll window. This guarantees the title/
+// date row, the "Items / Add item" header, and the sticky Create button
+// stay on screen no matter how many items are added — instead of the
+// footer being pushed off the bottom of the dialog. `vh` (not `dvh`) is
+// used deliberately so the cap still applies in older webviews where
+// `dvh` is unsupported and the dialog's own `max-height` calc drops out.
+.auction-form-modal-dialog .invite-section .auction-form-items {
+  max-height: 45vh;
+  overflow-y: auto;
+  // Keep top/bottom edge scroll gestures inside the list rather than
+  // chaining out to the form / backdrop.
+  overscroll-behavior: contain;
+  // Small gutter so a scrollbar doesn't sit on top of the item cards'
+  // right border.
+  padding-right: 4px;
+}
+
 // Remaining-countdown chip in the auction header row — emphasised so
 // users can see at a glance how long until the auction ends.
 .panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__remaining {
@@ -235,6 +253,15 @@ $auction-modal-bottom-offset-mobile: 0px;
 
   .auction-form-modal-dialog .invite-section .create-form--compact > .create-form__actions {
     margin-top: 8px;
+  }
+
+  // Phone renders the form inline and lets the page scroll, so drop the
+  // items scroll window entirely — a nested scroll region inside an
+  // already-scrolling page just fights the OS scroll chrome.
+  .auction-form-modal-dialog .invite-section .auction-form-items {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 }
 

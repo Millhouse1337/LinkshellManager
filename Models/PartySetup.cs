@@ -20,6 +20,9 @@ public class PartySetup
     [MaxLength(128)]
     public string Name { get; set; } = string.Empty;
 
+    [MaxLength(64)]
+    public string? EventType { get; set; }
+
     // Canonical monster name (e.g. "Nidhogg"), matching Tod.MonsterName so the
     // ToD Tracker can join on it. Null = not assigned to any monster.
     [MaxLength(256)]

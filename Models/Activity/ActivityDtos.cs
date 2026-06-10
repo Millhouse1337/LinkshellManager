@@ -306,6 +306,11 @@ public sealed record ActivityEventParticipantDto(
     double? EventDkp,
     IReadOnlyList<ActivityStatusLedgerDto> StatusLedger);
 
+public sealed record ActivityEventAddMemberCandidateDto(
+    string AppUserId,
+    string CharacterName,
+    string? Rank);
+
 public sealed record ActivityStatusLedgerDto(
     int Id,
     string ActionType,
@@ -579,6 +584,12 @@ public sealed record ActivityEventSignupRequest(
     string? JobType = null);
 
 public sealed record ActivityQuickJoinRequest(
+    [Required, StringLength(64, MinimumLength = 1)] string? JobName,
+    [StringLength(64)] string? SubJobName,
+    [StringLength(64)] string? JobType);
+
+public sealed record ActivityAddEventMemberRequest(
+    [Required] string AppUserId,
     [Required, StringLength(64, MinimumLength = 1)] string? JobName,
     [StringLength(64)] string? SubJobName,
     [StringLength(64)] string? JobType);

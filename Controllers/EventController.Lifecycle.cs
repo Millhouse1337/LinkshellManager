@@ -753,6 +753,10 @@ public partial class EventController
         var endTimeUtc = DateTime.UtcNow;
         var participantSummaries = new List<EndEventParticipantSummary>();
 
+        // Backfill any party-board signups that never became AppUserEvents so the
+        // closed event history matches the live roster and loot UI.
+        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(dbContext, eventEntity, CancellationToken.None);
+
         // Windowed events (HNM Style / Claim/Kill) award DKP per window attended,
         // not per hour of presence: the DkpPerHour column is reused as
         // DkpPerWindow when WindowCount > 1, and the per-participation total is

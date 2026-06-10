@@ -66,7 +66,13 @@
     @if (!selectedLinkshell()) {
       <p class="notice">Select or join a linkshell before working with auctions.</p>
     } @else if (auctionsView() === 'active') {
-      @if (activity.auctionsBusy()) {
+      <!-- Only show the loading notice on the *first* load (no data yet).
+           The auto-refresh poller flips auctionsBusy on every background
+           tick (5s while an auction is Live); swapping the table out for
+           the notice on each tick made the whole panel flicker and stole
+           focus from the bid inputs. With data present we keep the table
+           rendered and let the refreshed values update in place. -->
+      @if (activity.auctionsBusy() && auctions().length === 0) {
         <p class="notice">Loading auctions...</p>
       } @else if (auctions().length > 0) {
         <div class="table-wrap">
@@ -315,7 +321,9 @@
         <p class="notice">No auctions exist on this linkshell yet.</p>
       }
     } @else {
-      @if (activity.auctionHistoryBusy()) {
+      <!-- Same first-load-only gating as the active view: reloads after
+           close/mark-received actions shouldn't blank the table. -->
+      @if (activity.auctionHistoryBusy() && auctionHistoryRows().length === 0) {
         <p class="notice">Loading auction history...</p>
       } @else if (auctionHistoryRows().length > 0) {
         <div class="table-wrap">
@@ -448,6 +456,12 @@
             <button type="button" class="action-button action-button--secondary" (click)="addAuctionFormItem()">Add item</button>
           </div>
 
+          <!-- Item rows are the only part of the form that grows without
+               bound, so give *them* a dedicated scroll window. This keeps
+               the title/date row, the Items header, and the Create button
+               visible no matter how many items are added. (On phone the
+               SCSS removes the cap so the page scrolls inline instead.) -->
+          <div class="auction-form-items">
           @for (item of auctionFormModel.items; track $index) {
             <div class="create-form create-form--compact">
               <div class="create-form__grid">
@@ -504,6 +518,7 @@
               }
             </div>
           }
+          </div>
         </div>
 
         <div class="create-form__actions" style="justify-content:flex-end">

@@ -79,13 +79,29 @@
 }
 .panel-tab .news-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 10px 16px;
   border-top: 1px solid var(--border);
 }
 .panel-tab .news-row:first-child { border-top: 0; }
+.panel-tab .news-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
+  display: block;
+  object-fit: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+.panel-tab .news-thumb--image {
+  background-color: transparent;
+  border-color: transparent;
+}
 .panel-tab .news-icon {
   width: 10px;
   height: 10px;

@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  ActivityAddEventMemberInput,
   ActivityAttendanceWindow,
+  ActivityEventAddMemberCandidate,
   ActivityEventParticipant,
   ActivityLinkshellSettings,
   ActivityLootInput,
@@ -11,7 +13,7 @@ import {
   ActivityStatusLedgerEntry,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { ActivityEvent } from '../../discord/discord-activity.types';
+import { ActivityEvent, ActivityPartySetupSlot } from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
@@ -37,6 +39,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventsTabComponent {
+  private static readonly MAX_ADD_MEMBER_RESULTS = 10;
+
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetups = inject(PartySetupService);
   private readonly destroyRef = inject(DestroyRef);
@@ -47,6 +51,12 @@ export class EventsTabComponent {
   protected readonly subJobOptions = [...EVENT_SUB_JOB_OPTIONS];
   protected readonly jobTypeOptions = [...EVENT_JOB_TYPE_OPTIONS];
 
+  protected readonly addMemberDrafts: Record<number, ActivityAddEventMemberInput> = {};
+  protected readonly addMemberSearchDrafts: Record<number, string> = {};
+  protected readonly addMemberCandidatesByEvent = signal<Record<number, ActivityEventAddMemberCandidate[]>>({});
+  protected readonly expandedAddMemberEventIds = signal<Set<number>>(new Set());
+  protected readonly loadingAddMemberEventIds = signal<Set<number>>(new Set());
+  protected readonly openAddMemberTypeaheadEventId = signal<number | null>(null);
   protected readonly lootDrafts: Record<number, ActivityLootInput> = {};
   protected readonly quickJoinDrafts: Record<number, ActivityQuickJoinInput> = {};
 
@@ -82,6 +92,16 @@ export class EventsTabComponent {
   public constructor() {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
     this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
+
+    effect(() => {
+      const livePartyBoardEventIds = this.liveEvents()
+        .filter(event => !!event.partySetupId)
+        .map(event => event.id);
+
+      for (const eventId of livePartyBoardEventIds) {
+        void this.partySetups.loadEventBoard(eventId);
+      }
+    });
   }
 
   // ----- Settings / loot helpers (read-only mirrors) -----
@@ -154,6 +174,99 @@ export class EventsTabComponent {
     this.queuePanel().openEditEventForm(event);
   }
 
+  protected isAddMemberExpanded(eventId: number): boolean {
+    return this.expandedAddMemberEventIds().has(eventId);
+  }
+
+  protected addMemberCandidates(eventId: number): ActivityEventAddMemberCandidate[] {
+    return this.addMemberCandidatesByEvent()[eventId] ?? [];
+  }
+
+  protected addMemberLoading(eventId: number): boolean {
+    return this.loadingAddMemberEventIds().has(eventId);
+  }
+
+  protected addMemberSearchDraft(eventId: number): string {
+    return this.addMemberSearchDrafts[eventId] ?? '';
+  }
+
+  protected setAddMemberSearchDraft(eventId: number, value: string): void {
+    this.addMemberSearchDrafts[eventId] = value;
+    this.getAddMemberDraft(eventId).appUserId = '';
+    this.openAddMemberTypeaheadEventId.set(eventId);
+  }
+
+  protected openAddMemberTypeahead(eventId: number): void {
+    this.openAddMemberTypeaheadEventId.set(eventId);
+  }
+
+  protected closeAddMemberTypeahead(): void {
+    this.openAddMemberTypeaheadEventId.set(null);
+  }
+
+  protected filteredAddMemberCandidates(eventId: number): ActivityEventAddMemberCandidate[] {
+    const query = this.addMemberSearchDraft(eventId).trim().toLowerCase();
+    const matches = query
+      ? this.addMemberCandidates(eventId).filter(candidate => this.addMemberCandidateLabel(candidate).toLowerCase().includes(query))
+      : this.addMemberCandidates(eventId);
+
+    return matches.slice(0, EventsTabComponent.MAX_ADD_MEMBER_RESULTS);
+  }
+
+  protected chooseAddMemberCandidate(eventId: number, candidate: ActivityEventAddMemberCandidate): void {
+    this.addMemberSearchDrafts[eventId] = this.addMemberCandidateLabel(candidate);
+    this.getAddMemberDraft(eventId).appUserId = candidate.appUserId;
+    this.closeAddMemberTypeahead();
+  }
+
+  protected getAddMemberDraft(eventId: number): ActivityAddEventMemberInput {
+    this.addMemberDrafts[eventId] ??= {
+      appUserId: '',
+      jobName: '',
+      subJobName: '',
+      jobType: ''
+    };
+
+    return this.addMemberDrafts[eventId];
+  }
+
+  protected async toggleAddMember(eventId: number): Promise<void> {
+    const next = new Set(this.expandedAddMemberEventIds());
+    if (next.has(eventId)) {
+      next.delete(eventId);
+      this.expandedAddMemberEventIds.set(next);
+      if (this.openAddMemberTypeaheadEventId() === eventId) {
+        this.closeAddMemberTypeahead();
+      }
+      return;
+    }
+
+    next.add(eventId);
+    this.expandedAddMemberEventIds.set(next);
+
+    if (this.addMemberCandidates(eventId).length === 0) {
+      await this.loadAddMemberCandidates(eventId);
+    }
+  }
+
+  private async loadAddMemberCandidates(eventId: number): Promise<void> {
+    this.loadingAddMemberEventIds.update(current => new Set(current).add(eventId));
+    try {
+      const candidates = await this.activity.loadAddMemberCandidates(eventId);
+      this.addMemberCandidatesByEvent.update(current => ({ ...current, [eventId]: candidates }));
+    } finally {
+      this.loadingAddMemberEventIds.update(current => {
+        const next = new Set(current);
+        next.delete(eventId);
+        return next;
+      });
+    }
+  }
+
+  protected addMemberCandidateLabel(candidate: ActivityEventAddMemberCandidate): string {
+    return candidate.rank ? `${candidate.characterName} · ${candidate.rank}` : candidate.characterName;
+  }
+
   // ----- Participant grouping -----
 
   protected attendanceParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {
@@ -164,7 +277,7 @@ export class EventsTabComponent {
 
   protected activeRoomParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {
     return this.sortCurrentUserFirst(
-      event.participants.filter(participant => !participant.isOnBreak && participant.isVerified === true)
+      this.mergeChannelSignupParticipants(event as ActivityEvent).filter(participant => !participant.isOnBreak && participant.isVerified === true)
     );
   }
 
@@ -182,6 +295,78 @@ export class EventsTabComponent {
       const bIsMe = b.appUserId === currentUserId ? 0 : 1;
       return aIsMe - bIsMe;
     });
+  }
+
+  protected lootEligibleParticipants(event: ActivityEvent): ActivityEventParticipant[] {
+    return this.sortCurrentUserFirst(this.mergeChannelSignupParticipants(event));
+  }
+
+  private mergeChannelSignupParticipants(event: ActivityEvent): ActivityEventParticipant[] {
+    const merged = [...event.participants];
+    const seen = new Set(merged.map(participant => this.participantKey(participant)).filter((key): key is string => !!key));
+
+    for (const signup of this.channelSignupParticipants(event)) {
+      const key = this.participantKey(signup);
+      if (key && seen.has(key)) {
+        continue;
+      }
+
+      if (key) {
+        seen.add(key);
+      }
+
+      merged.push(signup);
+    }
+
+    return merged;
+  }
+
+  private channelSignupParticipants(event: ActivityEvent): ActivityEventParticipant[] {
+    if (!event.partySetupId) {
+      return [];
+    }
+
+    return this.eventBoardSlots(event.id)
+      .filter(slot => !!slot.signedUpAppUserId || !!slot.signedUpCharacterName)
+      .map(slot => ({
+        id: -slot.slotId,
+        appUserId: slot.signedUpAppUserId ?? null,
+        characterName: slot.signedUpCharacterName ?? null,
+        jobName: slot.signedUpMainJob ?? slot.mainJob ?? null,
+        subJobName: slot.signedUpSubJob ?? slot.subJob ?? null,
+        jobType: slot.signedUpRole ?? slot.role ?? null,
+        isQuickJoin: false,
+        isVerified: true,
+        proctor: 'Discord channel signup',
+        startTime: event.commencementStartTime ?? event.startTime ?? null,
+        resumeTime: null,
+        pauseTime: null,
+        isOnBreak: false,
+        duration: 0,
+        eventDkp: 0,
+        statusLedger: []
+      } satisfies ActivityEventParticipant));
+  }
+
+  private eventBoardSlots(eventId: number): ActivityPartySetupSlot[] {
+    const board = this.partySetups.eventBoardFor(eventId);
+    if (!board) {
+      return [];
+    }
+
+    return board.alliances.flatMap(alliance => alliance.parties.flatMap(party => party.slots));
+  }
+
+  private participantKey(participant: Pick<ActivityEventParticipant, 'appUserId' | 'characterName'>): string | null {
+    if (participant.appUserId && participant.appUserId.trim().length > 0) {
+      return `user:${participant.appUserId.trim()}`;
+    }
+
+    if (participant.characterName && participant.characterName.trim().length > 0) {
+      return `name:${participant.characterName.trim().toLowerCase()}`;
+    }
+
+    return null;
   }
 
   // ----- Attendance windows -----
@@ -407,6 +592,30 @@ export class EventsTabComponent {
         subJobName: '',
         jobType: ''
       };
+    } catch {
+      // Service already exposes the action error state.
+    }
+  }
+
+  protected async submitAddMember(eventId: number): Promise<void> {
+    const draft = this.getAddMemberDraft(eventId);
+    if (!draft.appUserId || !draft.jobName || !draft.subJobName || !draft.jobType) {
+      this.activity.actionError.set('Member, role, main job, and sub job are required.');
+      this.activity.actionMessage.set(null);
+      return;
+    }
+
+    try {
+      await this.activity.addMemberToLiveEvent(eventId, draft);
+      this.addMemberDrafts[eventId] = {
+        appUserId: '',
+        jobName: '',
+        subJobName: '',
+        jobType: ''
+      };
+      this.addMemberSearchDrafts[eventId] = '';
+      this.closeAddMemberTypeahead();
+      await this.loadAddMemberCandidates(eventId);
     } catch {
       // Service already exposes the action error state.
     }

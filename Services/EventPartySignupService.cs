@@ -181,6 +181,12 @@ public static class EventPartySignupService
                 continue;
             }
 
+            var participationStartTime = eventEntity.CommencementStartTime;
+            if (participationStartTime.HasValue && signup.SignedUpAtUtc > participationStartTime.Value)
+            {
+                participationStartTime = signup.SignedUpAtUtc;
+            }
+
             eventEntity.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = signup.AppUserId,
@@ -189,7 +195,7 @@ public static class EventPartySignupService
                 JobName = signup.MainJob,
                 SubJobName = signup.SubJob,
                 JobType = signup.Role,
-                StartTime = eventEntity.CommencementStartTime,
+                StartTime = participationStartTime,
                 EventDkp = 0,
                 // Pending → shows in the Attendance room until a leader verifies,
                 // mirroring the Activity "Join" flow (IsVerified left null).

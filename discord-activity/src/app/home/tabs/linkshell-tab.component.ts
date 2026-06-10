@@ -34,11 +34,9 @@ export class LinkshellTabComponent {
   protected set rosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
 
   // App Sync filter: limits the Linkshell Roster (Manage Team) list to members
-  // who are both app-admitted (appUserId set) and Active. Defaults to true so
-  // the view leads with members the linkshell has tracking on; toggle off to
-  // also see Pending / Unclaimed rows pulled from the sheet without an app
-  // user. Mirrors the Dashboard tab's identical toggle.
-  protected readonly appSyncOnly = signal(true);
+  // who are app-linked (appUserId set). Status stays visible but is never part
+  // of the filter. Mirrors the Dashboard tab's identical toggle.
+  protected readonly appSyncOnly = signal(false);
   protected toggleAppSync(value: boolean): void {
     this.appSyncOnly.set(value);
     this.rosterPage.set(1);
@@ -112,8 +110,7 @@ export class LinkshellTabComponent {
     const members = this.selectedDashboardMembers();
     return members.filter(member => {
       if (appSyncOnly) {
-        const status = (member.status ?? 'Active').toLowerCase();
-        if (!member.appUserId || status !== 'active') return false;
+        if (!member.appUserId) return false;
       }
       if (term) {
         const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);

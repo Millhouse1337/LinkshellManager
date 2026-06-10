@@ -20,6 +20,7 @@ import {
 import type {
   ActivityAddonPairingCodeResponse,
   ActivityAddonTokenList,
+  ActivityAddEventMemberInput,
   ActivityCreateAuctionInput,
   ActivityCreateEventInput,
   ActivityCreateLinkshellInput,
@@ -28,6 +29,7 @@ import type {
   ActivityChannelRoutesResponse,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
+  ActivityEventAddMemberCandidate,
   ActivityHistory,
   ActivityLootEditInput,
   ActivityLootHistoryList,
@@ -58,6 +60,7 @@ export type {
   ActivityAddonPairingCodeResponse,
   ActivityAddonToken,
   ActivityAddonTokenList,
+  ActivityAddEventMemberInput,
   ActivityAnnouncement,
   ActivityAttendanceWindow,
   ActivityAttendanceWindowAttendee,
@@ -72,6 +75,7 @@ export type {
   ActivityDkpAddCandidate,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
+  ActivityEventAddMemberCandidate,
   ActivityEventParticipant,
   ActivityGuildOption,
   ActivityHistory,
@@ -799,6 +803,8 @@ export class DiscordActivityService {
   deleteLinkshellRole(linkshellId: number, roleId: number): Promise<boolean> { return this.linkshellService.deleteLinkshellRole(linkshellId, roleId); }
 
   // --- EventService ---
+  loadAddMemberCandidates(eventId: number): Promise<ActivityEventAddMemberCandidate[]> { return this.eventService.loadAddMemberCandidates(eventId); }
+  addMemberToLiveEvent(eventId: number, input: ActivityAddEventMemberInput): Promise<void> { return this.eventService.addMemberToLiveEvent(eventId, input); }
   signUpForEvent(eventId: number, jobId: number, adHocJob?: ActivityQuickJoinInput): Promise<void> { return this.eventService.signUpForEvent(eventId, jobId, adHocJob); }
   unsignFromEvent(eventId: number): Promise<void> { return this.eventService.unsignFromEvent(eventId); }
   createEvent(input: ActivityCreateEventInput): Promise<void> { return this.eventService.createEvent(input); }

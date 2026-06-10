@@ -30,11 +30,9 @@ export class DashboardTabComponent {
   protected get dashboardRosterSearch(): string { return this.rosterSearchValue; }
   protected set dashboardRosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
 
-  // App Sync filter: limits the dashboard roster to members who are both
-  // app-admitted (appUserId set) and Active. Defaults to true so the card
-  // leads with the linkshell's actually-tracked members; toggle off to also
-  // see Pending / Unclaimed rows pulled from the sheet without an app user.
-  protected readonly appSyncOnly = signal(true);
+  // App Sync filter: limits the dashboard roster to members who are app-linked
+  // (appUserId set). Status stays visible but is never part of the filter.
+  protected readonly appSyncOnly = signal(false);
   protected toggleAppSync(value: boolean): void {
     this.appSyncOnly.set(value);
     this.rosterPage.set(1);
@@ -117,8 +115,7 @@ export class DashboardTabComponent {
     const members = this.selectedDashboardMembers();
     return members.filter(member => {
       if (appSyncOnly) {
-        const status = (member.status ?? 'Active').toLowerCase();
-        if (!member.appUserId || status !== 'active') return false;
+        if (!member.appUserId) return false;
       }
       if (term) {
         const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
@@ -392,6 +389,7 @@ export class DashboardTabComponent {
     title: string;
     subtitle: string;
     dkp: number | null;
+    iconPath: string | null;
     relative: string;
     colorClass: string;
     when: number;
@@ -415,6 +413,7 @@ export class DashboardTabComponent {
           ? `Announcement · ${announcement.createdByCharacterName}`
           : 'Announcement',
         dkp: null,
+        iconPath: null,
         relative: this.shortPastRelative(when),
         colorClass: 'c',
         when
@@ -427,6 +426,7 @@ export class DashboardTabComponent {
         title: rule.title,
         subtitle: 'Rule updated',
         dkp: null,
+        iconPath: null,
         relative: this.shortPastRelative(when),
         colorClass: 'd',
         when
@@ -439,6 +439,7 @@ export class DashboardTabComponent {
         title: `${auction.title} ${auction.closed ? 'closed' : 'opened'}`,
         subtitle: 'Auction',
         dkp: null,
+        iconPath: null,
         relative: this.shortPastRelative(when),
         colorClass: 'e',
         when
@@ -452,6 +453,11 @@ export class DashboardTabComponent {
         title: `${audit.characterName} DKP ${sign}${audit.amount}`,
         subtitle: audit.isCorrection ? 'DKP correction' : 'DKP adjustment',
         dkp: null,
+        // Relative (no leading slash) so it resolves against the app's
+        // /discord-activity/ base href — the only static path that is both
+        // served by the web app AND covered by the Discord proxy's URL
+        // mappings. The file ships from discord-activity/public/.
+        iconPath: 'ffxi_assets/Other/DKP.jpg',
         relative: this.shortPastRelative(when),
         colorClass: 'f',
         when
@@ -465,6 +471,7 @@ export class DashboardTabComponent {
         title: `${member.characterName} joined`,
         subtitle: 'New member',
         dkp: null,
+        iconPath: 'ffxi_assets/Other/NewMember.jpg',
         relative: this.shortPastRelative(when),
         colorClass: 'a',
         when
@@ -474,7 +481,7 @@ export class DashboardTabComponent {
     return items
       .filter(item => item.when > 0)
       .sort((left, right) => right.when - left.when)
-      .slice(0, 12);
+        .slice(0, 10);
   }
 
   protected activityFilter: 'all' | 'kills' | 'claims' | 'events' | 'loot' = 'all';

@@ -779,8 +779,14 @@
   align-self: end;
   padding-bottom: 7px;
 }
+
+.create-form__grid > .create-form__inline-toggle-spaced {
+  padding-left: 14px;
+}
+
 @media (max-width: 640px) {
   .create-form__grid > .tod-toggle { align-self: start; padding-bottom: 0; }
+  .create-form__grid > .create-form__inline-toggle-spaced { padding-left: 0; }
 }
 
 // 3-column variant for forms that want a Title + Start + End style row.

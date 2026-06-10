@@ -100,9 +100,9 @@
               (ngModelChange)="onStartTimeChange()" />
           </label>
 
-          <label class="tod-toggle">
+          <label class="tod-toggle create-form__inline-toggle-spaced">
             <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
-            <span>Auto start at start time</span>
+            <span>Auto Start</span>
           </label>
 
           <label>
@@ -112,12 +112,12 @@
                 <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local"
                   (ngModelChange)="onEndTimeChange()" />
               } @else {
-                <input value="Not specified" disabled />
+                <input value="N/A" disabled />
               }
               <label class="tod-toggle">
                 <input type="checkbox" [ngModel]="endTimeNotSpecified"
                   (ngModelChange)="onEndTimeNotSpecifiedChange($event)" name="endTimeNotSpecified" />
-                <span>Not specified</span>
+                <span>N/A</span>
               </label>
             </div>
           </label>
@@ -129,12 +129,12 @@
                 <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25"
                   (ngModelChange)="onDurationChange()" />
               } @else {
-                <input value="Not specified" disabled />
+                <input value="N/A" disabled />
               }
               <label class="tod-toggle">
                 <input type="checkbox" [ngModel]="durationNotSpecified"
                   (ngModelChange)="onDurationNotSpecifiedChange($event)" name="durationNotSpecified" />
-                <span>Not specified</span>
+                <span>N/A</span>
               </label>
             </div>
           </label>
@@ -146,7 +146,7 @@
         <div class="create-form__grid">
           <label class="tod-toggle">
             <input type="checkbox" [(ngModel)]="createModel.countsTowardActive" name="countsTowardActive" />
-            <span>Counts toward active-member status</span>
+            <span>Active/Inactive Tracker</span>
           </label>
 
           @if (isDkpModeForSelectedLinkshell()) {
@@ -171,7 +171,7 @@
         <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px 28px">
           <div class="panel__header" style="margin:0">
             <div class="panel__header-title-row">
-              <h3>Party Setup (Optional)</h3>
+              <h3>Party Setup</h3>
               <div class="yesno-toggle" role="radiogroup" aria-label="Use a party setup">
                 <button type="button" class="yesno-toggle__btn"
                   [class.is-active]="!partySetupNotSpecified"

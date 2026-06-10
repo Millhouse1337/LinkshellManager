@@ -66,7 +66,7 @@ public sealed partial class ActivityDataController
             .ToList();
 
         return Ok(new ActivityPartySetupDetailDto(
-            setup.Id, setup.LinkshellId, setup.Name, setup.AssignedMonsterName, setup.Notes, canManage, alliances));
+            setup.Id, setup.LinkshellId, setup.Name, setup.EventType, setup.AssignedMonsterName, setup.Notes, canManage, alliances));
     }
 
     [HttpPost("events/{eventId:int}/party-slots/{slotId:int}/signup")]

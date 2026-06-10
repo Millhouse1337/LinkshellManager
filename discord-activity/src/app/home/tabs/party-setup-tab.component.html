@@ -30,7 +30,7 @@
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Monster</th>
+                <th>Event Type</th>
                 <th>Alliances</th>
                 <th>Parties</th>
                 <th>Slots</th>
@@ -43,8 +43,8 @@
                 <tr class="ps-row" [class.is-selected]="selectedId() === row.id" (click)="select(row.id)">
                   <td><strong>{{ row.name }}</strong></td>
                   <td>
-                    @if (row.assignedMonsterName) {
-                      <span class="status-pill ok">{{ row.assignedMonsterName }}</span>
+                    @if (row.eventType) {
+                      <span class="status-pill ok">{{ formatSetupType(row) }}</span>
                     } @else {
                       <span class="we-muted">—</span>
                     }
@@ -86,7 +86,8 @@
         <div class="card-head">
           <div class="card-title">
             {{ row.name }}
-            @if (row.assignedMonsterName) { <span class="ps-assigned">&middot; {{ row.assignedMonsterName }}</span> }
+            @if (row.eventType) { <span class="ps-assigned">&middot; {{ row.eventType }}</span> }
+            @if (isHnmSetup(row) && row.assignedMonsterName) { <span class="ps-assigned">&middot; {{ row.assignedMonsterName }}</span> }
           </div>
           <div class="section-head-right">
             @if (canManage()) {
@@ -102,9 +103,9 @@
           </div>
         </div>
 
-        @if (canManage()) {
+        @if (canManage() && isHnmSetup(row)) {
           <div class="ps-assign-row">
-            <span class="ps-assign-label">Assigned monster</span>
+            <span class="ps-assign-label">Monster</span>
             <select [ngModel]="assignDraft()" (ngModelChange)="assignDraft.set($event)">
               <option value="">Unassigned</option>
               @for (m of model.monsterOptions; track m) { <option [value]="m">{{ m }}</option> }
