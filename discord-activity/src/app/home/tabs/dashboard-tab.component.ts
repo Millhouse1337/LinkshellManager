@@ -288,6 +288,22 @@ export class DashboardTabComponent {
       .slice(0, 4);
   }
 
+  // Maps an event type/category (Sky, Sea, Dynamis, Limbus, ...) to a themed
+  // FFXI thumbnail served from the Activity's public folder. Types without a
+  // dedicated image (HNM, HENM, NM, BCNM, KSNM, blanks) return null so the
+  // caller falls back to the plain placeholder box.
+  private static readonly EVENT_TYPE_IMAGES: Record<string, string> = {
+    sky: 'ffxi_assets/Other/Sky.jpg',
+    sea: 'ffxi_assets/Other/Sea.jpg',
+    dynamis: 'ffxi_assets/Other/Dynamis.jpg',
+    limbus: 'ffxi_assets/Other/Limbus.jpg'
+  };
+
+  protected eventTypeImage(type?: string | null): string | null {
+    const key = (type ?? '').trim().toLowerCase();
+    return DashboardTabComponent.EVENT_TYPE_IMAGES[key] ?? null;
+  }
+
   protected eventRelativeLabel(value?: string | null): string {
     const target = parseDate(value);
     if (!target) return '';
@@ -439,7 +455,7 @@ export class DashboardTabComponent {
         title: `${auction.title} ${auction.closed ? 'closed' : 'opened'}`,
         subtitle: 'Auction',
         dkp: null,
-        iconPath: null,
+        iconPath: 'ffxi_assets/Other/Auction.jpg',
         relative: this.shortPastRelative(when),
         colorClass: 'e',
         when
@@ -538,6 +554,27 @@ export class DashboardTabComponent {
           detail: 'No claim',
           dkp: null,
           categoryLabel: 'No claim',
+          relative: this.longPastRelative(when),
+          when
+        });
+      }
+    }
+
+    // Loot entered during a LIVE (still-running) event — distinct from ToD loot
+    // and from closed-event loot. Without this, loot logged in the live event
+    // system didn't appear in Recent Activity until the event was archived.
+    for (const event of this.selectedDashboardEvents()) {
+      if (!event.loot?.length) { continue; }
+      const when = parseDate(event.commencementStartTime ?? event.startTime) ?? 0;
+      for (const loot of event.loot) {
+        const winner = (loot.itemWinner ?? '').trim();
+        items.push({
+          kind: 'loot',
+          name: event.name || 'Event',
+          action: 'loot',
+          detail: `${loot.itemName || 'Loot'}${winner ? ` → ${winner}` : ''}`,
+          dkp: loot.winningDkpSpent ?? null,
+          categoryLabel: 'Loot',
           relative: this.longPastRelative(when),
           when
         });

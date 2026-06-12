@@ -14,6 +14,10 @@
   --fg-2:     #a1a1aa;
   --fg-3:     #71717a;
   --fg-4:     #52525b;
+  // Muted secondary text (labels, placeholders, hints). Several components
+  // reference --muted; without this alias it was undefined, so those colors fell
+  // back to the inherited --fg (white) — e.g. input placeholders looked typed-in.
+  --muted:    var(--fg-3);
 
   --accent:       #818cf8;
   --accent-hover: #a5acf9;

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Options;
@@ -43,6 +44,8 @@ public sealed class LinkshellSheetController : Controller
         _timeZones = timeZones;
     }
 
+    // Import page: connect Google (step 1) + import existing DKP from an uploaded
+    // spreadsheet (step 2). The live-sync toggle lives in this page's header.
     [HttpGet("/linkshells/{linkshellId:int}/sheet")]
     public async Task<IActionResult> Index(int linkshellId)
     {
@@ -52,20 +55,36 @@ public sealed class LinkshellSheetController : Controller
 
         var viewModel = await BuildViewModelAsync(linkshellId);
         if (viewModel is null) return NotFound();
-        // ConnectedAt is stored UTC; surface a viewer-local copy so the
-        // "Step 1 -- Connected as ... since ..." line reads in the user's
-        // profile timezone instead of UTC. Falls back to UTC silently when
-        // the user has no zone configured (the view tag stays "UTC").
-        if (viewModel.ConnectedAt.HasValue)
-        {
-            var local = _timeZones.ToUserTime(viewModel.ConnectedAt, user.TimeZone);
-            if (local.HasValue && !string.IsNullOrWhiteSpace(user.TimeZone))
-            {
-                viewModel.ConnectedAtUserLocal = local;
-                viewModel.ConnectedAtTimeZoneLabel = user.TimeZone;
-            }
-        }
+        ApplyConnectedAtLocal(viewModel, user);
         return View(viewModel);
+    }
+
+    // Export page: create/connect the dedicated Google Sheet and push DKP into it.
+    [HttpGet("/linkshells/{linkshellId:int}/sheet/export")]
+    public async Task<IActionResult> Export(int linkshellId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+        if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
+
+        var viewModel = await BuildViewModelAsync(linkshellId);
+        if (viewModel is null) return NotFound();
+        ApplyConnectedAtLocal(viewModel, user);
+        return View(viewModel);
+    }
+
+    // ConnectedAt is stored UTC; surface a viewer-local copy so the "Connected as
+    // ... since ..." line reads in the user's profile timezone instead of UTC.
+    // Falls back to UTC silently when the user has no zone configured.
+    private void ApplyConnectedAtLocal(LinkshellSheetViewModel viewModel, AppUser user)
+    {
+        if (!viewModel.ConnectedAt.HasValue) return;
+        var local = _timeZones.ToUserTime(viewModel.ConnectedAt, user.TimeZone);
+        if (local.HasValue && !string.IsNullOrWhiteSpace(user.TimeZone))
+        {
+            viewModel.ConnectedAtUserLocal = local;
+            viewModel.ConnectedAtTimeZoneLabel = user.TimeZone;
+        }
     }
 
     private async Task<LinkshellSheetViewModel?> BuildViewModelAsync(int linkshellId)
@@ -211,7 +230,7 @@ public sealed class LinkshellSheetController : Controller
 
         await _db.SaveChangesAsync();
         TempData["SheetConfigSuccess"] = "Template tab name saved.";
-        return RedirectToAction(nameof(Index), new { linkshellId });
+        return RedirectToAction(nameof(Export), new { linkshellId });
     }
 
     // Creates a dedicated "LSM DKP" spreadsheet owned by the connected Google
@@ -232,7 +251,7 @@ public sealed class LinkshellSheetController : Controller
         if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
         {
             TempData["SheetConfigError"] = "Connect a Google account first.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
+            return RedirectToAction(nameof(Export), new { linkshellId });
         }
 
         try
@@ -269,7 +288,7 @@ public sealed class LinkshellSheetController : Controller
         {
             TempData["SheetConfigError"] = $"Could not create the sheet: {ex.Message}";
         }
-        return RedirectToAction(nameof(Index), new { linkshellId });
+        return RedirectToAction(nameof(Export), new { linkshellId });
     }
 
     // Export the linkshell's DKP into the styled generic template tab on the
@@ -285,13 +304,13 @@ public sealed class LinkshellSheetController : Controller
         var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
         if (string.IsNullOrWhiteSpace(linkshell?.GoogleSpreadsheetId))
         {
-            TempData["SheetImportError"] = "Configure a spreadsheet ID before exporting.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
+            TempData["SheetImportError"] = "Create your DKP sheet before exporting.";
+            return RedirectToAction(nameof(Export), new { linkshellId });
         }
         if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
         {
             TempData["SheetImportError"] = "Connect a Google account before exporting.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
+            return RedirectToAction(nameof(Export), new { linkshellId });
         }
 
         try
@@ -307,12 +326,15 @@ public sealed class LinkshellSheetController : Controller
         {
             TempData["SheetImportError"] = $"Export failed: {ex.Message}";
         }
-        return RedirectToAction(nameof(Index), new { linkshellId });
+        return RedirectToAction(nameof(Export), new { linkshellId });
     }
 
+    // Step 2 (Import page): read an uploaded .xlsx/.csv laid out like the template,
+    // match its rows against the roster, and render a preview. The parsed rows are
+    // round-tripped to the view as JSON so Commit needs no re-upload.
     [HttpPost("/linkshells/{linkshellId:int}/sheet/import-preview")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ImportPreview(int linkshellId, CancellationToken cancellationToken)
+    public async Task<IActionResult> ImportPreview(int linkshellId, IFormFile? file, CancellationToken cancellationToken)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -320,52 +342,73 @@ public sealed class LinkshellSheetController : Controller
 
         var viewModel = await BuildViewModelAsync(linkshellId);
         if (viewModel is null) return NotFound();
+        ApplyConnectedAtLocal(viewModel, user);
 
-        if (string.IsNullOrWhiteSpace(viewModel.SpreadsheetId))
+        if (file is null || file.Length == 0)
         {
-            TempData["SheetImportError"] = "Configure a spreadsheet ID before previewing an import.";
+            TempData["SheetImportError"] = "Choose an .xlsx (or .csv) file to import.";
             return View("Index", viewModel);
         }
-        if (!viewModel.IsOAuthConnected)
+        if (file.Length > 5 * 1024 * 1024)
         {
-            TempData["SheetImportError"] = "Connect a Google account before previewing an import.";
+            TempData["SheetImportError"] = "That file is larger than 5 MB — export a smaller DKP sheet.";
             return View("Index", viewModel);
         }
 
         try
         {
-            viewModel.TemplatePreview = await _template.BuildPreviewAsync(linkshellId, cancellationToken);
+            List<IList<object>> grid;
+            using (var stream = file.OpenReadStream())
+            {
+                grid = XlsxImportReader.Read(stream, file.FileName);
+            }
+
+            var parsed = _template.ParseImport(grid);
+            if (parsed.Count == 0)
+            {
+                TempData["SheetImportError"] =
+                    "No member rows found. Use the same columns as the template (Member Name, Current DKP, Total DKP, Total DKP Spent).";
+                return View("Index", viewModel);
+            }
+
+            viewModel.TemplatePreview = await _template.BuildPreviewAsync(linkshellId, parsed, file.FileName, cancellationToken);
+            viewModel.ImportFileName = file.FileName;
+            viewModel.ImportPayloadJson = JsonSerializer.Serialize(parsed);
         }
         catch (Exception ex)
         {
-            TempData["SheetImportError"] = $"Preview failed: {ex.Message}";
+            TempData["SheetImportError"] = $"Could not read that file: {ex.Message}";
         }
         return View("Index", viewModel);
     }
 
+    // Save import: commit the previewed rows (carried back as JSON) — sets each
+    // matched member's Current DKP and seeds their lifetime totals.
     [HttpPost("/linkshells/{linkshellId:int}/sheet/import-commit")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ImportCommit(int linkshellId, CancellationToken cancellationToken)
+    public async Task<IActionResult> ImportCommit(int linkshellId,
+        [FromForm] string? payload, [FromForm] string? fileName, CancellationToken cancellationToken)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
         if (!await CanManageAsync(user.Id, linkshellId)) return Forbid();
 
-        var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
-        if (linkshell?.GoogleSpreadsheetId is null)
+        List<DkpImportRow>? parsed = null;
+        if (!string.IsNullOrWhiteSpace(payload))
         {
-            TempData["SheetImportError"] = "Configure a spreadsheet ID before importing.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
+            try { parsed = JsonSerializer.Deserialize<List<DkpImportRow>>(payload); }
+            catch (JsonException) { parsed = null; }
         }
-        if (string.IsNullOrWhiteSpace(linkshell.GoogleOAuthRefreshTokenEnc))
+        if (parsed is null || parsed.Count == 0)
         {
-            TempData["SheetImportError"] = "Connect a Google account before importing.";
+            TempData["SheetImportError"] = "Nothing to import — upload a file and preview it first.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
 
         try
         {
-            var result = await _template.CommitAsync(linkshellId, cancellationToken);
+            var label = string.IsNullOrWhiteSpace(fileName) ? "import" : fileName!;
+            var result = await _template.CommitAsync(linkshellId, parsed, label, cancellationToken);
             var unmatched = result.Unmatched.Count == 0
                 ? string.Empty
                 : $" {result.Unmatched.Count} row(s) didn't match a member ({string.Join(", ", result.Unmatched.Take(5))}{(result.Unmatched.Count > 5 ? "…" : string.Empty)}).";

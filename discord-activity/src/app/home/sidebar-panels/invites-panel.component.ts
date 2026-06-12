@@ -32,6 +32,9 @@ export class InvitesPanelComponent {
   // Tracks which (locked) linkshell the "From your Discord server" roster has
   // been loaded for, so the effect doesn't refetch on every overview refresh.
   private discordRosterLoadedFor = 0;
+  protected discordRosterSearchTerm = '';
+  protected discordRosterPage = 1;
+  protected readonly discordRosterPageSize = 9;
 
   public constructor() {
     effect(() => {
@@ -95,14 +98,22 @@ export class InvitesPanelComponent {
       if (!canManage || !locked) {
         if (this.discordRosterLoadedFor !== 0) {
           this.discordRosterLoadedFor = 0;
-          untracked(() => this.activity.clearDiscordRoster());
+          untracked(() => {
+            this.discordRosterSearchTerm = '';
+            this.discordRosterPage = 1;
+            this.activity.clearDiscordRoster();
+          });
         }
         return;
       }
 
       if (this.discordRosterLoadedFor === linkshellId) return;
       this.discordRosterLoadedFor = linkshellId;
-      untracked(() => void this.activity.loadDiscordRoster(linkshellId));
+      untracked(() => {
+        this.discordRosterSearchTerm = '';
+        this.discordRosterPage = 1;
+        void this.activity.loadDiscordRoster(linkshellId);
+      });
     });
   }
 
@@ -120,6 +131,15 @@ export class InvitesPanelComponent {
       return;
     }
     await this.activity.inviteDiscordUser(linkshellId, discordUserId);
+  }
+
+  protected get discordRosterSearch(): string {
+    return this.discordRosterSearchTerm;
+  }
+
+  protected set discordRosterSearch(value: string) {
+    this.discordRosterSearchTerm = value;
+    this.discordRosterPage = 1;
   }
 
   protected linkshellMemberships() {
@@ -164,6 +184,37 @@ export class InvitesPanelComponent {
       this.connectedInviteCandidates().map(candidate => candidate.appUserId)
     );
     return this.activity.inviteBrowseResults().filter(result => !connectedIds.has(result.id));
+  }
+
+  protected filteredDiscordRosterCandidates() {
+    const term = this.discordRosterSearch.trim().toLowerCase();
+    const candidates = this.activity.discordRosterCandidates();
+    if (!term) {
+      return candidates;
+    }
+
+    return candidates.filter(candidate => candidate.displayName.toLowerCase().includes(term));
+  }
+
+  protected discordRosterTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredDiscordRosterCandidates().length / this.discordRosterPageSize));
+  }
+
+  protected discordRosterCurrentPage(): number {
+    return Math.min(Math.max(1, this.discordRosterPage), this.discordRosterTotalPages());
+  }
+
+  protected pagedDiscordRosterCandidates() {
+    const start = (this.discordRosterCurrentPage() - 1) * this.discordRosterPageSize;
+    return this.filteredDiscordRosterCandidates().slice(start, start + this.discordRosterPageSize);
+  }
+
+  protected discordRosterPrev(): void {
+    this.discordRosterPage = Math.max(1, this.discordRosterCurrentPage() - 1);
+  }
+
+  protected discordRosterNext(): void {
+    this.discordRosterPage = Math.min(this.discordRosterTotalPages(), this.discordRosterCurrentPage() + 1);
   }
 
   protected browseTotalPages(): number {

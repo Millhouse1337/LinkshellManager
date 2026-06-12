@@ -2,7 +2,9 @@
    iframe so officers can see the full alliance grid without horizontal
    scrolling. Mirrors the web app's PartySetup/Create.cshtml layout. */
 .pse-dialog {
-  width: min(1200px, calc(100vw - 24px));
+  // Wider so a party card has room to hold a whole slot row (leader + role +
+  // main + sub + duplicate + remove) on ONE line without wrapping.
+  width: min(1400px, calc(100vw - 24px));
   max-height: 92vh;
   padding: 0;
 }
@@ -167,25 +169,26 @@
 }
 
 /* One slot row: leader btn, role/main/sub selects (or Anything pill),
-   duplicate, remove. Wraps gracefully on narrow widths. */
+   duplicate, remove — kept on a SINGLE line (no wrap). The selects share the
+   leftover width and shrink (min-width:0) instead of dropping to a new row. */
 .pse-slot {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 4px 6px;
   border-radius: var(--r-sm);
   transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .pse-slot__role,
-.pse-slot__job { flex: 1 1 96px; min-width: 84px; }
+.pse-slot__job { flex: 1 1 64px; min-width: 0; }
 
 /* "Anything" pill — dashed border + italic label, replaces the Main/Sub
    selects for an unspecified slot. */
 .pse-slot__any {
-  flex: 2 1 200px;
-  min-width: 140px;
+  flex: 2 1 120px;
+  min-width: 0;
   height: 34px;
   display: inline-flex;
   align-items: center;

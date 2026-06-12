@@ -66,6 +66,11 @@
         <div class="card">
             <div class="card-head">
                 <div class="card-title">Ledger <span class="tag">@Model.TotalEntryCount</span></div>
+                @if (Model.Entries.Any())
+                {
+                    <input type="search" id="ledgerSearch" class="form-control" placeholder="Search ledger…"
+                           autocomplete="off" style="max-width:260px" />
+                }
             </div>
             @if (!Model.Entries.Any())
             {
@@ -73,7 +78,7 @@
             }
             else
             {
-                <table class="table themed">
+                <table class="table themed" id="ledgerTable">
                     <thead>
                         <tr>
                             <th>When</th>
@@ -150,32 +155,91 @@
                         }
                     </tbody>
                 </table>
-                @if (Model.TotalPages > 1)
-                {
-                    <div class="pagination-bar">
-                        <div class="pagination-bar__summary">
-                            Page <span class="num">@Model.PageNumber</span> of <span class="num">@Model.TotalPages</span>
-                        </div>
-                        <div class="pagination-bar__actions">
-                            <a class="btn ghost sm @(Model.PageNumber <= 1 ? "disabled" : "")"
-                               asp-action="Index"
-                               asp-route-appUserId="@Model.SelectedAppUserId"
-                               asp-route-page="@(Model.PageNumber - 1)">Previous</a>
-                            @for (var pageNumber = 1; pageNumber <= Model.TotalPages; pageNumber++)
-                            {
-                                <a class="btn sm @(pageNumber == Model.PageNumber ? "primary" : "ghost")"
-                                   asp-action="Index"
-                                   asp-route-appUserId="@Model.SelectedAppUserId"
-                                   asp-route-page="@pageNumber">@pageNumber</a>
-                            }
-                            <a class="btn ghost sm @(Model.PageNumber >= Model.TotalPages ? "disabled" : "")"
-                               asp-action="Index"
-                               asp-route-appUserId="@Model.SelectedAppUserId"
-                               asp-route-page="@(Model.PageNumber + 1)">Next</a>
-                        </div>
-                    </div>
-                }
+                <div class="empty" id="ledgerNoResults" hidden>No entries match your search.</div>
+                <div class="pagination-bar" id="ledgerPagination" hidden>
+                    <div class="pagination-bar__summary" id="ledgerPageSummary"></div>
+                    <div class="pagination-bar__actions" id="ledgerPageActions"></div>
+                </div>
             }
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var PAGE_SIZE = 10;
+            var searchInput = document.getElementById('ledgerSearch');
+            var table = document.getElementById('ledgerTable');
+            var pagination = document.getElementById('ledgerPagination');
+            var summary = document.getElementById('ledgerPageSummary');
+            var actions = document.getElementById('ledgerPageActions');
+            var noResults = document.getElementById('ledgerNoResults');
+            if (!table) { return; }
+
+            var rows = Array.prototype.slice.call(table.querySelectorAll('tbody > tr'));
+            var page = 1;
+            var term = '';
+
+            function filtered() {
+                if (!term) { return rows; }
+                return rows.filter(function (r) {
+                    return (r.textContent || '').toLowerCase().indexOf(term) !== -1;
+                });
+            }
+
+            function makeBtn(label, targetPage, opts) {
+                opts = opts || {};
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'btn sm ' + (opts.primary ? 'primary' : 'ghost') + (opts.disabled ? ' disabled' : '');
+                b.textContent = label;
+                if (opts.disabled) {
+                    b.disabled = true;
+                } else {
+                    b.addEventListener('click', function () { page = targetPage; render(); });
+                }
+                return b;
+            }
+
+            function render() {
+                var list = filtered();
+                var totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+                if (page > totalPages) { page = totalPages; }
+                if (page < 1) { page = 1; }
+
+                rows.forEach(function (r) { r.style.display = 'none'; });
+                var start = (page - 1) * PAGE_SIZE;
+                list.slice(start, start + PAGE_SIZE).forEach(function (r) { r.style.display = ''; });
+
+                if (noResults) { noResults.hidden = list.length !== 0; }
+
+                if (!pagination) { return; }
+                if (list.length <= PAGE_SIZE) {
+                    pagination.hidden = true;
+                    summary.textContent = '';
+                    actions.innerHTML = '';
+                    return;
+                }
+                pagination.hidden = false;
+                summary.innerHTML = 'Page <span class="num">' + page + '</span> of <span class="num">' + totalPages + '</span>';
+                actions.innerHTML = '';
+                actions.appendChild(makeBtn('Previous', page - 1, { disabled: page <= 1 }));
+                for (var p = 1; p <= totalPages; p++) {
+                    actions.appendChild(makeBtn(String(p), p, { primary: p === page }));
+                }
+                actions.appendChild(makeBtn('Next', page + 1, { disabled: page >= totalPages }));
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('input', function () {
+                    term = (searchInput.value || '').trim().toLowerCase();
+                    page = 1;
+                    render();
+                });
+            }
+
+            render();
+        })();
+    </script>
+}

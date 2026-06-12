@@ -525,14 +525,6 @@
                         <span>{{ pt.label }}</span>
                       </label>
                     }
-                    <!-- Per-route save: shows green "Saved" once persisted, "Save route" when edited. -->
-                    <button type="button" class="btn sm route-save"
-                      [class.primary]="!isRouteSaved(route)"
-                      [class.is-saved]="isRouteSaved(route)"
-                      [disabled]="!route.channelId || isRouteSaved(route) || activity.busyDiscordChannels() || !!channelRoutesError()"
-                      (click)="saveDiscordChannels()">
-                      {{ isRouteSaved(route) ? '✓ Saved' : 'Save route' }}
-                    </button>
                   </div>
                 </div>
 
@@ -551,6 +543,16 @@
                     </div>
                   </div>
                 }
+
+                <!-- Per-route save: spans the full card width and sits at the far
+                     right; shows green "Saved" once persisted, "Save route" when edited. -->
+                <button type="button" class="btn sm route-save"
+                  [class.primary]="!isRouteSaved(route)"
+                  [class.is-saved]="isRouteSaved(route)"
+                  [disabled]="!route.channelId || isRouteSaved(route) || activity.busyDiscordChannels() || !!channelRoutesError()"
+                  (click)="saveDiscordChannels()">
+                  {{ isRouteSaved(route) ? '✓ Saved' : 'Save route' }}
+                </button>
               </div>
             }
 

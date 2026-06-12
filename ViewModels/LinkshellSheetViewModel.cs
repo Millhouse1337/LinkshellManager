@@ -30,6 +30,11 @@ public sealed class LinkshellSheetViewModel
     // DKP change. Import (sheet → app) stays manual.
     public bool LiveSyncEnabled { get; set; }
 
-    // Populated by Import preview: each template row matched against the roster.
+    // Populated by Import preview: each uploaded row matched against the roster.
     public DkpTemplatePreview? TemplatePreview { get; set; }
+
+    // The uploaded file's name (shown on the preview) and the parsed rows as JSON
+    // so "Save import" can commit without forcing a re-upload.
+    public string? ImportFileName { get; set; }
+    public string? ImportPayloadJson { get; set; }
 }

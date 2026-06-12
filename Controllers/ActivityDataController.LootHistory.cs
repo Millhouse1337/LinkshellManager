@@ -82,9 +82,12 @@ public sealed partial class ActivityDataController
                     Context = detail.EventHistory != null
                         ? detail.EventHistory.EventName
                         : (detail.Event != null ? detail.Event.EventName : null),
+                    // Live-event loot has no end time yet — order it by when the event
+                    // actually went live (CommencementStartTime) so it sorts as recent,
+                    // not at its scheduled StartTime (which can be far in the past/future).
                     OccurredAt = detail.EventHistory != null
                         ? (DateTime?)detail.EventHistory.EndTime
-                        : (detail.Event != null ? (DateTime?)(detail.Event.EndTime ?? detail.Event.StartTime) : null),
+                        : (detail.Event != null ? (DateTime?)(detail.Event.EndTime ?? detail.Event.CommencementStartTime ?? detail.Event.StartTime) : null),
                     detail.ItemName,
                     detail.ItemWinner,
                     detail.WinningDkpSpent,

@@ -3,17 +3,20 @@
     ViewData["Title"] = "Create Auction";
     ViewData["BodyClass"] = "lsm-page";
     var sourceItemsJson = System.Text.Json.JsonSerializer.Serialize(Model.SourceItems);
+
+    // Initial per-row UI state, derived from the persisted item so a validation
+    // re-render restores the two-step Source / Source Type selection.
+    string SourceFor(int i) => Model.AuctionItems[i].GilAmount.HasValue || Model.AuctionItems[i].SourceItemId.HasValue ? "internal" : "external";
+    string SourceTypeFor(int i) => Model.AuctionItems[i].GilAmount.HasValue ? "gil" : "item";
 }
 
 <style>
-    /* Centre each item-row column above its input (Source / Item name /
-       Item type / Starting DKP). Scoped to auction rows so other create
-       forms keep their existing left-aligned labels. */
-    .auction-item-row .create-form__grid > label > span {
-        text-align: center;
-    }
-    /* Centre the inputs/select themselves so their content lines up under the
-       centered column labels. */
+    /* Centre the whole create-auction page (head + form) on wide screens. */
+    .auction-create-wrap { max-width: 1100px; margin-left: auto; margin-right: auto; }
+
+    /* Centre each item-row column label + its control. Scoped to auction rows
+       so other create forms keep their existing left-aligned labels. */
+    .auction-item-row .create-form__grid > label > span { text-align: center; }
     .auction-item-row .create-form__grid > label > input,
     .auction-item-row .create-form__grid > label > select {
         text-align: center;
@@ -26,103 +29,114 @@
     }
 </style>
 
-<div class="page-head fade d1">
-    <div>
-        <h1 class="page-title">Create auction</h1>
-        <div class="page-sub"><span>Schedule the window, add item rows, and manually start it when you are ready</span></div>
+<div class="auction-create-wrap">
+    <div class="page-head fade d1">
+        <div>
+            <h1 class="page-title">Create auction</h1>
+            <div class="page-sub"><span>Schedule the window, add item rows, and manually start it when you are ready</span></div>
+        </div>
     </div>
+
+    <form asp-action="Create" method="post" id="auctionForm" class="create-form fade d2">
+        <input asp-for="LinkshellId" type="hidden" />
+
+        <div class="create-form__grid">
+            <label>
+                <span>Title</span>
+                <input asp-for="Auction.AuctionTitle" required />
+                <span asp-validation-for="Auction.AuctionTitle" class="create-form__error"></span>
+            </label>
+            <label>
+                <span>Start time</span>
+                <input asp-for="Auction.StartTime" type="datetime-local" required />
+                <span asp-validation-for="Auction.StartTime" class="create-form__error"></span>
+            </label>
+            <label>
+                <span>End time</span>
+                <input asp-for="Auction.EndTime" type="datetime-local" required />
+                <span asp-validation-for="Auction.EndTime" class="create-form__error"></span>
+            </label>
+        </div>
+
+        <div class="create-form__section">
+            <div class="create-form__section-head">
+                <h3>Items</h3>
+                <button type="button" class="btn ghost sm" id="addAuctionItemButton">+ Add item</button>
+            </div>
+
+            <div id="auctionItems" class="create-form__items">
+                @for (var i = 0; i < Model.AuctionItems.Count; i++)
+                {
+                    <div class="create-form__item auction-item-row" data-index="@i"
+                         data-current-source="@SourceFor(i)"
+                         data-current-sourcetype="@SourceTypeFor(i)"
+                         data-current-inv="@(Model.AuctionItems[i].SourceItemId?.ToString() ?? "")">
+                        <input asp-for="AuctionItems[i].Id" type="hidden" />
+                        @* SourceItemId / ItemType / GilAmount are posted via hidden inputs the
+                           JS keeps in sync; the visible Source / Source Type / Item Name / Gil
+                           controls are UI-only drivers. *@
+                        <input asp-for="AuctionItems[i].SourceItemId" type="hidden" class="auction-item-source-id" />
+                        <input asp-for="AuctionItems[i].ItemType" type="hidden" class="auction-item-type" />
+                        <input asp-for="AuctionItems[i].GilAmount" type="hidden" class="auction-item-gil" />
+                        <div class="create-form__grid">
+                            <label>
+                                <span>Source</span>
+                                <select class="auction-item-source">
+                                    <option value="external">External</option>
+                                    <option value="internal">Internal</option>
+                                </select>
+                            </label>
+                            <label class="auction-item-sourcetype-field">
+                                <span>Source Type</span>
+                                <select class="auction-item-sourcetype">
+                                    <option value="item">Item</option>
+                                    <option value="gil">Gil</option>
+                                </select>
+                            </label>
+                            <label class="auction-item-name-field">
+                                <span>Item name</span>
+                                <input asp-for="AuctionItems[i].ItemName" class="auction-item-name" />
+                                <span asp-validation-for="AuctionItems[i].ItemName" class="create-form__error"></span>
+                            </label>
+                            <label class="auction-item-inv-field">
+                                <span>Item name</span>
+                                <select class="auction-item-inv">
+                                    <option value="">Select item...</option>
+                                    @foreach (var option in Model.SourceItems)
+                                    {
+                                        <option value="@option.Id" data-name="@option.ItemName" data-type="@option.ItemType">
+                                            @option.ItemName (@option.Quantity on hand)
+                                        </option>
+                                    }
+                                </select>
+                            </label>
+                            <label class="auction-item-gil-field">
+                                <span>Gil amount</span>
+                                <input type="text" inputmode="numeric" class="auction-item-gil-display" placeholder="0" />
+                            </label>
+                            <label>
+                                <span>Starting DKP</span>
+                                <input asp-for="AuctionItems[i].StartingBidDkp" type="number" min="0" />
+                                <span asp-validation-for="AuctionItems[i].StartingBidDkp" class="create-form__error"></span>
+                            </label>
+                            <label class="create-form__field--full">
+                                <span>Notes</span>
+                                <input asp-for="AuctionItems[i].Notes" />
+                            </label>
+                        </div>
+                        <div class="create-form__item-actions">
+                            <button type="button" class="btn ghost sm remove-auction-item">Remove row</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="create-form__actions">
+            <button type="submit" class="btn primary">Create auction</button>
+        </div>
+    </form>
 </div>
-
-<form asp-action="Create" method="post" id="auctionForm" class="create-form fade d2">
-    <input asp-for="LinkshellId" type="hidden" />
-
-    <div class="create-form__grid">
-        <label>
-            <span>Title</span>
-            <input asp-for="Auction.AuctionTitle" required />
-            <span asp-validation-for="Auction.AuctionTitle" class="create-form__error"></span>
-        </label>
-        <label>
-            <span>Start time</span>
-            <input asp-for="Auction.StartTime" type="datetime-local" required />
-            <span asp-validation-for="Auction.StartTime" class="create-form__error"></span>
-        </label>
-        <label>
-            <span>End time</span>
-            <input asp-for="Auction.EndTime" type="datetime-local" required />
-            <span asp-validation-for="Auction.EndTime" class="create-form__error"></span>
-        </label>
-    </div>
-
-    <div class="create-form__section">
-        <div class="create-form__section-head">
-            <h3>Items</h3>
-            <button type="button" class="btn ghost sm" id="addAuctionItemButton">+ Add item</button>
-        </div>
-
-        <div id="auctionItems" class="create-form__items">
-            @for (var i = 0; i < Model.AuctionItems.Count; i++)
-            {
-                <div class="create-form__item auction-item-row" data-index="@i">
-                    <input asp-for="AuctionItems[i].Id" type="hidden" />
-                    @* SourceItemId (int?) is posted via this hidden input; the
-                       visible Source select is UI-only and drives the hidden
-                       field + the Gil-amount field via JS. The "gil" sentinel
-                       never reaches the int? binder. *@
-                    <input asp-for="AuctionItems[i].SourceItemId" type="hidden" class="auction-item-source-id" />
-                    <div class="create-form__grid">
-                        <label>
-                            <span>Source</span>
-                            <select class="auction-item-source"
-                                    data-current-source="@(Model.AuctionItems[i].GilAmount.HasValue ? "gil" : (Model.AuctionItems[i].SourceItemId?.ToString() ?? ""))">
-                                <option value="">External (not from inventory)</option>
-                                <option value="gil">Gil (sell for DKP)</option>
-                                @foreach (var option in Model.SourceItems)
-                                {
-                                    <option value="@option.Id"
-                                            data-name="@option.ItemName"
-                                            data-type="@option.ItemType">
-                                        @option.ItemName (@option.Quantity on hand)
-                                    </option>
-                                }
-                            </select>
-                        </label>
-                        <label class="auction-item-name-field">
-                            <span>Item name</span>
-                            <input asp-for="AuctionItems[i].ItemName" class="auction-item-name" />
-                            <span asp-validation-for="AuctionItems[i].ItemName" class="create-form__error"></span>
-                        </label>
-                        <label class="auction-item-gil-field">
-                            <span>Gil amount</span>
-                            <input asp-for="AuctionItems[i].GilAmount" type="number" min="1" class="auction-item-gil" />
-                            <span asp-validation-for="AuctionItems[i].GilAmount" class="create-form__error"></span>
-                        </label>
-                        <label>
-                            <span>Item type</span>
-                            <input asp-for="AuctionItems[i].ItemType" class="auction-item-type" />
-                        </label>
-                        <label>
-                            <span>Starting DKP</span>
-                            <input asp-for="AuctionItems[i].StartingBidDkp" type="number" min="0" />
-                            <span asp-validation-for="AuctionItems[i].StartingBidDkp" class="create-form__error"></span>
-                        </label>
-                        <label class="create-form__field--full">
-                            <span>Notes</span>
-                            <input asp-for="AuctionItems[i].Notes" />
-                        </label>
-                    </div>
-                    <div class="create-form__item-actions">
-                        <button type="button" class="btn ghost sm remove-auction-item">Remove row</button>
-                    </div>
-                </div>
-            }
-        </div>
-    </div>
-
-    <div class="create-form__actions">
-        <button type="submit" class="btn primary">Create auction</button>
-    </div>
-</form>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
@@ -131,6 +145,7 @@
             const itemsContainer = document.getElementById('auctionItems');
             const addItemButton = document.getElementById('addAuctionItemButton');
             const sourceItems = @Html.Raw(sourceItemsJson);
+            const gilFormatter = new Intl.NumberFormat('en-US');
 
             const renumberRows = () => {
                 const rows = itemsContainer.querySelectorAll('.auction-item-row');
@@ -148,73 +163,89 @@
                 });
             };
 
-            const buildSourceOptions = () => {
-                const externalLabel = '<option value="">External (not from inventory)</option>';
-                const gilLabel = '<option value="gil">Gil (sell for DKP)</option>';
-                const escape = (value) => String(value ?? '')
-                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                const options = sourceItems.map((option) =>
-                    `<option value="${option.Id}" data-name="${escape(option.ItemName)}" data-type="${escape(option.ItemType ?? '')}">${escape(option.ItemName)} (${option.Quantity} on hand)</option>`);
-                return externalLabel + gilLabel + options.join('');
-            };
+            const escapeHtml = (value) => String(value ?? '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-            // Drive the row's hidden SourceItemId + Gil-amount field + name/type
-            // locking from the visible Source select:
-            //   "gil"  -> show Gil amount, clear+disable name/type/source id
-            //   <id>   -> inventory item: copy + lock name/type, set source id
-            //   ""     -> external: free-text name/type, no source id, no gil
-            const applySourceSelection = (row) => {
-                const sourceSelect = row.querySelector('.auction-item-source');
-                const sourceIdInput = row.querySelector('.auction-item-source-id');
-                const nameInput = row.querySelector('.auction-item-name');
+            const buildInvOptions = () => '<option value="">Select item...</option>' + sourceItems.map((option) =>
+                `<option value="${option.Id}" data-name="${escapeHtml(option.ItemName)}" data-type="${escapeHtml(option.ItemType ?? '')}">${escapeHtml(option.ItemName)} (${option.Quantity} on hand)</option>`).join('');
+
+            const show = (el, on) => { if (el) { el.style.display = on ? '' : 'none'; } };
+
+            // Drive the row's hidden SourceItemId / ItemName / ItemType / GilAmount
+            // and which control is visible, from the two-step Source + Source Type:
+            //   External            -> free-text Item Name (no source id / gil)
+            //   Internal · Item     -> inventory dropdown (sets source id + name + type)
+            //   Internal · Gil      -> Gil Amount (commas) -> hidden numeric GilAmount, type "Gil"
+            const applyRowState = (row) => {
+                const source = row.querySelector('.auction-item-source').value;
+                const sourceType = row.querySelector('.auction-item-sourcetype').value;
+                const sourceTypeField = row.querySelector('.auction-item-sourcetype-field');
                 const nameField = row.querySelector('.auction-item-name-field');
-                const typeInput = row.querySelector('.auction-item-type');
+                const nameInput = row.querySelector('.auction-item-name');
+                const invField = row.querySelector('.auction-item-inv-field');
                 const gilField = row.querySelector('.auction-item-gil-field');
+                const gilDisplay = row.querySelector('.auction-item-gil-display');
+                const sourceIdInput = row.querySelector('.auction-item-source-id');
+                const typeInput = row.querySelector('.auction-item-type');
                 const gilInput = row.querySelector('.auction-item-gil');
-                if (!sourceSelect || !nameInput || !typeInput) { return; }
-                const value = sourceSelect.value;
-                const selectedOption = sourceSelect.options[sourceSelect.selectedIndex];
 
-                if (value === 'gil') {
-                    // Gil items are auto-named "<amount> gil" server-side, so the
-                    // Item name field is hidden; show the Gil amount instead.
-                    if (sourceIdInput) { sourceIdInput.value = ''; }
-                    nameInput.value = '';
-                    if (nameField) { nameField.style.display = 'none'; }
-                    typeInput.value = 'Gil';
-                    typeInput.readOnly = true;
-                    if (gilField) { gilField.style.display = ''; }
-                    return;
-                }
+                const internal = source === 'internal';
+                show(sourceTypeField, internal);
 
-                // Non-gil: show the name field, hide + clear the gil amount.
-                if (nameField) { nameField.style.display = ''; }
-                if (gilField) { gilField.style.display = 'none'; }
-                if (gilInput) { gilInput.value = ''; }
+                const isItem = internal && sourceType === 'item';
+                const isGil = internal && sourceType === 'gil';
 
-                if (value) {
-                    if (sourceIdInput) { sourceIdInput.value = value; }
-                    nameInput.value = selectedOption?.dataset?.name ?? '';
-                    typeInput.value = selectedOption?.dataset?.type ?? '';
-                    nameInput.readOnly = true;
-                    typeInput.readOnly = true;
-                } else {
-                    if (sourceIdInput) { sourceIdInput.value = ''; }
+                show(nameField, !internal);        // free-text name only for External
+                show(invField, isItem);            // inventory dropdown for Internal · Item
+                show(gilField, isGil);             // gil amount for Internal · Gil
+
+                if (!internal) {
+                    // External: free-text name, nothing else.
+                    sourceIdInput.value = '';
+                    gilInput.value = '';
+                    gilDisplay.value = '';
+                    typeInput.value = '';
                     nameInput.readOnly = false;
-                    typeInput.readOnly = false;
+                } else if (isGil) {
+                    sourceIdInput.value = '';
+                    nameInput.value = '';
+                    typeInput.value = 'Gil';
+                } else {
+                    // Internal · Item: value comes from the inventory dropdown.
+                    gilInput.value = '';
+                    gilDisplay.value = '';
+                    nameInput.readOnly = true;
                 }
             };
 
-            // Initialize existing rows: restore each select to its persisted
-            // source (data-current-source survives a validation re-render).
+            const applyInventoryPick = (row) => {
+                const invSelect = row.querySelector('.auction-item-inv');
+                const opt = invSelect.options[invSelect.selectedIndex];
+                row.querySelector('.auction-item-source-id').value = invSelect.value || '';
+                row.querySelector('.auction-item-name').value = opt?.dataset?.name ?? '';
+                row.querySelector('.auction-item-type').value = opt?.dataset?.type ?? '';
+            };
+
+            const applyGilInput = (row) => {
+                const gilDisplay = row.querySelector('.auction-item-gil-display');
+                const gilInput = row.querySelector('.auction-item-gil');
+                const digits = gilDisplay.value.replace(/\D/g, '');
+                gilInput.value = digits;
+                gilDisplay.value = digits ? gilFormatter.format(Number(digits)) : '';
+            };
+
+            // Restore each existing row from its data-current-* (survives a validation
+            // re-render), then reflect it in the UI.
             itemsContainer.querySelectorAll('.auction-item-row').forEach((row) => {
-                const sourceSelect = row.querySelector('.auction-item-source');
-                if (sourceSelect) {
-                    const current = sourceSelect.dataset.currentSource ?? '';
-                    if (current) { sourceSelect.value = current; }
-                }
-                applySourceSelection(row);
+                row.querySelector('.auction-item-source').value = row.dataset.currentSource || 'external';
+                row.querySelector('.auction-item-sourcetype').value = row.dataset.currentSourcetype || 'item';
+                const inv = row.querySelector('.auction-item-inv');
+                if (row.dataset.currentInv) { inv.value = row.dataset.currentInv; }
+                const gilInput = row.querySelector('.auction-item-gil');
+                const gilDisplay = row.querySelector('.auction-item-gil-display');
+                if (gilInput.value) { gilDisplay.value = gilFormatter.format(Number(gilInput.value)); }
+                applyRowState(row);
             });
 
             addItemButton.addEventListener('click', () => {
@@ -222,25 +253,39 @@
                 const wrapper = document.createElement('div');
                 wrapper.className = 'create-form__item auction-item-row';
                 wrapper.dataset.index = index;
+                wrapper.dataset.currentSource = 'external';
+                wrapper.dataset.currentSourcetype = 'item';
                 wrapper.innerHTML = `
                     <input type="hidden" name="AuctionItems[${index}].Id" value="0" />
                     <input type="hidden" id="AuctionItems_${index}__SourceItemId" name="AuctionItems[${index}].SourceItemId" class="auction-item-source-id" />
+                    <input type="hidden" id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" class="auction-item-type" />
+                    <input type="hidden" id="AuctionItems_${index}__GilAmount" name="AuctionItems[${index}].GilAmount" class="auction-item-gil" />
                     <div class="create-form__grid">
                         <label>
                             <span>Source</span>
-                            <select class="auction-item-source">${buildSourceOptions()}</select>
+                            <select class="auction-item-source">
+                                <option value="external">External</option>
+                                <option value="internal">Internal</option>
+                            </select>
+                        </label>
+                        <label class="auction-item-sourcetype-field">
+                            <span>Source Type</span>
+                            <select class="auction-item-sourcetype">
+                                <option value="item">Item</option>
+                                <option value="gil">Gil</option>
+                            </select>
                         </label>
                         <label class="auction-item-name-field">
                             <span>Item name</span>
                             <input id="AuctionItems_${index}__ItemName" name="AuctionItems[${index}].ItemName" class="auction-item-name" />
                         </label>
-                        <label class="auction-item-gil-field" style="display:none">
-                            <span>Gil amount</span>
-                            <input id="AuctionItems_${index}__GilAmount" name="AuctionItems[${index}].GilAmount" type="number" min="1" class="auction-item-gil" />
+                        <label class="auction-item-inv-field">
+                            <span>Item name</span>
+                            <select class="auction-item-inv">${buildInvOptions()}</select>
                         </label>
-                        <label>
-                            <span>Item type</span>
-                            <input id="AuctionItems_${index}__ItemType" name="AuctionItems[${index}].ItemType" class="auction-item-type" />
+                        <label class="auction-item-gil-field">
+                            <span>Gil amount</span>
+                            <input type="text" inputmode="numeric" class="auction-item-gil-display" placeholder="0" />
                         </label>
                         <label>
                             <span>Starting DKP</span>
@@ -255,14 +300,23 @@
                         <button type="button" class="btn ghost sm remove-auction-item">Remove row</button>
                     </div>`;
                 itemsContainer.appendChild(wrapper);
-                applySourceSelection(wrapper);
+                applyRowState(wrapper);
             });
 
             itemsContainer.addEventListener('change', (event) => {
-                const select = event.target.closest('.auction-item-source');
-                if (!select) { return; }
-                const row = select.closest('.auction-item-row');
-                if (row) { applySourceSelection(row); }
+                const row = event.target.closest('.auction-item-row');
+                if (!row) { return; }
+                if (event.target.closest('.auction-item-source') || event.target.closest('.auction-item-sourcetype')) {
+                    applyRowState(row);
+                } else if (event.target.closest('.auction-item-inv')) {
+                    applyInventoryPick(row);
+                }
+            });
+
+            itemsContainer.addEventListener('input', (event) => {
+                if (!event.target.closest('.auction-item-gil-display')) { return; }
+                const row = event.target.closest('.auction-item-row');
+                if (row) { applyGilInput(row); }
             });
 
             itemsContainer.addEventListener('click', (event) => {

@@ -35,6 +35,26 @@ public partial class AuctionController
         NormalizeAuctionItems(model);
         ValidateAuction(model);
 
+        // Gil items sell treasury gil for DKP — block if the linkshell has none, or
+        // the total gil being auctioned exceeds the treasury balance.
+        var requestedGil = model.AuctionItems
+            .Where(item => item.GilAmount is > 0)
+            .Sum(item => item.GilAmount!.Value);
+        if (requestedGil > 0)
+        {
+            var availableGil = await _context.RevenueEntries
+                .Where(entry => entry.LinkshellId == model.LinkshellId)
+                .SumAsync(entry => entry.EntryType == "Expense" ? -entry.Value : entry.Value);
+            if (availableGil <= 0)
+            {
+                ModelState.AddModelError(string.Empty, "This linkshell has no gil in its treasury to auction.");
+            }
+            else if (requestedGil > availableGil)
+            {
+                ModelState.AddModelError(string.Empty, $"Not enough gil in the treasury: {availableGil:N0} available, but {requestedGil:N0} is being auctioned.");
+            }
+        }
+
         if (!ModelState.IsValid)
         {
             return View(model);

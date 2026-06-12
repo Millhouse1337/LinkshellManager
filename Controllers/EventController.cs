@@ -58,7 +58,8 @@ public partial class EventController : Controller
                 {
                     Id = setup.Id,
                     Name = setup.Name,
-                    AssignedMonsterName = setup.AssignedMonsterName
+                    AssignedMonsterName = setup.AssignedMonsterName,
+                    EventType = setup.EventType
                 })
                 .ToListAsync()
             : new List<PartySetupOption>();

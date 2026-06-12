@@ -5,14 +5,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Posts auction lifecycle embeds to the linkshell's Auctions channel route via
-// the bot (so the embed can carry "Bid: {item}" buttons + an "open in app" link):
-//  • Create — an "auction opened" embed (items + start/end + creator).
-//  • Update — a fresh "new bid" card at the bottom of the channel.
-//  • Close  — the final results embed (winner + DKP per item).
-// Best-effort: a failed post is logged and dropped; the auction itself is
-// unaffected. Never throws to the caller. No-op when no Auctions route is set or
-// the bot isn't configured.
+// Posts the auction board to the linkshell's Auctions channel route via the bot —
+// a wide, readable embed (items + start/end as fields) with the rendered, themed
+// PNG (same visual language + linkshell theme as the event board) shown INSIDE it,
+// carrying "Bid: {item}" buttons + an "open in app" link. The embed fills the
+// message column (a bare image attachment is capped narrow by Discord) and still
+// carries the themed image:
+//  • Create — post the board (one message).
+//  • Update — EDIT that same message in place with a freshly-rendered board, so a
+//             live auction is one evolving card (like the event post), not a stack
+//             of per-bid messages.
+//  • Close  — post the final results board (winner + DKP per item).
+// When Chromium isn't available the renderer returns null and each path falls back
+// to the same embed without the image so the auction always posts. Best-effort: a
+// failed post is logged and dropped; the auction itself is unaffected. Never throws
+// to the caller. No-op when no Auctions route is set or the bot isn't configured.
 public sealed class DiscordAuctionChannelPublisher
 {
     private const int CreateColor = 0x5865F2; // Blurple.
@@ -22,6 +29,7 @@ public sealed class DiscordAuctionChannelPublisher
     private readonly ChannelRouteResolver _routes;
     private readonly IConfiguration _configuration;
     private readonly DiscordBotClient _bot;
+    private readonly EventBoardImageRenderer _renderer;
     private readonly ILogger<DiscordAuctionChannelPublisher> _logger;
 
     public DiscordAuctionChannelPublisher(
@@ -29,12 +37,14 @@ public sealed class DiscordAuctionChannelPublisher
         ChannelRouteResolver routes,
         IConfiguration configuration,
         DiscordBotClient bot,
+        EventBoardImageRenderer renderer,
         ILogger<DiscordAuctionChannelPublisher> logger)
     {
         _db = db;
         _routes = routes;
         _configuration = configuration;
         _bot = bot;
+        _renderer = renderer;
         _logger = logger;
     }
 
@@ -77,9 +87,20 @@ public sealed class DiscordAuctionChannelPublisher
         {
             return;
         }
-        var (channelId, messageId) = await DispatchAsync(
-            auction.LinkshellId, BuildCreateEmbed(auction), BuildCreateComponents(auction), ct);
-        if (!string.IsNullOrEmpty(channelId) && !string.IsNullOrEmpty(messageId))
+
+        var channelId = await _routes.ResolveChannelIdAsync(auction.LinkshellId, ChannelPostTypes.Auctions, ct);
+        if (string.IsNullOrEmpty(channelId) || !_bot.IsConfigured)
+        {
+            return;
+        }
+
+        // Prefer the rendered board image; fall back to the text embed when the
+        // renderer is unavailable so the auction always posts.
+        var messageId = await PostBoardImageAsync(channelId, auction, ct)
+            ?? await _bot.PostMessageAsync(
+                channelId, BuildEmbedPayload(BuildCreateEmbed(auction), BuildCreateComponents(auction)), ct);
+
+        if (!string.IsNullOrEmpty(messageId))
         {
             auction.DiscordChannelId = channelId;
             auction.DiscordMessageId = messageId;
@@ -97,14 +118,13 @@ public sealed class DiscordAuctionChannelPublisher
             : $"{auction.DiscordMessageIds},{messageId}";
     }
 
-    // A bid landed → post a brand-new card at the BOTTOM of the auction channel
-    // (rather than editing the original in place) so the current auction state is
-    // never buried as people chat. Every bid becomes its own message — a running
-    // bid history. No-op when the auction wasn't bot-posted (webhook fallback
-    // can't carry components) or the bot isn't configured.
+    // A bid landed → EDIT the single board message in place with a freshly-rendered
+    // board (like the event post), so the auction is one evolving card rather than a
+    // stack of per-bid messages. No-op when the auction wasn't bot-posted (webhook
+    // fallback can't carry components) or the bot isn't configured.
     private async Task UpdateAsync(int auctionId, CancellationToken ct)
     {
-        // Tracked so we can keep DiscordMessageId pointing at the latest card.
+        // Tracked so we can repoint DiscordMessageId if we have to re-post.
         var auction = await _db.Auctions
             .Include(a => a.AuctionItems)
             .FirstOrDefaultAsync(a => a.Id == auctionId, ct);
@@ -115,17 +135,43 @@ public sealed class DiscordAuctionChannelPublisher
             return;
         }
 
-        var payload = new
+        var channelId = auction.DiscordChannelId!;
+
+        // Edit the existing board message in place when we have one.
+        if (!string.IsNullOrEmpty(auction.DiscordMessageId))
         {
-            embeds = new[] { BuildCreateEmbed(auction, "New bid") },
-            components = BuildCreateComponents(auction),
-            allowed_mentions = new { parse = Array.Empty<string>() }
-        };
-        var messageId = await _bot.PostMessageAsync(auction.DiscordChannelId, payload, ct);
-        if (!string.IsNullOrEmpty(messageId))
+            var messageId = auction.DiscordMessageId!;
+            var theme = await ResolveThemeAsync(auction.LinkshellId, ct);
+            var png = await _renderer.RenderAsync(AuctionBoardHtmlBuilder.Build(auction, theme), ct);
+            if (png is not null)
+            {
+                var fileName = $"auction-{auction.Id}-board.png";
+                if (await _bot.EditMessageWithImageAsync(
+                        channelId, messageId, BuildBoardImagePayload(auction, fileName, "New bid"), png, fileName, ct))
+                {
+                    return;
+                }
+            }
+            else if (await _bot.EditMessageAsync(
+                         channelId, messageId,
+                         BuildEmbedPayload(BuildCreateEmbed(auction, "New bid"), BuildCreateComponents(auction)), ct))
+            {
+                // Renderer unavailable → edited the same message to the text embed
+                // (image↔embed edits are allowed; both are classic messages).
+                return;
+            }
+            // The edit failed (message deleted, etc.) — fall through and re-post.
+        }
+
+        // No board message yet, or the edit failed: post a fresh card and repoint
+        // DiscordMessageId at it.
+        var newId = await PostBoardImageAsync(channelId, auction, ct, "New bid")
+            ?? await _bot.PostMessageAsync(
+                channelId, BuildEmbedPayload(BuildCreateEmbed(auction, "New bid"), BuildCreateComponents(auction)), ct);
+        if (!string.IsNullOrEmpty(newId))
         {
-            auction.DiscordMessageId = messageId;
-            AppendMessageId(auction, messageId);
+            auction.DiscordMessageId = newId;
+            AppendMessageId(auction, newId);
             await _db.SaveChangesAsync(ct);
         }
     }
@@ -140,27 +186,96 @@ public sealed class DiscordAuctionChannelPublisher
         {
             return;
         }
-        await DispatchAsync(history.LinkshellId, BuildClosedEmbed(history), BuildLinkButton("View results in app"), ct);
-    }
 
-    // Posts to the linkshell's Auctions channel route via the bot (so the embed
-    // can carry the bid + link buttons). Returns the (channelId, messageId) so the
-    // caller can persist them for later in-place edits; (null, null) when no
-    // Auctions route is configured or the bot isn't available.
-    private async Task<(string? ChannelId, string? MessageId)> DispatchAsync(
-        int linkshellId, object embed, object[]? components, CancellationToken ct)
-    {
-        var channelId = await _routes.ResolveChannelIdAsync(linkshellId, ChannelPostTypes.Auctions, ct);
+        var channelId = await _routes.ResolveChannelIdAsync(history.LinkshellId, ChannelPostTypes.Auctions, ct);
         if (string.IsNullOrEmpty(channelId) || !_bot.IsConfigured)
         {
-            return (null, null);
+            return;
         }
 
-        object payload = components is null || components.Length == 0
+        // Prefer the rendered results board; fall back to the text embed.
+        var theme = await ResolveThemeAsync(history.LinkshellId, ct);
+        var png = await _renderer.RenderAsync(AuctionBoardHtmlBuilder.BuildClosed(history, theme), ct);
+        if (png is not null)
+        {
+            var fileName = $"auction-history-{history.Id}-results.png";
+            var posted = await _bot.PostMessageWithImageAsync(
+                channelId, BuildClosedImagePayload(history, fileName), png, fileName, ct);
+            if (!string.IsNullOrEmpty(posted))
+            {
+                return;
+            }
+        }
+
+        await _bot.PostMessageAsync(
+            channelId, BuildEmbedPayload(BuildClosedEmbed(history), BuildLinkButton("View results in app")), ct);
+    }
+
+    // The classic text-embed payload — the fallback used when the board image can't
+    // be rendered. `components` is omitted when empty.
+    private static object BuildEmbedPayload(object embed, object[]? components)
+    {
+        return components is null || components.Length == 0
             ? new { embeds = new[] { embed }, allowed_mentions = new { parse = Array.Empty<string>() } }
             : new { embeds = new[] { embed }, components, allowed_mentions = new { parse = Array.Empty<string>() } };
-        var messageId = await _bot.PostMessageAsync(channelId, payload, ct);
-        return (channelId, messageId);
+    }
+
+    // The linkshell's chosen board theme key (the same palette the event board
+    // uses). Null/blank/unknown is normalised to the default by the builder.
+    private async Task<string?> ResolveThemeAsync(int linkshellId, CancellationToken ct)
+    {
+        return await _db.Linkshells
+            .AsNoTracking()
+            .Where(l => l.Id == linkshellId)
+            .Select(l => l.EventBoardTheme)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    // Render the live board to a PNG and post it (carrying the bid buttons). Returns
+    // the new message id, or null when rendering is unavailable (caller falls back to
+    // the text embed). Assumes the channel is resolved and the bot is configured.
+    private async Task<string?> PostBoardImageAsync(
+        string channelId, Auction auction, CancellationToken ct, string footerText = "Auction opened")
+    {
+        var theme = await ResolveThemeAsync(auction.LinkshellId, ct);
+        var png = await _renderer.RenderAsync(AuctionBoardHtmlBuilder.Build(auction, theme), ct);
+        if (png is null)
+        {
+            return null;
+        }
+        var fileName = $"auction-{auction.Id}-board.png";
+        return await _bot.PostMessageWithImageAsync(
+            channelId, BuildBoardImagePayload(auction, fileName, footerText), png, fileName, ct);
+    }
+
+    // The board message: the wide, readable embed (items + start/end as fields) with
+    // the rendered PNG shown INSIDE it (image: attachment://file) + the bid buttons.
+    // The embed fills the message column (a bare image attachment is capped narrow by
+    // Discord) and still carries the themed visual. `attachments:[{id:0,...}]`
+    // references the file uploaded as files[0].
+    private object BuildBoardImagePayload(Auction auction, string fileName, string footerText = "Auction opened")
+    {
+        return new
+        {
+            embeds = new[] { BuildCreateEmbed(auction, footerText, fileName) },
+            components = BuildCreateComponents(auction),
+            attachments = new object[] { new { id = 0, filename = fileName } },
+            allowed_mentions = new { parse = Array.Empty<string>() },
+        };
+    }
+
+    // The results message: the closed embed (winner + DKP per item) with the rendered
+    // results PNG inside it + an "open in app" link (no bid buttons).
+    private object BuildClosedImagePayload(AuctionHistory history, string fileName)
+    {
+        object[]? components = BuildLinkButton("View results in app");
+        return new
+        {
+            embeds = new[] { BuildClosedEmbed(history, fileName) },
+            components, // omitted by the serializer when null (no public base URL)
+            attachments = new object[] { new { id = 0, filename = fileName } },
+            allowed_mentions = new { parse = Array.Empty<string>() },
+        };
     }
 
     // The "auction opened" components: a "Bid: {item}" button per item (each
@@ -220,7 +335,7 @@ public sealed class DiscordAuctionChannelPublisher
         };
     }
 
-    private object BuildCreateEmbed(Auction auction, string footerText = "Auction opened")
+    private object BuildCreateEmbed(Auction auction, string footerText = "Auction opened", string? imageFileName = null)
     {
         var sb = new StringBuilder();
         var items = auction.AuctionItems.OrderBy(i => i.Id).ToList();
@@ -278,12 +393,14 @@ public sealed class DiscordAuctionChannelPublisher
             description = sb.ToString(),
             color = CreateColor,
             fields = fields.ToArray(),
+            // The rendered board PNG, shown inside the embed (omitted when null).
+            image = imageFileName is null ? null : new { url = $"attachment://{imageFileName}" },
             footer = new { text = footerText },
             timestamp = DateTime.UtcNow.ToString("o"),
         };
     }
 
-    private object BuildClosedEmbed(AuctionHistory history)
+    private object BuildClosedEmbed(AuctionHistory history, string? imageFileName = null)
     {
         var sb = new StringBuilder();
         var items = history.AuctionItems.OrderBy(i => i.Id).ToList();
@@ -316,6 +433,8 @@ public sealed class DiscordAuctionChannelPublisher
             title = Truncate($"✅ Auction closed — {history.AuctionTitle ?? $"#{history.Id}"}", 250),
             description = sb.ToString(),
             color = ClosedColor,
+            // The rendered results PNG, shown inside the embed (omitted when null).
+            image = imageFileName is null ? null : new { url = $"attachment://{imageFileName}" },
             footer = new { text = "Auction closed" },
             timestamp = DateTime.UtcNow.ToString("o"),
         };
@@ -333,9 +452,15 @@ public sealed class DiscordAuctionChannelPublisher
 
     private static string TimestampMarkup(DateTime utc)
     {
-        var unix = ((DateTimeOffset)DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        var unix = ToUnix(utc);
         return $"<t:{unix}:f> (<t:{unix}:R>)";
     }
+
+    private static long ToUnix(DateTime utc) =>
+        ((DateTimeOffset)AsUtc(utc)).ToUnixTimeSeconds();
+
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
     private static string Escape(string value) => value
         .Replace("\\", "\\\\").Replace("`", "\\`").Replace("*", "\\*")

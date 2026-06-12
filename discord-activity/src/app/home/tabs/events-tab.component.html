@@ -32,7 +32,10 @@
                 </div>
                 <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
                 @if (activity.formatDateTime(event.commencementStartTime || event.startTime); as liveStart) {
-                  <p>Started {{ liveStart }}</p>
+                  <p class="event-card__when">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    Started {{ liveStart }}
+                  </p>
                 }
                 @if (event.creatorCharacterName) {
                   <p class="event-card__actor"><span class="event-card__actor-label">Event Creator:</span> {{ event.creatorCharacterName }}</p>
@@ -46,17 +49,25 @@
                 <span class="num event-card__global-timer-value">{{ liveEventTimerLabel(event) }}</span>
               </div>
               <div class="event-card__meta">
-                <span>{{ event.participantCount }} participants</span>
-                <span class="num">{{ event.dkpPerHour ?? 0 }} DKP/hour</span>
+                <span class="event-card__metric">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  {{ event.participantCount }} participants
+                </span>
+                <span class="event-card__metric num">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  {{ event.dkpPerHour ?? 0 }} DKP/hour
+                </span>
                 @if (canManageLinkshell(event.linkshellId)) {
-                  <button type="button" class="btn sm event-card__edit"
+                  <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                     [disabled]="activity.busyEventId() === event.id"
                     (click)="openEditLiveEventForm(event)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                     Edit Live Event
                   </button>
-                  <button type="button" class="btn sm event-card__edit"
+                  <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                     [disabled]="activity.busyEventId() === event.id || addMemberLoading(event.id)"
                     (click)="toggleAddMember(event.id)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
                     {{ isAddMemberExpanded(event.id) ? 'Hide Add Member' : 'Add a Member' }}
                   </button>
                 }
@@ -502,11 +513,18 @@
                     <strong>Archive event</strong>
                     <span>Finalize attendance, award DKP, and move this run into history.</span>
                   </div>
-                  <button type="button" class="btn primary" [disabled]="activity.busyEventId() === event.id"
+                  <button type="button" class="btn success"
+                    [disabled]="activity.busyEventId() === event.id || pendingAttendanceCount(event) > 0"
+                    [title]="pendingAttendanceCount(event) > 0 ? 'Confirm or remove the pending members in attendance first' : ''"
                     (click)="activity.endEvent(event.id)">
                     {{ activity.busyEventId() === event.id ? 'Updating...' : 'End event' }}
                   </button>
                 </div>
+                @if (pendingAttendanceCount(event) > 0) {
+                  <p class="notice" style="margin-top:8px">
+                    Confirm or remove the {{ pendingAttendanceCount(event) }} member(s) still pending in attendance before ending the event.
+                  </p>
+                }
               }
             </section>
 

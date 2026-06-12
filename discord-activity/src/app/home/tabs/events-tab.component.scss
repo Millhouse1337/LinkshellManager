@@ -66,7 +66,7 @@
 
 .live-add-member-form__submit {
   width: auto;
-  justify-self: start;
+  justify-self: end;
   min-width: 132px;
 }
 
@@ -115,6 +115,7 @@
 .live-party-setup-row {
   display: grid;
   gap: 12px;
+  margin-bottom: 18px;
 }
 
 .live-party-setup-row__details {

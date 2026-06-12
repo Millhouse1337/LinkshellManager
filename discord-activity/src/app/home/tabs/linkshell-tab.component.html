@@ -181,25 +181,40 @@
               @if (roster.members.length === 0) {
                 <div class="empty-state empty-state--compact"><div class="empty-state-desc">No app-linked members yet.</div></div>
               } @else {
-                <div style="display:flex;flex-direction:column;gap:10px">
-                  @for (member of roster.members; track member.id) {
-                    <div style="border:1px solid var(--border, rgba(255,255,255,.08));border-radius:10px;padding:10px 12px">
-                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                <div class="jobs-roster-toolbar">
+                  <input
+                    type="text"
+                    placeholder="Search jobs roster"
+                    [(ngModel)]="jobsRosterSearch"
+                    name="jobsRosterSearch" />
+                  <span class="tag default num">
+                    {{ filteredJobsRosterMembers().length }} member{{ filteredJobsRosterMembers().length === 1 ? '' : 's' }}
+                  </span>
+                </div>
+                @if (filteredJobsRosterMembers().length === 0) {
+                  <div class="empty-state empty-state--compact">
+                    <div class="empty-state-desc">No jobs roster members matched your search.</div>
+                  </div>
+                } @else {
+                  <div class="jobs-roster-list">
+                    @for (member of pagedJobsRosterMembers(); track member.id) {
+                      <div class="jobs-roster-member">
+                        <div class="jobs-roster-member__head">
                         <strong>{{ member.characterName }}</strong>
                         <span class="tag default">{{ member.rank || 'Member' }}</span>
-                      </div>
-                      @for (ch of rosterCharacters(member); track ch.label) {
-                        <div style="margin-top:6px">
+                        </div>
+                        @for (ch of rosterCharacters(member); track ch.label) {
+                          <div class="jobs-roster-member__character">
                           @if (ch.isAlt) {
-                            <div style="font-size:12px;color:var(--fg-2);margin-bottom:4px">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
+                            <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
                           }
                           @if (leveledJobs(ch.levels, ch.strong); as jobs) {
                             @if (jobs.length === 0) {
-                              <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
+                              <div class="jobs-roster-member__empty">No jobs entered</div>
                             } @else {
-                              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                              <div class="jobs-roster-member__pills">
                                 @for (job of jobs; track job.name) {
-                                  <span class="tag default" [class.is-strong]="job.strong" style="display:inline-flex;gap:5px">
+                                  <span class="tag default jobs-roster-member__pill" [class.is-strong]="job.strong">
                                     <span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>
                                     @if (job.strong) { <span class="jr-strong" title="Strong — well-geared / merited">★</span> }
                                   </span>
@@ -207,11 +222,22 @@
                               </div>
                             }
                           }
-                        </div>
-                      }
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                  @if (jobsRosterTotalPages() > 1) {
+                    <div class="table-paginator">
+                      <button type="button" class="btn sm" [disabled]="jobsRosterCurrentPage() <= 1" (click)="jobsRosterPrev()">Prev</button>
+                      <span class="muted" style="font-size:12px">
+                        Page {{ jobsRosterCurrentPage() }} of {{ jobsRosterTotalPages() }}
+                        &middot; {{ filteredJobsRosterMembers().length }} member{{ filteredJobsRosterMembers().length === 1 ? '' : 's' }}
+                      </span>
+                      <button type="button" class="btn sm" [disabled]="jobsRosterCurrentPage() >= jobsRosterTotalPages()" (click)="jobsRosterNext()">Next</button>
                     </div>
                   }
-                </div>
+                }
               }
             } @else {
               <div class="empty-state empty-state--compact">

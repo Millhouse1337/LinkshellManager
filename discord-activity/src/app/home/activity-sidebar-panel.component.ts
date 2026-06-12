@@ -360,12 +360,19 @@ export class ActivitySidebarPanelComponent {
     return this.activity.historyDetail();
   }
 
-  protected formatDurationForLinkshell(duration: number | null | undefined, linkshellId: number): string {
-    const hours = duration ?? 0;
-    const linkshell = (this.activity.overview()?.linkshells ?? []).find(l => l.id === linkshellId);
-    const step = linkshell?.settings?.dkpRoundingIncrement === 'Half' ? 0.5 : 0.25;
-    const rounded = Math.round(hours / step) * step;
-    return rounded.toFixed(2).replace(/\.?0+$/, '');
+  protected formatDurationForLinkshell(duration: number | null | undefined, _linkshellId: number): string {
+    // Exact elapsed time (second precision), never rounded down to a misleading
+    // "0h". Long events read "2h 15m"; short ones "35m" / "35s".
+    const totalSeconds = Math.max(0, Math.round((duration ?? 0) * 3600));
+    if (totalSeconds === 0) { return '0m'; }
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const parts: string[] = [];
+    if (h > 0) { parts.push(`${h}h`); }
+    if (m > 0) { parts.push(`${m}m`); }
+    if (s > 0 && h === 0) { parts.push(`${s}s`); }
+    return parts.join(' ');
   }
 
   protected dkpHistory() {

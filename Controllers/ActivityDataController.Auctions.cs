@@ -198,6 +198,26 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = validationError });
         }
 
+        // Gil items sell treasury gil for DKP — block if the linkshell has no gil,
+        // or if the total gil being auctioned exceeds the treasury balance.
+        var requestedGil = normalizedItems
+            .Where(item => item.GilAmount is > 0)
+            .Sum(item => item.GilAmount!.Value);
+        if (requestedGil > 0)
+        {
+            var availableGil = await _dbContext.RevenueEntries
+                .Where(entry => entry.LinkshellId == request.LinkshellId)
+                .SumAsync(entry => entry.EntryType == "Expense" ? -entry.Value : entry.Value, cancellationToken);
+            if (availableGil <= 0)
+            {
+                return BadRequest(new { error = "This linkshell has no gil in its treasury to auction." });
+            }
+            if (requestedGil > availableGil)
+            {
+                return BadRequest(new { error = $"Not enough gil in the treasury: {availableGil:N0} available, but {requestedGil:N0} is being auctioned." });
+            }
+        }
+
         var auction = new Auction
         {
             LinkshellId = request.LinkshellId,

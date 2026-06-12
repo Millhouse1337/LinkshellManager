@@ -56,7 +56,9 @@ export class ActivityQueuePanelComponent {
     eventLocation: '',
     startTimeLocal: '',
     endTimeLocal: '',
-    duration: 1,
+    // Derived from Start + End (no longer entered directly); null when there's
+    // no end time. Kept on the model so it still posts to the server.
+    duration: null,
     dkpPerHour: 1,
     details: '',
     partySetupId: null,
@@ -73,7 +75,6 @@ export class ActivityQueuePanelComponent {
 
   protected isCreateOpen = false;
   protected isSubmittingCreate = false;
-  protected durationNotSpecified = false;
   protected endTimeNotSpecified = false;
   // True = "No" (no party setup attached). False = "Yes" (dropdown enabled).
   // Defaults to "Yes" so the dropdown is visible on form open — most events
@@ -88,8 +89,24 @@ export class ActivityQueuePanelComponent {
   // party setup panel. Members click "Sign Up Manually" to reveal the form.
   protected readonly expandedManualSignupEventIds = signal<Set<number>>(new Set());
 
+  // Party setups offered for the chosen event type: those whose type matches the
+  // selected event type, PLUS universal ("Any") and untyped/legacy setups (so
+  // nothing existing disappears). With no event type chosen yet, all are shown.
+  // The already-linked setup is always kept so it's never silently unlinked.
   protected availablePartySetups(): ActivityPartySetupListRow[] {
-    return this.partySetups.list()?.items ?? [];
+    const all = this.partySetups.list()?.items ?? [];
+    const selected = (this.createModel.eventType ?? '').trim().toLowerCase();
+    const currentId = this.createModel.partySetupId;
+    return all.filter(setup => {
+      if (setup.id === currentId) {
+        return true;
+      }
+      if (!selected) {
+        return true;
+      }
+      const type = (setup.eventType ?? '').trim().toLowerCase();
+      return type === '' || type === 'any' || type === selected;
+    });
   }
 
   protected onEventTypeSelectionChange(value: string): void {
@@ -109,60 +126,53 @@ export class ActivityQueuePanelComponent {
     }
   }
 
-  protected onDurationNotSpecifiedChange(checked: boolean): void {
-    this.durationNotSpecified = checked;
-    if (checked) {
-      this.createModel.duration = null;
-    } else {
-      if (this.createModel.duration == null) {
-        this.createModel.duration = 1;
-      }
-      this.recomputeEndFromStartDuration();
-    }
-  }
-
   protected onEndTimeNotSpecifiedChange(checked: boolean): void {
     this.endTimeNotSpecified = checked;
     if (checked) {
       this.createModel.endTimeLocal = '';
-    } else {
-      this.recomputeEndFromStartDuration();
     }
+    this.recomputeDuration();
   }
 
   protected onStartTimeChange(): void {
-    if (!this.endTimeNotSpecified && this.createModel.endTimeLocal) {
-      this.recomputeDurationFromStartEnd();
-    } else if (!this.durationNotSpecified && this.createModel.duration != null) {
-      this.recomputeEndFromStartDuration();
-    }
+    this.recomputeDuration();
   }
 
   protected onEndTimeChange(): void {
-    this.recomputeDurationFromStartEnd();
+    this.recomputeDuration();
   }
 
-  protected onDurationChange(): void {
-    this.recomputeEndFromStartDuration();
-  }
-
-  private recomputeDurationFromStartEnd(): void {
-    if (this.durationNotSpecified || this.endTimeNotSpecified) return;
+  // Duration is derived from Start + End (no longer entered directly) — kept on
+  // the model for submission and shown as read-only text via durationLabel().
+  // Null when there's no end time or the range is invalid.
+  private recomputeDuration(): void {
+    if (this.endTimeNotSpecified) {
+      this.createModel.duration = null;
+      return;
+    }
     const start = this.parseLocalDateTime(this.createModel.startTimeLocal);
     const end = this.parseLocalDateTime(this.createModel.endTimeLocal);
-    if (!start || !end) return;
+    if (!start || !end) {
+      this.createModel.duration = null;
+      return;
+    }
     const hours = (end.getTime() - start.getTime()) / 3_600_000;
-    if (hours < 0) return;
-    this.createModel.duration = Math.round(hours * 100) / 100;
+    this.createModel.duration = hours >= 0 ? Math.round(hours * 100) / 100 : null;
   }
 
-  private recomputeEndFromStartDuration(): void {
-    if (this.endTimeNotSpecified || this.durationNotSpecified) return;
-    const start = this.parseLocalDateTime(this.createModel.startTimeLocal);
+  // Human-readable Start→End span for the read-only Duration field ("3h 30m").
+  protected durationLabel(): string {
     const hours = this.createModel.duration;
-    if (!start || hours == null || hours < 0) return;
-    const end = new Date(start.getTime() + hours * 3_600_000);
-    this.createModel.endTimeLocal = this.formatLocalDateTime(end);
+    if (hours == null || hours <= 0) {
+      return '—';
+    }
+    const totalMinutes = Math.round(hours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h > 0 && m > 0) {
+      return `${h}h ${m}m`;
+    }
+    return h > 0 ? `${h}h` : `${m}m`;
   }
 
   private parseLocalDateTime(value: string | null | undefined): Date | null {
@@ -171,11 +181,6 @@ export class ActivityQueuePanelComponent {
     if (!trimmed) return null;
     const parsed = new Date(trimmed);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  private formatLocalDateTime(date: Date): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
   protected readonly mainJobOptions = [...EVENT_MAIN_JOB_OPTIONS];
@@ -385,11 +390,8 @@ export class ActivityQueuePanelComponent {
     this.createModel.eventLocation = event.location ?? '';
     this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null);
     this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null);
-    // Source of truth is the actual stored value: addon-created (HNM) events
-    // come back with both endTime and duration null, so the "Not specified"
-    // checkboxes should reflect that on edit.
-    this.createModel.duration = event.duration ?? 1;
-    this.durationNotSpecified = event.duration == null;
+    // Addon-created (HNM) events come back with no end time; the "N/A" toggle
+    // reflects that, and the duration is derived from Start + End below.
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
     this.createModel.partySetupId = event.partySetupId ?? null;
     this.editingOriginalPartySetupId = event.partySetupId ?? null;
@@ -400,9 +402,7 @@ export class ActivityQueuePanelComponent {
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
     }
-    if (!this.durationNotSpecified && !this.endTimeNotSpecified) {
-      this.recomputeDurationFromStartEnd();
-    }
+    this.recomputeDuration();
     this.createModel.dkpPerHour = event.dkpPerHour ?? 0;
     this.createModel.details = event.details ?? '';
     // External callers (e.g. live-event Edit on the events tab) reach this
@@ -456,10 +456,9 @@ export class ActivityQueuePanelComponent {
     this.createModel.eventLocation = '';
     this.createModel.startTimeLocal = '';
     this.createModel.endTimeLocal = '';
-    this.createModel.duration = 1;
+    this.createModel.duration = null;
     this.createModel.dkpPerHour = 1;
     this.createModel.details = '';
-    this.durationNotSpecified = false;
     this.endTimeNotSpecified = false;
     this.partySetupNotSpecified = false;
     this.createModel.partySetupId = null;
@@ -493,12 +492,15 @@ export class ActivityQueuePanelComponent {
   // up against the planned slots — uses the embedded PartySetupPanelComponent
   // which renders the exact same alliance → parties → slots tree as the
   // Party Setup tab, and shares its signUp / withdraw flow.
-  protected togglePartySetupExpanded(setupId: number, linkshellId: number): void {
+  // Keyed by EVENT id (not party-setup id) so expanding one queued event only
+  // opens that card's slots — several events can share the same party setup,
+  // and keying by setup id would expand them all at once.
+  protected togglePartySetupExpanded(eventId: number, linkshellId: number): void {
     const next = new Set(this.expandedPartySetupIds());
-    if (next.has(setupId)) {
-      next.delete(setupId);
+    if (next.has(eventId)) {
+      next.delete(eventId);
     } else {
-      next.add(setupId);
+      next.add(eventId);
       // The embedded panel pulls option lists (role / main / sub) from
       // partySetups.list(); load it once so the sign-up dropdowns populate
       // even when the user hasn't visited the Party Setup tab yet.
@@ -507,8 +509,8 @@ export class ActivityQueuePanelComponent {
     this.expandedPartySetupIds.set(next);
   }
 
-  protected isPartySetupExpanded(setupId: number): boolean {
-    return this.expandedPartySetupIds().has(setupId);
+  protected isPartySetupExpanded(eventId: number): boolean {
+    return this.expandedPartySetupIds().has(eventId);
   }
 
   // Manual signup form inside the expanded party setup panel — gated behind a

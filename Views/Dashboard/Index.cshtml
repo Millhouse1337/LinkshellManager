@@ -88,10 +88,13 @@ else
             <div class="stat-cell-label">Upcoming Auctions</div>
             <div class="stat-cell-value">@Model.UpcomingAuctionsCount</div>
         </div>
-        <div class="stat-cell">
-            <div class="stat-cell-label">Upcoming ToDs</div>
-            <div class="stat-cell-value">@Model.UpcomingTodsCount</div>
-        </div>
+        @if (Model.LinkshellType != "SkySeaDynamis")
+        {
+            <div class="stat-cell">
+                <div class="stat-cell-label">Upcoming ToDs</div>
+                <div class="stat-cell-value">@Model.UpcomingTodsCount</div>
+            </div>
+        }
     </div>
 
     <div class="card fade d2" style="margin-top:16px;margin-bottom:16px">
@@ -415,7 +418,7 @@ else
         </div>
 
         <div class="col">
-            @if (Model.EnableToDs)
+            @if (Model.EnableToDs && Model.LinkshellType != "SkySeaDynamis")
             {
             <div class="card fade d3">
                 <div class="card-head">

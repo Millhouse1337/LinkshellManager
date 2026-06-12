@@ -1001,10 +1001,10 @@ public sealed class DiscordInteractionsController : ControllerBase
             .AsNoTracking()
             .Where(signup => signup.EventId == ev.Id)
             .OrderBy(signup => signup.CharacterName)
-            .Select(signup => new { signup.CharacterName, signup.JobName })
+            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType })
             .ToListAsync(cancellationToken);
         var signups = rows
-            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName))
+            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType))
             .ToList();
 
         var slotSignups = ev.PartySetup is null

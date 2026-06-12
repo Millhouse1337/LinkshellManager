@@ -128,11 +128,11 @@ public sealed class DiscordEventChannelPublisher
             .AsNoTracking()
             .Where(signup => signup.EventId == eventId)
             .OrderBy(signup => signup.CharacterName)
-            .Select(signup => new { signup.CharacterName, signup.JobName })
+            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType })
             .ToListAsync(cancellationToken);
 
         return rows
-            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName))
+            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType))
             .ToList();
     }
 }

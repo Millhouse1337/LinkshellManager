@@ -64,13 +64,10 @@ public sealed class DkpTemplateSheetService
         // Biddable DKP = Current − committed (the app's "available DKP").
         var committedByUser = await AuctionDkpService.ComputeCommittedDkpByUserAsync(_db, linkshellId, cancellationToken);
 
-        var values = new List<IList<object>>
-        {
-            new List<object> { $"{linkshell.LinkshellName ?? "Linkshell"} — DKP", "", "", "", "", "", "" },
-            new List<object> { "Member Name", "Alt 1", "Alt 2", "Current DKP", "Biddable DKP", "Total DKP", "Total DKP Spent" },
-        };
-
-        double sumCurrent = 0, sumBiddable = 0, sumEarned = 0, sumSpent = 0;
+        // Build the member rows first so the top summary cards can show the
+        // column totals (sum of Total DKP / Biddable / Total DKP Spent).
+        var memberRows = new List<IList<object>>();
+        double sumBiddable = 0, sumEarned = 0, sumSpent = 0;
         foreach (var m in members)
         {
             var name = m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
@@ -78,12 +75,11 @@ public sealed class DkpTemplateSheetService
             var committed = m.AppUserId is not null ? committedByUser.GetValueOrDefault(m.AppUserId, 0) : 0;
             var biddable = DkpRounding.Round((m.LinkshellDkp ?? 0) - committed, step);
             var (earned, spent) = ComputeTotals(m, ledgerByUser, step);
-            sumCurrent += current;
             sumBiddable += biddable;
             sumEarned += earned;
             sumSpent += spent;
 
-            values.Add(new List<object>
+            memberRows.Add(new List<object>
             {
                 name,
                 m.AppUser?.AltCharacterName1 ?? string.Empty,
@@ -95,14 +91,22 @@ public sealed class DkpTemplateSheetService
             });
         }
 
-        values.Add(new List<object>
+        // Row 1: branded title (A:G). Row 2: summary card labels. Row 3: summary
+        // values. Row 4: the importable column header. Row 5+: members.
+        var values = new List<IList<object>>
         {
-            "TOTAL", "", "",
-            DkpRounding.Round(sumCurrent, step),
-            DkpRounding.Round(sumBiddable, step),
-            DkpRounding.Round(sumEarned, step),
-            DkpRounding.Round(sumSpent, step),
-        });
+            new List<object> { $"{linkshell.LinkshellName ?? "Linkshell"} — DKP", "", "", "", "", "", "" },
+            new List<object> { "TOTAL MEMBERS", "TOTAL DKP", "", "BIDDABLE DKP", "", "TOTAL DKP SPENT", "" },
+            new List<object>
+            {
+                members.Count,
+                DkpRounding.Round(sumEarned, step), "",
+                DkpRounding.Round(sumBiddable, step), "",
+                DkpRounding.Round(sumSpent, step), "",
+            },
+            new List<object> { "Member Name", "Alt 1", "Alt 2", "Current DKP", "Biddable DKP", "Total DKP", "Total DKP Spent" },
+        };
+        values.AddRange(memberRows);
 
         var sheetId = await _sheets.EnsureTabAsync(linkshellId, spreadsheetId, tab, cancellationToken);
         // Clear stale rows (membership may have shrunk) then write the grid from A1.
@@ -121,12 +125,19 @@ public sealed class DkpTemplateSheetService
         return new DkpTemplateExportResult(tab, members.Count);
     }
 
-    // ---- Import: template tab -> app ----------------------------------------
+    // ---- Import: uploaded file -> app ---------------------------------------
 
-    public async Task<DkpTemplatePreview> BuildPreviewAsync(int linkshellId, CancellationToken cancellationToken)
+    // Turn a raw uploaded grid (from XlsxImportReader) into matched import rows.
+    // Header-aware, so a reformatted sheet with a different column order still
+    // imports as long as the labels are recognizable.
+    public List<DkpImportRow> ParseImport(IList<IList<object>> grid) => ParseTemplate(grid);
+
+    public async Task<DkpTemplatePreview> BuildPreviewAsync(
+        int linkshellId, IReadOnlyList<DkpImportRow> parsed, string sourceLabel, CancellationToken cancellationToken)
     {
-        var (linkshell, tab) = await ResolveAsync(linkshellId, cancellationToken);
-        var parsed = await ReadTemplateAsync(linkshellId, linkshell.GoogleSpreadsheetId!, tab, cancellationToken);
+        var linkshell = await _db.Linkshells.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException("Linkshell not found.");
         var step = DkpRounding.StepFor(linkshell.DkpRoundingIncrement);
 
         var members = await _db.AppUserLinkshells
@@ -138,7 +149,7 @@ public sealed class DkpTemplateSheetService
         var (byName, byAlt) = BuildMatchers(members.Select(m => (m.Id, m.CharacterName, m.LinkshellDkp,
             m.AppUser?.AltCharacterName1, m.AppUser?.AltCharacterName2)));
 
-        var preview = new DkpTemplatePreview { Tab = tab };
+        var preview = new DkpTemplatePreview { Tab = sourceLabel };
         foreach (var row in parsed)
         {
             var match = Match(byName, byAlt, row.Name);
@@ -154,10 +165,12 @@ public sealed class DkpTemplateSheetService
         return preview;
     }
 
-    public async Task<DkpTemplateImportResult> CommitAsync(int linkshellId, CancellationToken cancellationToken)
+    public async Task<DkpTemplateImportResult> CommitAsync(
+        int linkshellId, IReadOnlyList<DkpImportRow> parsed, string sourceLabel, CancellationToken cancellationToken)
     {
-        var (linkshell, tab) = await ResolveAsync(linkshellId, cancellationToken);
-        var parsed = await ReadTemplateAsync(linkshellId, linkshell.GoogleSpreadsheetId!, tab, cancellationToken);
+        var linkshell = await _db.Linkshells.AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken)
+            ?? throw new InvalidOperationException("Linkshell not found.");
         var step = DkpRounding.StepFor(linkshell.DkpRoundingIncrement);
 
         var members = await _db.AppUserLinkshells
@@ -183,7 +196,7 @@ public sealed class DkpTemplateSheetService
             if (!string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName2)) { membersByAlt.TryAdd(m.AppUser!.AltCharacterName2!.Trim(), m); }
         }
 
-        var result = new DkpTemplateImportResult { Tab = tab };
+        var result = new DkpTemplateImportResult { Tab = sourceLabel };
         var now = DateTime.UtcNow;
 
         foreach (var row in parsed)
@@ -233,17 +246,6 @@ public sealed class DkpTemplateSheetService
 
     // ---- helpers ------------------------------------------------------------
 
-    private async Task<(Linkshell Linkshell, string Tab)> ResolveAsync(int linkshellId, CancellationToken cancellationToken)
-    {
-        var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken)
-            ?? throw new InvalidOperationException("Linkshell not found.");
-        if (string.IsNullOrWhiteSpace(linkshell.GoogleSpreadsheetId))
-        {
-            throw new InvalidOperationException("Set the spreadsheet ID first.");
-        }
-        return (linkshell, ResolveTabName(linkshell.DkpTemplateTabName));
-    }
-
     private sealed record LedgerLite(int Id, double Amount, string EntryType);
 
     private async Task<Dictionary<string, List<LedgerLite>>> LoadLedgerByUserAsync(int linkshellId, CancellationToken cancellationToken)
@@ -283,19 +285,12 @@ public sealed class DkpTemplateSheetService
         return (DkpRounding.Round(earned, step), DkpRounding.Round(spent, step));
     }
 
-    private async Task<List<ParsedRow>> ReadTemplateAsync(int linkshellId, string spreadsheetId, string tab, CancellationToken cancellationToken)
-    {
-        var raw = await _sheets.ReadAsync(linkshellId, spreadsheetId, $"{tab}!A1:F1000", unformatted: true, cancellationToken)
-                  ?? new List<IList<object>>();
-        return ParseTemplate(raw);
-    }
-
     // Header-aware parse: find the header row by its labels, map columns by name
     // (so a reformatted sheet with a different column order still imports), then
     // read the data rows below it.
-    private static List<ParsedRow> ParseTemplate(IList<IList<object>> raw)
+    private static List<DkpImportRow> ParseTemplate(IList<IList<object>> raw)
     {
-        var rows = new List<ParsedRow>();
+        var rows = new List<DkpImportRow>();
         if (raw.Count == 0) { return rows; }
 
         int headerIndex = -1, nameCol = -1, currentCol = -1, totalCol = -1, spentCol = -1;
@@ -329,8 +324,11 @@ public sealed class DkpTemplateSheetService
             var name = CellText(raw[r], nameCol);
             if (string.IsNullOrWhiteSpace(name)) { continue; }
             if (string.Equals(name, "TOTAL", StringComparison.OrdinalIgnoreCase)) { continue; }
+            // The sample template leaves "✦" placeholder rows to fill in — skip
+            // any the user didn't replace so they don't import as bogus members.
+            if (name.Trim() == "✦") { continue; }
 
-            rows.Add(new ParsedRow(
+            rows.Add(new DkpImportRow(
                 name.Trim(),
                 TryNumber(raw[r], currentCol),
                 TryNumber(raw[r], totalCol),
@@ -375,8 +373,6 @@ public sealed class DkpTemplateSheetService
         return null;
     }
 
-    private readonly record struct ParsedRow(string Name, double? Current, double? Total, double? Spent);
-
     private readonly record struct MemberMatch(int Id, double CurrentDkp);
 
     // ---- styling ------------------------------------------------------------
@@ -384,12 +380,14 @@ public sealed class DkpTemplateSheetService
     private static List<Request> BuildFormattingRequests(int sheetId, int dataRowCount)
     {
         const int colCount = 7;   // Member, Alt1, Alt2, Current, Biddable, Total, Total Spent
-        var totalsRow = 2 + dataRowCount;          // 0-based: title(0), header(1), data(2..), totals
-        var gridEnd = totalsRow + 1;
+        // 0-based rows: title(0), summary labels(1), summary values(2),
+        // column header(3), member data(4..).
+        const int dataStart = 4;
+        var dataEnd = dataStart + dataRowCount;
 
         var titleBg = new Color { Red = 0.15f, Green = 0.16f, Blue = 0.24f };
         var headerBg = new Color { Red = 0.39f, Green = 0.40f, Blue = 0.95f };
-        var totalsBg = new Color { Red = 0.90f, Green = 0.91f, Blue = 0.96f };
+        var summaryBg = new Color { Red = 0.93f, Green = 0.94f, Blue = 0.98f };
         var white = new Color { Red = 1f, Green = 1f, Blue = 1f };
         var band2 = new Color { Red = 0.95f, Green = 0.95f, Blue = 1f };
 
@@ -402,19 +400,25 @@ public sealed class DkpTemplateSheetService
             EndColumnIndex = c1,
         };
 
+        Request Merge(int r0, int r1, int c0, int c1) =>
+            new() { MergeCells = new MergeCellsRequest { Range = Grid(r0, r1, c0, c1), MergeType = "MERGE_ALL" } };
+
+        var dkpNumberFormat = new NumberFormat { Type = "NUMBER", Pattern = "#,##0.00" };
+
         var requests = new List<Request>
         {
-            // Freeze the title + header rows.
+            // Freeze the title + summary + column-header rows.
             new()
             {
                 UpdateSheetProperties = new UpdateSheetPropertiesRequest
                 {
-                    Properties = new SheetProperties { SheetId = sheetId, GridProperties = new GridProperties { FrozenRowCount = 2 } },
+                    Properties = new SheetProperties { SheetId = sheetId, GridProperties = new GridProperties { FrozenRowCount = 4 } },
                     Fields = "gridProperties.frozenRowCount",
                 },
             },
-            // Merge + style the branded title row.
-            new() { MergeCells = new MergeCellsRequest { Range = Grid(0, 1, 0, colCount), MergeType = "MERGE_ALL" } },
+
+            // Title row (A:G).
+            Merge(0, 1, 0, colCount),
             new()
             {
                 RepeatCell = new RepeatCellRequest
@@ -426,18 +430,72 @@ public sealed class DkpTemplateSheetService
                         {
                             BackgroundColor = titleBg,
                             HorizontalAlignment = "CENTER",
-                            TextFormat = new TextFormat { Bold = true, FontSize = 14, ForegroundColor = white },
+                            TextFormat = new TextFormat { Bold = true, FontSize = 18, ForegroundColor = white },
                         },
                     },
                     Fields = "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat)",
                 },
             },
-            // Bold, colored, centered header row.
+
+            // Summary cards: merge B:C, D:E, F:G across the label + value rows.
+            Merge(1, 2, 1, 3), Merge(1, 2, 3, 5), Merge(1, 2, 5, colCount),
+            Merge(2, 3, 1, 3), Merge(2, 3, 3, 5), Merge(2, 3, 5, colCount),
+            // Summary block background + light bold labels.
+            new()
+            {
+                RepeatCell = new RepeatCellRequest
+                {
+                    Range = Grid(1, 3, 0, colCount),
+                    Cell = new CellData { UserEnteredFormat = new CellFormat { BackgroundColor = summaryBg } },
+                    Fields = "userEnteredFormat.backgroundColor",
+                },
+            },
             new()
             {
                 RepeatCell = new RepeatCellRequest
                 {
                     Range = Grid(1, 2, 0, colCount),
+                    Cell = new CellData
+                    {
+                        UserEnteredFormat = new CellFormat
+                        {
+                            TextFormat = new TextFormat { Bold = true, FontSize = 9 },
+                        },
+                    },
+                    Fields = "userEnteredFormat.textFormat",
+                },
+            },
+            // Big bold summary values.
+            new()
+            {
+                RepeatCell = new RepeatCellRequest
+                {
+                    Range = Grid(2, 3, 0, colCount),
+                    Cell = new CellData
+                    {
+                        UserEnteredFormat = new CellFormat { TextFormat = new TextFormat { Bold = true, FontSize = 16 } },
+                    },
+                    Fields = "userEnteredFormat.textFormat",
+                },
+            },
+            // Comma/2dp number format on the DKP summary values (B/D/F — skip A,
+            // the integer member count).
+            new()
+            {
+                RepeatCell = new RepeatCellRequest
+                {
+                    Range = Grid(2, 3, 1, colCount),
+                    Cell = new CellData { UserEnteredFormat = new CellFormat { NumberFormat = dkpNumberFormat } },
+                    Fields = "userEnteredFormat.numberFormat",
+                },
+            },
+
+            // Column-header row (bold, indigo, centered).
+            new()
+            {
+                RepeatCell = new RepeatCellRequest
+                {
+                    Range = Grid(3, 4, 0, colCount),
                     Cell = new CellData
                     {
                         UserEnteredFormat = new CellFormat
@@ -450,39 +508,24 @@ public sealed class DkpTemplateSheetService
                     Fields = "userEnteredFormat(backgroundColor,horizontalAlignment,textFormat)",
                 },
             },
-            // Number format on the three DKP columns (data + totals).
+            // Comma/2dp number format on the four DKP data columns (D..G).
             new()
             {
                 RepeatCell = new RepeatCellRequest
                 {
-                    Range = Grid(2, gridEnd, 3, colCount),
-                    Cell = new CellData
-                    {
-                        UserEnteredFormat = new CellFormat { NumberFormat = new NumberFormat { Type = "NUMBER", Pattern = "0.##" } },
-                    },
+                    Range = Grid(dataStart, dataEnd, 3, colCount),
+                    Cell = new CellData { UserEnteredFormat = new CellFormat { NumberFormat = dkpNumberFormat } },
                     Fields = "userEnteredFormat.numberFormat",
                 },
             },
-            // Emphasize the TOTAL row.
-            new()
-            {
-                RepeatCell = new RepeatCellRequest
-                {
-                    Range = Grid(totalsRow, gridEnd, 0, colCount),
-                    Cell = new CellData
-                    {
-                        UserEnteredFormat = new CellFormat { BackgroundColor = totalsBg, TextFormat = new TextFormat { Bold = true } },
-                    },
-                    Fields = "userEnteredFormat(backgroundColor,textFormat)",
-                },
-            },
+
             // Column widths.
             ColumnWidth(sheetId, 0, 1, 180),
             ColumnWidth(sheetId, 1, 3, 140),
             ColumnWidth(sheetId, 3, colCount, 120),
         };
 
-        // Alternating row banding over the data rows (skip when empty).
+        // Alternating row banding over the member data rows (skip when empty).
         if (dataRowCount > 0)
         {
             requests.Add(new Request
@@ -491,7 +534,7 @@ public sealed class DkpTemplateSheetService
                 {
                     BandedRange = new BandedRange
                     {
-                        Range = Grid(2, 2 + dataRowCount, 0, colCount),
+                        Range = Grid(dataStart, dataEnd, 0, colCount),
                         RowProperties = new BandingProperties { FirstBandColor = white, SecondBandColor = band2 },
                     },
                 },
@@ -513,6 +556,11 @@ public sealed class DkpTemplateSheetService
 }
 
 public sealed record DkpTemplateExportResult(string Tab, int MemberCount);
+
+// One parsed row from an uploaded import file (after header-aware mapping). Held
+// in the import preview and round-tripped (as JSON) into the commit so the user
+// doesn't have to re-upload between Preview and Save.
+public sealed record DkpImportRow(string Name, double? Current, double? Total, double? Spent);
 
 public sealed class DkpTemplatePreview
 {

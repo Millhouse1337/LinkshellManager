@@ -39,6 +39,68 @@
     </div>
 </div>
 
+<style>
+    /* Party Board (live event sign-up board) — same look as the queued board on
+       the Events index. 3 parties per alliance row; the slot-count renders as a
+       pill (otherwise "Party 1" + "6" read as "Party 16"). */
+    .event-ps-alliance-title {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--accent); margin: 14px 0 8px;
+    }
+    .event-ps-party-grid {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+    }
+    @@media (max-width: 760px) { .event-ps-party-grid { grid-template-columns: 1fr; } }
+    .event-ps-party {
+        border: 1px solid var(--border); border-radius: var(--r-md);
+        padding: 10px; background: var(--surface);
+    }
+    .event-ps-party__head {
+        display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--fg);
+        font-size: 13px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+    }
+    .event-ps-party__count {
+        margin-left: auto; padding: 2px 8px; border-radius: 999px;
+        background: rgba(148, 163, 184, 0.14); font-size: 11px; color: var(--fg-3); font-weight: 600;
+    }
+    .event-ps-slot {
+        display: flex; flex-direction: column; gap: 7px; padding: 8px 10px;
+        border-radius: var(--r-sm); background: var(--bg-elev); border: 1px solid var(--border);
+        margin-bottom: 6px;
+    }
+    .event-ps-slot--leader {
+        border-color: rgba(245, 197, 24, 0.42);
+        background: linear-gradient(180deg, rgba(245, 197, 24, 0.06), transparent 60%), var(--bg-elev);
+    }
+    .event-ps-slot__label {
+        display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--fg);
+    }
+    .event-ps-leader-tag {
+        display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+        font-size: 10.5px; font-weight: 700; color: #1a1300;
+        background: linear-gradient(180deg, #ffe27a, #f5b800);
+        box-shadow: 0 0 6px rgba(245, 197, 24, 0.4);
+    }
+    .event-ps-slot__controls {
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end;
+    }
+    .event-ps-slot__controls select.form-select {
+        flex: 1 1 90px; max-width: 130px; height: 32px; padding: 0 8px; font-size: 12.5px;
+    }
+    .event-ps-chip {
+        display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+        font-size: 12px; font-weight: 600; color: #cdd9ff;
+        background: rgba(124, 92, 255, 0.18); border: 1px solid rgba(124, 92, 255, 0.45);
+    }
+    .event-ps-chip--mine {
+        background: rgba(124, 92, 255, 0.32); color: #f0ecff;
+        border-color: rgba(124, 92, 255, 0.65);
+        box-shadow: 0 0 12px rgba(124, 92, 255, 0.25);
+    }
+    .event-ps-chip .muted { opacity: 0.82; font-weight: 500; }
+    .event-ps-empty { padding: 14px; color: var(--fg-3); font-size: 12.5px; }
+</style>
+
 <div class="card fade d2"
      data-live-event-dashboard
      data-event-start-local="@ToLocalIso(Model.CommencementStartTime)"
@@ -682,8 +744,15 @@
                     const participantElapsedMs = (participantBaseHours * 3600000)
                         + (participantOnBreak ? 0 : (segmentStart ? Math.max(0, now.getTime() - segmentStart.getTime()) : 0));
                     const participantDkp = (participantElapsedMs / 3600000) * dkpPerHour;
-                    const progress = Number.isFinite(plannedHours) && plannedHours > 0
-                        ? Math.min(100, (participantElapsedMs / (plannedHours * 3600000)) * 100)
+                    // Progress = how far through the planned duration we are; for
+                    // open-ended events (no planned end) fall back to the
+                    // participant's share of the event's elapsed time so the bar
+                    // still reflects attendance coverage instead of sitting at 0.
+                    const denominatorMs = (Number.isFinite(plannedHours) && plannedHours > 0)
+                        ? plannedHours * 3600000
+                        : eventElapsedMs;
+                    const progress = denominatorMs > 0
+                        ? Math.min(100, (participantElapsedMs / denominatorMs) * 100)
                         : 0;
 
                     const timerCell = row.querySelector('[data-live-participant-timer]');

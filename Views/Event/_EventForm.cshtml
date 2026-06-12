@@ -170,6 +170,26 @@
         var hidden = document.getElementById('event-type-hidden');
         if (!picker || !other || !hidden) return;
 
+        var partySelect = document.getElementById('PartySetupId');
+
+        // Show only party setups whose type matches the chosen event type, plus
+        // universal ("Any") and untyped/legacy setups (so nothing existing
+        // disappears). With no event type chosen yet, all are shown. The
+        // already-linked setup is always kept so editing an event never silently
+        // unlinks a setup whose type doesn't match the event.
+        function filterPartySetups() {
+            if (!partySelect) return;
+            var selected = (hidden.value || '').trim().toLowerCase();
+            for (var i = 0; i < partySelect.options.length; i++) {
+                var opt = partySelect.options[i];
+                if (opt.value === '') continue; // keep the placeholder
+                var t = (opt.getAttribute('data-event-type') || '').trim().toLowerCase();
+                var show = opt.selected || selected === '' || t === '' || t === 'any' || t === selected;
+                opt.hidden = !show;
+                opt.disabled = !show;
+            }
+        }
+
         function sync() {
             if (picker.value === 'Other') {
                 other.style.display = '';
@@ -178,10 +198,12 @@
                 other.style.display = 'none';
                 hidden.value = picker.value;
             }
+            filterPartySetups();
         }
 
         picker.addEventListener('change', sync);
-        other.addEventListener('input', function () { hidden.value = other.value; });
+        other.addEventListener('input', function () { hidden.value = other.value; filterPartySetups(); });
+        filterPartySetups();
     })();
 </script>
 
@@ -349,11 +371,11 @@
                 : $"{option.Name} — {option.AssignedMonsterName}";
             if (Model.PartySetupId == option.Id)
             {
-                <option value="@option.Id" selected>@label</option>
+                <option value="@option.Id" data-event-type="@option.EventType" selected>@label</option>
             }
             else
             {
-                <option value="@option.Id">@label</option>
+                <option value="@option.Id" data-event-type="@option.EventType">@label</option>
             }
         }
     </select>

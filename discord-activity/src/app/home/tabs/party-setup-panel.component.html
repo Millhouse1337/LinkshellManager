@@ -34,7 +34,8 @@
 
               <div class="ps-slots">
                 @for (slot of party.slots; track slot.slotId) {
-                  <div class="ps-slot" [class.is-open]="isOpen(slot)" [class.is-leader]="slot.isPartyLeader">
+                  <div class="ps-slot" [class.is-open]="isOpen(slot)" [class.is-leader]="slot.isPartyLeader"
+                       [class.ps-slot--inline]="isOpen(slot) && !needsRole(slot) && !needsMainJob(slot) && !needsSubJob(slot)">
                     <div class="ps-slot-req">
                       @if (slot.isPartyLeader) {
                         <span class="ps-crown" title="Party leader" aria-label="Party leader">

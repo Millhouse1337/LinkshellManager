@@ -161,6 +161,18 @@ export class LinkshellTabComponent {
   protected readonly jobsRosterExpanded = signal(false);
   protected readonly jobsRosterBusy = signal(false);
   private readonly jobsRosterLoadedFor = signal<number | null>(null);
+  protected readonly jobsRosterPageSize = 3;
+  protected readonly jobsRosterPage = signal(1);
+  protected jobsRosterSearchTerm = '';
+
+  protected get jobsRosterSearch(): string {
+    return this.jobsRosterSearchTerm;
+  }
+
+  protected set jobsRosterSearch(value: string) {
+    this.jobsRosterSearchTerm = value;
+    this.jobsRosterPage.set(1);
+  }
 
   // The cached roster, but only if it belongs to the currently-selected
   // linkshell — guards against showing one linkshell's jobs after a switch.
@@ -185,10 +197,60 @@ export class LinkshellTabComponent {
       if (data) {
         this.jobsRoster.set(data);
         this.jobsRosterLoadedFor.set(id);
+        this.jobsRosterPage.set(1);
       }
     } finally {
       this.jobsRosterBusy.set(false);
     }
+  }
+
+  protected filteredJobsRosterMembers(): ActivityJobsRosterMember[] {
+    const members = this.jobsRosterForCurrent()?.members ?? [];
+    const term = this.jobsRosterSearch.trim().toLowerCase();
+    if (!term) {
+      return members;
+    }
+
+    return members.filter(member => this.matchesJobsRosterSearch(member, term));
+  }
+
+  protected jobsRosterTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredJobsRosterMembers().length / this.jobsRosterPageSize));
+  }
+
+  protected jobsRosterCurrentPage(): number {
+    return Math.min(Math.max(1, this.jobsRosterPage()), this.jobsRosterTotalPages());
+  }
+
+  protected pagedJobsRosterMembers(): ActivityJobsRosterMember[] {
+    const start = (this.jobsRosterCurrentPage() - 1) * this.jobsRosterPageSize;
+    return this.filteredJobsRosterMembers().slice(start, start + this.jobsRosterPageSize);
+  }
+
+  protected jobsRosterPrev(): void {
+    this.jobsRosterPage.set(Math.max(1, this.jobsRosterCurrentPage() - 1));
+  }
+
+  protected jobsRosterNext(): void {
+    this.jobsRosterPage.set(Math.min(this.jobsRosterTotalPages(), this.jobsRosterCurrentPage() + 1));
+  }
+
+  private matchesJobsRosterSearch(member: ActivityJobsRosterMember, term: string): boolean {
+    const namesAndRank = [
+      member.characterName,
+      member.rank,
+      member.alt1Name,
+      member.alt2Name
+    ];
+
+    if (namesAndRank.some(value => (value ?? '').toLowerCase().includes(term))) {
+      return true;
+    }
+
+    return this.rosterCharacters(member).some(character =>
+      this.leveledJobs(character.levels, character.strong)
+        .some(job => `${job.name} ${job.level}`.toLowerCase().includes(term))
+    );
   }
 
   // Main + named alts for one roster member, as labeled characters to render.

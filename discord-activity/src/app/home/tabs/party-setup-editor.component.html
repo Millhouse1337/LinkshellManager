@@ -103,13 +103,13 @@
                     } @else {
                       <select class="pse-input pse-select pse-slot__job" [(ngModel)]="slot.mainJob"
                         [name]="'slotMain' + ai + '_' + pi + '_' + si">
-                        <option value="">Any job</option>
-                        @for (j of mainJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                        <option value="">{{ anyMainLabel(slot) }}</option>
+                        @for (j of mainJobOptionsFor(slot); track j) { <option [value]="j">{{ j }}</option> }
                       </select>
                       <select class="pse-input pse-select pse-slot__job" [(ngModel)]="slot.subJob"
                         [name]="'slotSub' + ai + '_' + pi + '_' + si">
-                        <option value="">No sub</option>
-                        @for (j of subJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                        <option value="">Player's Choice</option>
+                        @for (j of subJobOptionsFor(slot); track j) { <option [value]="j">{{ j }}</option> }
                       </select>
                     }
 

@@ -433,6 +433,7 @@ public class PartySetupController : Controller
                 .Where(ls => ls.Id == linkshellId)
                 .Select(ls => ls.LinkshellName)
                 .FirstOrDefaultAsync(),
+            LinkshellType = await ResolveLinkshellTypeAsync(linkshellId),
             Slots = SeedSlots()
         };
         return View(model);
@@ -448,10 +449,12 @@ public class PartySetupController : Controller
         var linkshellId = await ResolveActiveLinkshellIdAsync(user);
         if (linkshellId <= 0 || !await ResolveCanManagePartiesAsync(user.Id, linkshellId)) return Forbid();
 
-        NormalizeAndValidate(model);
+        var allowCustomMonster = ResolveAssignedMonster(model);
+        NormalizeAndValidate(model, allowCustomMonster);
         if (!ModelState.IsValid)
         {
             model.LinkshellId = linkshellId;
+            model.LinkshellType = await ResolveLinkshellTypeAsync(linkshellId);
             return View(model);
         }
 
@@ -467,6 +470,7 @@ public class PartySetupController : Controller
             Name = model.Name.Trim(),
             AssignedMonsterName = NormalizeMonster(model.AssignedMonsterName),
             Notes = string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim(),
+            EventType = string.IsNullOrWhiteSpace(model.EventType) ? null : model.EventType.Trim(),
             CreatedByAppUserId = user.Id,
             CreatedByCharacterName = characterName,
             CreatedAt = now,
@@ -500,9 +504,11 @@ public class PartySetupController : Controller
                 .Where(ls => ls.Id == partySetup.LinkshellId)
                 .Select(ls => ls.LinkshellName)
                 .FirstOrDefaultAsync(),
+            LinkshellType = await ResolveLinkshellTypeAsync(partySetup.LinkshellId),
             Name = partySetup.Name,
             AssignedMonsterName = partySetup.AssignedMonsterName,
             Notes = partySetup.Notes,
+            EventType = string.IsNullOrWhiteSpace(partySetup.EventType) ? "Any" : partySetup.EventType,
             Slots = FlattenTree(partySetup)
         };
         return View(nameof(Create), model);
@@ -522,11 +528,13 @@ public class PartySetupController : Controller
         if (!await HasLinkshellAccessAsync(user.Id, partySetup.LinkshellId)) return Forbid();
         if (!await ResolveCanManagePartiesAsync(user.Id, partySetup.LinkshellId)) return Forbid();
 
-        NormalizeAndValidate(model);
+        var allowCustomMonster = ResolveAssignedMonster(model);
+        NormalizeAndValidate(model, allowCustomMonster);
         if (!ModelState.IsValid)
         {
             model.Id = partySetup.Id;
             model.LinkshellId = partySetup.LinkshellId;
+            model.LinkshellType = await ResolveLinkshellTypeAsync(partySetup.LinkshellId);
             return View(nameof(Create), model);
         }
 
@@ -537,6 +545,7 @@ public class PartySetupController : Controller
         partySetup.Name = model.Name.Trim();
         partySetup.AssignedMonsterName = NormalizeMonster(model.AssignedMonsterName);
         partySetup.Notes = string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim();
+        partySetup.EventType = string.IsNullOrWhiteSpace(model.EventType) ? null : model.EventType.Trim();
         partySetup.UpdatedAt = DateTime.UtcNow;
         partySetup.Alliances = BuildTreeFromFlat(model.Slots);
 
@@ -766,15 +775,17 @@ public class PartySetupController : Controller
         return slot;
     }
 
-    private void NormalizeAndValidate(PartySetupEditorViewModel model)
+    private void NormalizeAndValidate(PartySetupEditorViewModel model, bool allowCustomMonster = false)
     {
         if (string.IsNullOrWhiteSpace(model.Name))
         {
             ModelState.AddModelError(nameof(model.Name), "A name is required.");
         }
 
+        // HNM linkshells can name a custom pop via the "Other" option, so a
+        // free-text monster skips the supported-list check.
         var monster = model.AssignedMonsterName?.Trim();
-        if (!string.IsNullOrEmpty(monster) && !SupportedMonsters.Contains(monster))
+        if (!allowCustomMonster && !string.IsNullOrEmpty(monster) && !SupportedMonsters.Contains(monster))
         {
             ModelState.AddModelError(nameof(model.AssignedMonsterName), "Select a supported ToD monster, or leave it unassigned.");
         }
@@ -843,6 +854,30 @@ public class PartySetupController : Controller
     {
         var trimmed = monsterName?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    private async Task<string> ResolveLinkshellTypeAsync(int linkshellId)
+    {
+        var raw = await _context.Linkshells.AsNoTracking()
+            .Where(ls => ls.Id == linkshellId)
+            .Select(ls => ls.LinkshellType)
+            .FirstOrDefaultAsync();
+        return LinkshellTypes.Normalize(raw);
+    }
+
+    // Folds the "Other" Assigned Monster pick into a free-text custom name and
+    // reports whether the value should bypass the supported-monster check
+    // (HNM linkshells can name a custom pop). Mutates model.AssignedMonsterName.
+    private static bool ResolveAssignedMonster(PartySetupEditorViewModel model)
+    {
+        if (!string.Equals(model.AssignedMonsterName?.Trim(), "Other", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        model.AssignedMonsterName = string.IsNullOrWhiteSpace(model.AssignedMonsterCustom)
+            ? null
+            : model.AssignedMonsterCustom.Trim();
+        return true;
     }
 
     private async Task<AppUser?> RequireCurrentUserAsync()

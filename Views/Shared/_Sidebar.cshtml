@@ -53,6 +53,9 @@
         activeLinkshellType != LinkshellManagerDiscordApp.Models.LinkshellTypes.HnmOnly;
     var showAttendanceNav =
         activeLinkshellType != LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis;
+    // Sky/Sea/Dynamis linkshells don't track Times of Death, so hide the ToD nav.
+    var showToDsNav =
+        activeLinkshellType != LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis;
 
     // Feature Toggles (Customize page): unchecked hides the group. Fail-open
     // to shown when there's no active linkshell, matching Allow(...) above.
@@ -222,18 +225,21 @@
             </div>
         }
 
-        <button type="button" class="nav-item nav-group @IsExpanded("Tod")" data-target="#nav-tods">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-            ToD Tracker
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-tods" class="nav-sub">
-            <a class="nav-sub-item @IsSubActive("Tod", "Index")" asp-controller="Tod" asp-action="Index">View ToDs</a>
-            @if (Allow(p => p.CanManageTods))
-            {
-                <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
-            }
-        </div>
+        @if (showToDsNav)
+        {
+            <button type="button" class="nav-item nav-group @IsExpanded("Tod")" data-target="#nav-tods">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                ToD Tracker
+                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <div id="nav-tods" class="nav-sub">
+                <a class="nav-sub-item @IsSubActive("Tod", "Index")" asp-controller="Tod" asp-action="Index">View ToDs</a>
+                @if (Allow(p => p.CanManageTods))
+                {
+                    <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
+                }
+            </div>
+        }
 
         <button type="button" class="nav-item nav-group @IsExpanded("PartySetup")" data-target="#nav-party-setups">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
@@ -336,7 +342,8 @@
                 <a class="nav-sub-item @IsSubActive("Linkshell", "Customize")" asp-controller="Linkshell" asp-action="Customize">Customize Linkshell</a>
                 @if (activeLinkshellId.HasValue)
                 {
-                    <a class="nav-sub-item @IsSubActive("LinkshellSheet")" asp-controller="LinkshellSheet" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Google Sheet Integration</a>
+                    <a class="nav-sub-item @IsSubActive("LinkshellSheet", "Index", "ImportPreview", "ImportCommit")" asp-controller="LinkshellSheet" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Import DKP</a>
+                    <a class="nav-sub-item @IsSubActive("LinkshellSheet", "Export")" asp-controller="LinkshellSheet" asp-action="Export" asp-route-linkshellId="@activeLinkshellId.Value">Export DKP</a>
                 }
             }
         </div>

@@ -52,6 +52,10 @@ export class PartySetupEditorComponent {
   protected readonly ANY_ROLE = 'Any Role';
   protected readonly HNM_EVENT_TYPE = 'HNM';
   protected readonly OTHER_EVENT_TYPE = 'Other';
+  // A party setup typed "Any" is event-type-agnostic: it shows in the Create
+  // Event party-setup picker for EVERY event type. (Not an event type itself —
+  // events are always a specific type.)
+  protected readonly ANY_EVENT_TYPE = 'Any';
 
   protected editingId: number | null = null;
   protected name = '';
@@ -84,6 +88,7 @@ export class PartySetupEditorComponent {
 
   protected eventTypeOptions(): string[] {
     return [
+      this.ANY_EVENT_TYPE,
       ...PartySetupEditorComponent.BASE_EVENT_TYPE_OPTIONS,
       ...(this.allowsHnmEventType() ? [this.HNM_EVENT_TYPE] : []),
       this.OTHER_EVENT_TYPE
@@ -164,6 +169,25 @@ export class PartySetupEditorComponent {
 
   protected subJobOptions(): string[] {
     return this.partySetup.list()?.subJobOptions ?? [];
+  }
+
+  // The Main select's blank option reflects the chosen role ("Any Tank", "Any
+  // DPS", …) so an open role slot reads naturally; a slot with no specific role
+  // falls back to "Any job".
+  protected anyMainLabel(slot: EditorSlot): string {
+    const role = (slot.role ?? '').trim();
+    return role && role !== this.ANY_ROLE ? `Any ${role}` : 'Any job';
+  }
+
+  // A job picked in Main can't also be picked in Sub, and vice versa — each list
+  // drops the OTHER field's current pick (but keeps its own, so a legacy main==sub
+  // row never silently loses its value).
+  protected mainJobOptionsFor(slot: EditorSlot): string[] {
+    return this.mainJobOptions().filter(job => job !== slot.subJob || job === slot.mainJob);
+  }
+
+  protected subJobOptionsFor(slot: EditorSlot): string[] {
+    return this.subJobOptions().filter(job => job !== slot.mainJob || job === slot.subJob);
   }
 
   openForCreate(): void {

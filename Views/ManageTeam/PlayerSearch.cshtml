@@ -30,13 +30,16 @@
     <form asp-action="SearchPlayers" method="get" class="form-grid"
           style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
         <div class="field" style="flex:1 1 220px">
-            <label for="selectedLinkshellId">Linkshell</label>
-            <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select">
-                @foreach (var linkshell in Model.Linkshells)
-                {
-                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.SelectedLinkshellId)">@linkshell.LinkshellName</option>
-                }
-            </select>
+            <label for="selectedLinkshellName">Linkshell</label>
+            @* Locked here on purpose — the active linkshell is switched from the
+               side nav or Customize Linkshell, never from this search form. The
+               id still posts via the hidden field. *@
+            <input type="text" id="selectedLinkshellName" class="form-control" readonly tabindex="-1"
+                   aria-readonly="true"
+                   title="Switch your active linkshell from the side nav or Customize Linkshell"
+                   value="@(Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId)?.LinkshellName ?? "Selected Linkshell")"
+                   style="border-color:var(--danger);color:var(--danger);cursor:not-allowed;background:rgba(248,113,113,0.08)" />
+            <input type="hidden" name="selectedLinkshellId" value="@Model.SelectedLinkshellId" />
         </div>
         <div class="field" style="flex:2 1 240px">
             <label for="search">Search players</label>

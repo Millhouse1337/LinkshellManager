@@ -191,3 +191,19 @@
   border-color: var(--danger);
   color: var(--danger);
 }
+
+// Solid green CTA (e.g. the event "Create event" submit) — stands out as the
+// primary confirm action.
+.panel-tab .action-button--success {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.panel-tab .action-button--success:hover {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+  filter: brightness(1.08);
+}

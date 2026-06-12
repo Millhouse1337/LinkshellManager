@@ -1,0 +1,169 @@
+@model LinkshellManagerDiscordApp.ViewModels.LinkshellSheetViewModel
+@{
+    ViewData["Title"] = "Export DKP";
+    var templateTab = string.IsNullOrWhiteSpace(Model.DkpTemplateTabName) ? "LSM DKP" : Model.DkpTemplateTabName;
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Export DKP</h1>
+        <div class="page-sub">
+            <span>Push this linkshell's DKP out to a Google Sheet</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> · </span>
+                <span>@Model.LinkshellName</span>
+            }
+        </div>
+    </div>
+</div>
+
+<style nonce="@Html.CspNonce()">
+    .sheet-cards > .card { margin-bottom: 16px; }
+    .sheet-cards > .card:last-child { margin-bottom: 0; }
+    .sheet-cards .form-row { display: flex; flex-direction: column; gap: 6px; }
+    .sheet-cards .form-row > label { font-size: 13px; font-weight: 500; color: var(--fg-2); }
+    .sheet-cards .form-row > small { font-size: 12px; color: var(--fg-3); line-height: 1.6; }
+    .sheet-cards .form-row .input { width: 100%; max-width: 520px; height: auto; min-height: 36px; padding: 8px 10px; line-height: 1.4; }
+    .sheet-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+
+<div class="sheet-cards">
+
+@if (TempData["SheetImportError"] is string err)
+{
+    <div class="alert alert-danger fade d2">@err</div>
+}
+@if (TempData["SheetConfigError"] is string cfgErr)
+{
+    <div class="alert alert-danger fade d2">@cfgErr</div>
+}
+@if (TempData["SheetConfigSuccess"] is string ok)
+{
+    <div class="alert alert-success fade d2">@ok</div>
+}
+@if (TempData["SheetImportSuccess"] is string imp)
+{
+    <div class="alert alert-success fade d2">@imp</div>
+}
+
+@if (!Model.IsOAuthConfigured)
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Google OAuth not configured</div>
+        </div>
+        <div class="empty">
+            The server admin must set <code>GoogleSheets:ClientId</code> and <code>GoogleSheets:ClientSecret</code> in app configuration to enable export to Google Sheets.
+        </div>
+    </div>
+}
+else if (!Model.IsOAuthConnected)
+{
+    <div class="card fade d2">
+        <div class="card-head">
+            <div class="card-title">Connect Google first</div>
+        </div>
+        <div style="padding:12px 16px">
+            <p style="margin-top:0">
+                Export creates and manages a single Google Sheet for this linkshell. Connect a Google account to continue.
+            </p>
+            <form asp-action="Connect" asp-route-linkshellId="@Model.LinkshellId" method="post">
+                <button type="submit" class="btn btn-primary">Connect Google account</button>
+            </form>
+            <p style="margin:12px 0 0;font-size:12px;color:var(--fg-3)">
+                You can also connect from <a asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">Import DKP</a> (Step 1).
+            </p>
+        </div>
+    </div>
+}
+else
+{
+    @if (Model.GoogleSheetAppCreated && !string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+    {
+        <div class="card fade d2">
+            <div class="card-head">
+                <div class="card-title">Your DKP sheet</div>
+            </div>
+            <div style="padding:12px 16px">
+                <p style="margin-top:0">
+                    LSManager created and manages a dedicated <code>@templateTab</code> spreadsheet for this linkshell —
+                    it's the only file the app can touch. Export writes the <code>@templateTab</code> tab.
+                </p>
+                <a class="btn" target="_blank" href="https://docs.google.com/spreadsheets/d/@Model.SpreadsheetId/edit">Open sheet</a>
+            </div>
+            <form asp-action="SaveConfig" asp-route-linkshellId="@Model.LinkshellId" method="post" style="padding:0 16px 12px">
+                <div class="form-row">
+                    <label>DKP template tab name (optional)</label>
+                    <input class="input" type="text" name="dkpTemplateTabName" value="@Model.DkpTemplateTabName" placeholder="LSM DKP" />
+                    <small>Defaults to <code>LSM DKP</code>. Export writes this tab. Point it at another tab in this sheet if you've reformatted one to match the template.</small>
+                </div>
+                <div style="margin-top:12px">
+                    <button type="submit" class="btn">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card fade d3">
+            <div class="card-head">
+                <div class="card-title">Export to Google Sheet</div>
+            </div>
+            <div style="padding:12px 16px">
+                <p style="margin-top:0">
+                    Writes the styled <code>@templateTab</code> tab from the app's current DKP:
+                    <strong>Member Name</strong>, <strong>Alt 1</strong>, <strong>Alt 2</strong>,
+                    <strong>Current DKP</strong>, <strong>Biddable DKP</strong>, <strong>Total DKP</strong>, <strong>Total DKP Spent</strong>.
+                    Biddable DKP (Current minus DKP locked in winning bids on active auctions) is computed here and export-only.
+                </p>
+                <div class="sheet-actions">
+                    <form asp-action="ExportTemplate" asp-route-linkshellId="@Model.LinkshellId" method="post" style="display:inline">
+                        <button type="submit" class="btn btn-primary">Export DKP now</button>
+                    </form>
+                    <a class="btn" target="_blank" href="https://docs.google.com/spreadsheets/d/@Model.SpreadsheetId/edit">Open sheet</a>
+                </div>
+                <p style="margin:12px 0 0;font-size:12px;color:var(--fg-3)">
+                    Want the sheet to stay current automatically? Turn on the <strong>Live sync</strong> toggle at the top of the
+                    <a asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">Import DKP</a> page.
+                </p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card fade d2">
+            <div class="card-head">
+                <div class="card-title">Create your DKP sheet</div>
+            </div>
+            <div style="padding:12px 16px">
+                @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+                {
+                    <p style="margin-top:0">
+                        This linkshell was previously linked to an external spreadsheet under Google's broad permission.
+                        LSManager now uses a dedicated sheet it creates and manages, so it only needs access to that one file.
+                        Click below to create it — your DKP exports straight into it.
+                    </p>
+                }
+                else
+                {
+                    <p style="margin-top:0">
+                        Create a dedicated <code>@templateTab</code> spreadsheet for this linkshell. LSManager makes it in your
+                        Google Drive and only ever touches this one sheet — your current DKP is exported into it automatically.
+                    </p>
+                }
+                <form asp-action="CreateSheet" asp-route-linkshellId="@Model.LinkshellId" method="post">
+                    <button type="submit" class="btn btn-primary">Create LSM DKP sheet</button>
+                </form>
+                @if (!string.IsNullOrWhiteSpace(Model.SpreadsheetId))
+                {
+                    <p style="margin-top:10px;font-size:12px;color:var(--fg-3)">
+                        To fully drop the old broad access, <strong>Disconnect</strong> on the
+                        <a asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">Import DKP</a> page and reconnect first —
+                        the new permission is limited to the sheet LSManager creates.
+                    </p>
+                }
+            </div>
+        </div>
+    }
+}
+
+</div>@* /.sheet-cards *@

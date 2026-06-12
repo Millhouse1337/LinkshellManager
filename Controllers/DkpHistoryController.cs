@@ -148,10 +148,9 @@ public class DkpHistoryController : Controller
             .ToList();
         projected.Reverse();
 
-        viewModel.Entries = projected
-            .Skip((viewModel.PageNumber - 1) * viewModel.PageSize)
-            .Take(viewModel.PageSize)
-            .ToList();
+        // Render the whole ledger; the DKP History view paginates (10 per page)
+        // and filters it client-side so search is instant across every entry.
+        viewModel.Entries = projected;
 
         return View(viewModel);
     }

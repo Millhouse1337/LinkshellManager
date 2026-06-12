@@ -10,11 +10,11 @@
     </div>
 </div>
 
-<div class="card fade d2" style="padding:20px;max-width:720px">
+<div class="card fade d2" style="padding:20px;max-width:720px;margin:0 auto">
     <form asp-action="Create" method="post">
         <div asp-validation-summary="ModelOnly" class="alert alert-danger" style="margin-bottom:12px"></div>
         <div class="field">
-            <label asp-for="LinkshellName"></label>
+            <label asp-for="LinkshellName">Linkshell Name</label>
             <input asp-for="LinkshellName" class="form-control" />
             <span asp-validation-for="LinkshellName" style="color:var(--danger);font-size:11px"></span>
         </div>

@@ -5,17 +5,21 @@ using LinkshellManagerDiscordApp.ViewModels;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// One person signed up to an event (for rendering the Discord roster).
-public sealed record EventSignupLine(string CharacterName, string? JobName);
+// One person signed up to an event (for rendering the Discord roster). For
+// no-slot attendees JobName is the main job, SubJobName the sub, JobType the role.
+public sealed record EventSignupLine(
+    string CharacterName, string? JobName, string? SubJobName = null, string? JobType = null);
 
 // Builds the Discord message payloads for an event announcement.
 //
-// The PARTY board is posted as a rendered PNG (EventBoardHtmlBuilder +
-// EventBoardImageRenderer) carried by BuildBoardImageMessage — that's the only way
-// to get colour + bold + side-by-side columns. When the image renderer is
-// unavailable, Build() is the classic-embed fallback so events always post. Both
-// are classic messages (no Components V2 flag) so the board can be edited between
-// image and embed without Discord rejecting a flag toggle.
+// The PARTY board is posted as a wide, readable EMBED (parties as fields) with the
+// rendered PNG (EventBoardHtmlBuilder + EventBoardImageRenderer) shown INSIDE it via
+// BuildBoardImageEmbedMessage — the embed fills the message column (a bare image
+// attachment is capped narrow by Discord) and still carries the themed visual. When
+// the image renderer is unavailable, Build() is the classic embed-only fallback so
+// events always post. Both are classic messages (no Components V2 flag) so the board
+// can be edited between the image-embed and the plain embed without Discord rejecting
+// a flag toggle.
 //
 // The same payload shape is also used for the interaction UPDATE_MESSAGE response
 // (type 7) and for bot edits, so the message refreshes in place after a click.
@@ -82,6 +86,7 @@ public static class DiscordEventMessageBuilder
             var signupsBySlot = slotSignups ?? new Dictionary<int, EventPartySlotSignup>();
             return new
             {
+                content = BuildStartHeading(ev),
                 embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot, signups) },
                 components = BuildBoardComponents(ev.Id),
                 attachments = Array.Empty<object>(),
@@ -91,6 +96,7 @@ public static class DiscordEventMessageBuilder
 
         return new
         {
+            content = BuildStartHeading(ev),
             embeds = new[] { BuildEmbed(ev, signups) },
             components = BuildComponents(ev.Id),
             attachments = Array.Empty<object>(),
@@ -98,42 +104,24 @@ public static class DiscordEventMessageBuilder
         };
     }
 
-    // The party board as a rendered-PNG message: the image (uploaded as files[0],
-    // referenced here as attachments:[{id:0,...}]) plus the board buttons. `embeds`
-    // is cleared so an edit from the embed fallback drops its embed.
-    //
-    // `content` carries the start time as a Discord timestamp (<t:unix:…>) so it
-    // renders in EACH viewer's own local timezone — the baked PNG can't do per-user
-    // time (one shared image renders identically for everyone), so the time is NOT
-    // drawn into the image at all; it lives in the message text above it. Empty when
-    // the event has no start time.
-    public static object BuildBoardImageMessage(Event ev, string fileName)
+    // The party board as a wide, readable EMBED (the parties listed as fields, the
+    // event details, the localized start time) WITH the rendered PNG shown inside it
+    // (image: attachment://file). The embed frame fills the message column — far
+    // larger than a bare image attachment, which Discord caps narrow — so the board
+    // reads big AND carries the themed visual. `attachments:[{id:0,...}]` references
+    // the file uploaded as files[0]; the board buttons sit below.
+    public static object BuildBoardImageEmbedMessage(
+        Event ev, IReadOnlyList<EventSignupLine> signups, PartySetup setup,
+        IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, string fileName)
     {
         return new
         {
-            content = BuildBoardContentLine(ev),
-            embeds = Array.Empty<object>(),
-            attachments = new object[] { new { id = 0, filename = fileName } },
+            content = BuildStartHeading(ev),
+            embeds = new[] { BuildBoardEmbed(ev, setup, slotSignups, signups, fileName) },
             components = BuildBoardComponents(ev.Id),
+            attachments = new object[] { new { id = 0, filename = fileName } },
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
-    }
-
-    // The big "when" header shown ABOVE the image: a Discord `#` heading (large
-    // text) with the localized full date/time, and the relative time as subtext
-    // (`-#`). Both use Discord timestamp markup so every viewer sees their own
-    // timezone. Empty when the event has no scheduled time (Discord accepts empty
-    // content alongside an attachment).
-    private static string BuildBoardContentLine(Event ev)
-    {
-        var when = ev.CommencementStartTime ?? ev.StartTime;
-        if (when is null)
-        {
-            return string.Empty;
-        }
-        var unix = ((DateTimeOffset)DateTime.SpecifyKind(when.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
-        var label = ev.CommencementStartTime is not null ? "Started" : "Starts";
-        return $"# 🕒 Event Start Time: <t:{unix}:f>\n-# {label} · <t:{unix}:R>";
     }
 
     // Action rows for the ephemeral "pick a slot" message shown when someone hits
@@ -238,7 +226,6 @@ public static class DiscordEventMessageBuilder
             description = string.IsNullOrWhiteSpace(ev.Details) ? null : Truncate(Escape(ev.Details!.Trim()), 1500),
             color = EmbedColor,
             fields = fields.ToArray(),
-            footer = new { text = "Pick your job below to sign up · Withdraw to drop out" },
         };
     }
 
@@ -309,18 +296,12 @@ public static class DiscordEventMessageBuilder
         };
     }
 
-    // Event detail fields for the board embed fallback.
+    // Event detail fields for the board embed. The start time is NOT here — it's
+    // the larger `##` heading in the message content above the embed
+    // (BuildStartHeading), since embed-field text can't be enlarged.
     private static List<object> BuildEventDetailFields(Event ev)
     {
         var fields = new List<object>();
-        if (ev.CommencementStartTime is { } commenced)
-        {
-            fields.Add(new { name = "Started", value = TimestampMarkup(commenced), inline = false });
-        }
-        else if (ev.StartTime is { } start)
-        {
-            fields.Add(new { name = "Starts", value = TimestampMarkup(start), inline = false });
-        }
         if (ev.DkpPerHour is { } dkpPerHour)
         {
             fields.Add(new { name = "DKP / hour", value = dkpPerHour.ToString(), inline = true });
@@ -332,56 +313,107 @@ public static class DiscordEventMessageBuilder
         return fields;
     }
 
+    // The start time as a `##` heading in the message content (above the embed) so
+    // it reads a little larger than embed-field text — the only way to enlarge text
+    // in a Discord message. Uses Discord timestamp markup so it renders in each
+    // viewer's own timezone. Empty when the event has no scheduled time. (Discord
+    // has no way to center message text, so this sits left-aligned at the top.)
+    private static string BuildStartHeading(Event ev)
+    {
+        var when = ev.CommencementStartTime ?? ev.StartTime;
+        if (when is null)
+        {
+            return string.Empty;
+        }
+        var unix = ((DateTimeOffset)DateTime.SpecifyKind(when.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        var label = ev.CommencementStartTime is not null ? "Started" : "Starts";
+        return $"## 🕒 {label}: <t:{unix}:f> · <t:{unix}:R>";
+    }
+
     // Board embed (the fallback when the image renderer is unavailable): event
     // details + one field per party listing each slot with a role-colored dot —
     // claimed slots show the member + jobs, open slots show the requirement.
     private static object BuildBoardEmbed(
         Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
-        IReadOnlyList<EventSignupLine> generalSignups)
+        IReadOnlyList<EventSignupLine> generalSignups, string? imageFileName = null)
     {
         var fields = BuildEventDetailFields(ev);
 
-        foreach (var (party, label) in LabeledParties(setup))
+        // Discord lays inline fields out up to 3-across. Each alliance is a
+        // full-width "Alliance N" header (so the grouping reads as one title)
+        // followed by its parties as inline fields sitting side by side. The
+        // header also breaks the row so the first party never packs onto the
+        // details row. A single alliance gets no header — just a blank divider
+        // before its inline parties; a lone party stays full-width.
+        var alliances = setup.Alliances.OrderBy(a => a.SortOrder).ToList();
+        var multiAlliance = alliances.Count > 1;
+        var totalParties = alliances.Sum(a => a.Parties.Count);
+        var partiesInline = totalParties > 1;
+
+        if (partiesInline && !multiAlliance)
         {
-            // Embeds cap at 25 fields; leave a little headroom.
-            if (fields.Count >= 24)
+            // Zero-width space (U+200B) — a thin full-width divider that breaks the row
+            // so single-alliance inline parties don't pack onto the details row. (The
+            // embed's max-width is forced on the title line, not here, so this stays a
+            // minimal divider with no empty band.)
+            fields.Add(new { name = "​", value = "​", inline = false });
+        }
+
+        for (var ai = 0; ai < alliances.Count && fields.Count < 24; ai++)
+        {
+            var parties = alliances[ai].Parties.OrderBy(p => p.SortOrder).ToList();
+            if (parties.Count == 0)
             {
-                break;
+                continue;
             }
 
-            var slots = party.Slots.OrderBy(s => s.SortOrder).ToList();
-            var filled = slots.Count(s => slotSignups.ContainsKey(s.Id));
-            var sb = new StringBuilder();
-            foreach (var slot in slots)
+            if (multiAlliance)
             {
-                slotSignups.TryGetValue(slot.Id, out var signup);
-                var icon = RoleIcon(slot, signup);
-                var crown = (signup?.IsPartyLeader ?? false) ? "👑 " : string.Empty;
-                string line;
-                if (signup is not null)
-                {
-                    var jobs = SignedUpJobs(signup);
-                    line = $"{icon} {crown}**{Escape(signup.CharacterName ?? "Member")}**"
-                         + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}");
-                }
-                else
-                {
-                    line = $"{icon} {crown}{Escape(SlotRequirement(slot))}";
-                }
-                if (sb.Length > 0) { sb.Append('\n'); }
-                sb.Append(line);
+                var allianceName = string.IsNullOrWhiteSpace(alliances[ai].Name)
+                    ? $"Alliance {ai + 1}"
+                    : alliances[ai].Name!.Trim();
+                fields.Add(new { name = Truncate(allianceName, 250), value = "​", inline = false });
             }
-            if (sb.Length == 0) { sb.Append("_No slots_"); }
 
-            fields.Add(new
+            for (var pi = 0; pi < parties.Count && fields.Count < 24; pi++)
             {
-                name = Truncate($"{label} ({filled}/{slots.Count})", 250),
-                value = Truncate(sb.ToString(), 1024),
-                inline = false,
-            });
+                var party = parties[pi];
+                var slots = party.Slots.OrderBy(s => s.SortOrder).ToList();
+                var filled = slots.Count(s => slotSignups.ContainsKey(s.Id));
+                var sb = new StringBuilder();
+                foreach (var slot in slots)
+                {
+                    slotSignups.TryGetValue(slot.Id, out var signup);
+                    var icon = RoleIcon(slot, signup);
+                    var crown = (signup?.IsPartyLeader ?? false) ? "👑 " : string.Empty;
+                    string line;
+                    if (signup is not null)
+                    {
+                        var jobs = SignedUpJobs(signup);
+                        line = $"{icon} {crown}**{Escape(signup.CharacterName ?? "Member")}**"
+                             + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}");
+                    }
+                    else
+                    {
+                        line = $"{icon} {crown}{Escape(SlotRequirement(slot))}";
+                    }
+                    if (sb.Length > 0) { sb.Append('\n'); }
+                    sb.Append(line);
+                }
+                if (sb.Length == 0) { sb.Append("_No slots_"); }
+
+                var partyName = string.IsNullOrWhiteSpace(party.Name) ? $"Party {pi + 1}" : party.Name!.Trim();
+                fields.Add(new
+                {
+                    name = Truncate($"{partyName} ({filled}/{slots.Count})", 250),
+                    value = Truncate(sb.ToString(), 1024),
+                    inline = partiesInline, // side by side (≤3-across) when >1 party
+                });
+            }
         }
 
         // General attendees who joined WITHOUT a party slot (slot-holders excluded).
+        // Shown with the same role dot + bold name + role/main/sub as a slot line.
         var slotNames = new HashSet<string>(
             slotSignups.Values
                 .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
@@ -396,12 +428,14 @@ public static class DiscordEventMessageBuilder
             foreach (var g in extra)
             {
                 if (sb.Length > 0) { sb.Append('\n'); }
-                var jobs = string.IsNullOrWhiteSpace(g.JobName) ? string.Empty : $" — {Escape(g.JobName!)}";
-                sb.Append($"• {Escape(g.CharacterName)}{jobs}");
+                var icon = GeneralRoleIcon(g.JobType);
+                var jobs = GeneralSignupJobs(g);
+                sb.Append($"{icon} **{Escape(g.CharacterName)}**"
+                    + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}"));
             }
             fields.Add(new
             {
-                name = Truncate($"Also attending — no slot ({extra.Count})", 250),
+                name = "Also Attending",
                 value = Truncate(sb.ToString(), 1024),
                 inline = false,
             });
@@ -413,10 +447,17 @@ public static class DiscordEventMessageBuilder
         return new
         {
             title,
-            description = string.IsNullOrWhiteSpace(ev.Details) ? null : Truncate(Escape(ev.Details!.Trim()), 1500),
+            // The description renders directly under the title, so use it to put a
+            // little breathing room below the event type: the real details when set,
+            // otherwise a single thin blank line. (Discord gives no other control over
+            // title↕field spacing.)
+            description = string.IsNullOrWhiteSpace(ev.Details) ? "​" : Truncate(Escape(ev.Details!.Trim()), 1500),
             color = EmbedColor,
             fields = fields.ToArray(),
-            footer = new { text = "Sign Up (or as Party Leader 👑) to claim a slot · Sign Up (No Slot) for attendance · Withdraw to drop out" },
+            // The rendered board PNG, shown INSIDE the embed (omitted when null).
+            // Referencing the uploaded file (files[0]) by name lets the wide,
+            // readable embed carry the themed image too.
+            image = imageFileName is null ? null : new { url = $"attachment://{imageFileName}" },
         };
     }
 
@@ -556,6 +597,29 @@ public static class DiscordEventMessageBuilder
         }
         return string.Join(" - ", parts);
     }
+
+    // "Role - MAIN/SUB" for a no-slot attendee (mirrors SignedUpJobs for slots).
+    private static string GeneralSignupJobs(EventSignupLine g)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(g.JobType)) { parts.Add(g.JobType!); }
+        if (!string.IsNullOrWhiteSpace(g.JobName))
+        {
+            parts.Add(string.IsNullOrWhiteSpace(g.SubJobName)
+                ? g.JobName!
+                : $"{g.JobName}/{g.SubJobName}");
+        }
+        return string.Join(" - ", parts);
+    }
+
+    private static string GeneralRoleIcon(string? jobType) => jobType?.Trim().ToLowerInvariant() switch
+    {
+        "tank" => "🔵",
+        "heal" or "healer" => "🟢",
+        "support" => "🟡",
+        "dps" => "🔴",
+        _ => "⚪",
+    };
 
     private static string TimestampMarkup(DateTime utc)
     {

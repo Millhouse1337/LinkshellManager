@@ -295,7 +295,11 @@
               <div class="upcoming-list">
                 @for (event of dashboardUpcomingEvents(); track event.id) {
                   <div class="upcoming-row">
-                    <div class="upcoming-thumb"></div>
+                    @if (eventTypeImage(event.type); as thumbSrc) {
+                      <img class="upcoming-thumb upcoming-thumb--image" [src]="thumbSrc" [alt]="event.type || 'Event'" />
+                    } @else {
+                      <div class="upcoming-thumb"></div>
+                    }
                     <div class="upcoming-body">
                       <div class="upcoming-title-row">
                         <span class="upcoming-title">{{ event.name || 'Event' }}</span>
@@ -329,9 +333,9 @@
            linkshell feature toggle (ToDs / HNM section); the row only renders
            when at least one is enabled. -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-        @if (dashboardLinkshell.settings?.enableToDs || (dashboardLinkshell.settings?.enableHnmSection && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis')) {
+        @if ((dashboardLinkshell.settings?.enableToDs && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis') || (dashboardLinkshell.settings?.enableHnmSection && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis')) {
         <div class="dash-row dash-row--equal">
-        @if (dashboardLinkshell.settings?.enableToDs) {
+        @if (dashboardLinkshell.settings?.enableToDs && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis') {
         <div class="card card--tod-fixed">
           <div class="card-head">
             <div class="card-title">ToD Tracker</div>

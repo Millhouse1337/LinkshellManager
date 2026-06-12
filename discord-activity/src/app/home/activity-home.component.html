@@ -124,7 +124,7 @@
           Attendance System
         </button>
       }
-      @if (isFeatureEnabled('enableToDs')) {
+      @if (isFeatureEnabled('enableToDs') && !isSkySeaDynamis()) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('tods')"
                 [attr.aria-controls]="panelId('tods')"

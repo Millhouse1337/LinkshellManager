@@ -54,12 +54,30 @@ public class PartySetupEditorViewModel
     [MaxLength(256)]
     public string? AssignedMonsterName { get; set; }
 
+    // Free-text monster name captured when the Assigned Monster dropdown is set
+    // to "Other" (HNM linkshells naming a custom pop). Folded into
+    // AssignedMonsterName by the controller before validation.
+    [MaxLength(256)]
+    public string? AssignedMonsterCustom { get; set; }
+
+    // The active linkshell's content style (SkySeaDynamis / HnmOnly / Both).
+    // Drives which of the Event Type / Assigned Monster inputs the editor shows.
+    public string? LinkshellType { get; set; }
+
     [MaxLength(1024)]
     public string? Notes { get; set; }
+
+    // Which event type this setup is for. "Any" (the default) means it shows in
+    // the Create Event party-setup picker for EVERY event type; a specific type
+    // limits it to matching events.
+    [MaxLength(64)]
+    public string? EventType { get; set; } = "Any";
 
     public List<PartySetupSlotInput> Slots { get; set; } = new();
 
     // Option lists (repopulated by the controller on an invalid POST).
+    public List<string> EventTypeOptions { get; set; } =
+        new() { "Any", "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
     public List<string> MonsterOptions { get; set; } = TodManagerViewModel.SupportedMonsters.ToList();
     public List<string> RoleOptions { get; set; } = EventJobCatalog.JobTypeOptions.ToList();
     public List<string> MainJobOptions { get; set; } = EventJobCatalog.MainJobOptions.ToList();

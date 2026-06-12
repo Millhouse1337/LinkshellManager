@@ -45,6 +45,9 @@ public class PartySetupOption
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? AssignedMonsterName { get; set; }
+    // The setup's event type ("Any"/null = shows for every event type). Drives the
+    // client-side filtering of the picker as the event type is chosen.
+    public string? EventType { get; set; }
 }
 
 public class EventAttendanceWindowViewModel

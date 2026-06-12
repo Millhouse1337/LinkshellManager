@@ -4,6 +4,10 @@
 
 body {
   margin: 0;
+  // The queue panel breaks out to 100vw (full-iframe width); clip any sub-pixel /
+  // scrollbar-width overflow it creates so no horizontal scrollbar appears. `clip`
+  // (not `hidden`) avoids turning body into a scroll container.
+  overflow-x: clip;
 }
 
 .activity-shell,
@@ -398,6 +402,15 @@ body {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
+.panel-tab .btn.success {
+  background: var(--success);
+  border-color: var(--success);
+  color: #0a0a0b;
+  font-weight: 600;
+}
+.panel-tab .btn.success:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
 .panel-tab .btn.sm {
   height: 26px;
   padding: 0 8px;
@@ -744,6 +757,16 @@ body {
 .panel-tab app-activity-sidebar-panel .panel,
 .panel-tab app-activity-queue-panel .panel {
   margin-bottom: 10px;
+}
+
+/* The queue (Pending Events + create-event form) flows inside the same
+   1640px-capped, centered .panel-tab as the Live Operations section above it
+   so their left/right edges line up. */
+.panel-tab app-activity-queue-panel {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Ensure embedded sidebar/queue panels use the cleaner card chrome */

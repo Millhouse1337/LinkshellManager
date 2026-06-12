@@ -236,6 +236,19 @@ else
                                     </div>
                                 </td>
                             </tr>
+                            <tr class="bid-history-row" id="bidRow-@item.Id" style="display:none">
+                                <td colspan="7" style="padding:0;background:rgba(255,255,255,0.02)">
+                                    <div style="padding:10px 16px 12px">
+                                        <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);margin-bottom:6px">Bid history</div>
+                                        <table class="table themed" style="margin:0">
+                                            <thead>
+                                                <tr><th>Character</th><th>Bid</th><th>When</th></tr>
+                                            </thead>
+                                            <tbody id="bidsBody-@item.Id"></tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
                         }
                     </tbody>
                 </table>
@@ -276,25 +289,6 @@ else
                     <div class="field"><label for="Notes">Notes</label><input type="text" class="form-control" id="Notes" name="Notes" /></div>
                     <button type="submit" class="btn primary" style="margin-top:8px">Add item</button>
                 </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="viewBidsModal" tabindex="-1" aria-labelledby="viewBidsModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="viewBidsModalLabel">Bid history</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <table class="table themed">
-                    <thead>
-                        <tr><th>Character</th><th>Bid</th><th>When</th></tr>
-                    </thead>
-                    <tbody id="bidsTableBody"></tbody>
-                </table>
             </div>
         </div>
     </div>
@@ -354,19 +348,38 @@ else
                 });
             });
 
+            // "View Bids" now toggles an inline row beneath the item instead of
+            // opening a modal — fetch the bids on first open, collapse on re-click.
             const viewBidsButtons = document.querySelectorAll('.viewBidsButton');
             viewBidsButtons.forEach((button) => {
                 button.addEventListener('click', async () => {
-                    const response = await fetch(`/Auction/GetBids?auctionItemId=${button.getAttribute('data-item-id')}`);
-                    if (!response.ok) { return; }
+                    const itemId = button.getAttribute('data-item-id');
+                    const row = document.getElementById(`bidRow-${itemId}`);
+                    const tbody = document.getElementById(`bidsBody-${itemId}`);
+                    if (!row || !tbody) { return; }
+
+                    if (row.style.display !== 'none') {
+                        row.style.display = 'none';
+                        button.textContent = 'View Bids';
+                        return;
+                    }
+
+                    row.style.display = 'table-row';
+                    button.textContent = 'Hide Bids';
+                    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--fg-3)">Loading…</td></tr>';
+
+                    const response = await fetch(`/Auction/GetBids?auctionItemId=${itemId}`);
+                    if (!response.ok) {
+                        tbody.innerHTML = '<tr><td colspan="3" style="color:var(--danger)">Could not load bids.</td></tr>';
+                        return;
+                    }
                     const bids = await response.json();
-                    const tbody = document.getElementById('bidsTableBody');
                     tbody.innerHTML = '';
                     if (!Array.isArray(bids) || bids.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="3" style="color:var(--fg-3)">No bids yet.</td></tr>';
                     } else {
                         bids.forEach((bid) => {
-                            const row = document.createElement('tr');
+                            const r = document.createElement('tr');
                             const nameCell = document.createElement('td');
                             nameCell.textContent = bid.characterName ?? '';
                             const amountCell = document.createElement('td');
@@ -374,13 +387,12 @@ else
                             amountCell.textContent = bid.bidAmount ?? '';
                             const dateCell = document.createElement('td');
                             dateCell.textContent = bid.createdAt ?? '';
-                            row.appendChild(nameCell);
-                            row.appendChild(amountCell);
-                            row.appendChild(dateCell);
-                            tbody.appendChild(row);
+                            r.appendChild(nameCell);
+                            r.appendChild(amountCell);
+                            r.appendChild(dateCell);
+                            tbody.appendChild(r);
                         });
                     }
-                    new bootstrap.Modal(document.getElementById('viewBidsModal')).show();
                 });
             });
 

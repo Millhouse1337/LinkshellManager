@@ -296,6 +296,17 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // Can't end while attendees are still pending confirmation (IsVerified == null).
+        // Every pending member must be confirmed present or removed first.
+        var pendingCount = eventEntity.AppUserEvents.Count(p => p.IsVerified == null);
+        if (pendingCount > 0)
+        {
+            return BadRequest(new
+            {
+                error = $"Confirm or remove the {pendingCount} member(s) still pending in attendance before ending the event."
+            });
+        }
+
         var lootStructure = NormalizeLootStructure(eventEntity.Linkshell?.LootStructure ?? "Dkp");
         var isLootCouncil = lootStructure == "LootCouncil";
         var isHybrid = lootStructure == "Hybrid";
@@ -345,10 +356,12 @@ public sealed partial class ActivityDataController
         foreach (var participation in eventEntity.AppUserEvents)
         {
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
-            var roundedDuration = DkpRounding.Round(durationHours, roundingStep);
-            var eventDkp = isLootCouncil ? 0 : roundedDuration * (eventEntity.DkpPerHour ?? 0);
+            // Pay DKP for the ACTUAL time present, snapping the DKP value (not the
+            // duration) to the linkshell's increment. Rounding the duration first
+            // floored sub-quarter-hour events to 0h and paid present members 0 DKP.
+            var eventDkp = isLootCouncil ? 0 : DkpRounding.Round(durationHours * (eventEntity.DkpPerHour ?? 0), roundingStep);
 
-            participation.Duration = roundedDuration;
+            participation.Duration = durationHours;
             participation.EventDkp = eventDkp;
 
             history.AppUserEventHistories.Add(new AppUserEventHistory
@@ -359,7 +372,7 @@ public sealed partial class ActivityDataController
                 SubJobName = participation.SubJobName,
                 JobType = participation.JobType,
                 StartTime = participation.StartTime,
-                Duration = roundedDuration,
+                Duration = durationHours,
                 EventDkp = eventDkp,
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,

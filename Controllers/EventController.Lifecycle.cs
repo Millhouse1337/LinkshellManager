@@ -723,6 +723,14 @@ public partial class EventController
             return Forbid();
         }
 
+        // Can't end while attendees are still pending confirmation (IsVerified == null).
+        // Every pending member must be confirmed present or removed first.
+        var pendingCount = eventEntity.AppUserEvents.Count(p => p.IsVerified == null);
+        if (pendingCount > 0)
+        {
+            return BadRequest($"Confirm or remove the {pendingCount} member(s) still pending in attendance before ending the event.");
+        }
+
         await EndEventCoreAsync(_context, eventEntity);
 
         return RedirectToAction(nameof(Index), "EventHistory");
@@ -808,22 +816,24 @@ public partial class EventController
         foreach (var participation in eventEntity.AppUserEvents)
         {
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
-            var roundedDuration = Math.Round(durationHours * 4) / 4;
             int? windowsAttended = isWindowed
                 ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
                 : (int?)null;
+            // Pay DKP for the ACTUAL time present, snapping the DKP value (not the
+            // duration) to the linkshell's increment. Rounding the duration first
+            // floored sub-quarter-hour events to 0h and paid present members 0 DKP.
             var eventDkp = isWindowed
                 ? (windowsAttended ?? 0) * (eventEntity.DkpPerHour ?? 0)
-                : roundedDuration * (eventEntity.DkpPerHour ?? 0);
+                : DkpRounding.Round(durationHours * (eventEntity.DkpPerHour ?? 0), DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement));
 
-            participation.Duration = roundedDuration;
+            participation.Duration = durationHours;
             participation.EventDkp = eventDkp;
 
             participantSummaries.Add(new EndEventParticipantSummary(
                 participation.CharacterName,
                 participation.JobName,
                 participation.SubJobName,
-                roundedDuration,
+                durationHours,
                 eventDkp,
                 windowsAttended));
 
@@ -835,7 +845,7 @@ public partial class EventController
                 SubJobName = participation.SubJobName,
                 JobType = participation.JobType,
                 StartTime = participation.StartTime,
-                Duration = roundedDuration,
+                Duration = durationHours,
                 EventDkp = eventDkp,
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,

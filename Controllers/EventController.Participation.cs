@@ -300,40 +300,43 @@ public partial class EventController
         }
 
         var existing = await _context.AppUserEvents.FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
-        if (existing is null)
+        if (existing is not null)
         {
-            var eventEntity = await _context.Events.FirstOrDefaultAsync(item => item.Id == eventId);
-            if (eventEntity is null)
-            {
-                return NotFound();
-            }
-
-            var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-            if (membership is null)
-            {
-                return Forbid();
-            }
-
-            if (!eventEntity.CommencementStartTime.HasValue)
-            {
-                return BadRequest("The event must be live before quick join is available.");
-            }
-
-            _context.AppUserEvents.Add(new AppUserEvent
-            {
-                AppUserId = user.Id,
-                EventId = eventId,
-                CharacterName = user.CharacterName,
-                JobName = cleanJobName,
-                SubJobName = cleanSubJobName,
-                JobType = cleanJobType,
-                StartTime = DateTime.UtcNow,
-                EventDkp = 0,
-                IsQuickJoin = true
-            });
-
-            await _context.SaveChangesAsync();
+            // Already a participant — can't late/quick join twice.
+            return BadRequest("You are already attending this event.");
         }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(item => item.Id == eventId);
+        if (eventEntity is null)
+        {
+            return NotFound();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        if (!eventEntity.CommencementStartTime.HasValue)
+        {
+            return BadRequest("The event must be live before quick join is available.");
+        }
+
+        _context.AppUserEvents.Add(new AppUserEvent
+        {
+            AppUserId = user.Id,
+            EventId = eventId,
+            CharacterName = user.CharacterName,
+            JobName = cleanJobName,
+            SubJobName = cleanSubJobName,
+            JobType = cleanJobType,
+            StartTime = DateTime.UtcNow,
+            EventDkp = 0,
+            IsQuickJoin = true
+        });
+
+        await _context.SaveChangesAsync();
 
         return RedirectToAction(nameof(Start), new { eventId });
     }

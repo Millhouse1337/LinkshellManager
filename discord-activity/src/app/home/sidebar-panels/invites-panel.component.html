@@ -164,31 +164,56 @@
             @if (activity.discordRosterBusy()) {
               <p class="notice">Loading your Discord server roster...</p>
             } @else if (activity.discordRosterCandidates().length > 0) {
-              <ul class="compact-list compact-list--dense">
-                @for (candidate of activity.discordRosterCandidates(); track candidate.discordUserId) {
-                  <li>
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <img [src]="candidate.avatarUrl" alt="" width="24" height="24"
-                        style="border-radius:50%;flex:0 0 auto" />
-                      <div>
-                        <strong>{{ candidate.displayName }}</strong>
-                        @if (!candidate.hasLsmAccount) {
-                          <span>New to LSM — auto-joins on first sign-in</span>
-                        }
+              <div class="invite-search invite-search--discord-roster">
+                <input
+                  [(ngModel)]="discordRosterSearch"
+                  name="discordRosterSearch"
+                  placeholder="Search Discord server members" />
+                <span class="notice invite-search__count" style="margin:0">
+                  {{ filteredDiscordRosterCandidates().length }} member{{ filteredDiscordRosterCandidates().length === 1 ? '' : 's' }}
+                </span>
+              </div>
+              @if (filteredDiscordRosterCandidates().length > 0) {
+                <div class="discord-roster-grid">
+                  @for (candidate of pagedDiscordRosterCandidates(); track candidate.discordUserId) {
+                    <div class="discord-roster-card">
+                      <div class="discord-roster-card__identity">
+                        <img [src]="candidate.avatarUrl" alt="" width="24" height="24"
+                          class="discord-roster-card__avatar" />
+                        <div class="discord-roster-card__text">
+                          <strong>{{ candidate.displayName }}</strong>
+                          @if (!candidate.hasLsmAccount) {
+                            <span>New to LSM — auto-joins on first sign-in</span>
+                          }
+                        </div>
+                      </div>
+                      <div class="button-cluster">
+                        <button
+                          type="button"
+                          class="action-button"
+                          [disabled]="activity.busyDiscordUserId() === candidate.discordUserId"
+                          (click)="inviteFromDiscord(candidate.discordUserId)">
+                          {{ activity.busyDiscordUserId() === candidate.discordUserId ? 'Inviting...' : 'Invite' }}
+                        </button>
                       </div>
                     </div>
-                    <div class="button-cluster">
-                      <button
-                        type="button"
-                        class="action-button"
-                        [disabled]="activity.busyDiscordUserId() === candidate.discordUserId"
-                        (click)="inviteFromDiscord(candidate.discordUserId)">
-                        {{ activity.busyDiscordUserId() === candidate.discordUserId ? 'Inviting...' : 'Invite' }}
-                      </button>
-                    </div>
-                  </li>
+                  }
+                </div>
+                @if (discordRosterTotalPages() > 1) {
+                  <div class="table-paginator table-paginator--invite-grid">
+                    <button type="button" class="action-button action-button--secondary"
+                      [disabled]="discordRosterCurrentPage() <= 1" (click)="discordRosterPrev()">Prev</button>
+                    <span class="notice" style="margin:0">
+                      Page {{ discordRosterCurrentPage() }} of {{ discordRosterTotalPages() }}
+                      &middot; {{ filteredDiscordRosterCandidates().length }} total
+                    </span>
+                    <button type="button" class="action-button action-button--secondary"
+                      [disabled]="discordRosterCurrentPage() >= discordRosterTotalPages()" (click)="discordRosterNext()">Next</button>
+                  </div>
                 }
-              </ul>
+              } @else {
+                <p class="notice">No Discord server members matched your search.</p>
+              }
             } @else {
               <p class="notice">No one left to add from your Discord server, or the bot can't read it yet.</p>
             }

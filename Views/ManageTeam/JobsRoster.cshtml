@@ -39,30 +39,8 @@
 }
 else
 {
-    @if (Model.Linkshells.Count > 1)
-    {
-        <div class="card fade d2" style="padding:16px;margin-bottom:16px">
-            <form asp-action="JobsRoster" method="get" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
-                <div class="field">
-                    <label for="selectedLinkshellId">Linkshell</label>
-                    <select id="selectedLinkshellId" name="selectedLinkshellId" class="form-select" style="min-width:240px">
-                        @foreach (var linkshell in Model.Linkshells)
-                        {
-                            if (linkshell.Id == Model.SelectedLinkshellId)
-                            {
-                                <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                            }
-                            else
-                            {
-                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                            }
-                        }
-                    </select>
-                </div>
-                <button type="submit" class="btn primary sm" style="margin-bottom:14px;white-space:nowrap">Switch Linkshell</button>
-            </form>
-        </div>
-    }
+    @* Linkshell switching lives in the side nav / Customize Linkshell — the
+       per-page switch card was removed to keep one switch entry point. *@
 
     <div class="card fade d2" style="padding:14px 16px;margin-bottom:16px">
         <div class="page-sub" style="margin:0">

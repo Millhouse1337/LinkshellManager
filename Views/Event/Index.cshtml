@@ -164,6 +164,18 @@ else
        that panel — used after a PartySetup signup/withdraw round-trip. *@
     <script nonce="@Html.CspNonce()">
         (function () {
+            var STORE_KEY = 'lsmOpenEventPsPanel';
+
+            function openPanel(id) {
+                if (!id) { return null; }
+                var panel = document.getElementById(id);
+                if (panel && panel.classList.contains('event-ps-panel')) {
+                    panel.removeAttribute('hidden');
+                    return panel;
+                }
+                return null;
+            }
+
             document.addEventListener('click', function (e) {
                 var t = e.target.closest('.event-ps-toggle, .event-manual__toggle');
                 if (!t) return;
@@ -172,13 +184,39 @@ else
                 if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden');
                 else panel.setAttribute('hidden', '');
             });
+
+            // Sign up / Withdraw / manual-signup forms live inside a party-setup
+            // panel and post with a full page reload. Remember which panel was
+            // open so we re-expand it after the redirect instead of collapsing
+            // back to the summary.
+            document.addEventListener('submit', function (e) {
+                var form = e.target;
+                if (!form || !form.closest) return;
+                var panel = form.closest('.event-ps-panel');
+                if (panel && panel.id) {
+                    try { sessionStorage.setItem(STORE_KEY, panel.id); } catch (err) { /* ignore */ }
+                }
+            });
+
+            // On load, re-open the panel remembered across a signup/withdraw
+            // round-trip (one-shot), and/or the one named by the URL fragment.
+            var restored = null;
+            try {
+                var saved = sessionStorage.getItem(STORE_KEY);
+                if (saved) {
+                    sessionStorage.removeItem(STORE_KEY);
+                    restored = openPanel(saved);
+                }
+            } catch (err) { /* ignore */ }
+
             var hash = window.location.hash;
             if (hash && hash.length > 1) {
-                var panel = document.getElementById(hash.substring(1));
-                if (panel && panel.classList.contains('event-ps-panel')) {
-                    panel.removeAttribute('hidden');
-                    panel.scrollIntoView({ behavior: 'auto', block: 'center' });
-                }
+                var fromHash = openPanel(hash.substring(1));
+                if (fromHash && !restored) { restored = fromHash; }
+            }
+
+            if (restored) {
+                restored.scrollIntoView({ behavior: 'auto', block: 'center' });
             }
         })();
     </script>

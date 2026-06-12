@@ -29,8 +29,8 @@
                 <span asp-validation-for="EntryType" class="text-danger"></span>
             </div>
 
-            <div class="field">
-                <label asp-for="Category"></label>
+            <div class="field" id="categoryField">
+                <label asp-for="Category" id="categoryLabel"></label>
                 <input asp-for="Category" class="form-control" maxlength="128" />
                 <span asp-validation-for="Category" class="text-danger"></span>
             </div>
@@ -60,3 +60,36 @@
         </div>
     </form>
 </div>
+
+@section Scripts {
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var source = document.getElementById('EntryType');
+            var field = document.getElementById('categoryField');
+            var label = document.getElementById('categoryLabel');
+            var input = document.getElementById('Category');
+            if (!source || !field || !label) { return; }
+
+            // The Category field is relabelled to fit the chosen source, and
+            // dropped entirely for Donations (which carry no category).
+            var LABELS = {
+                'AH Sale': 'Item Name',
+                'Mercenary Work': 'Description',
+                'Other': 'Details'
+            };
+
+            function apply() {
+                if (source.value === 'Donation') {
+                    field.style.display = 'none';
+                    if (input) { input.value = ''; } // don't post a stale category
+                    return;
+                }
+                field.style.display = '';
+                label.textContent = LABELS[source.value] || 'Category';
+            }
+
+            source.addEventListener('change', apply);
+            apply();
+        })();
+    </script>
+}

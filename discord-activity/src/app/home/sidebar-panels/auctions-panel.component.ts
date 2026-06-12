@@ -19,6 +19,7 @@ export class AuctionsPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
+  private readonly numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
   @Input({ required: true }) selectedLinkshellId!: number;
 
@@ -32,6 +33,7 @@ export class AuctionsPanelComponent {
   // Per-item source mode driving the form UI: inventory pick, free-text
   // external, or a gil sale (treasury gil sold for DKP).
   protected auctionItemSourceMode: ('inventory' | 'external' | 'gil')[] = ['external'];
+  protected auctionGilAmountDrafts: string[] = [''];
   protected readonly auctionBidDrafts: Record<number, number | null> = {};
   protected readonly expandedAuctionBidItems: Record<number, boolean> = {};
   protected isAuctionFormOpen = false;
@@ -130,6 +132,7 @@ export class AuctionsPanelComponent {
     this.auctionFormModel.endTimeLocal = '';
     this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }];
     this.auctionItemSourceMode = ['external'];
+    this.auctionGilAmountDrafts = [''];
     this.scrollFormIntoView();
   }
 
@@ -183,6 +186,7 @@ export class AuctionsPanelComponent {
       : [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }];
     this.auctionItemSourceMode = this.auctionFormModel.items.map(item =>
       item.gilAmount != null ? 'gil' : item.sourceItemId != null ? 'inventory' : 'external');
+    this.auctionGilAmountDrafts = this.auctionFormModel.items.map(item => this.formatGilAmount(item.gilAmount));
     this.scrollFormIntoView();
   }
 
@@ -197,6 +201,31 @@ export class AuctionsPanelComponent {
       { id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }
     ];
     this.auctionItemSourceMode = [...this.auctionItemSourceMode, 'external'];
+    this.auctionGilAmountDrafts = [...this.auctionGilAmountDrafts, ''];
+  }
+
+  protected onAuctionItemGilAmountInput(index: number, rawValue: string | number | null): void {
+    const item = this.auctionFormModel.items[index];
+    if (!item) return;
+
+    const digits = String(rawValue ?? '').replace(/\D/g, '');
+    if (!digits) {
+      item.gilAmount = null;
+      this.auctionGilAmountDrafts[index] = '';
+      return;
+    }
+
+    const numericValue = Number(digits);
+    item.gilAmount = Number.isFinite(numericValue) ? numericValue : null;
+    this.auctionGilAmountDrafts[index] = this.formatGilAmount(item.gilAmount);
+  }
+
+  private formatGilAmount(value: number | null | undefined): string {
+    if (value == null || !Number.isFinite(value)) {
+      return '';
+    }
+
+    return this.numberFormatter.format(value);
   }
 
   protected inventoryItemsForAuctionForm(): { id: number; itemName: string; itemType?: string | null; quantity: number }[] {
@@ -217,6 +246,7 @@ export class AuctionsPanelComponent {
     item.itemName = '';
     item.itemType = mode === 'gil' ? 'Gil' : '';
     item.gilAmount = null;
+    this.auctionGilAmountDrafts[index] = '';
   }
 
   protected isGilItem(index: number): boolean {
@@ -225,6 +255,30 @@ export class AuctionsPanelComponent {
 
   protected isInventoryItem(index: number): boolean {
     return this.auctionItemSourceMode[index] === 'inventory';
+  }
+
+  // Two-step Source / Source Type views over the single `auctionItemSourceMode`
+  // source of truth: External = not from inventory; Internal = from the linkshell
+  // (Item = inventory pick, Gil = treasury gil sold for DKP).
+  protected auctionItemSource(index: number): 'external' | 'internal' {
+    return this.auctionItemSourceMode[index] === 'external' ? 'external' : 'internal';
+  }
+
+  protected auctionItemSourceType(index: number): 'item' | 'gil' {
+    return this.auctionItemSourceMode[index] === 'gil' ? 'gil' : 'item';
+  }
+
+  protected onAuctionItemSourceChange(index: number, source: 'external' | 'internal'): void {
+    if (source === 'external') {
+      this.onAuctionItemSourceModeChange(index, 'external');
+    } else {
+      // Internal defaults to Item (inventory); keep Gil if it was already gil.
+      this.onAuctionItemSourceModeChange(index, this.auctionItemSourceMode[index] === 'gil' ? 'gil' : 'inventory');
+    }
+  }
+
+  protected onAuctionItemSourceTypeChange(index: number, type: 'item' | 'gil'): void {
+    this.onAuctionItemSourceModeChange(index, type === 'gil' ? 'gil' : 'inventory');
   }
 
   protected onAuctionItemInventoryPick(index: number, inventoryItemId: number | null): void {
@@ -249,6 +303,7 @@ export class AuctionsPanelComponent {
 
     this.auctionFormModel.items = this.auctionFormModel.items.filter((_, itemIndex) => itemIndex !== index);
     this.auctionItemSourceMode = this.auctionItemSourceMode.filter((_, itemIndex) => itemIndex !== index);
+    this.auctionGilAmountDrafts = this.auctionGilAmountDrafts.filter((_, itemIndex) => itemIndex !== index);
   }
 
   protected getAuctionBidDraft(itemId: number): number | null {

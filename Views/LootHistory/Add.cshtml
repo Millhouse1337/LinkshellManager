@@ -39,13 +39,13 @@
 
         <div class="form-grid">
             <div class="field">
-                <label asp-for="Context">Event <span class="muted">(optional)</span></label>
+                <label asp-for="Context">Event</label>
                 @if (string.Equals(Model.LinkshellType, LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis, StringComparison.OrdinalIgnoreCase))
                 {
                     @* Sky/Sea/Dynamis linkshell: curated event dropdown. Picking
                        "Other" reveals a free-text box (CustomContext) that the
                        controller folds into Context on save. *@
-                    var eventOptions = new[] { "Sky", "Sea", "Dynamis", "HENM", "KSNM", "BCNM", "Other" };
+                    var eventOptions = new[] { "Sky", "Sea", "Dynamis", "Limbus", "HENM", "KSNM", "BCNM", "Other" };
                     var isKnownEvent = eventOptions.Any(o => string.Equals(o, Model.Context, StringComparison.OrdinalIgnoreCase));
                     var pickValue = string.IsNullOrEmpty(Model.Context) ? string.Empty : (isKnownEvent ? Model.Context! : "Other");
                     var customValue = (!isKnownEvent && !string.IsNullOrEmpty(Model.Context)) ? Model.Context : Model.CustomContext;

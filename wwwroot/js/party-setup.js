@@ -76,6 +76,7 @@
                         renameField(slotEl, 'SubJob', flat);
                         renameField(slotEl, 'IsPartyLeader', flat);
                         applyRoleState(slotEl);
+                        applyJobExclusivity(slotEl);
                         flat++;
                     });
                 });
@@ -130,11 +131,11 @@
                 mainSel.classList.remove('d-none');
                 subSel.classList.remove('d-none');
                 anyEl.classList.add('d-none');
-                // Main reflects the picked role ("Any Tank"); Sub stays
-                // a fixed "Any Sub" -- the role names the slot's main job,
+                // Main reflects the picked role ("Any Tank"); Sub is left to the
+                // player ("Player's Choice") -- the role names the slot's main job,
                 // not its subjob, so echoing the role into Sub reads wrong.
                 if (mainSel.options.length) { mainSel.options[0].textContent = 'Any ' + role; }
-                if (subSel.options.length) { subSel.options[0].textContent = 'Any Sub'; }
+                if (subSel.options.length) { subSel.options[0].textContent = "Player's Choice"; }
             } else {
                 if (role === 'Any Role') {
                     // Explicit "anything" — drop any stale job picks so the
@@ -147,6 +148,24 @@
                 anyEl.classList.remove('d-none');
                 anyEl.textContent = (role === '') ? 'Select a role first' : '— Anything —';
             }
+        }
+
+        // A job picked in Main can't also be picked in Sub (and vice versa): hide
+        // the colliding option in the OTHER select so it can't be chosen twice. The
+        // blank placeholder (value "") and each select's own current value are never
+        // hidden.
+        function applyJobExclusivity(slotEl) {
+            var mainSel = slotEl.querySelector('[data-field="MainJob"]');
+            var subSel = slotEl.querySelector('[data-field="SubJob"]');
+            if (!mainSel || !subSel) { return; }
+            var mainVal = mainSel.value;
+            var subVal = subSel.value;
+            Array.prototype.forEach.call(subSel.options, function (opt) {
+                opt.hidden = opt.value !== '' && opt.value === mainVal && opt.value !== subVal;
+            });
+            Array.prototype.forEach.call(mainSel.options, function (opt) {
+                opt.hidden = opt.value !== '' && opt.value === subVal && opt.value !== mainVal;
+            });
         }
 
         function createSlot() {
@@ -346,12 +365,30 @@
         });
 
         // Changing a slot's Role immediately re-flows that row's job UI
-        // (show/hide + relabel + "anything" indicator).
+        // (show/hide + relabel + "anything" indicator). Changing Main/Sub re-runs
+        // the mutual-exclusion so the same job can't sit in both.
         container.addEventListener('change', function (evt) {
             var roleSel = evt.target.closest('[data-field="Role"]');
             if (roleSel) {
-                var slotEl = roleSel.closest('.ps-slot');
-                if (slotEl) { applyRoleState(slotEl); }
+                var roleSlotEl = roleSel.closest('.ps-slot');
+                if (roleSlotEl) { applyRoleState(roleSlotEl); applyJobExclusivity(roleSlotEl); }
+                return;
+            }
+
+            var jobSel = evt.target.closest('[data-field="MainJob"], [data-field="SubJob"]');
+            if (jobSel) {
+                var jobSlotEl = jobSel.closest('.ps-slot');
+                if (!jobSlotEl) { return; }
+                var mainSel = jobSlotEl.querySelector('[data-field="MainJob"]');
+                var subSel = jobSlotEl.querySelector('[data-field="SubJob"]');
+                // The same job can't be in both — clear the OTHER select when the
+                // new pick collides with it.
+                if (jobSel === mainSel && subSel && mainSel.value !== '' && subSel.value === mainSel.value) {
+                    subSel.value = '';
+                } else if (jobSel === subSel && mainSel && subSel.value !== '' && mainSel.value === subSel.value) {
+                    mainSel.value = '';
+                }
+                applyJobExclusivity(jobSlotEl);
             }
         });
 

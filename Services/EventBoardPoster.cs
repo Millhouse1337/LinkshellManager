@@ -2,12 +2,14 @@ using LinkshellManagerDiscordApp.Models;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Posts/edits an event's Discord board, choosing the format: a party board is
-// rendered to a PNG (EventBoardHtmlBuilder → EventBoardImageRenderer) and posted
-// as an image; if the renderer is unavailable it falls back to the classic text
-// embed so events always post. Ad-hoc (no party setup) events are always the text
-// embed. Both formats are classic messages, so an edit can switch between image
-// and embed without Discord rejecting a Components-V2 flag toggle.
+// Posts/edits an event's Discord board. A party board is a wide, readable embed
+// (parties as fields) with the rendered PNG (EventBoardHtmlBuilder →
+// EventBoardImageRenderer) shown inside it — the embed fills the message column
+// while a bare image attachment is capped narrow by Discord. If the renderer is
+// unavailable it falls back to the same embed without the image so events always
+// post. Ad-hoc (no party setup) events are the plain embed. All are classic
+// messages, so an edit can switch between the image-embed and the plain embed
+// without Discord rejecting a Components-V2 flag toggle.
 //
 // Centralised here so the publisher (initial post + detail-edit refresh) and the
 // queue-driven signup refreshes go through identical logic.
@@ -52,7 +54,8 @@ public sealed class EventBoardPoster
             if (png is not null)
             {
                 var fileName = $"event-{ev.Id}-board.png";
-                var payload = DiscordEventMessageBuilder.BuildBoardImageMessage(ev, fileName);
+                var payload = DiscordEventMessageBuilder.BuildBoardImageEmbedMessage(
+                    ev, signups, ev.PartySetup, slotSignups, fileName);
                 if (messageId is null)
                 {
                     return await _bot.PostMessageWithImageAsync(channelId, payload, png, fileName, cancellationToken);

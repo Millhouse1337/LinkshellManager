@@ -139,6 +139,32 @@
   background: linear-gradient(180deg, rgba(245, 197, 24, 0.05), transparent 60%), var(--surface);
 }
 
+/* Fully-pinned open slot (no dropdowns) — keep the job label, the Leader
+   toggle and the Sign up button all on one row instead of stacking them. */
+.ps-slot--inline {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ps-slot--inline .ps-slot-req { flex: 0 0 auto; }
+/* Let the leader toggle + Sign up button become direct flex items of the slot
+   so the toggle can sit centered between the job label (left) and the button
+   (right) via the pair of auto margins below. */
+.ps-slot--inline .ps-signup { display: contents; }
+.ps-slot--inline .ps-leader-toggle {
+  margin-left: auto;     /* paired with .ps-signup-btn's margin-left:auto → centered */
+  gap: 6px;
+}
+.ps-slot--inline .ps-slot-open-readonly { margin-left: auto; }
+
+/* "way smaller" Leader [Yes|No] toggle for the single-row slots. */
+.ps-slot--inline .ps-leader-toggle__label { font-size: 11px; }
+.ps-slot--inline .yesno__btn {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
 .ps-slot-req {
   display: flex;
   align-items: center;

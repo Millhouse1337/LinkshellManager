@@ -299,3 +299,224 @@
   border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.02);
 }
+
+/* ===== Pending Events — horizontal summary card ===== */
+.queue-card {
+  position: relative;
+  overflow: hidden;
+  padding: 16px 18px;
+  background:
+    radial-gradient(90% 140% at 0% 0%, rgba(129, 140, 248, 0.07), transparent 55%),
+    var(--surface-2);
+}
+
+.queue-card .event-card__summary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.queue-card .event-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--accent-weak);
+  border: 1px solid var(--border-2);
+  color: var(--accent);
+}
+.queue-card .event-icon svg { width: 22px; height: 22px; }
+
+.queue-card .event-main {
+  /* Don't grow — a fixed min-width keeps the name block compact so the detail
+     columns sit just to its right (and line up row-to-row); the free space is
+     pushed to the actions instead (margin-left:auto below). */
+  flex: 0 1 auto;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.queue-card .event-main h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.queue-card .event-main p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-3);
+}
+
+.queue-card .event-detail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 18px;
+  border-left: 1px solid var(--border);
+}
+.queue-card .event-detail > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+}
+.queue-card .event-detail > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.queue-card .event-detail span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+}
+.queue-card .event-detail strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-1);
+  white-space: nowrap;
+}
+
+.queue-card .setup-badge {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent-weak);
+  border: 1px solid rgba(129, 140, 248, 0.30);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.queue-card .participant-box {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+.queue-card .participant-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+}
+.queue-card .participant-count svg { width: 16px; height: 16px; color: var(--fg-3); }
+.queue-card .participant-count strong { font-size: 16px; font-weight: 700; }
+.queue-card .participant-box > span {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+.queue-card .event-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+/* Self-contained buttons (avoid the global .panel-tab .btn base). */
+.evt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease, color 0.12s ease;
+}
+.evt-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.evt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.evt-btn--primary {
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.28);
+}
+.evt-btn--primary:hover:not(:disabled) { filter: brightness(1.07); }
+
+.evt-btn--secondary {
+  background: var(--surface-3);
+  border-color: var(--border-2);
+  color: var(--fg-1);
+}
+.evt-btn--secondary:hover:not(:disabled) {
+  border-color: var(--border-hot);
+  background: var(--surface-2);
+}
+
+.evt-btn--small { padding: 0 14px; }
+
+.evt-btn--danger { color: var(--danger); }
+.evt-btn--danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-weak);
+}
+
+/* Expanded / status content below the summary row. */
+.queue-card .queue-card__belowrow {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* ===== Live card — icon'd metadata + buttons ===== */
+.event-card__when {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.event-card__when svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+}
+
+.event-card__metric {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  justify-self: end;
+}
+.event-card__metric svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--fg-3);
+}
+
+/* Edit Live Event / Add a Member ride the meta column — a touch shorter than
+   the queue-card buttons and pinned to the right edge of the grid cell. */
+.event-card__meta .evt-btn.event-card__edit {
+  height: 32px;
+  margin-top: 6px;
+  justify-self: end;
+}

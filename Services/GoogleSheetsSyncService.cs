@@ -318,9 +318,45 @@ public sealed class GoogleSheetsSyncService
             ?? throw new InvalidOperationException($"Linkshell {linkshellId} is not connected to Google Sheets.");
         try
         {
-            var existing = await GetSheetIdAsync(service, spreadsheetId, tabName, cancellationToken);
-            if (existing.HasValue) return existing.Value;
+            var getReq = service.Spreadsheets.Get(spreadsheetId);
+            getReq.Fields = "sheets.properties(sheetId,title)";
+            var spreadsheet = await getReq.ExecuteAsync(cancellationToken);
+            var sheets = spreadsheet.Sheets?
+                .Select(s => s.Properties)
+                .Where(p => p is not null)
+                .ToList() ?? new List<SheetProperties>();
 
+            // Already present (case-insensitive) — reuse it.
+            var existing = sheets.FirstOrDefault(p => string.Equals(p.Title, tabName, StringComparison.OrdinalIgnoreCase));
+            if (existing?.SheetId is int existingId) return existingId;
+
+            // Pristine spreadsheet (just Google's default "Sheet1") — rename that
+            // first tab to the template name instead of adding a SECOND tab, so the
+            // managed grid lives on the one-and-only sheet rather than next to an
+            // empty "Sheet1".
+            if (sheets.Count == 1 &&
+                string.Equals(sheets[0].Title, "Sheet1", StringComparison.OrdinalIgnoreCase) &&
+                sheets[0].SheetId is int defaultId)
+            {
+                var renameReq = new BatchUpdateSpreadsheetRequest
+                {
+                    Requests = new List<Request>
+                    {
+                        new()
+                        {
+                            UpdateSheetProperties = new UpdateSheetPropertiesRequest
+                            {
+                                Properties = new SheetProperties { SheetId = defaultId, Title = tabName },
+                                Fields = "title",
+                            },
+                        },
+                    },
+                };
+                await service.Spreadsheets.BatchUpdate(renameReq, spreadsheetId).ExecuteAsync(cancellationToken);
+                return defaultId;
+            }
+
+            // Otherwise add a new tab (leave the user's existing sheets alone).
             var request = new BatchUpdateSpreadsheetRequest
             {
                 Requests = new List<Request>

@@ -155,8 +155,9 @@
 .route-remove { margin-bottom: 2px; white-space: nowrap; }
 
 .post-types { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; }
-// Per-route save button sits at the right end of the post-types row.
-.route-save { margin-left: auto; }
+// Per-route save button spans the full card grid and pins to the far right,
+// below both the post-types row and the event-types panel.
+.route-save { grid-column: 1 / -1; justify-self: end; }
 .route-save.is-saved {
   color: var(--success);
   border-color: rgba(74, 222, 128, 0.4);

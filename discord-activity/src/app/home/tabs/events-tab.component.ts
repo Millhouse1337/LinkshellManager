@@ -179,7 +179,18 @@ export class EventsTabComponent {
   }
 
   protected addMemberCandidates(eventId: number): ActivityEventAddMemberCandidate[] {
-    return this.addMemberCandidatesByEvent()[eventId] ?? [];
+    const candidates = this.addMemberCandidatesByEvent()[eventId] ?? [];
+    // Drop anyone already in the event (including the current user) so they
+    // can't be "added" a second time and don't clutter the search.
+    const event = (this.activity.overview()?.activeEvents ?? []).find(item => item.id === eventId);
+    const taken = new Set(
+      (event?.participants ?? [])
+        .map(participant => participant.appUserId)
+        .filter((id): id is string => !!id && id.trim().length > 0)
+    );
+    return taken.size === 0
+      ? candidates
+      : candidates.filter(candidate => !taken.has(candidate.appUserId));
   }
 
   protected addMemberLoading(eventId: number): boolean {
@@ -273,6 +284,12 @@ export class EventsTabComponent {
     return this.sortCurrentUserFirst(
       event.participants.filter(participant => !participant.isOnBreak && participant.isVerified !== true)
     );
+  }
+
+  // Members still awaiting an officer's confirmation (isVerified == null). The
+  // event can't be ended until every one is confirmed present or removed.
+  protected pendingAttendanceCount(event: { participants: ActivityEventParticipant[] }): number {
+    return event.participants.filter(participant => !participant.isOnBreak && participant.isVerified == null).length;
   }
 
   protected activeRoomParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {

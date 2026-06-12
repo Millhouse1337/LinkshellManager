@@ -236,7 +236,7 @@
                 <td>{{ history.type || 'Event' }} | {{ history.location || 'Unknown location' }}</td>
                 <td>{{ activity.formatDateTime(history.endTime) || '—' }}</td>
                 <td class="num">{{ history.participantCount }}</td>
-                <td class="num">{{ formatDurationForLinkshell(history.duration, history.linkshellId) }}h</td>
+                <td class="num">{{ formatDurationForLinkshell(history.duration, history.linkshellId) }}</td>
                 <td>
                   @if (historyDetail()?.id === history.id) {
                     <button
@@ -267,7 +267,7 @@
                           @if (activity.formatDateTime(historyDetail.endTime); as endedAt) {
                             <span><strong>Ended:</strong> {{ endedAt }}</span>
                           }
-                          <span><strong>Duration:</strong> {{ formatDurationForLinkshell(historyDetail.duration, historyDetail.linkshellId) }}h</span>
+                          <span><strong>Duration:</strong> {{ formatDurationForLinkshell(historyDetail.duration, historyDetail.linkshellId) }}</span>
                           <span><strong>DKP/hour:</strong> {{ historyDetail.dkpPerHour ?? 0 }}</span>
                         </div>
                         @if (historyDetail.details) {
@@ -289,7 +289,7 @@
                                 <tr>
                                   <td><strong>{{ participant.characterName || 'Unknown participant' }}</strong></td>
                                   <td>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</td>
-                                  <td class="num">{{ formatDurationForLinkshell(participant.duration, historyDetail.linkshellId) }}h</td>
+                                  <td class="num">{{ formatDurationForLinkshell(participant.duration, historyDetail.linkshellId) }}</td>
                                   <td class="num">{{ participant.eventDkp ?? 0 }}</td>
                                   <td>
                                     @if (participant.isVerified === true) {

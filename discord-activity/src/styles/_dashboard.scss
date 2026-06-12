@@ -42,6 +42,12 @@
   border-radius: var(--r-md);
   background: var(--surface-2);
   border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.panel-tab .upcoming-thumb--image {
+  object-fit: cover;
+  background: var(--surface-2);
+  display: block;
 }
 .panel-tab .upcoming-title-row {
   display: flex;

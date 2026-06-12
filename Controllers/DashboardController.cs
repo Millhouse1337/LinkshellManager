@@ -80,6 +80,7 @@ public class DashboardController : Controller
 
         var events = selectedLinkshellId.HasValue
             ? await _context.Events
+                .Include(evt => evt.EventLootDetails)
                 .Where(evt => evt.LinkshellId == selectedLinkshellId.Value)
                 .OrderBy(evt => evt.StartTime)
                 .Take(10)
@@ -172,7 +173,7 @@ public class DashboardController : Controller
         var todTracker = BuildTodTracker(tods);
         var upcomingRepops = BuildUpcomingRepops(tods);
         var hnmClaims = BuildHnmClaims(tods, out var hnmTotal);
-        var recentActivity = BuildRecentActivity(eventHistories, tods);
+        var recentActivity = BuildRecentActivity(events, eventHistories, tods);
         var newsUpdates = BuildNewsUpdates(announcements, rules, auctions, dkpAudits, members);
 
         return View(new DashboardViewModel
@@ -347,9 +348,31 @@ public class DashboardController : Controller
             .ToList();
     }
 
-    private static List<RecentActivityEntry> BuildRecentActivity(IReadOnlyCollection<EventHistory> eventHistories, IReadOnlyCollection<Tod> tods)
+    private static List<RecentActivityEntry> BuildRecentActivity(IReadOnlyCollection<Event> activeEvents, IReadOnlyCollection<EventHistory> eventHistories, IReadOnlyCollection<Tod> tods)
     {
         var items = new List<RecentActivityEntry>();
+
+        // Loot entered during a LIVE (still-running) event. Without this, loot
+        // logged in the live event system didn't appear in Recent Activity until
+        // the event was archived into an EventHistory.
+        foreach (var ev in activeEvents)
+        {
+            if (ev.EventLootDetails.Count == 0) { continue; }
+            var lootWhen = ev.CommencementStartTime ?? ev.StartTime ?? DateTime.UtcNow;
+            foreach (var loot in ev.EventLootDetails.OrderByDescending(l => l.Id))
+            {
+                if (string.IsNullOrWhiteSpace(loot.ItemName)) { continue; }
+                var winner = (loot.ItemWinner ?? string.Empty).Trim();
+                items.Add(new RecentActivityEntry
+                {
+                    When = lootWhen,
+                    RelativeTime = FormatRelative(lootWhen),
+                    DotClass = "claim",
+                    Title = loot.ItemName!,
+                    Subtitle = winner.Length > 0 ? $"{ev.EventName ?? "Event"} · {winner}" : $"{ev.EventName ?? "Event"} drop"
+                });
+            }
+        }
 
         foreach (var history in eventHistories)
         {

@@ -5,7 +5,7 @@
       <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Pending Events' }}</h2>
     </div>
     <div class="button-cluster">
-      @if (canManageAnyLinkshell()) {
+      @if (canManageAnyLinkshell() && !isCreateOpen) {
         <button type="button" class="action-button" (click)="openCreateForm()">Create event</button>
       }
     </div>
@@ -93,19 +93,18 @@
 
       <div class="create-form__section">
         <div class="create-form__section-title">Schedule</div>
-        <div class="create-form__grid">
-          <label>
+
+        <!-- Start / End on one row. Flex (not the 2-col grid) so they sit together
+             on desktop and wrap cleanly on a narrow iframe; the N/A toggle aligns to
+             the inputs' baseline via align-items:flex-end. -->
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <label style="flex:1 1 180px;min-width:0">
             <span>Start</span>
             <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local"
               (ngModelChange)="onStartTimeChange()" />
           </label>
 
-          <label class="tod-toggle create-form__inline-toggle-spaced">
-            <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
-            <span>Auto Start</span>
-          </label>
-
-          <label>
+          <label style="flex:1 1 180px;min-width:0">
             <span>End</span>
             <div class="tod-day-number-row">
               @if (!endTimeNotSpecified) {
@@ -121,40 +120,32 @@
               </label>
             </div>
           </label>
-
-          <label>
-            <span>Duration (hours)</span>
-            <div class="tod-day-number-row">
-              @if (!durationNotSpecified) {
-                <input [(ngModel)]="createModel.duration" name="duration" type="number" step="0.25"
-                  (ngModelChange)="onDurationChange()" />
-              } @else {
-                <input value="N/A" disabled />
-              }
-              <label class="tod-toggle">
-                <input type="checkbox" [ngModel]="durationNotSpecified"
-                  (ngModelChange)="onDurationNotSpecifiedChange($event)" name="durationNotSpecified" />
-                <span>N/A</span>
-              </label>
-            </div>
-          </label>
         </div>
-      </div>
 
-      <div class="create-form__section">
-        <div class="create-form__section-title">Rewards &amp; member status</div>
-        <div class="create-form__grid">
-          <label class="tod-toggle">
-            <input type="checkbox" [(ngModel)]="createModel.countsTowardActive" name="countsTowardActive" />
-            <span>Active/Inactive Tracker</span>
+        <!-- Duration (derived from Start + End, read-only) / DKP / Auto Start /
+             Active-Inactive Tracking on the row below. -->
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px">
+          <label style="flex:1 1 180px;min-width:0">
+            <span>Duration</span>
+            <input [value]="durationLabel()" name="durationDisplay" disabled />
           </label>
 
           @if (isDkpModeForSelectedLinkshell()) {
-            <label>
+            <label style="flex:1 1 180px;min-width:0">
               <span>{{ createModel.eventType === 'HNM' ? 'DKP/window' : 'DKP/hour' }}</span>
               <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
             </label>
           }
+
+          <label class="tod-toggle" style="flex:0 0 auto;padding-bottom:7px;white-space:nowrap">
+            <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
+            <span>Auto Start</span>
+          </label>
+
+          <label class="tod-toggle" style="flex:0 0 auto;padding-bottom:7px;white-space:nowrap">
+            <input type="checkbox" [(ngModel)]="createModel.countsTowardActive" name="countsTowardActive" />
+            <span>Active/Inactive Tracking</span>
+          </label>
         </div>
       </div>
 
@@ -220,7 +211,7 @@
       </div>
 
       <div class="create-form__actions create-form__actions--end">
-        <button type="submit" class="action-button" [disabled]="isSubmittingCreate">
+        <button type="submit" class="action-button action-button--success" [disabled]="isSubmittingCreate">
           @if (isSubmittingCreate) {
             {{ editingEventId ? 'Saving...' : 'Creating...' }}
           } @else {
@@ -248,44 +239,131 @@
     <div class="queue-list">
       @for (event of queuedEvents(); track event.id) {
         <article class="queue-card">
-          <div class="queue-card__header">
-            <div>
-              <strong>{{ event.name || 'Untitled event' }}</strong>
-              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
-              @if (activity.formatDateTime(event.startTime); as scheduledStart) {
-                <p>Starts {{ scheduledStart }}</p>
-              }
-              @if (activity.formatDateTime(event.endTime); as scheduledEnd) {
-                <p>Ends {{ scheduledEnd }}</p>
-              }
-              @if (event.creatorCharacterName) {
-                <p class="event-card__actor"><span class="event-card__actor-label">Event Creator:</span> {{ event.creatorCharacterName }}</p>
-              }
-              @if (event.starterCharacterName) {
-                <p class="event-card__actor"><span class="event-card__actor-label">Event Starter:</span> {{ event.starterCharacterName }}</p>
-              }
+          <!-- Horizontal summary row: icon · name/type · Starts · Creator ·
+               Party Setup · participants · actions. -->
+          <div class="event-card__summary">
+            <div class="event-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
             </div>
-            <div class="queue-card__meta">
-              <span>{{ event.participantCount }} participants</span>
+
+            <div class="event-main">
+              <h3>{{ event.name || 'Untitled event' }}</h3>
+              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
+            </div>
+
+            <div class="event-detail">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              <div>
+                <span>Starts</span>
+                <strong>{{ activity.formatDateTime(event.startTime) || 'TBD' }}</strong>
+              </div>
+            </div>
+
+            @if (event.creatorCharacterName) {
+              <div class="event-detail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>
+                <div>
+                  <span>Creator</span>
+                  <strong>{{ event.creatorCharacterName }}</strong>
+                </div>
+              </div>
+            }
+
+            @if (event.partySetupId) {
+              <div class="event-detail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <div>
+                  <span>Party Setup</span>
+                  <strong class="setup-badge">{{ event.partySetupName || '(unnamed setup)' }}</strong>
+                </div>
+              </div>
+            }
+
+            <div class="participant-box">
+              <div class="participant-count">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <strong>{{ event.participantCount }}</strong>
+              </div>
+              <span>participants</span>
+            </div>
+
+            <div class="event-actions">
+              @if (event.partySetupId) {
+                <button type="button" class="evt-btn evt-btn--primary"
+                  (click)="togglePartySetupExpanded(event.id, event.linkshellId)">
+                  {{ isPartySetupExpanded(event.id) ? 'Hide slots' : 'View & Sign Up' }}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              }
+              @if (canManageLinkshell(event.linkshellId)) {
+                @if (isAddonOnlyStart(event)) {
+                  <button type="button" class="evt-btn evt-btn--secondary" disabled
+                    title="HNM events are started with the in-game addon (/attend launcher).">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    Start (addon-only)
+                  </button>
+                } @else {
+                  <button type="button" class="evt-btn evt-btn--secondary"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="attemptStartEvent(event)">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start Event' }}
+                  </button>
+                }
+                <button type="button" class="evt-btn evt-btn--secondary evt-btn--small"
+                  [disabled]="activity.busyEventId() === event.id"
+                  (click)="openEditEventForm(event)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                  Edit
+                </button>
+                @if (pendingCancelEventId() === event.id) {
+                  <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="confirmCancelEvent(event.id)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    Confirm cancel
+                  </button>
+                  <button type="button" class="evt-btn evt-btn--secondary evt-btn--small"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="abortCancelEvent()">
+                    Keep
+                  </button>
+                } @else {
+                  <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="requestCancelEvent(event.id)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    Cancel
+                  </button>
+                }
+              }
             </div>
           </div>
 
-          @if (event.partySetupId) {
-            <div class="jobs-needed-row">
-              <span class="jobs-needed-row__label">Party Setup:</span>
-              <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
-              @if (event.partySetupAssignedMonsterName) {
-                <span class="ad-hoc-signup__hint">{{ event.partySetupAssignedMonsterName }}</span>
-              }
+          <!-- Already-signed-up status + Unsign (manage actions live in the
+               summary row above). -->
+          @if (event.currentParticipation) {
+            <div class="event-action-bar queue-card__belowrow">
+              <div class="event-action-copy">
+                <strong>Signed up</strong>
+                <span>
+                  {{ event.currentParticipation.characterName || activity.overview()?.appUser?.characterName || activity.overview()?.appUser?.userName }}
+                  as {{ event.currentParticipation.jobName || 'Job' }}/{{ event.currentParticipation.subJobName || 'Sub' }}
+                </span>
+              </div>
               <button
                 type="button"
                 class="action-button action-button--secondary"
-                (click)="togglePartySetupExpanded(event.partySetupId, event.linkshellId)">
-                {{ isPartySetupExpanded(event.partySetupId) ? 'Hide slots' : 'View &amp; Sign Up' }}
+                [disabled]="activity.busyEventId() === event.id"
+                (click)="activity.unsignFromEvent(event.id)">
+                {{ activity.busyEventId() === event.id ? 'Updating...' : 'Unsign' }}
               </button>
             </div>
+          }
 
-            @if (isPartySetupExpanded(event.partySetupId)) {
+          <!-- Expanded party-setup board + manual signup. -->
+          @if (event.partySetupId && isPartySetupExpanded(event.id)) {
+            <div class="queue-card__belowrow">
               <app-party-setup-panel
                 [setupId]="event.partySetupId"
                 [linkshellId]="event.linkshellId"
@@ -354,181 +432,57 @@
                   }
                 </div>
               }
-            }
+            </div>
           }
 
-          @if (event.currentParticipation) {
-            <div class="event-action-bar">
-              <div class="event-action-copy">
-                <strong>Signed up</strong>
-                <span>
-                  {{ event.currentParticipation.characterName || activity.overview()?.appUser?.characterName || activity.overview()?.appUser?.userName }}
-                  as {{ event.currentParticipation.jobName || 'Job' }}/{{ event.currentParticipation.subJobName || 'Sub' }}
-                </span>
+          <!-- No party setup → inline ad-hoc signup (pick a job). -->
+          @if (!event.partySetupId && !event.currentParticipation) {
+            <div class="ad-hoc-signup queue-card__belowrow">
+              <p class="ad-hoc-signup__hint">
+                Pick the job you'll bring and sign up.
+              </p>
+              <div class="ad-hoc-signup__grid">
+                <label>
+                  <span>Role</span>
+                  <select
+                    [(ngModel)]="getSignupDraft(event.id).jobType"
+                    [name]="'signupJobType' + event.id">
+                    <option value="">Select role</option>
+                    @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
+                      <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Main job</span>
+                  <select
+                    [(ngModel)]="getSignupDraft(event.id).jobName"
+                    [name]="'signupJobName' + event.id">
+                    <option value="">Select main job</option>
+                    @for (jobOption of mainJobOptions; track jobOption) {
+                      <option [value]="jobOption">{{ jobOption }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Sub job</span>
+                  <select
+                    [(ngModel)]="getSignupDraft(event.id).subJobName"
+                    [name]="'signupSubJobName' + event.id">
+                    <option value="">Select sub job</option>
+                    @for (jobOption of subJobOptions; track jobOption) {
+                      <option [value]="jobOption">{{ jobOption }}</option>
+                    }
+                  </select>
+                </label>
               </div>
-              <div class="button-cluster">
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  [disabled]="activity.busyEventId() === event.id"
-                  (click)="activity.unsignFromEvent(event.id)">
-                  {{ activity.busyEventId() === event.id ? 'Updating...' : 'Unsign' }}
-                </button>
-                @if (canManageLinkshell(event.linkshellId)) {
-                  @if (isAddonOnlyStart(event)) {
-                    <button
-                      type="button"
-                      class="action-button"
-                      disabled
-                      title="HNM events are started with the in-game addon (/attend launcher).">
-                      Start (addon-only)
-                    </button>
-                  } @else {
-                    <button
-                      type="button"
-                      class="action-button"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="attemptStartEvent(event)">
-                      {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
-                    </button>
-                  }
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="openEditEventForm(event)">
-                    Edit
-                  </button>
-                  @if (pendingCancelEventId() === event.id) {
-                    <button
-                      type="button"
-                      class="action-button action-button--danger"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="confirmCancelEvent(event.id)">
-                      Confirm cancel
-                    </button>
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="abortCancelEvent()">
-                      Keep
-                    </button>
-                  } @else {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="requestCancelEvent(event.id)">
-                      Cancel
-                    </button>
-                  }
-                }
-              </div>
-            </div>
-          } @else {
-            <div class="event-action-grid">
-              @if (!event.partySetupId) {
-                <div class="ad-hoc-signup">
-                  <p class="ad-hoc-signup__hint">
-                    Pick the job you'll bring and sign up.
-                  </p>
-                  <div class="ad-hoc-signup__grid">
-                    <label>
-                      <span>Role</span>
-                      <select
-                        [(ngModel)]="getSignupDraft(event.id).jobType"
-                        [name]="'signupJobType' + event.id">
-                        <option value="">Select role</option>
-                        @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
-                          <option [value]="jobTypeOption">{{ jobTypeOption }}</option>
-                        }
-                      </select>
-                    </label>
-                    <label>
-                      <span>Main job</span>
-                      <select
-                        [(ngModel)]="getSignupDraft(event.id).jobName"
-                        [name]="'signupJobName' + event.id">
-                        <option value="">Select main job</option>
-                        @for (jobOption of mainJobOptions; track jobOption) {
-                          <option [value]="jobOption">{{ jobOption }}</option>
-                        }
-                      </select>
-                    </label>
-                    <label>
-                      <span>Sub job</span>
-                      <select
-                        [(ngModel)]="getSignupDraft(event.id).subJobName"
-                        [name]="'signupSubJobName' + event.id">
-                        <option value="">Select sub job</option>
-                        @for (jobOption of subJobOptions; track jobOption) {
-                          <option [value]="jobOption">{{ jobOption }}</option>
-                        }
-                      </select>
-                    </label>
-                  </div>
-                  <button
-                    type="button"
-                    class="action-button"
-                    [disabled]="activity.busyEventId() === event.id || !isSignupDraftComplete(event.id)"
-                    (click)="submitAdHocSignup(event.id)">
-                    {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
-                  </button>
-                </div>
-              }
-              @if (canManageLinkshell(event.linkshellId)) {
-                <div class="event-action-grid__manage">
-                  @if (isAddonOnlyStart(event)) {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      disabled
-                      title="HNM events are started with the in-game addon (/attend launcher).">
-                      Start (addon-only)
-                    </button>
-                  } @else {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="attemptStartEvent(event)">
-                      {{ activity.busyEventId() === event.id ? 'Updating...' : 'Start event' }}
-                    </button>
-                  }
-                  <button
-                    type="button"
-                    class="action-button action-button--secondary"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="openEditEventForm(event)">
-                    Edit
-                  </button>
-                  @if (pendingCancelEventId() === event.id) {
-                    <button
-                      type="button"
-                      class="action-button action-button--danger"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="confirmCancelEvent(event.id)">
-                      Confirm cancel
-                    </button>
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="abortCancelEvent()">
-                      Keep
-                    </button>
-                  } @else {
-                    <button
-                      type="button"
-                      class="action-button action-button--secondary"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="requestCancelEvent(event.id)">
-                      Cancel
-                    </button>
-                  }
-                </div>
-              }
+              <button
+                type="button"
+                class="action-button"
+                [disabled]="activity.busyEventId() === event.id || !isSignupDraftComplete(event.id)"
+                (click)="submitAdHocSignup(event.id)">
+                {{ activity.busyEventId() === event.id ? 'Updating...' : 'Sign up' }}
+              </button>
             </div>
           }
         </article>

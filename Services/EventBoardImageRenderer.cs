@@ -39,8 +39,14 @@ public sealed class EventBoardImageRenderer : IAsyncDisposable
 
             await using var page = await browser.NewPageAsync(new BrowserNewPageOptions
             {
-                ViewportSize = new ViewportSize { Width = 1000, Height = 1400 },
-                DeviceScaleFactor = 2, // retina-crisp text
+                // Viewport matches the wide 1600px card so the layout isn't squeezed
+                // before the element screenshot is taken.
+                ViewportSize = new ViewportSize { Width = 1600, Height = 1400 },
+                // 2× density (1600px card → 3200px PNG). Discord refuses to preview
+                // images over 4096px on a side, and a tall multi-alliance board at 3×
+                // (4800px) would exceed that — so 2× is the safe ceiling for retina
+                // crispness at this width.
+                DeviceScaleFactor = 2,
             });
             await page.SetContentAsync(html, new PageSetContentOptions
             {
