@@ -103,9 +103,14 @@ export class AuctionsPanelComponent {
     return link?.permissions?.canLockAuctions === true;
   }
 
-  // Leadership has frozen bidding. The list endpoint stamps the same flag on
-  // every auction, so the first one is representative.
+  // Leadership has frozen bidding. The canonical flag lives on the linkshell
+  // (overview), so it's correct even with ZERO auctions on the board. Fall back
+  // to the per-auction flag the list endpoint stamps when the overview is stale.
   protected auctionsLocked(): boolean {
+    const link = this.activity.overview()?.linkshells?.find(l => l.id === this.selectedLinkshellId);
+    if (link?.auctionsLocked !== undefined) {
+      return link.auctionsLocked === true;
+    }
     const auctions = this.auctions();
     return auctions.length > 0 && auctions[0].auctionsLocked === true;
   }

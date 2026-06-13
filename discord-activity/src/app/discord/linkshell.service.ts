@@ -9,6 +9,8 @@ import type {
   ActivityChannelRoutesResponse,
   ActivityDkpRoundingIncrement,
   ActivityGuildOption,
+  ActivityJobRatingCommentSummary,
+  ActivityJobRatingsResponse,
   ActivityJobsRoster,
   ActivityLinkshellDetail,
   ActivityLinkshellRolePermissionsInput,
@@ -363,6 +365,112 @@ export class LinkshellService {
       );
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Updating the member role failed.'));
+    } finally {
+      this.busyMemberId.set(null);
+    }
+  }
+
+  // ----- Peer job ratings -----
+
+  async loadJobRatings(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingsResponse | null> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityJobRatingsResponse>(
+        `/api/activity/job-ratings/${encodeURIComponent(targetAppUserId)}?linkshellId=${linkshellId}&slot=${slot}`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading job ratings failed.'));
+      return null;
+    }
+  }
+
+  async rateJob(linkshellId: number, targetAppUserId: string, jobIndex: number, gear: number, skill: number, hasRelic: boolean, slot = 0, relicNames: string[] = []): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.postActivityAction('/api/activity/job-ratings', {
+        linkshellId, targetAppUserId, jobIndex, gear, skill, hasRelic, characterSlot: slot, relicNames
+      });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Saving the rating failed.'));
+      return false;
+    }
+  }
+
+  async rateJobComment(linkshellId: number, targetAppUserId: string, comment: string, slot = 0): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.postActivityAction('/api/activity/job-ratings/comment', {
+        linkshellId, targetAppUserId, comment, characterSlot: slot
+      });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Saving the comment failed.'));
+      return false;
+    }
+  }
+
+  async loadJobRatingCommentSummary(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingCommentSummary | null> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityJobRatingCommentSummary>(
+        `/api/activity/job-ratings/${encodeURIComponent(targetAppUserId)}/comment-summary?linkshellId=${linkshellId}&slot=${slot}`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading the feedback summary failed.'));
+      return null;
+    }
+  }
+
+  async updateLinkshellMemberStatus(
+    linkshellId: number,
+    memberId: number,
+    status: string,
+    characterName?: string | null
+  ): Promise<void> {
+    this.busyMemberId.set(memberId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(
+        `/api/activity/linkshells/${linkshellId}/members/${memberId}/status`,
+        { status }
+      );
+      await this.auth.refreshOverview();
+      const who = characterName?.trim() || 'Member';
+      this.auth.setActionMessage(`${who}'s status set to ${status}.`);
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the member status failed.'));
+    } finally {
+      this.busyMemberId.set(null);
+    }
+  }
+
+  // Officer override of a member's active-credit "Count" — stores the number and
+  // recomputes their Active/Inactive status from the linkshell's threshold.
+  async setMemberActiveCreditCount(
+    linkshellId: number,
+    memberId: number,
+    count: number,
+    characterName?: string | null,
+    streakType: 'credit' | 'absent' = 'credit'
+  ): Promise<void> {
+    this.busyMemberId.set(memberId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(
+        `/api/activity/linkshells/${linkshellId}/members/${memberId}/active-credit-count`,
+        { count, streakType }
+      );
+      await this.auth.refreshOverview();
+      const who = characterName?.trim() || 'Member';
+      const label = streakType === 'absent' ? 'absence streak' : 'active credit';
+      this.auth.setActionMessage(`${who}'s ${label} set to ${count}.`);
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating active credit failed.'));
     } finally {
       this.busyMemberId.set(null);
     }

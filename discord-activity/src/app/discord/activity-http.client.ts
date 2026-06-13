@@ -34,21 +34,25 @@ export class ActivityHttpClient {
 
     const responseText = await response.text();
     let payload: unknown = {};
+    let parsedJson = false;
 
     if (responseText) {
       try {
         payload = JSON.parse(responseText);
+        parsedJson = true;
       } catch {
-        payload = { error: responseText };
+        // Non-JSON body (HTML 502/login/SPA-fallback page) — do NOT stuff the
+        // raw markup into the error; nonJsonMessage() produces a clean message.
+        parsedJson = false;
       }
     }
 
     if (!response.ok) {
-      const errorPayload = payload as { error?: unknown };
+      const errorPayload = parsedJson ? (payload as { error?: unknown }) : null;
       const message =
-        typeof errorPayload.error === 'string'
+        errorPayload && typeof errorPayload.error === 'string'
           ? errorPayload.error
-          : `Loading linkshell activity data failed with status ${response.status}.`;
+          : this.nonJsonMessage(response, responseText);
       throw new Error(message);
     }
 
@@ -124,6 +128,11 @@ export class ActivityHttpClient {
   // followed redirect) into a clear, actionable message instead of letting a
   // raw JSON.parse error or a dumped HTML page reach the UI.
   private nonJsonMessage(response: Response, text: string): string {
+    // Gateway/availability errors come back as a Cloudflare/origin HTML page.
+    // Report them as a transient server issue, not a session problem.
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      return `The server is temporarily unavailable (HTTP ${response.status}). Please try again in a moment.`;
+    }
     const looksHtml = /^\s*</.test(text ?? '');
     if (response.redirected || looksHtml) {
       return 'Your session may have expired — reload the Activity and try again.';

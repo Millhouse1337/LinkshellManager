@@ -27,14 +27,14 @@
 
   <div class="loot-history-panel__filters">
     <label class="loot-history-panel__filter">
-      <span>Winner contains</span>
+      <span>Search by winner</span>
       <input class="bid-input"
              [ngModel]="winnerFilter()"
              (ngModelChange)="winnerFilter.set($event)"
              name="lootWinnerFilter" maxlength="64" />
     </label>
     <label class="loot-history-panel__filter">
-      <span>Item contains</span>
+      <span>Search by item</span>
       <input class="bid-input"
              [ngModel]="itemFilter()"
              (ngModelChange)="itemFilter.set($event)"

@@ -105,6 +105,13 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
+        // Current credit / absent streaks per member (consecutive recent counting
+        // events) so the Linkshell-tab + sidebar roster show the same active-credit /
+        // absent-streak badges the Overview's primary roster does. Without this the
+        // detail roster always rendered "0".
+        var streaks = await new MemberActivityService(_dbContext)
+            .ComputeStreaksByAppUserAsync(linkshellId, cancellationToken);
+
         // Member Status is now the single source of truth (the attendance rule
         // auto-drives Active/Inactive at close — see MemberActivityService), so the
         // roster just surfaces Status; no separate computed activity flag.
@@ -125,7 +132,9 @@ public sealed partial class ActivityDataController
                     link.Rank,
                     link.Status,
                     link.LinkshellDkp,
-                    link.DateJoined))
+                    link.DateJoined,
+                    link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Credit : 0,
+                    link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Absent : 0))
                 .ToList()));
     }
 

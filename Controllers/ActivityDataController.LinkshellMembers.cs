@@ -174,4 +174,112 @@ public sealed partial class ActivityDataController
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
+
+    // Manually set a member's Active/Pending/Inactive status. Gated on
+    // CanManageMembers (same as remove). If the linkshell has automatic activity
+    // tracking enabled, the computed Active/Inactive may overwrite this on the
+    // next recompute — Pending is the only sticky manual state.
+    [HttpPost("linkshells/{linkshellId:int}/members/{memberId:int}/status")]
+    public async Task<IActionResult> UpdateMemberStatusAsync(
+        int linkshellId,
+        int memberId,
+        [FromBody] ActivityUpdateMemberStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to update member status."
+            });
+        }
+
+        var currentMembership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(currentMembership, r => r.CanManageMembers, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var status = request.Status?.Trim();
+        var match = ManageTeamViewModel.StatusOptions
+            .FirstOrDefault(s => string.Equals(s, status, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            return BadRequest(new { error = "Status must be Active, Pending, or Inactive." });
+        }
+
+        var targetMembership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(link => link.Id == memberId && link.LinkshellId == linkshellId, cancellationToken);
+        if (targetMembership is null)
+        {
+            return NotFound(new { error = "The selected member was not found." });
+        }
+
+        targetMembership.Status = match;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Officer override of a member's active-credit "Count" on the roster. Stores
+    // the typed number as a manual streak override and recomputes Active/Inactive
+    // from the linkshell's attendance threshold. The override (and derived status)
+    // sticks until the next event recompute clears it. Gated on CanManageMembers.
+    [HttpPost("linkshells/{linkshellId:int}/members/{memberId:int}/active-credit-count")]
+    public async Task<IActionResult> SetMemberActiveCreditCountAsync(
+        int linkshellId,
+        int memberId,
+        [FromBody] ActivitySetActiveCreditCountRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to update active credit." });
+        }
+
+        var currentMembership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(currentMembership, r => r.CanManageMembers, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var count = request.Count < 0 ? 0 : request.Count;
+        var isAbsent = string.Equals(request.StreakType, "absent", StringComparison.OrdinalIgnoreCase);
+
+        var targetMembership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(link => link.Id == memberId && link.LinkshellId == linkshellId, cancellationToken);
+        if (targetMembership is null)
+        {
+            return NotFound(new { error = "The selected member was not found." });
+        }
+
+        var thresholds = await _dbContext.Linkshells
+            .Where(l => l.Id == linkshellId)
+            .Select(l => new { l.ActiveAfterAttendances, l.InactiveAfterAbsences })
+            .FirstOrDefaultAsync(cancellationToken);
+        var activeAfter = thresholds?.ActiveAfterAttendances ?? 1;
+        if (activeAfter < 1) { activeAfter = 1; }
+        var inactiveAfter = thresholds?.InactiveAfterAbsences ?? 1;
+        if (inactiveAfter < 1) { inactiveAfter = 1; }
+
+        if (isAbsent)
+        {
+            // Absence override (red number): drives Inactive once the absence
+            // threshold is reached. Clears any credit override (mutually exclusive).
+            targetMembership.ManualAbsentStreak = count;
+            targetMembership.ManualActiveCreditStreak = null;
+            targetMembership.Status = count >= inactiveAfter ? "Inactive" : "Active";
+        }
+        else
+        {
+            // Active-credit override (green number): Active once they've hit the
+            // attendance requirement, else Inactive. Clears any absence override.
+            targetMembership.ManualActiveCreditStreak = count;
+            targetMembership.ManualAbsentStreak = null;
+            targetMembership.Status = count >= activeAfter ? "Active" : "Inactive";
+        }
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
 }

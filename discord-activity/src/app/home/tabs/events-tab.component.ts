@@ -15,7 +15,7 @@ import {
 } from '../../discord/discord-activity.service';
 import { ActivityEvent, ActivityPartySetupSlot } from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
-import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
+import { EventHistoryPanelComponent } from '../sidebar-panels/event-history-panel.component';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
 import { PartySetupService } from '../../discord/party-setup.service';
 import {
@@ -33,7 +33,7 @@ import {
 
 @Component({
   selector: 'app-events-tab',
-  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, ActivitySidebarPanelComponent, PartySetupPanelComponent],
+  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

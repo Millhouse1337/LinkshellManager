@@ -34,6 +34,28 @@ public class AppUser : IdentityUser
     [Column(TypeName = "jsonb")]
     public int[]? Alt2StrongJobs { get; set; }
 
+    // Per-job free-text merit notes for the two alt characters, catalog-aligned
+    // (index 0 = WAR … 14 = SMN), parallel to the alts' Strong flags. Null when the
+    // alt has no name / no merits set.
+    [Column(TypeName = "jsonb")]
+    public string[]? Alt1MeritJobs { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public string[]? Alt2MeritJobs { get; set; }
+
+    // Per-craft levels for the main character and the two alts, in CraftCatalog
+    // order (Alchemy, Bonecraft, …, Fishing). Crafting is account-level (it doesn't
+    // vary by linkshell), so — unlike per-membership job levels — all three live
+    // here on the account. Null when unset / the alt has no name.
+    [Column(TypeName = "jsonb")]
+    public int[]? CraftLevels { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public int[]? Alt1CraftLevels { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public int[]? Alt2CraftLevels { get; set; }
+
     public string? TimeZone { get; set; }
 
     public int? PrimaryLinkshellId { get; set; }

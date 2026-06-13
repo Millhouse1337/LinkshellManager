@@ -36,12 +36,23 @@ public sealed class DiscordInteractionsController : ControllerBase
     private const int ResponseModal = 9;
     private const int EphemeralFlag = 64;
 
+    // Prefix for the ephemeral "which character?" select shown before signup when
+    // a member has alts. Tail: "{token}:{eventId}" (+ ":{job}" for the ad-hoc job
+    // flow), where token ∈ slot | slotL | join | job picks the flow to resume.
+    private const string CharPickPrefix = "evt:charpick:";
+
+    // Prefix for the "quick sign up" select that lists a member's 3 most recent
+    // job combos. Tail: "{eventId}". Option values: "c|{main}|{sub}|{role}" to
+    // claim a matching open slot, or "m" to fall through to the manual picker.
+    private const string QuickComboPrefix = "evt:quickcombo:";
+
     private readonly DiscordInteractionVerifier _verifier;
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
     private readonly ILogger<DiscordInteractionsController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _discordClientId;
+    private readonly SignupCharacterChoiceCache _charChoice;
 
     // This component interaction's token, captured per request so a success
     // handler can dismiss (delete) the ephemeral picker/wizard it lives on.
@@ -53,7 +64,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         DiscordEventChannelQueue eventQueue,
         ILogger<DiscordInteractionsController> logger,
         IHttpClientFactory httpClientFactory,
-        IOptions<DiscordOAuthOptions> discordOptions)
+        IOptions<DiscordOAuthOptions> discordOptions,
+        SignupCharacterChoiceCache charChoice)
     {
         _verifier = verifier;
         _db = db;
@@ -61,6 +73,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _discordClientId = discordOptions.Value.ClientId;
+        _charChoice = charChoice;
     }
 
     [HttpPost("interactions")]
@@ -143,6 +156,50 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (string.IsNullOrEmpty(appUserId))
         {
             return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+
+        // The member chose which character to sign up as → remember it, then resume
+        // the flow they were on. Tail: "{token}:{eventId}[:{job}]".
+        if (customId.StartsWith(CharPickPrefix, StringComparison.Ordinal))
+        {
+            var parts = customId[CharPickPrefix.Length..].Split(':');
+            var token = parts.Length > 0 ? parts[0] : string.Empty;
+            var pickEventId = parts.Length > 1 && int.TryParse(parts[1], out var eid) ? eid : 0;
+            var chosen = SelectedValue(data);
+            if (pickEventId > 0 && !string.IsNullOrWhiteSpace(chosen))
+            {
+                _charChoice.Set(appUserId, pickEventId, chosen!);
+            }
+            return token switch
+            {
+                "slot" => await HandlePartySlotSignUpAsync(pickEventId, appUserId, asLeader: false, cancellationToken),
+                "slotL" => await HandlePartySlotSignUpAsync(pickEventId, appUserId, asLeader: true, cancellationToken),
+                "join" => await StartGeneralJoinAsync(pickEventId, appUserId, cancellationToken),
+                "job" => await HandleJobSignupAsync(pickEventId, appUserId,
+                    parts.Length > 2 ? string.Join(':', parts.Skip(2)) : null, cancellationToken),
+                _ => Ephemeral("That action isn't recognized.")
+            };
+        }
+
+        // Quick sign up: the member picked a recent job combo (auto-claim a matching
+        // open slot) or "manual" (fall through to the slot picker).
+        if (customId.StartsWith(QuickComboPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, QuickComboPrefix);
+            var value = SelectedValue(data);
+            if (string.Equals(value, "m", StringComparison.Ordinal))
+            {
+                return await HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: false, cancellationToken, skipQuickCombo: true);
+            }
+            if (value is not null && value.StartsWith("c|", StringComparison.Ordinal))
+            {
+                var p = value[2..].Split('|');
+                var main = p.Length > 0 ? p[0] : string.Empty;
+                var sub = p.Length > 1 && p[1].Length > 0 ? p[1] : null;
+                var role = p.Length > 2 && p[2].Length > 0 ? p[2] : null;
+                return await HandleQuickComboClaimAsync(eventId, appUserId, main, sub, role, cancellationToken);
+            }
+            return Ephemeral("That option isn't recognized.");
         }
 
         if (customId.StartsWith(DiscordEventMessageBuilder.JobSelectPrefix, StringComparison.Ordinal))
@@ -420,28 +477,34 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
         }
 
-        var characterName = membership.CharacterName
-            ?? membership.AppUser?.CharacterName
-            ?? membership.AppUser?.UserName
-            ?? "Unknown";
+        if (NeedsCharacterPick(membership, eventId, appUserId))
+        {
+            return CharacterPicker(membership, $"job:{eventId}:{job}");
+        }
 
-        // Signing up again just replaces the prior job (mirrors the app's signup).
+        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
+
+        // Signing up again switches jobs IN PLACE so accrued time (StartTime /
+        // Duration / break state) is preserved instead of restarting the clock.
         var existing = await _db.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUserId, cancellationToken);
         if (existing is not null)
         {
-            _db.AppUserEvents.Remove(existing);
+            existing.CharacterName = characterName;
+            existing.JobName = job!.Trim();
         }
-
-        _db.AppUserEvents.Add(new AppUserEvent
+        else
         {
-            AppUserId = appUserId,
-            EventId = eventId,
-            CharacterName = characterName,
-            JobName = job!.Trim(),
-            EventDkp = 0,
-            StartTime = ev.CommencementStartTime
-        });
+            _db.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = appUserId,
+                EventId = eventId,
+                CharacterName = characterName,
+                JobName = job!.Trim(),
+                EventDkp = 0,
+                StartTime = ev.CommencementStartTime
+            });
+        }
         await _db.SaveChangesAsync(cancellationToken);
 
         return await UpdatedEventMessageAsync(ev.Id, cancellationToken);
@@ -477,7 +540,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // to leaderless parties (BuildSlotPickerComponents) and routes the select through
     // the leader claim prefix. Picking a slot runs HandlePartySlotClaimAsync.
     private async Task<IActionResult> HandlePartySlotSignUpAsync(
-        int eventId, string appUserId, bool asLeader, CancellationToken cancellationToken)
+        int eventId, string appUserId, bool asLeader, CancellationToken cancellationToken, bool skipQuickCombo = false)
     {
         if (eventId <= 0)
         {
@@ -490,14 +553,34 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var isMember = await _db.AppUserLinkshells
-            .AnyAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (!isMember)
+        var membership = await _db.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .FirstOrDefaultAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
+        if (membership is null)
         {
             return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
         }
+        if (NeedsCharacterPick(membership, eventId, appUserId))
+        {
+            return CharacterPicker(membership, $"{(asLeader ? "slotL" : "slot")}:{eventId}");
+        }
 
         var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+
+        // Quick sign up (regular flow): offer the member's recent job combos that
+        // have a matching open slot, so they can one-tap in. "Manual" or no
+        // available combo falls through to the full slot picker below.
+        if (!asLeader && !skipQuickCombo)
+        {
+            var combos = await RecentCombosAsync(appUserId, ev.LinkshellId, cancellationToken);
+            var available = combos.Where(c => FindBestOpenSlotForCombo(ev.PartySetup, slotSignups, c) is not null).ToList();
+            if (available.Count > 0)
+            {
+                var full = combos.Where(c => !available.Contains(c)).ToList();
+                return QuickComboPicker(eventId, available, full);
+            }
+        }
+
         var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(eventId, ev.PartySetup, slotSignups, asLeader);
         if (picker.Length == 0)
         {
@@ -516,6 +599,166 @@ public sealed class DiscordInteractionsController : ControllerBase
                 flags = EphemeralFlag
             }
         });
+    }
+
+    private sealed record JobCombo(string Main, string? Sub, string? Role);
+
+    private static readonly HashSet<string> ValidMainJobs = new(EventJobCatalog.MainJobOptions, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> ValidSubJobs = new(EventJobCatalog.SubJobOptions, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> ValidRoles = new(EventJobCatalog.JobTypeOptions, StringComparer.OrdinalIgnoreCase);
+
+    // The member's up-to-3 most recent DISTINCT (main, sub, role) combos in this
+    // linkshell, newest first, from their completed-event history. Filtered to
+    // catalog-valid jobs so an offered combo is reliably claimable (a slot claim
+    // always needs a valid role + main; an invalid sub would also be rejected).
+    private async Task<List<JobCombo>> RecentCombosAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
+    {
+        var rows = await _db.AppUserEventHistories
+            .Where(p => p.AppUserId == appUserId
+                        && p.EventHistory!.LinkshellId == linkshellId
+                        && p.JobName != null && p.JobType != null)
+            .OrderByDescending(p => p.EventHistory!.EndTime ?? p.EventHistory!.TimeStamp)
+            .Select(p => new { p.JobName, p.SubJobName, p.JobType })
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        var combos = new List<JobCombo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            var main = row.JobName?.Trim();
+            var role = row.JobType?.Trim();
+            if (string.IsNullOrWhiteSpace(main) || string.IsNullOrWhiteSpace(role)) continue;
+            if (!ValidMainJobs.Contains(main) || !ValidRoles.Contains(role)) continue;
+            var sub = string.IsNullOrWhiteSpace(row.SubJobName) ? null : row.SubJobName!.Trim();
+            if (sub is not null && (!ValidSubJobs.Contains(sub) || string.Equals(sub, main, StringComparison.OrdinalIgnoreCase)))
+            {
+                sub = null; // drop an invalid/duplicate sub rather than reject the combo
+            }
+            if (!seen.Add($"{main}|{sub}|{role}")) continue;
+            combos.Add(new JobCombo(main!, sub, role));
+            if (combos.Count == 3) break;
+        }
+        return combos;
+    }
+
+    // The best OPEN slot a combo can fill, or null if none: a Job slot whose main
+    // (and pinned sub, if any) match; else a Role slot whose role matches; else any
+    // open "Any" slot. Most-specific wins so the member lands in the right slot.
+    private static PartySetupSlot? FindBestOpenSlotForCombo(
+        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups, JobCombo combo)
+    {
+        PartySetupSlot? jobMatch = null, roleMatch = null, anyMatch = null;
+        foreach (var party in setup.Alliances.SelectMany(a => a.Parties))
+        {
+            foreach (var slot in party.Slots.OrderBy(s => s.SortOrder))
+            {
+                if (signups.ContainsKey(slot.Id)) continue; // taken
+                var type = slot.RequirementType ?? "Any";
+                if (string.Equals(type, "Job", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Eq(slot.MainJob, combo.Main)
+                        && (string.IsNullOrWhiteSpace(slot.SubJob) || Eq(slot.SubJob, combo.Sub)))
+                    {
+                        jobMatch ??= slot;
+                    }
+                }
+                else if (string.Equals(type, "Role", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Eq(slot.Role, combo.Role)) roleMatch ??= slot;
+                }
+                else
+                {
+                    anyMatch ??= slot;
+                }
+            }
+        }
+        return jobMatch ?? roleMatch ?? anyMatch;
+
+        static bool Eq(string? a, string? b) => string.Equals(a?.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ComboLabel(JobCombo combo)
+        => $"{combo.Main}/{(string.IsNullOrWhiteSpace(combo.Sub) ? "—" : combo.Sub)}"
+           + (string.IsNullOrWhiteSpace(combo.Role) ? string.Empty : $" · {combo.Role}");
+
+    // Ephemeral "quick sign up" select: one option per available recent combo (auto-
+    // claims its matching slot) plus a manual fallback. Full recent combos are only
+    // listed in the text, so an unavailable combo can't be selected.
+    private IActionResult QuickComboPicker(int eventId, List<JobCombo> available, List<JobCombo> full)
+    {
+        var options = available
+            .Select(c => (object)new { label = $"{ComboLabel(c)} · open", value = $"c|{c.Main}|{c.Sub}|{c.Role}" })
+            .Append((object)new { label = "Pick a slot manually →", value = "m" })
+            .ToArray();
+
+        var content = "⚡ Quick sign up — pick a recent job, or choose a slot manually:";
+        if (full.Count > 0)
+        {
+            content += $"\nFull right now: {string.Join(", ", full.Select(ComboLabel))}.";
+        }
+
+        return Ok(new
+        {
+            type = ResponseChannelMessage,
+            data = new
+            {
+                content,
+                components = SelectRow(QuickComboPrefix, eventId.ToString(), "Pick a recent job", options),
+                flags = EphemeralFlag,
+            }
+        });
+    }
+
+    // Auto-claim the best open slot matching a chosen recent combo. Refuses (no
+    // signup) when nothing's open for it — including a last-moment race.
+    private async Task<IActionResult> HandleQuickComboClaimAsync(
+        int eventId, string appUserId, string main, string? sub, string? role, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0 || string.IsNullOrWhiteSpace(main))
+        {
+            return Ephemeral("That option isn't recognized.");
+        }
+
+        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+        if (ev is null || ev.PartySetup is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+
+        var membership = await _db.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .FirstOrDefaultAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
+        if (membership is null)
+        {
+            return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
+        }
+
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var combo = new JobCombo(main.Trim(), sub, role);
+        var slot = FindBestOpenSlotForCombo(ev.PartySetup, slotSignups, combo);
+        if (slot is null)
+        {
+            return Ephemeral($"No open slot for {ComboLabel(combo)} right now — sign up again to pick another, or choose a slot manually.");
+        }
+
+        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
+        var result = await EventPartySignupService.ClaimSlotAsync(
+            _db, eventId, slot, appUserId, characterName, role, main, sub, cancellationToken, claimAsLeader: false);
+        if (!result.Success)
+        {
+            return Ephemeral(result.Error ?? "Couldn't claim that slot.");
+        }
+        if (!await TryCommitSlotClaimAsync(cancellationToken))
+        {
+            return Ephemeral("That slot was just taken by another member. Sign up again to pick another.");
+        }
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, appUserId, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
+
+        _eventQueue.Enqueue(eventId);
+        return DismissPickerSilently();
     }
 
     // Picker select → claim the chosen slot for THIS event. If the slot pins both
@@ -559,8 +802,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await AdvancePartyJobWizardAsync(eventId, slotId, null, null, null, false, appUserId, asLeader, cancellationToken);
         }
 
-        var characterName = membership.CharacterName
-            ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Member";
+        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
         var result = await EventPartySignupService.ClaimSlotAsync(
             _db, eventId, slot, appUserId, characterName, null, null, null, cancellationToken, asLeader);
         if (!result.Success)
@@ -660,8 +902,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         // Everything needed is collected → claim, edit the board, confirm.
-        var characterName = membership.CharacterName
-            ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Member";
+        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
         var result = await EventPartySignupService.ClaimSlotAsync(
             _db, eventId, slot, appUserId, characterName,
             NormalizeWizardValue(role), NormalizeWizardValue(main), NormalizeWizardValue(sub), cancellationToken, asLeader);
@@ -820,11 +1061,16 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var isMember = await _db.AppUserLinkshells
-            .AnyAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (!isMember)
+        var membership = await _db.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .FirstOrDefaultAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
+        if (membership is null)
         {
             return Ephemeral("You're not a member of this linkshell, so you can't join its events.");
+        }
+        if (NeedsCharacterPick(membership, eventId, appUserId))
+        {
+            return CharacterPicker(membership, $"join:{eventId}");
         }
 
         var roleOptions = new[] { (object)new { label = "No specific role", value = DiscordEventMessageBuilder.PartyWizardNoRole } }
@@ -906,33 +1152,42 @@ public sealed class DiscordInteractionsController : ControllerBase
                     "Pick your sub job", subOptions));
         }
 
-        // Done — (re)create the general-attendance row carrying the chosen job.
-        var characterName = membership.CharacterName
-            ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Member";
+        // Done — set the general-attendance row to the chosen job.
+        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
 
         var existing = await _db.AppUserEvents
             .Where(p => p.EventId == eventId && p.AppUserId == appUserId)
             .ToListAsync(cancellationToken);
-        if (existing.Count > 0)
-        {
-            _db.AppUserEvents.RemoveRange(existing);
-        }
 
         // One identity per event: joining "no slot" releases any party slot the
         // member currently holds, so they're never both in a slot and "no slot".
         var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, appUserId, cancellationToken);
 
-        _db.AppUserEvents.Add(new AppUserEvent
+        if (existing.Count > 0)
         {
-            AppUserId = appUserId,
-            EventId = eventId,
-            CharacterName = characterName,
-            JobType = NormalizeWizardValue(role),
-            JobName = NormalizeWizardValue(main),
-            SubJobName = NormalizeWizardValue(sub),
-            EventDkp = 0,
-            StartTime = ev.CommencementStartTime,
-        });
+            // Switching jobs updates IN PLACE so accrued time (StartTime / Duration /
+            // break state) is preserved; drop any duplicate rows.
+            var keep = existing[0];
+            keep.CharacterName = characterName;
+            keep.JobType = NormalizeWizardValue(role);
+            keep.JobName = NormalizeWizardValue(main);
+            keep.SubJobName = NormalizeWizardValue(sub);
+            for (var i = 1; i < existing.Count; i++) { _db.AppUserEvents.Remove(existing[i]); }
+        }
+        else
+        {
+            _db.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = appUserId,
+                EventId = eventId,
+                CharacterName = characterName,
+                JobType = NormalizeWizardValue(role),
+                JobName = NormalizeWizardValue(main),
+                SubJobName = NormalizeWizardValue(sub),
+                EventDkp = 0,
+                StartTime = ev.CommencementStartTime,
+            });
+        }
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, leftPartyId, cancellationToken);
         _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
@@ -1038,4 +1293,34 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     private IActionResult Ephemeral(string message) =>
         Ok(new { type = ResponseChannelMessage, data = new { content = message, flags = EphemeralFlag } });
+
+    // Interrupt a signup with a "which character?" step only when it's meaningful:
+    // the member has alts AND hasn't already chosen for this event.
+    private bool NeedsCharacterPick(AppUserLinkshell membership, int eventId, string appUserId)
+        => SignupCharacters.HasAlternatives(membership.AppUser, membership)
+           && _charChoice.Peek(appUserId, eventId) is null;
+
+    // Ephemeral select of the member's characters (main + alts). `tail` resumes the
+    // original flow after a pick (e.g. "slot:42", "slotL:42", "join:42", "job:42:Warrior").
+    private IActionResult CharacterPicker(AppUserLinkshell membership, string tail)
+    {
+        var options = SignupCharacters.ForMember(membership.AppUser, membership)
+            .Select(name => (object)new { label = name, value = name })
+            .ToArray();
+        return Ok(new
+        {
+            type = ResponseChannelMessage,
+            data = new
+            {
+                content = "Which character are you signing up as?",
+                components = SelectRow(CharPickPrefix, tail, "Pick your character", options),
+                flags = EphemeralFlag
+            }
+        });
+    }
+
+    // The character name to record for a Discord signup: the member's cached pick
+    // (from the character-pick step) or their main when none was chosen.
+    private string ResolveSignupCharacter(AppUserLinkshell membership, int eventId, string appUserId)
+        => SignupCharacters.Resolve(membership.AppUser, membership, _charChoice.Peek(appUserId, eventId));
 }

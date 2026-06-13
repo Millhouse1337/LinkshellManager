@@ -15,6 +15,9 @@
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
     var isAlreadyParticipant = !string.IsNullOrWhiteSpace(currentUserId)
         && Model.AppUserEvents.Any(p => p.AppUserId == currentUserId);
+    // Characters the current member can sign up as (main + alts). Picker only
+    // renders when there's more than one.
+    var signupCharacters = ViewBag.SignupCharacters as List<string> ?? new List<string>();
 }
 
 <div class="page-head fade d1">
@@ -289,6 +292,10 @@
                                                 <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@Model.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="returnUrl" value="@psReturnUrl" />
+                                                    @if (signupCharacters.Count > 1)
+                                                    {
+                                                        <select name="selectedCharacter" class="form-select" title="Sign up as">@foreach (var c in signupCharacters) { <option value="@c">@c</option> }</select>
+                                                    }
                                                     @if (!slotRequiresRole)
                                                     {
                                                         <select name="role" required class="form-select"><option value="">Role…</option>@foreach (var r in roleOpts) { <option value="@r">@r</option> }</select>
@@ -535,6 +542,15 @@
             </div>
             <form asp-action="QuickJoin" method="post" style="padding:4px 16px 16px">
                 <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                @if (signupCharacters.Count > 1)
+                {
+                    <div class="field" style="margin-bottom:10px">
+                        <label>Character</label>
+                        <select class="form-select" name="characterName">
+                            @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                        </select>
+                    </div>
+                }
                 <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));align-items:end">
                     <div class="field">
                         <label>Main job</label>

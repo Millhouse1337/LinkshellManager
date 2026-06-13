@@ -6,7 +6,7 @@ import {
   ActivityLinkshellRole,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { formatAlts } from '../activity-home.helpers';
+import { formatAlts, rankIcon } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-roster-panel',
@@ -381,6 +381,21 @@ export class RosterPanelComponent {
       confirmLabel: promoteToLeader ? 'Transfer' : 'Change',
       danger: promoteToLeader,
       confirm: () => this.activity.updateLinkshellMemberRole(linkshellId, memberId, trimmed, characterName)
+    });
+  }
+
+  protected readonly rankIcon = rankIcon;
+  protected readonly statusOptions = ['Active', 'Pending', 'Inactive'] as const;
+
+  protected changeMemberStatus(linkshellId: number, memberId: number, characterName: string, newStatus: string): void {
+    const trimmed = newStatus.trim();
+    if (!trimmed) return;
+    this.pendingConfirm.set({
+      title: 'Change status?',
+      message: `Set ${characterName}'s status to ${trimmed}?`,
+      confirmLabel: 'Change',
+      danger: false,
+      confirm: () => this.activity.updateLinkshellMemberStatus(linkshellId, memberId, trimmed, characterName)
     });
   }
 }

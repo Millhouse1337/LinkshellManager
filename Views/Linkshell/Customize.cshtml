@@ -365,6 +365,39 @@
     </div>
 </div>
 
+<!-- Post-event discussion mirror: the bot reposts each new event-history comment
+     to this channel so the discussion shows up in Discord too. -->
+<div class="card" style="margin-bottom:16px">
+    <div class="card-head"><div class="card-title">💬 Post-event discussion channel</div></div>
+    <div style="padding:8px 16px 14px">
+        <p style="margin-top:0;font-size:13px;color:var(--fg-3)">
+            Optional. New comments on a completed event are mirrored to this channel. Leave blank to keep discussion in-app only.
+        </p>
+        <form asp-action="SetDiscussionChannel" method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+            <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+            <label class="field" style="flex:1 1 240px">
+                <span>Discussion channel</span>
+                @if (Model.AvailableChannels.Count > 0)
+                {
+                    <select class="form-select" name="discussionChannelId">
+                        <option value="">— none (in-app only) —</option>
+                        @foreach (var channel in Model.AvailableChannels)
+                        {
+                            <option value="@channel.Id" selected="@(channel.Id == Model.DiscussionChannelId)">#@channel.Name</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <input class="input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="20"
+                           placeholder="Channel ID" name="discussionChannelId" value="@Model.DiscussionChannelId" autocomplete="off" />
+                }
+            </label>
+            <button class="btn primary sm" type="submit" style="margin-bottom:2px">Save</button>
+        </form>
+    </div>
+</div>
+
 <!-- Discord channel routes: the bot posts each kind of content to the channel(s)
      you assign here. Combine several post types into one channel or split them. -->
 @{

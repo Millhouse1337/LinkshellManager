@@ -125,6 +125,56 @@
   line-height: 1;
 }
 
+/* Relic weapon: a glowing, shimmering flame border on job pills the member
+   marked as having the relic for. Layers onto the existing .tag pill. */
+.tag.relic-flame {
+  position: relative;
+  overflow: visible;
+  color: #fff;
+  border: 2px solid #ffb31f;
+  background: linear-gradient(180deg, #241f16, #111218);
+  box-shadow:
+    0 0 8px rgba(255, 177, 31, 0.9),
+    0 0 20px rgba(255, 95, 0, 0.45);
+}
+/* flames licking up from behind the chip */
+.tag.relic-flame::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  bottom: 70%;
+  height: 34px;
+  background:
+    radial-gradient(ellipse at 15% 100%, #ffd05a 0%, #ff7a00 35%, transparent 68%),
+    radial-gradient(ellipse at 35% 100%, #fff0a6 0%, #ff9b00 35%, transparent 70%),
+    radial-gradient(ellipse at 55% 100%, #ffd05a 0%, #ff6200 38%, transparent 72%),
+    radial-gradient(ellipse at 75% 100%, #fff0a6 0%, #ff8a00 35%, transparent 70%);
+  filter: blur(1px);
+  opacity: 0.9;
+  animation: relicFlameFlicker 0.9s infinite alternate ease-in-out;
+  pointer-events: none;
+  z-index: -1;
+}
+/* soft orange glow under the flames */
+.tag.relic-flame::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  background: rgba(255, 120, 0, 0.22);
+  filter: blur(14px);
+  z-index: -2;
+  pointer-events: none;
+}
+@keyframes relicFlameFlicker {
+  from { transform: translateY(2px) scaleY(0.9); opacity: 0.7; }
+  to { transform: translateY(-4px) scaleY(1.15); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag.relic-flame::before { animation: none; }
+}
+
 .panel-tab .jobs-roster-toolbar {
   display: flex;
   align-items: center;

@@ -725,6 +725,8 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<Item> Items => Set<Item>();
         public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
         public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
+        public DbSet<JobRating> JobRatings => Set<JobRating>();
+        public DbSet<EventComment> EventComments => Set<EventComment>();
         public DbSet<AddonApiToken> AddonApiTokens => Set<AddonApiToken>();
         public DbSet<AddonPairingCode> AddonPairingCodes => Set<AddonPairingCode>();
         public DbSet<EventAttendanceWindow> EventAttendanceWindows => Set<EventAttendanceWindow>();
@@ -1024,6 +1026,32 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.EventHistoryId);
+            });
+
+            builder.Entity<EventComment>(entity =>
+            {
+                entity.ToTable("EventComments");
+                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.Property(item => item.CharacterName).HasMaxLength(256);
+                entity.Property(item => item.Body).HasMaxLength(2000);
+                entity.Property(item => item.DiscordMessageId).HasMaxLength(20);
+                entity.HasOne(item => item.EventHistory)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventHistoryId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.EventHistoryId, item.CreatedAt });
+            });
+
+            builder.Entity<JobRating>(entity =>
+            {
+                entity.ToTable("JobRatings");
+                entity.Property(item => item.TargetAppUserId).HasMaxLength(450);
+                entity.Property(item => item.RaterAppUserId).HasMaxLength(450);
+                // One rating per rater per target's job + character within a
+                // linkshell (upsert). CharacterSlot distinguishes main/alt rows.
+                entity.HasIndex(item => new { item.LinkshellId, item.TargetAppUserId, item.RaterAppUserId, item.CharacterSlot, item.JobIndex }).IsUnique();
+                // Aggregate a target's ratings across all raters.
+                entity.HasIndex(item => new { item.LinkshellId, item.TargetAppUserId });
             });
 
             builder.Entity<EventPartySlotSignup>(entity =>

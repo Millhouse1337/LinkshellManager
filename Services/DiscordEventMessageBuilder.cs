@@ -557,7 +557,7 @@ public static class DiscordEventMessageBuilder
         {
             return string.IsNullOrWhiteSpace(slot.MainJob)
                 ? "Any"
-                : (string.IsNullOrWhiteSpace(slot.SubJob) ? slot.MainJob! : $"{slot.MainJob}/{slot.SubJob}");
+                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? "Player's Choice" : slot.SubJob)}";
         }
         return "Any";
     }
@@ -576,7 +576,7 @@ public static class DiscordEventMessageBuilder
         {
             core = string.IsNullOrWhiteSpace(slot.MainJob)
                 ? "Any job"
-                : (string.IsNullOrWhiteSpace(slot.SubJob) ? slot.MainJob! : $"{slot.MainJob}/{slot.SubJob}");
+                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? "Player's Choice" : slot.SubJob)}";
         }
         else
         {

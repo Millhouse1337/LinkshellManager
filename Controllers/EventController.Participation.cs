@@ -145,6 +145,8 @@ public partial class EventController
 
         ViewBag.CurrentAppUserId = user.Id;
         ViewBag.CanManageParties = CanManageLinkshell(membership);
+        // Characters this member can sign up as (main + alts) for the picker.
+        ViewBag.SignupCharacters = SignupCharacters.ForMember(user, membership);
         ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
         ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
         ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
@@ -157,7 +159,7 @@ public partial class EventController
     // PartySetup's own signup endpoint, not on events directly.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SignUp(int eventId, string? jobName = null, string? subJobName = null, string? jobType = null)
+    public async Task<IActionResult> SignUp(int eventId, string? jobName = null, string? subJobName = null, string? jobType = null, string? characterName = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -173,24 +175,33 @@ public partial class EventController
         var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
         if (membership is null) return Forbid();
 
+        static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        var character = SignupCharacters.Resolve(user, membership, characterName);
+
         var existing = await _context.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
         if (existing is not null)
         {
-            _context.AppUserEvents.Remove(existing);
+            // Switching jobs: update in place so accumulated time (StartTime /
+            // Duration / break state) is preserved instead of restarting the clock.
+            existing.CharacterName = character;
+            existing.JobName = Clean(jobName);
+            existing.SubJobName = Clean(subJobName);
+            existing.JobType = Clean(jobType);
         }
-
-        static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-        _context.AppUserEvents.Add(new AppUserEvent
+        else
         {
-            AppUserId = user.Id,
-            EventId = eventId,
-            CharacterName = user.CharacterName,
-            JobName = Clean(jobName),
-            SubJobName = Clean(subJobName),
-            JobType = Clean(jobType),
-            EventDkp = 0,
-        });
+            _context.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = user.Id,
+                EventId = eventId,
+                CharacterName = character,
+                JobName = Clean(jobName),
+                SubJobName = Clean(subJobName),
+                JobType = Clean(jobType),
+                EventDkp = 0,
+            });
+        }
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }
@@ -266,7 +277,7 @@ public partial class EventController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> QuickJoin(int eventId, string jobName, string subJobName, string jobType)
+    public async Task<IActionResult> QuickJoin(int eventId, string jobName, string subJobName, string jobType, string? characterName = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -299,13 +310,6 @@ public partial class EventController
             return BadRequest("Job type must be 64 characters or fewer.");
         }
 
-        var existing = await _context.AppUserEvents.FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
-        if (existing is not null)
-        {
-            // Already a participant — can't late/quick join twice.
-            return BadRequest("You are already attending this event.");
-        }
-
         var eventEntity = await _context.Events.FirstOrDefaultAsync(item => item.Id == eventId);
         if (eventEntity is null)
         {
@@ -323,18 +327,32 @@ public partial class EventController
             return BadRequest("The event must be live before quick join is available.");
         }
 
-        _context.AppUserEvents.Add(new AppUserEvent
+        var character = SignupCharacters.Resolve(user, membership, characterName);
+        var existing = await _context.AppUserEvents.FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
+        if (existing is not null)
         {
-            AppUserId = user.Id,
-            EventId = eventId,
-            CharacterName = user.CharacterName,
-            JobName = cleanJobName,
-            SubJobName = cleanSubJobName,
-            JobType = cleanJobType,
-            StartTime = DateTime.UtcNow,
-            EventDkp = 0,
-            IsQuickJoin = true
-        });
+            // Already attending → switching jobs updates in place, keeping their
+            // accrued time (StartTime / Duration / break state) intact.
+            existing.CharacterName = character;
+            existing.JobName = cleanJobName;
+            existing.SubJobName = cleanSubJobName;
+            existing.JobType = cleanJobType;
+        }
+        else
+        {
+            _context.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = user.Id,
+                EventId = eventId,
+                CharacterName = character,
+                JobName = cleanJobName,
+                SubJobName = cleanSubJobName,
+                JobType = cleanJobType,
+                StartTime = DateTime.UtcNow,
+                EventDkp = 0,
+                IsQuickJoin = true
+            });
+        }
 
         await _context.SaveChangesAsync();
 

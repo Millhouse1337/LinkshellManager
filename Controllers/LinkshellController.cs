@@ -390,6 +390,7 @@ public class LinkshellController : Controller
             CanRole(roles, membership?.Rank, role => role.CanManageRoles));
         vm.DiscordGuildId = target.DiscordGuildId;
         vm.DiscordGuildName = target.DiscordGuildName;
+        vm.DiscussionChannelId = target.DiscussionChannelId;
         vm.GuildLocked = target.LockToDiscordGuild;
         vm.EligibleGuilds = await BuildEligibleGuildsAsync(user.Id, HttpContext.RequestAborted);
         await PopulateDiscordChannelsAsync(vm, target, HttpContext.RequestAborted);
@@ -583,6 +584,37 @@ public class LinkshellController : Controller
         await _context.SaveChangesAsync();
 
         TempData["CustomizeSaved"] = "Discord server cleared.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    // Sets (or clears, when blank) the channel post-event discussion comments
+    // mirror to. Just stores the id; the bot posts there on each new comment.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetDiscussionChannel(int linkshellId, string? discussionChannelId)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership)) return Forbid();
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        if (linkshell is null) return NotFound();
+
+        var trimmed = discussionChannelId?.Trim();
+        if (!string.IsNullOrEmpty(trimmed) && (trimmed.Length > 20 || !trimmed.All(char.IsDigit)))
+        {
+            TempData["CustomizeError"] = "Enter the numeric Discord channel ID (digits only), or leave blank to clear.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        linkshell.DiscussionChannelId = string.IsNullOrEmpty(trimmed) ? null : trimmed;
+        await _context.SaveChangesAsync();
+
+        TempData["CustomizeSaved"] = string.IsNullOrEmpty(trimmed)
+            ? "Discussion channel cleared — comments stay in-app."
+            : "Discussion channel set. New post-event comments will mirror there.";
         return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 

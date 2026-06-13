@@ -532,12 +532,25 @@
               <div class="event-section__header">
                 <div>
                   <h3>Late Join</h3>
-                  <p class="muted">Join the current live event with the same constrained party setup.</p>
+                  <p class="muted">
+                    @if (event.partySetupId) {
+                      Claim an open party slot from the board above first — or late-join with no slot here.
+                    } @else {
+                      Join the current live event with the same constrained party setup.
+                    }
+                  </p>
                 </div>
               </div>
 
               @if (!event.currentParticipation) {
                 <form class="late-join-form" (ngSubmit)="submitQuickJoin(event.id)">
+                  @if (activity.signupCharacterOptions().length > 1) {
+                    <select [(ngModel)]="getQuickJoinDraft(event.id).characterName" [name]="'quickJoinCharacter' + event.id" title="Sign up as">
+                      @for (c of activity.signupCharacterOptions(); track c) {
+                        <option [value]="c">{{ c }}</option>
+                      }
+                    </select>
+                  }
                   <select [(ngModel)]="getQuickJoinDraft(event.id).jobType" [name]="'quickJoinType' + event.id">
                     <option value="">Select role</option>
                     @for (jobTypeOption of jobTypeOptions; track jobTypeOption) {
@@ -547,13 +560,17 @@
                   <select [(ngModel)]="getQuickJoinDraft(event.id).jobName" [name]="'quickJoinJob' + event.id">
                     <option value="">Select main job</option>
                     @for (jobOption of mainJobOptions; track jobOption) {
-                      <option [value]="jobOption">{{ jobOption }}</option>
+                      @if (jobOption !== getQuickJoinDraft(event.id).subJobName) {
+                        <option [value]="jobOption">{{ jobOption }}</option>
+                      }
                     }
                   </select>
                   <select [(ngModel)]="getQuickJoinDraft(event.id).subJobName" [name]="'quickJoinSubJob' + event.id">
                     <option value="">Select sub job</option>
                     @for (jobOption of subJobOptions; track jobOption) {
-                      <option [value]="jobOption">{{ jobOption }}</option>
+                      @if (jobOption !== getQuickJoinDraft(event.id).jobName) {
+                        <option [value]="jobOption">{{ jobOption }}</option>
+                      }
                     }
                   </select>
                   <button type="submit" class="btn primary sm" [disabled]="activity.busyEventId() === event.id">
@@ -576,6 +593,6 @@
       <!-- Queue / Create event -->
       <app-activity-queue-panel />
 
-      <!-- Event history from sidebar -->
-      <app-activity-sidebar-panel [visibleSections]="['history']" />
+      <!-- Past events: browse + (officer) edit metadata / DKP / attendees -->
+      <app-event-history-panel [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />
     </div>

@@ -3,6 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
+// A member's current trailing streaks over counting events. Mutually exclusive:
+// the most recent run is either credited (Credit > 0) or absent (Absent > 0).
+public readonly record struct MemberStreaks(int Credit, int Absent);
+
 // Computes each member's Active/Inactive activity state from event attendance,
 // on read (so it always reflects the current per-linkshell config + any credit
 // reconciliation). The rule is a streak hysteresis over the member's sequence of
@@ -126,6 +130,92 @@ public sealed class MemberActivityService
         return result;
     }
 
+    // appUserId -> current streaks over counting events (EventHistory.CountsTowardActive,
+    // ended after they joined), oldest -> newest. Credit = trailing consecutive events
+    // CREDITED; Absent = trailing consecutive events NOT credited. They're mutually
+    // exclusive (one is 0). Computed regardless of EnableActivityTracking so the roster
+    // can always show the numbers.
+    public async Task<Dictionary<string, MemberStreaks>> ComputeStreaksByAppUserAsync(
+        int linkshellId, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, MemberStreaks>(StringComparer.OrdinalIgnoreCase);
+
+        var members = await _db.AppUserLinkshells
+            .AsNoTracking()
+            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
+            .Select(m => new { AppUserId = m.AppUserId!, m.DateJoined, m.ManualActiveCreditStreak, m.ManualAbsentStreak })
+            .ToListAsync(cancellationToken);
+        if (members.Count == 0)
+        {
+            return result;
+        }
+
+        // An officer override (the roster "Count", set via Modify) wins over the
+        // computed streak until the next attendance recompute clears it. Credit
+        // and absent overrides are mutually exclusive; credit takes precedence if
+        // both somehow exist.
+        var creditOverrides = members
+            .Where(m => m.ManualActiveCreditStreak.HasValue)
+            .ToDictionary(m => m.AppUserId, m => m.ManualActiveCreditStreak!.Value, StringComparer.OrdinalIgnoreCase);
+        var absentOverrides = members
+            .Where(m => m.ManualAbsentStreak.HasValue)
+            .ToDictionary(m => m.AppUserId, m => m.ManualAbsentStreak!.Value, StringComparer.OrdinalIgnoreCase);
+
+        MemberStreaks WithOverride(string appUserId, MemberStreaks computed)
+        {
+            if (creditOverrides.TryGetValue(appUserId, out var creditOv)) { return new MemberStreaks(creditOv, 0); }
+            if (absentOverrides.TryGetValue(appUserId, out var absentOv)) { return new MemberStreaks(0, absentOv); }
+            return computed;
+        }
+
+        var countingEvents = await _db.EventHistories
+            .AsNoTracking()
+            .Where(h => h.LinkshellId == linkshellId && h.CountsTowardActive && h.EndTime != null)
+            .OrderBy(h => h.EndTime)
+            .Select(h => new { h.Id, h.EndTime })
+            .ToListAsync(cancellationToken);
+        if (countingEvents.Count == 0)
+        {
+            foreach (var member in members)
+            {
+                result[member.AppUserId] = WithOverride(member.AppUserId, new MemberStreaks(0, 0));
+            }
+            return result;
+        }
+
+        var historyIds = countingEvents.Select(e => e.Id).ToList();
+        var creditedRows = await _db.AppUserEventHistories
+            .AsNoTracking()
+            .Where(r => historyIds.Contains(r.EventHistoryId) && r.ActiveCredit && r.AppUserId != null)
+            .Select(r => new { r.EventHistoryId, AppUserId = r.AppUserId! })
+            .ToListAsync(cancellationToken);
+        var creditedByEvent = creditedRows
+            .GroupBy(r => r.EventHistoryId)
+            .ToDictionary(
+                g => g.Key,
+                g => new HashSet<string>(g.Select(x => x.AppUserId), StringComparer.OrdinalIgnoreCase));
+
+        foreach (var member in members)
+        {
+            var creditStreak = 0;
+            var absentStreak = 0;
+            foreach (var ev in countingEvents) // oldest -> newest; trailing run wins
+            {
+                if (member.DateJoined.HasValue && ev.EndTime.HasValue && ev.EndTime.Value < member.DateJoined.Value)
+                {
+                    continue;
+                }
+                var attended = creditedByEvent.TryGetValue(ev.Id, out var credited)
+                    && credited.Contains(member.AppUserId);
+                if (attended) { creditStreak++; absentStreak = 0; }
+                else { absentStreak++; creditStreak = 0; }
+            }
+            result[member.AppUserId] = WithOverride(member.AppUserId, new MemberStreaks(creditStreak, absentStreak));
+        }
+
+        return result;
+    }
+
     // Single-member convenience (detail views). Defaults to Active when tracking is
     // off or the member has no counting history.
     public async Task<bool> IsActiveAsync(int linkshellId, string appUserId, CancellationToken cancellationToken)
@@ -155,6 +245,18 @@ public sealed class MemberActivityService
         var changed = 0;
         foreach (var member in members)
         {
+            // A recompute supersedes any officer "Count" override: clear it so the
+            // attendance-computed streak/status takes over from here.
+            if (member.ManualActiveCreditStreak.HasValue)
+            {
+                member.ManualActiveCreditStreak = null;
+                changed++;
+            }
+            if (member.ManualAbsentStreak.HasValue)
+            {
+                member.ManualAbsentStreak = null;
+                changed++;
+            }
             if (member.AppUserId is null || !map.TryGetValue(member.AppUserId, out var active))
             {
                 continue;

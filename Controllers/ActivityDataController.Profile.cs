@@ -58,7 +58,7 @@ public sealed partial class ActivityDataController
         // so the character's jobs are consistent across linkshells and stored in
         // the addon's FFXI-job-id format. The client sends a catalog-aligned
         // array (index 0 = WAR ... 14 = SMN).
-        if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 })
+        if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 } || request.MeritJobs is { Length: > 0 })
         {
             var memberships = await _dbContext.AppUserLinkshells
                 .Where(link => link.AppUserId == appUser.Id)
@@ -77,6 +77,11 @@ public sealed partial class ActivityDataController
                     {
                         membership.StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(membership.StrongJobs, request.StrongJobs);
                     }
+                    // Merit notes (catalog-aligned text), same value on every membership.
+                    if (request.MeritJobs is { Length: > 0 })
+                    {
+                        membership.MeritJobs = ProfileJobLevels.NormalizeMerits(request.MeritJobs);
+                    }
                 }
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
@@ -90,6 +95,7 @@ public sealed partial class ActivityDataController
         {
             if (appUser.Alt1JobLevels is not null) { appUser.Alt1JobLevels = null; altJobsChanged = true; }
             if (appUser.Alt1StrongJobs is not null) { appUser.Alt1StrongJobs = null; altJobsChanged = true; }
+            if (appUser.Alt1MeritJobs is not null) { appUser.Alt1MeritJobs = null; altJobsChanged = true; }
         }
         else
         {
@@ -103,11 +109,17 @@ public sealed partial class ActivityDataController
                 appUser.Alt1StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(appUser.Alt1StrongJobs, request.Alt1StrongJobs);
                 altJobsChanged = true;
             }
+            if (request.Alt1MeritJobs is { Length: > 0 })
+            {
+                appUser.Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(request.Alt1MeritJobs);
+                altJobsChanged = true;
+            }
         }
         if (string.IsNullOrWhiteSpace(request.AltCharacterName2))
         {
             if (appUser.Alt2JobLevels is not null) { appUser.Alt2JobLevels = null; altJobsChanged = true; }
             if (appUser.Alt2StrongJobs is not null) { appUser.Alt2StrongJobs = null; altJobsChanged = true; }
+            if (appUser.Alt2MeritJobs is not null) { appUser.Alt2MeritJobs = null; altJobsChanged = true; }
         }
         else
         {
@@ -121,8 +133,41 @@ public sealed partial class ActivityDataController
                 appUser.Alt2StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(appUser.Alt2StrongJobs, request.Alt2StrongJobs);
                 altJobsChanged = true;
             }
+            if (request.Alt2MeritJobs is { Length: > 0 })
+            {
+                appUser.Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(request.Alt2MeritJobs);
+                altJobsChanged = true;
+            }
         }
-        if (altJobsChanged)
+        // Per-craft levels (account-level for the main + alts). Stored as-is (a
+        // plain ordered array — no FFXI-job-id mapping). Clear an alt's crafts when
+        // its name is removed.
+        var craftsChanged = altJobsChanged;
+        if (request.CraftLevels is { Length: > 0 })
+        {
+            appUser.CraftLevels = request.CraftLevels;
+            craftsChanged = true;
+        }
+        if (string.IsNullOrWhiteSpace(request.AltCharacterName1))
+        {
+            if (appUser.Alt1CraftLevels is not null) { appUser.Alt1CraftLevels = null; craftsChanged = true; }
+        }
+        else if (request.Alt1CraftLevels is { Length: > 0 })
+        {
+            appUser.Alt1CraftLevels = request.Alt1CraftLevels;
+            craftsChanged = true;
+        }
+        if (string.IsNullOrWhiteSpace(request.AltCharacterName2))
+        {
+            if (appUser.Alt2CraftLevels is not null) { appUser.Alt2CraftLevels = null; craftsChanged = true; }
+        }
+        else if (request.Alt2CraftLevels is { Length: > 0 })
+        {
+            appUser.Alt2CraftLevels = request.Alt2CraftLevels;
+            craftsChanged = true;
+        }
+
+        if (craftsChanged)
         {
             await _userManager.UpdateAsync(appUser);
         }

@@ -150,7 +150,7 @@ export class PartySetupPanelComponent {
         break;
       case 'Job':
         core = slot.mainJob
-          ? (slot.subJob ? `${slot.mainJob}/${slot.subJob}` : slot.mainJob)
+          ? `${slot.mainJob}/${slot.subJob ? slot.subJob : "Player's Choice"}`
           : 'Any job';
         break;
       default:

@@ -171,6 +171,12 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken)
             : new List<AppUserLinkshell>();
 
+        // Current credit / absent streaks per member (consecutive recent counting
+        // events) for the roster's active-credit + absent-streak indicators.
+        var primaryStreaks = primaryLinkshellId.HasValue
+            ? await new MemberActivityService(_dbContext).ComputeStreaksByAppUserAsync(primaryLinkshellId.Value, cancellationToken)
+            : new Dictionary<string, MemberStreaks>();
+
         var primaryRules = primaryLinkshellId.HasValue
             ? await _dbContext.Rules
                 .AsNoTracking()
@@ -287,6 +293,13 @@ public sealed partial class ActivityDataController
             ?? linkshellMemberships.FirstOrDefault(link => link.StrongJobs != null)?.StrongJobs);
         var alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt1StrongJobs);
         var alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt2StrongJobs);
+        // Per-job merit notes, parallel to the strong flags (main from the primary
+        // membership, alts from the AppUser).
+        var meritJobs = ProfileJobLevels.NormalizeMerits(
+            linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.MeritJobs
+            ?? linkshellMemberships.FirstOrDefault(link => link.MeritJobs != null)?.MeritJobs);
+        var alt1MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt1MeritJobs);
+        var alt2MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt2MeritJobs);
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -303,7 +316,13 @@ public sealed partial class ActivityDataController
                 alt2JobLevels,
                 strongJobs,
                 alt1StrongJobs,
-                alt2StrongJobs),
+                alt2StrongJobs,
+                CraftCatalog.Normalize(appUser.CraftLevels),
+                CraftCatalog.Normalize(appUser.Alt1CraftLevels),
+                CraftCatalog.Normalize(appUser.Alt2CraftLevels),
+                meritJobs,
+                alt1MeritJobs,
+                alt2MeritJobs),
             linkshellMemberships.Select(link => new ActivityLinkshellDto(
                 link.LinkshellId,
                 link.Linkshell?.LinkshellName ?? "Unknown linkshell",
@@ -315,7 +334,8 @@ public sealed partial class ActivityDataController
                 revenueTotals.GetValueOrDefault(link.LinkshellId, 0L),
                 link.Linkshell?.Details,
                 ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName),
-                MapLinkshellSettingsDto(link.Linkshell))).ToList(),
+                MapLinkshellSettingsDto(link.Linkshell),
+                link.Linkshell?.AuctionsLocked ?? false)).ToList(),
             primaryLinkshell is null
                 ? null
                 : new ActivityPrimaryLinkshellDto(
@@ -332,7 +352,9 @@ public sealed partial class ActivityDataController
                         member.Rank,
                         member.Status,
                         member.LinkshellDkp,
-                        member.DateJoined)).ToList(),
+                        member.DateJoined,
+                        member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Credit : 0,
+                        member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Absent : 0)).ToList(),
                     primaryRules.Select(rule => new ActivityRuleDto(
                         rule.Id,
                         rule.LinkshellId,

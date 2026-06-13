@@ -195,27 +195,47 @@
                 }
               }
             </div>
-            <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
+            <div class="ac-roster-rank">{{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}</div>
             <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
-            <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
-            @if (canManageMembers() && member.appUserId && member.appUserId !== appUserId()) {
+            <div>
+              <span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span>
+              @if ((member.absentStreak ?? 0) > 0) {
+                <span class="ac-roster-credit absent" title="Absent streak: recent events missed in a row">{{ member.absentStreak }}</span>
+              } @else {
+                <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Active-credit streak: recent events credited in a row">{{ member.activeCreditStreak ?? 0 }}</span>
+              }
+            </div>
+            @if (canManageMembers() && member.appUserId) {
               <div class="ac-roster-actions">
+                @if (member.appUserId !== appUserId()) {
+                  <select
+                    [ngModel]="member.rank || 'Member'"
+                    (ngModelChange)="changeMemberRole(selectedLinkshell.id, member.id, member.characterName, $event)"
+                    [name]="'memberRole_' + member.id"
+                    [disabled]="activity.busyMemberId() === member.id">
+                    @for (role of availableRolesForLinkshell(selectedLinkshell.id); track role.id) {
+                      <option [value]="role.name">{{ role.name }}</option>
+                    }
+                  </select>
+                }
                 <select
-                  [ngModel]="member.rank || 'Member'"
-                  (ngModelChange)="changeMemberRole(selectedLinkshell.id, member.id, member.characterName, $event)"
-                  [name]="'memberRole_' + member.id"
+                  [ngModel]="member.status || 'Active'"
+                  (ngModelChange)="changeMemberStatus(selectedLinkshell.id, member.id, member.characterName, $event)"
+                  [name]="'memberStatus_' + member.id"
                   [disabled]="activity.busyMemberId() === member.id">
-                  @for (role of availableRolesForLinkshell(selectedLinkshell.id); track role.id) {
-                    <option [value]="role.name">{{ role.name }}</option>
+                  @for (s of statusOptions; track s) {
+                    <option [value]="s">{{ s }}</option>
                   }
                 </select>
-                <button
-                  type="button"
-                  class="action-button action-button--secondary"
-                  [disabled]="activity.busyMemberId() === member.id"
-                  (click)="confirmRemoveMember(selectedLinkshell.id, member.id, member.characterName)">
-                  {{ activity.busyMemberId() === member.id ? 'Removing...' : 'Remove' }}
-                </button>
+                @if (member.appUserId !== appUserId()) {
+                  <button
+                    type="button"
+                    class="action-button action-button--secondary"
+                    [disabled]="activity.busyMemberId() === member.id"
+                    (click)="confirmRemoveMember(selectedLinkshell.id, member.id, member.characterName)">
+                    {{ activity.busyMemberId() === member.id ? 'Removing...' : 'Remove' }}
+                  </button>
+                }
               </div>
             }
           </div>

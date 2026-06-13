@@ -128,6 +128,11 @@ public class Linkshell
     [MaxLength(256)]
     public string? DiscordGuildName { get; set; }
 
+    // Optional Discord channel where post-event discussion comments are mirrored.
+    // Null = comments stay in-app only.
+    [MaxLength(20)]
+    public string? DiscussionChannelId { get; set; }
+
     // OPTIONAL access lock, separate from setting the server above. When false
     // (default), the linkshell is merely *associated* with DiscordGuildId for
     // roster/invite/channel features — anyone can still view it from anywhere.

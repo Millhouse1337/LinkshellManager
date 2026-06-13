@@ -95,4 +95,22 @@ public static class ProfileJobLevels
     }
 
     private static int Clamp(int level) => level < 0 ? 0 : level > MaxLevel ? MaxLevel : level;
+
+    // ----- Per-job merit notes -----
+    // Free-text, catalog-aligned (index i = MainJobOptions[i]) — NOT FFXI-job-id
+    // indexed like the level/flag arrays. Stored as-is (no remap needed).
+
+    // Normalizes a merit-note array to the catalog length (15), trimming + capping
+    // each entry. Missing/short entries become empty strings.
+    public static string[] NormalizeMerits(string[]? source)
+    {
+        const int maxLen = 500;
+        var result = new string[JobCount];
+        for (var i = 0; i < JobCount; i++)
+        {
+            var note = (source is not null && i < source.Length ? source[i] : null)?.Trim() ?? string.Empty;
+            result[i] = note.Length > maxLen ? note[..maxLen] : note;
+        }
+        return result;
+    }
 }

@@ -204,6 +204,10 @@ builder.Services.AddScoped<GlobalSettingsService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
 builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();
+builder.Services.AddScoped<EventHistoryEditService>();
+builder.Services.AddScoped<EventCommentService>();
+builder.Services.AddSingleton<AiCommentSummaryService>();
+builder.Services.AddSingleton<SignupCharacterChoiceCache>();
 builder.Services.AddScoped<TodImageUploadService>();
 builder.Services.AddScoped<SubmissionApprovalService>();
 // Data Protection guards the encrypted Google refresh tokens, auth cookies and

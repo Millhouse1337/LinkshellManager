@@ -62,13 +62,17 @@
                           @if (needsMainJob(slot)) {
                             <select [ngModel]="draftFor(slot.slotId).mainJob" (ngModelChange)="setDraft(slot.slotId, { mainJob: $event })">
                               <option value="">Main job&hellip;</option>
-                              @for (j of mainJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                              @for (j of mainJobOptions(); track j) {
+                                @if (j !== (draftFor(slot.slotId).subJob || slot.subJob)) { <option [value]="j">{{ j }}</option> }
+                              }
                             </select>
                           }
                           @if (needsSubJob(slot)) {
                             <select [ngModel]="draftFor(slot.slotId).subJob" (ngModelChange)="setDraft(slot.slotId, { subJob: $event })">
                               <option value="">Sub job&hellip;</option>
-                              @for (j of subJobOptions(); track j) { <option [value]="j">{{ j }}</option> }
+                              @for (j of subJobOptions(); track j) {
+                                @if (j !== (draftFor(slot.slotId).mainJob || slot.mainJob)) { <option [value]="j">{{ j }}</option> }
+                              }
                             </select>
                           }
                           @if (isEventBoard() && !partyHasLeader(party)) {
@@ -114,6 +118,23 @@
                 }
               </div>
             </article>
+          }
+        </div>
+      </section>
+    }
+
+    @if (detail.alsoAttending && detail.alsoAttending.length > 0) {
+      <section class="ps-alliance ps-also-attending">
+        <header class="ps-alliance-head">
+          <span class="ps-alliance-tag">Also attending</span>
+          <span class="ps-alliance-name">no slot</span>
+        </header>
+        <div class="ps-also-list">
+          @for (a of detail.alsoAttending; track $index) {
+            <div class="ps-also-row">
+              <span class="ps-also-name">{{ a.characterName || 'Member' }}</span>
+              <span class="ps-also-job">{{ a.role || 'Any' }}@if (a.mainJob) { · {{ a.mainJob }}@if (a.subJob) {/{{ a.subJob }}}}</span>
+            </div>
           }
         </div>
       </section>

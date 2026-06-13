@@ -6,7 +6,10 @@ import { datetimeLocalToUtcIso, formatActionError } from './discord-activity.hel
 import type {
   ActivityAddEventMemberInput,
   ActivityCreateEventInput,
+  ActivityEditEventHistoryInput,
   ActivityEventAddMemberCandidate,
+  ActivityEventCommentsResponse,
+  ActivityEventHistoryResponse,
   ActivityLootInput,
   ActivityQuickJoinInput
 } from './discord-activity.types';
@@ -31,11 +34,12 @@ export class EventService {
     this.auth.setActionMessage(null);
 
     try {
-      const body: { jobName?: string; subJobName?: string; jobType?: string } = {};
+      const body: { jobName?: string; subJobName?: string; jobType?: string; characterName?: string } = {};
       if (adHocJob) {
         body.jobName = adHocJob.jobName;
         body.subJobName = adHocJob.subJobName;
         body.jobType = adHocJob.jobType;
+        if (adHocJob.characterName) { body.characterName = adHocJob.characterName; }
       }
       await this.http.postActivityAction(`/api/activity/events/${eventId}/signup`, body);
       await this.auth.refreshOverview();
@@ -385,7 +389,8 @@ export class EventService {
       await this.http.postActivityAction(`/api/activity/events/${eventId}/quick-join`, {
         jobName: input.jobName,
         subJobName: input.subJobName,
-        jobType: input.jobType
+        jobType: input.jobType,
+        characterName: input.characterName || undefined
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Live event join added.');
@@ -394,6 +399,135 @@ export class EventService {
       throw error;
     } finally {
       this.busyEventId.set(null);
+    }
+  }
+
+  // ----- Past event (EventHistory) browse + edit -----
+
+  async loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityEventHistoryResponse>(
+        `/api/activity/event-history?linkshellId=${linkshellId}`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading event history failed.'));
+      return null;
+    }
+  }
+
+  async editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/${id}/edit`, input);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Event updated.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the event failed.'));
+      return false;
+    }
+  }
+
+  async setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(
+        `/api/activity/event-history/${id}/participants/${participantId}/dkp`,
+        { amount }
+      );
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Attendee DKP updated.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating attendee DKP failed.'));
+      return false;
+    }
+  }
+
+  async setEventHistoryParticipantActiveCredit(id: number, participantId: number, credited: boolean): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(
+        `/api/activity/event-history/${id}/participants/${participantId}/active-credit`,
+        { credited }
+      );
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Active credit updated.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating active credit failed.'));
+      return false;
+    }
+  }
+
+  // Undo active credit for every attendee of an event (credited by accident).
+  async clearEventHistoryActiveCredit(id: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/${id}/active-credit/clear`, {});
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Active credit removed for the whole event.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Removing active credit failed.'));
+      return false;
+    }
+  }
+
+  async removeEventHistoryParticipant(id: number, participantId: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(
+        `/api/activity/event-history/${id}/participants/${participantId}/remove`
+      );
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Attendee removed and DKP refunded.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Removing the attendee failed.'));
+      return false;
+    }
+  }
+
+  // ----- Post-event discussion -----
+
+  async loadEventComments(historyId: number): Promise<ActivityEventCommentsResponse | null> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityEventCommentsResponse>(
+        `/api/activity/event-history/${historyId}/comments`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading the discussion failed.'));
+      return null;
+    }
+  }
+
+  async addEventComment(historyId: number, body: string, isAnonymous: boolean): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/${historyId}/comments`, { body, isAnonymous });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Posting the comment failed.'));
+      return false;
+    }
+  }
+
+  async deleteEventComment(commentId: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/comments/${commentId}/delete`);
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting the comment failed.'));
+      return false;
     }
   }
 

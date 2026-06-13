@@ -205,6 +205,9 @@ export class AuctionService {
     try {
       await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/auctions-lock`, { locked });
       await this.loadAuctions(linkshellId);
+      // Refresh the overview so the linkshell-level lock flag updates even when
+      // the board has zero auctions (the per-auction flag has nothing to ride).
+      await this.auth.refreshOverview();
       this.auth.setActionMessage(locked ? 'Bidding locked.' : 'Bidding unlocked.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Updating the auction lock failed.'));

@@ -105,3 +105,14 @@ export function formatAlts(alt1?: string | null, alt2?: string | null): string {
     .filter((value): value is string => !!value && value.trim() !== '')
     .join(', ');
 }
+
+// Rank tier icon for the linkshell rank system, shown next to the rank label
+// across rosters/headers. Falls back to the Member badge for custom roles.
+export function rankIcon(rank?: string | null): string {
+  switch ((rank ?? '').toLowerCase()) {
+    case 'leader': return '👑';
+    case 'officer': return '⭐';
+    case 'trial': return '🌱';
+    default: return '🛡️';
+  }
+}

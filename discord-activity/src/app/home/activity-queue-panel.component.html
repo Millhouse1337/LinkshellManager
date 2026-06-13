@@ -396,6 +396,16 @@
                         Sign up as a job that isn't in the party setup above.
                       </p>
                       <div class="manual-signup__row">
+                        @if (activity.signupCharacterOptions().length > 1) {
+                          <select
+                            [(ngModel)]="getSignupDraft(event.id).characterName"
+                            [name]="'signupCharacter' + event.id"
+                            title="Sign up as">
+                            @for (c of activity.signupCharacterOptions(); track c) {
+                              <option [value]="c">{{ c }}</option>
+                            }
+                          </select>
+                        }
                         <select
                           [(ngModel)]="getSignupDraft(event.id).jobType"
                           [name]="'signupJobType' + event.id">
@@ -409,7 +419,9 @@
                           [name]="'signupJobName' + event.id">
                           <option value="">Main job&hellip;</option>
                           @for (jobOption of mainJobOptions; track jobOption) {
-                            <option [value]="jobOption">{{ jobOption }}</option>
+                            @if (jobOption !== getSignupDraft(event.id).subJobName) {
+                              <option [value]="jobOption">{{ jobOption }}</option>
+                            }
                           }
                         </select>
                         <select
@@ -417,7 +429,9 @@
                           [name]="'signupSubJobName' + event.id">
                           <option value="">Sub job&hellip;</option>
                           @for (jobOption of subJobOptions; track jobOption) {
-                            <option [value]="jobOption">{{ jobOption }}</option>
+                            @if (jobOption !== getSignupDraft(event.id).jobName) {
+                              <option [value]="jobOption">{{ jobOption }}</option>
+                            }
                           }
                         </select>
                         <button
@@ -442,6 +456,18 @@
                 Pick the job you'll bring and sign up.
               </p>
               <div class="ad-hoc-signup__grid">
+                @if (activity.signupCharacterOptions().length > 1) {
+                  <label>
+                    <span>Character</span>
+                    <select
+                      [(ngModel)]="getSignupDraft(event.id).characterName"
+                      [name]="'signupCharacter' + event.id">
+                      @for (c of activity.signupCharacterOptions(); track c) {
+                        <option [value]="c">{{ c }}</option>
+                      }
+                    </select>
+                  </label>
+                }
                 <label>
                   <span>Role</span>
                   <select
@@ -460,7 +486,9 @@
                     [name]="'signupJobName' + event.id">
                     <option value="">Select main job</option>
                     @for (jobOption of mainJobOptions; track jobOption) {
-                      <option [value]="jobOption">{{ jobOption }}</option>
+                      @if (jobOption !== getSignupDraft(event.id).subJobName) {
+                        <option [value]="jobOption">{{ jobOption }}</option>
+                      }
                     }
                   </select>
                 </label>
@@ -471,7 +499,9 @@
                     [name]="'signupSubJobName' + event.id">
                     <option value="">Select sub job</option>
                     @for (jobOption of subJobOptions; track jobOption) {
-                      <option [value]="jobOption">{{ jobOption }}</option>
+                      @if (jobOption !== getSignupDraft(event.id).jobName) {
+                        <option [value]="jobOption">{{ jobOption }}</option>
+                      }
                     }
                   </select>
                 </label>

@@ -11,12 +11,14 @@ import {
   ActivityRevenueInput,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
+import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
-import { formatAlts } from '../activity-home.helpers';
+import { formatAlts, rankIcon } from '../activity-home.helpers';
+import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
 
 @Component({
   selector: 'app-linkshell-tab',
-  imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent],
+  imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent, StarRatingComponent],
   templateUrl: './linkshell-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -254,38 +256,91 @@ export class LinkshellTabComponent {
   }
 
   // Main + named alts for one roster member, as labeled characters to render.
-  protected rosterCharacters(member: ActivityJobsRosterMember): { label: string; isAlt: boolean; levels: number[]; strong: boolean[] }[] {
-    const list = [{ label: member.characterName, isAlt: false, levels: member.jobLevels ?? [], strong: member.strongJobs ?? [] }];
-    if (member.alt1Name) { list.push({ label: member.alt1Name, isAlt: true, levels: member.alt1JobLevels ?? [], strong: member.alt1StrongJobs ?? [] }); }
-    if (member.alt2Name) { list.push({ label: member.alt2Name, isAlt: true, levels: member.alt2JobLevels ?? [], strong: member.alt2StrongJobs ?? [] }); }
+  protected rosterCharacters(member: ActivityJobsRosterMember): { label: string; isAlt: boolean; levels: number[]; strong: boolean[]; relic: boolean[]; merit: string[]; relicName: string[] }[] {
+    const list = [{ label: member.characterName, isAlt: false, levels: member.jobLevels ?? [], strong: member.strongJobs ?? [], relic: member.relicFlags ?? [], merit: member.meritJobs ?? [], relicName: member.relicNames ?? [] }];
+    if (member.alt1Name) { list.push({ label: member.alt1Name, isAlt: true, levels: member.alt1JobLevels ?? [], strong: member.alt1StrongJobs ?? [], relic: member.alt1RelicFlags ?? [], merit: member.alt1MeritJobs ?? [], relicName: member.alt1RelicNames ?? [] }); }
+    if (member.alt2Name) { list.push({ label: member.alt2Name, isAlt: true, levels: member.alt2JobLevels ?? [], strong: member.alt2StrongJobs ?? [], relic: member.alt2RelicFlags ?? [], merit: member.alt2MeritJobs ?? [], relicName: member.alt2RelicNames ?? [] }); }
     return list;
   }
 
   // The leveled jobs (level > 0) for one character, highest level first; each
-  // carries its "strong" flag (well-geared/merited) for the pill marker.
-  protected leveledJobs(levels: number[] | null | undefined, strong?: boolean[] | null): { name: string; level: number; strong: boolean }[] {
+  // carries its "strong" (merited) flag + relic flag/weapon + merit note for the pills.
+  protected leveledJobs(levels: number[] | null | undefined, strong?: boolean[] | null, relic?: boolean[] | null, merit?: string[] | null, relicName?: string[] | null): { name: string; level: number; strong: boolean; relic: boolean; merit: string; relicName: string }[] {
     const catalog = this.jobsRosterForCurrent()?.jobCatalog ?? [];
     const arr = levels ?? [];
     const flags = strong ?? [];
+    const relicFlags = relic ?? [];
+    const meritNotes = merit ?? [];
+    const relicNames = relicName ?? [];
     return catalog
-      .map((name, i) => ({ name, level: arr[i] ?? 0, strong: flags[i] ?? false }))
+      .map((name, i) => ({ name, level: arr[i] ?? 0, strong: flags[i] ?? false, relic: relicFlags[i] ?? false, merit: meritNotes[i] ?? '', relicName: relicNames[i] ?? '' }))
       .filter(entry => entry.level > 0)
       .sort((a, b) => b.level - a.level);
   }
 
+  // Hover tooltip for a job pill: relic (weapon name if known) + merit info.
+  protected pillTitle(job: { strong: boolean; relic: boolean; merit: string; relicName: string }): string | null {
+    const parts: string[] = [];
+    if (job.relic) { parts.push(job.relicName ? 'Relic: ' + job.relicName : 'Relic weapon'); }
+    if (job.strong && job.merit) { parts.push('Merits: ' + job.merit); }
+    else if (job.strong) { parts.push('Merited'); }
+    return parts.length ? parts.join(' · ') : null;
+  }
+
   // ----- Per-member "View Profile" modal -----
   // Reuses the jobs-roster data (lazy-loaded) to show one member's jobs in a
-  // popup, opened from the roster row. Built to grow (e.g. crafts later).
+  // popup, opened from the roster row. Also loads what the linkshell thinks of
+  // them (peer gear/skill averages per job + an anonymous comment summary, main
+  // character / slot 0).
   protected readonly viewingProfileMember = signal<ActivityJobsRosterMember | null>(null);
   protected readonly viewingProfileBusy = signal(false);
+  // Peer feedback is loaded PER CHARACTER (main = slot 0, alts = slots 1/2) so a
+  // teammate's rating/comment on an alt is shown under that alt's name, not mixed
+  // into the main character's block.
+  protected readonly viewingProfileRatingBlocks = signal<{
+    slot: number;
+    name: string;
+    isAlt: boolean;
+    ratings: ActivityJobRatingsResponse | null;
+    summary: ActivityJobRatingCommentSummary | null;
+  }[]>([]);
 
   protected async openMemberProfile(memberId: number): Promise<void> {
     this.viewingProfileBusy.set(true);
     this.viewingProfileMember.set(null);
+    this.viewingProfileRatingBlocks.set([]);
     try {
       await this.ensureJobsRoster();
       const found = this.jobsRosterForCurrent()?.members.find(m => m.id === memberId) ?? null;
       this.viewingProfileMember.set(found);
+
+      // Resolve the AppUser id (the roster member only carries the membership id)
+      // from the linkshell's members, then pull peer ratings + summary for the
+      // main character and each alt the member has.
+      const linkshellId = this.selectedDashboardLinkshellId();
+      const appUserId = this.selectedDashboardMembers().find(m => m.id === memberId)?.appUserId ?? null;
+      if (found && linkshellId && appUserId) {
+        const slots: { slot: number; name: string; isAlt: boolean }[] = [
+          { slot: 0, name: found.characterName, isAlt: false },
+        ];
+        if (found.alt1Name) { slots.push({ slot: 1, name: found.alt1Name, isAlt: true }); }
+        if (found.alt2Name) { slots.push({ slot: 2, name: found.alt2Name, isAlt: true }); }
+
+        const blocks: {
+          slot: number; name: string; isAlt: boolean;
+          ratings: ActivityJobRatingsResponse | null;
+          summary: ActivityJobRatingCommentSummary | null;
+        }[] = [];
+        for (const s of slots) {
+          const ratings = await this.activity.loadJobRatings(linkshellId, appUserId, s.slot);
+          let summary: ActivityJobRatingCommentSummary | null = null;
+          if ((ratings?.peerCommentCount ?? 0) > 0) {
+            summary = await this.activity.loadJobRatingCommentSummary(linkshellId, appUserId, s.slot);
+          }
+          blocks.push({ ...s, ratings, summary });
+        }
+        this.viewingProfileRatingBlocks.set(blocks);
+      }
     } finally {
       this.viewingProfileBusy.set(false);
     }
@@ -293,12 +348,36 @@ export class LinkshellTabComponent {
 
   protected closeMemberProfile(): void {
     this.viewingProfileMember.set(null);
+    this.viewingProfileRatingBlocks.set([]);
+  }
+
+  // Jobs a teammate rated for one character block (peerCount > 0).
+  protected peerJobsFor(ratings: ActivityJobRatingsResponse | null) {
+    return (ratings?.jobs ?? []).filter(job => job.peerCount > 0);
+  }
+
+  // True when ANY character (main or alt) has peer ratings or comments.
+  protected viewingProfileHasFeedback(): boolean {
+    return this.viewingProfileRatingBlocks().some(
+      b => (b.ratings?.peerRaterCount ?? 0) > 0 || (b.ratings?.peerCommentCount ?? 0) > 0);
+  }
+
+  // Catalog job name for a rating's jobIndex (uses the loaded jobs-roster catalog).
+  protected ratingJobName(jobIndex: number): string {
+    return this.jobsRosterForCurrent()?.jobCatalog?.[jobIndex] ?? `Job ${jobIndex + 1}`;
   }
 
   // ----- Rank editing UI (only shown in this tab) -----
 
   protected editingRankMemberId = signal<number | null>(null);
   protected editingRankValue = '';
+  protected editingStatusValue = '';
+  // Roster "Count" edit (only while modifying a row): which streak the number
+  // targets (active credit = green / absence = red) and its value.
+  protected editingStreakType: 'credit' | 'absent' = 'credit';
+  protected editingStreakValue = 0;
+  protected readonly rankIcon = rankIcon;
+  protected readonly statusOptions = ['Active', 'Pending', 'Inactive'] as const;
 
   // Roles are linkshell-specific (custom roles are persisted server-side via
   // createLinkshellRole). We load on demand and cache per-linkshell so the
@@ -321,6 +400,17 @@ export class LinkshellTabComponent {
   protected async beginEditRank(memberId: number, currentRank: string | null | undefined): Promise<void> {
     this.editingRankMemberId.set(memberId);
     this.editingRankValue = currentRank || 'Member';
+    const editing = this.selectedDashboardMembers().find(m => m.id === memberId);
+    this.editingStatusValue = editing?.status || 'Active';
+    // Default the Count question to whichever streak the member is currently on:
+    // an absence run shows red, otherwise we edit the (green) active-credit run.
+    if ((editing?.absentStreak ?? 0) > 0) {
+      this.editingStreakType = 'absent';
+      this.editingStreakValue = editing?.absentStreak ?? 0;
+    } else {
+      this.editingStreakType = 'credit';
+      this.editingStreakValue = editing?.activeCreditStreak ?? 0;
+    }
     const id = this.selectedDashboardLinkshellId();
     if (id && !this.rolesByLinkshell()[id]) {
       const data = await this.activity.loadLinkshellRoles(id);
@@ -333,21 +423,53 @@ export class LinkshellTabComponent {
   protected cancelEditRank(): void {
     this.editingRankMemberId.set(null);
     this.editingRankValue = '';
+    this.editingStatusValue = '';
+    this.editingStreakType = 'credit';
+    this.editingStreakValue = 0;
   }
 
   protected async saveEditRank(linkshellId: number, memberId: number): Promise<void> {
+    const member = this.selectedDashboardMembers().find(m => m.id === memberId);
+    const characterName = member?.characterName ?? null;
     const newRank = this.editingRankValue;
-    if (!newRank) return;
-    const characterName = this.selectedDashboardMembers().find(m => m.id === memberId)?.characterName ?? null;
-    await this.activity.updateLinkshellMemberRole(linkshellId, memberId, newRank, characterName);
+    const newStatus = this.editingStatusValue;
+    const rankChanged = !!newRank && newRank !== (member?.rank || 'Member');
+    const statusChanged = !!newStatus && newStatus !== (member?.status || 'Active');
+
+    // The roster "Count" override: compare the typed (type, value) against the
+    // member's current displayed streak (absence wins the color when present).
+    const curType: 'credit' | 'absent' = (member?.absentStreak ?? 0) > 0 ? 'absent' : 'credit';
+    const curVal = curType === 'absent' ? (member?.absentStreak ?? 0) : (member?.activeCreditStreak ?? 0);
+    const streakValue = Math.max(0, Math.trunc(Number(this.editingStreakValue) || 0));
+    const streakChanged = this.editingStreakType !== curType || streakValue !== curVal;
+
+    if (rankChanged) {
+      await this.activity.updateLinkshellMemberRole(linkshellId, memberId, newRank, characterName);
+    }
+    // Apply the streak override before an explicit status change so a manually
+    // chosen status (e.g. Pending) still wins as the final word.
+    if (streakChanged) {
+      await this.activity.setMemberActiveCreditCount(
+        linkshellId, memberId, streakValue, characterName, this.editingStreakType);
+    }
+    if (statusChanged) {
+      await this.activity.updateLinkshellMemberStatus(linkshellId, memberId, newStatus, characterName);
+    }
     this.editingRankMemberId.set(null);
     this.editingRankValue = '';
+    this.editingStatusValue = '';
   }
 
   protected canEditRosterRank(memberAppUserId: string | null | undefined): boolean {
     if (!this.canManageSelectedDashboard()) return false;
     if (!memberAppUserId) return false;
     return memberAppUserId !== this.activity.overview()?.appUser?.id;
+  }
+
+  // Status is editable for ANY member incl. self (a leader/officer can set their
+  // own Active/Inactive); rank stays non-self via canEditRosterRank.
+  protected canEditRosterStatus(memberAppUserId: string | null | undefined): boolean {
+    return this.canManageSelectedDashboard() && !!memberAppUserId;
   }
 
   // ----- Leave / remove members -----

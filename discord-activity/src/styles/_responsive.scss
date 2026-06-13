@@ -26,11 +26,16 @@
   }
 
   .loot-form,
-  .late-join-form,
   .invite-search,
   .loot-row-editor,
   .tod-time-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* late-join-form is flex; stack its controls full-width on small screens. */
+  .late-join-form {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

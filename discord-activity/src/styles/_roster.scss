@@ -43,6 +43,22 @@
 .panel-tab .ac-roster-name { font-size: 13px; color: var(--fg); font-weight: 500; }
 .panel-tab .ac-roster-name-sub { font-size: 11px; color: var(--fg-3); }
 .panel-tab .ac-roster-rank { font-size: 12px; color: var(--fg-1); }
+/* Active-credit streak chip shown beside the status tag (no extra grid column). */
+.panel-tab .ac-roster-credit {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 16px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-align: center;
+  color: var(--fg-3);
+  background: var(--surface-2);
+  vertical-align: middle;
+}
+.panel-tab .ac-roster-credit.has { color: var(--success); background: var(--success-weak); }
+.panel-tab .ac-roster-credit.absent { color: var(--danger); background: var(--danger-weak); }
 .panel-tab .ac-roster-dkp,
 .panel-tab .ac-roster-dkp-head {
   font-family: var(--font-mono);
@@ -61,8 +77,44 @@
 }
 .panel-tab .ac-roster--with-actions .ac-roster-head,
 .panel-tab .ac-roster--with-actions .ac-roster-row {
-  grid-template-columns: 32px 1fr 110px 90px 90px 272px;
+  grid-template-columns: 32px 1fr 110px 80px 150px 250px;
 }
+/* Status cell holds the status tag + the colored streak number (and, while a
+   row is being modified, the streak-type select + count input). */
+.panel-tab .ac-roster-status-cell { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+/* While a row is being modified, widen the Status column (borrowing from the
+   flexible name column) so the status + streak-type + count controls sit on one
+   horizontal line to the right instead of stacking. */
+.panel-tab .ac-roster--with-actions .ac-roster-row.editing {
+  grid-template-columns: 32px 1fr 110px 80px 300px 220px;
+}
+/* The streak-type question shown only while modifying a row. */
+.panel-tab .ac-roster-streak-type {
+  padding: 4px 6px;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+}
+.panel-tab .ac-roster-count-input {
+  width: 52px;
+  padding: 4px 6px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--surface-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.panel-tab .ac-roster-count-input:focus {
+  outline: none;
+  border-color: var(--accent, #6268ff);
+}
+/* Tint the count input to preview the chip color the chosen streak produces. */
+.panel-tab .ac-roster-count-input.is-credit { color: var(--success); border-color: var(--success); }
+.panel-tab .ac-roster-count-input.is-absent { color: var(--danger); border-color: var(--danger); }
 .panel-tab .ac-roster--with-actions .ac-roster-actions {
   grid-column: auto;
   display: flex;

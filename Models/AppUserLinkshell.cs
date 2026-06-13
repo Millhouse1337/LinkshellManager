@@ -24,6 +24,18 @@ public class AppUserLinkshell
 
     public string? Status { get; set; }
 
+    // Officer override of the computed active-credit streak (the roster "Count").
+    // When set, it's shown instead of the attendance-computed credit streak and
+    // drives Status by the linkshell's thresholds. Cleared the next time the
+    // attendance status is recomputed (event close), so auto-tracking resumes.
+    public int? ManualActiveCreditStreak { get; set; }
+
+    // Officer override of the computed ABSENT streak (the roster red "Count").
+    // Mutually exclusive with ManualActiveCreditStreak — setting one nulls the
+    // other. When set, drives Status toward Inactive by the absence threshold.
+    // Cleared on the next attendance recompute so auto-tracking resumes.
+    public int? ManualAbsentStreak { get; set; }
+
     public double? LinkshellDkp { get; set; }
 
     // Lifetime DKP totals seeded from the generic DKP template import. The
@@ -51,4 +63,11 @@ public class AppUserLinkshell
     // value to every membership (one character, one set of strengths).
     [Column(TypeName = "jsonb")]
     public int[]? StrongJobs { get; set; }
+
+    // Per-job free-text merit notes for the main character, catalog-aligned (index
+    // 0 = WAR … 14 = SMN, NOT the FFXI-job-id format the level arrays use). Set
+    // when a job is marked merited; empty otherwise. Written to every membership
+    // like JobLevels/StrongJobs (one character, one set of merits).
+    [Column(TypeName = "jsonb")]
+    public string[]? MeritJobs { get; set; }
 }

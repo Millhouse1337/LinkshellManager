@@ -51,7 +51,7 @@
           <polyline points="21 4 21 10 15 10"/>
         </svg>
       </button>
-      <span class="identity-role">{{ appUserRoleLabel() }}</span>
+      <span class="identity-role">{{ rankIcon(appUserRoleLabel()) }} {{ appUserRoleLabel() }}</span>
       <span class="identity-user">{{ appDisplayName() }}</span>
       <div class="identity-av">{{ initials(appDisplayName()) }}</div>
     </div>

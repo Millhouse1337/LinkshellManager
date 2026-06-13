@@ -71,66 +71,188 @@
 
       @if (hasLinkshell()) {
         <div style="margin-top:4px">
-          <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px;align-items:center;text-align:center">
-            <span style="font-weight:600;font-size:13px">Jobs</span>
-            <span style="font-size:12px;opacity:.7">
-              Level of each job (0–{{ profileJobMaxLevel }}). Shared with your linkshells and the addon's loot filter.
-            </span>
-          </div>
+          <section class="jobs-panel">
+            <header class="jobs-header">
+              <h2>JOBS</h2>
+              <p>Level of each job (0–{{ profileJobMaxLevel }}), shared with your linkshells and the addon's loot filter.</p>
 
-          <!-- Character tabs: main always; an alt's tab appears once it's named. -->
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;justify-content:center">
-            <button
-              type="button"
-              class="btn sm"
-              [class.primary]="selectedJobTab === 'main'"
-              (click)="selectJobTab('main')">
-              {{ profileModel.characterName.trim() || 'Main' }}
-            </button>
-            @if (profileModel.altCharacterName1.trim()) {
-              <button
-                type="button"
-                class="btn sm"
-                [class.primary]="selectedJobTab === 'alt1'"
-                (click)="selectJobTab('alt1')">
-                {{ profileModel.altCharacterName1.trim() }}
-              </button>
-            }
-            @if (profileModel.altCharacterName2.trim()) {
-              <button
-                type="button"
-                class="btn sm"
-                [class.primary]="selectedJobTab === 'alt2'"
-                (click)="selectJobTab('alt2')">
-                {{ profileModel.altCharacterName2.trim() }}
-              </button>
-            }
-          </div>
+              <!-- Character tabs: main always; an alt's tab appears once it's named. -->
+              <div class="character-tabs"
+                   [style.grid-template-columns]="'repeat(' + jobTabCount() + ', 1fr)'"
+                   [style.width.px]="jobTabCount() * 120">
+                <button type="button" [class.active]="selectedJobTab === 'main'" (click)="selectJobTab('main')">
+                  {{ profileModel.characterName.trim() || 'Main' }}
+                </button>
+                @if (profileModel.altCharacterName1.trim()) {
+                  <button type="button" [class.active]="selectedJobTab === 'alt1'" (click)="selectJobTab('alt1')">
+                    {{ profileModel.altCharacterName1.trim() }}
+                  </button>
+                }
+                @if (profileModel.altCharacterName2.trim()) {
+                  <button type="button" [class.active]="selectedJobTab === 'alt2'" (click)="selectJobTab('alt2')">
+                    {{ profileModel.altCharacterName2.trim() }}
+                  </button>
+                }
+              </div>
+            </header>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px">
-            @for (job of profileJobOptions; track job; let i = $index) {
+            <div class="jobs-grid">
+              @for (job of profileJobOptions; track job; let i = $index) {
+                <div class="job-card">
+                  <div class="job-top">
+                    <span>{{ job }}</span>
+                    <input
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      [max]="profileJobMaxLevel"
+                      step="1"
+                      [(ngModel)]="activeJobLevels[i]"
+                      [name]="'profileJob' + i" />
+                  </div>
+                  <button
+                    type="button"
+                    class="strength"
+                    [class.empty]="!activeStrongJobs[i]"
+                    (click)="toggleStrong(i)"
+                    [attr.aria-pressed]="activeStrongJobs[i]"
+                    [title]="activeStrongJobs[i] ? (activeMeritJobs[i] || 'Click to specify your merits') : 'Mark this job as merited'">
+                    {{ activeStrongJobs[i] ? '★ Merited' : '–' }}
+                  </button>
+                  <!-- Self gear/skill/relic, per character (main + each alt). -->
+                  <div class="rating-row">
+                    <span>Gear</span>
+                    <app-star-rating [value]="selfGearValue(i)" (valueChange)="setSelfGear(i, $event)" />
+                  </div>
+                  <div class="rating-row">
+                    <span>Skill</span>
+                    <app-star-rating [value]="selfSkillValue(i)" (valueChange)="setSelfSkill(i, $event)" />
+                  </div>
+                  <div class="relic-block">
+                    <span class="relic-block__label">Relic</span>
+                    @if (selfRelicsValue(i).length > 0) {
+                      <div class="relic-chips">
+                        @for (relic of selfRelicsValue(i); track relic) {
+                          <span class="relic-chip">
+                            {{ relic }}
+                            <button type="button" (click)="removeRelic(i, relic)" [attr.aria-label]="'Remove ' + relic">✕</button>
+                          </span>
+                        }
+                      </div>
+                    }
+                    @if (availableRelics(i).length > 0) {
+                      <select class="relic-add" [value]="''"
+                              (change)="addRelic(i, $any($event.target).value); $any($event.target).value=''"
+                              title="Add a relic this character owns">
+                        <option value="">+ Add relic</option>
+                        @for (relic of availableRelics(i); track relic) {
+                          <option [value]="relic">{{ relic }}</option>
+                        }
+                      </select>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </section>
+
+          <!-- Merits modal: opened when a job is marked "Merited". -->
+          @if (meritModalJobIndex() !== null) {
+            <div class="merit-modal-backdrop" (click)="closeMeritModal()">
+              <div class="merit-modal" (click)="$event.stopPropagation()">
+                <div class="merit-modal__head">
+                  <strong>{{ meritModalJobName() }} — your merits</strong>
+                  <button type="button" class="btn ghost sm" (click)="closeMeritModal()" aria-label="Close">✕</button>
+                </div>
+                <p class="merit-modal__hint">Which merits do you have for {{ meritModalJobName() }}? (e.g. 5/5 Combo, 5/5 Penance, Shoulder Tackle)</p>
+                <textarea rows="4" maxlength="500" [(ngModel)]="meritDraft" name="meritDraft"
+                          placeholder="Describe your merit points / categories for this job…"></textarea>
+                <div class="merit-modal__actions">
+                  <button type="button" class="btn ghost sm merit-modal__clear" (click)="clearMerited()">Not merited</button>
+                  <span style="flex:1"></span>
+                  <button type="button" class="btn ghost sm" (click)="closeMeritModal()">Cancel</button>
+                  <button type="button" class="btn primary sm" (click)="saveMerit()">Save</button>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- What your linkshell thinks of you: per-job peer averages + an
+               auto-loaded summary of their comments, for the ACTIVE character
+               tab (main or an alt). -->
+          @if (myRatings(); as mr) {
+            <div style="max-width:520px;margin:20px auto 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;text-align:center">
+              <div style="font-weight:600;letter-spacing:.04em">WHAT YOUR LINKSHELL THINKS</div>
+              @if (activeRatingCharacterName(); as name) {
+                <div style="font-size:11px;opacity:.6;margin-top:2px">{{ name }}@if (selectedJobTab !== 'main') { <span style="opacity:.7"> · alt</span> }</div>
+              }
+              @if (mr.peerRaterCount > 0) {
+                <div style="font-size:11px;opacity:.65;margin:4px 0 10px">Based on feedback from {{ mr.peerRaterCount }} teammate{{ mr.peerRaterCount === 1 ? '' : 's' }}.</div>
+                <div style="text-align:left">
+                  <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.04em;opacity:.6;padding-bottom:4px">
+                    <span>Job</span><span>Gear</span><span>Skill</span><span title="Number of teammates who rated this job"># Rated</span>
+                  </div>
+                  @for (job of peerRatedJobs(); track job.jobIndex) {
+                    <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
+                      <span style="font-weight:600">{{ profileJobOptions[job.jobIndex] }}</span>
+                      <app-star-rating [value]="job.peerAvgGear" [readonly]="true" [showValue]="true" />
+                      <app-star-rating [value]="job.peerAvgSkill" [readonly]="true" [showValue]="true" />
+                      <span style="opacity:.6">{{ job.peerCount }}</span>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div style="font-size:12px;opacity:.7;margin-top:8px">No teammates have rated your jobs yet.</div>
+              }
+
+              @if (mr.peerCommentCount > 0) {
+                <div style="margin-top:14px;text-align:left">
+                  <span style="font-size:12px;font-weight:600">Summary</span>
+                  @if (loadingAiSummary()) {
+                    <p style="font-size:11px;opacity:.7;margin:8px 0 0">Summarizing {{ mr.peerCommentCount }} comment{{ mr.peerCommentCount === 1 ? '' : 's' }}…</p>
+                  } @else if (aiSummary()?.summary; as summary) {
+                    <p style="font-size:12px;margin:8px 0 0;line-height:1.45">{{ summary }}</p>
+                  }
+                  <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+                    @for (c of mr.peerComments; track $index) {
+                      <blockquote style="margin:0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;opacity:.9">{{ c }}</blockquote>
+                    }
+                  </div>
+                </div>
+              } @else {
+                <div style="font-size:11px;opacity:.6;margin-top:10px">No written feedback yet.</div>
+              }
+            </div>
+          }
+
+          <!-- Crafts: same number-per-entry design as jobs, centered. -->
+          <div style="text-align:center;margin:22px 0 8px">
+            <div style="font-weight:600;letter-spacing:.04em">CRAFTS</div>
+            <span style="font-size:12px;opacity:.7">Level of each craft (0–{{ profileCraftMaxLevel }}).</span>
+          </div>
+          <div style="max-width:540px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px">
+            @for (craft of profileCraftOptions; track craft; let i = $index) {
               <label style="display:flex;flex-direction:column;gap:2px;font-size:12px">
-                <span>{{ job }}</span>
+                <span>{{ craft }}</span>
                 <input
                   type="number"
                   inputmode="numeric"
                   min="0"
-                  [max]="profileJobMaxLevel"
+                  [max]="profileCraftMaxLevel"
                   step="1"
-                  [(ngModel)]="activeJobLevels[i]"
-                  [name]="'profileJob' + i" />
-                <button
-                  type="button"
-                  class="strong-toggle"
-                  [class.on]="activeStrongJobs[i]"
-                  (click)="toggleStrong(i)"
-                  [attr.aria-pressed]="activeStrongJobs[i]"
-                  title="Mark this job as well-geared / merited">
-                  ★ Strong
-                </button>
+                  [(ngModel)]="activeCraftLevels[i]"
+                  [name]="'profileCraft' + i" />
               </label>
             }
           </div>
+
+          @if (ratingLinkshellId()) {
+            <app-job-ratings-panel
+              [linkshellId]="ratingLinkshellId()"
+              [currentAppUserId]="ratingMe()"
+              [members]="ratingMembers()"
+              [jobNames]="profileJobOptions" />
+          }
         </div>
       }
 
@@ -357,7 +479,10 @@
 
     @if (!selectedLinkshell()) {
       <p class="notice">Select or join a linkshell to inspect per-member DKP History.</p>
-    } @else if (activity.dkpHistoryBusy()) {
+    } @else if (activity.dkpHistoryBusy() && !dkpHistory()) {
+      <!-- Only blank for the INITIAL load. Background refreshes (the 25s
+           auto-refresh / tab re-click) keep showing existing data so the
+           panel doesn't flicker. -->
       <p class="notice">Loading DKP History...</p>
     } @else if (dkpHistory(); as dkpHistory) {
       @if (dkpHistory.members.length > 0) {

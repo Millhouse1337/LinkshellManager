@@ -31,6 +31,24 @@ public sealed partial class ActivityDataController
         var canManage = await CanAsync(membership, r => r.CanManageParties, cancellationToken);
         var signups = await EventPartySignupService.GetSignupsForEventAsync(_dbContext, eventId, cancellationToken);
 
+        // "Also attending" = event participants who don't hold a party slot. Pre-start
+        // these are the ad-hoc / "no slot" signups (slot holders live in
+        // EventPartySlotSignups); once live, slot holders are materialized as
+        // participations too, so filter them out by the slot-signup user ids.
+        var slotUserIds = new HashSet<string>(
+            signups.Values.Where(s => s.AppUserId != null).Select(s => s.AppUserId!),
+            StringComparer.Ordinal);
+        var participants = await _dbContext.AppUserEvents
+            .AsNoTracking()
+            .Where(p => p.EventId == eventId)
+            .Select(p => new { p.AppUserId, p.CharacterName, p.JobType, p.JobName, p.SubJobName })
+            .ToListAsync(cancellationToken);
+        var alsoAttending = participants
+            .Where(p => p.AppUserId == null || !slotUserIds.Contains(p.AppUserId))
+            .OrderBy(p => p.CharacterName)
+            .Select(p => new ActivityAlsoAttendingDto(p.CharacterName, p.JobType, p.JobName, p.SubJobName))
+            .ToList();
+
         var setup = ev.PartySetup;
         var alliances = setup.Alliances
             .OrderBy(a => a.SortOrder)
@@ -66,7 +84,7 @@ public sealed partial class ActivityDataController
             .ToList();
 
         return Ok(new ActivityPartySetupDetailDto(
-            setup.Id, setup.LinkshellId, setup.Name, setup.EventType, setup.AssignedMonsterName, setup.Notes, canManage, alliances));
+            setup.Id, setup.LinkshellId, setup.Name, setup.EventType, setup.AssignedMonsterName, setup.Notes, canManage, alliances, alsoAttending));
     }
 
     [HttpPost("events/{eventId:int}/party-slots/{slotId:int}/signup")]

@@ -21,3 +21,32 @@ export const PROFILE_JOB_OPTIONS = [
   'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK',
   'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN'
 ] as const;
+
+// The nine crafts, catalog-aligned with the API's craftLevels arrays
+// (index 0 = Alchemy ... 8 = Fishing). Keep in sync with the backend CraftCatalog.
+export const PROFILE_CRAFT_OPTIONS = [
+  'Alchemy', 'Bonecraft', 'Clothcraft', 'Cooking', 'Goldsmithing',
+  'Leathercraft', 'Smithing', 'Woodworking', 'Fishing'
+] as const;
+
+// The relic weapons each job can equip, catalog-aligned with PROFILE_JOB_OPTIONS
+// (index 0 = WAR ... 14 = SMN). When a job is marked as having its relic, the
+// profile shows this list as a dropdown. (BLU/COR/PUP/DNC/SCH have no relic and
+// aren't part of the classic-15 grid.)
+export const JOB_RELIC_OPTIONS: readonly (readonly string[])[] = [
+  ['Bravura', 'Ragnarok'],              // WAR
+  ['Spharai'],                          // MNK
+  ['Mjollnir'],                         // WHM
+  ['Claustrum'],                        // BLM
+  ['Mandau', 'Excalibur'],              // RDM
+  ['Mandau'],                           // THF
+  ['Excalibur', 'Ragnarok', 'Aegis'],   // PLD
+  ['Ragnarok', 'Apocalypse'],           // DRK
+  ['Guttler'],                          // BST
+  ['Mandau', 'Gjallarhorn'],            // BRD
+  ['Yoichinoyumi', 'Annihilator'],      // RNG
+  ['Amanomurakumo', 'Yoichinoyumi'],    // SAM
+  ['Kikoku'],                           // NIN
+  ['Gungnir'],                          // DRG
+  ['Claustrum']                         // SMN
+];

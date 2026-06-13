@@ -94,6 +94,9 @@ public partial class EventController
 
         // Drive the manage badge + slot dropdown options on the inline panel.
         ViewBag.CurrentAppUserId = user.Id;
+        // Characters this member can sign up as (main + alts) — drives the
+        // "sign up as" picker that only appears when there's more than one.
+        ViewBag.SignupCharacters = SignupCharacters.ForMember(user, null);
         ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
         ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
         ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
@@ -241,7 +244,7 @@ public partial class EventController
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SignUpPartySlot(
-        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false)
+        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false, string? selectedCharacter = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -270,9 +273,7 @@ public partial class EventController
             return SafeLocalRedirect(returnUrl);
         }
 
-        var characterName = string.IsNullOrWhiteSpace(membership.CharacterName)
-            ? (user.CharacterName ?? user.UserName ?? "Member")
-            : membership.CharacterName;
+        var characterName = SignupCharacters.Resolve(user, membership, selectedCharacter);
         var result = await EventPartySignupService.ClaimSlotAsync(
             _context, eventId, slot, user.Id, characterName, role, mainJob, subJob, HttpContext.RequestAborted, asLeader);
         if (!result.Success)

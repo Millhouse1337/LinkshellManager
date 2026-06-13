@@ -603,10 +603,16 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1.25fr) minmax(0, 1fr) auto;
 }
 
+/* Flex (not grid) so the row holds 3 OR 4 selects (the optional character
+   picker) plus the button on a single line; selects share the space, the
+   button keeps its intrinsic width. */
 .late-join-form {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: end;
 }
+.late-join-form > select { flex: 1 1 0; min-width: 0; }
+.late-join-form > button { flex: 0 0 auto; }
 
 .ad-hoc-signup {
   display: flex;

@@ -206,7 +206,7 @@ public class PartySetupSlotView
                     : $"Any {Role}",
                 PartySetupSlotRequirementTypes.Job => string.IsNullOrWhiteSpace(MainJob)
                     ? "Any job"
-                    : string.IsNullOrWhiteSpace(SubJob) ? MainJob! : $"{MainJob}/{SubJob}",
+                    : $"{MainJob}/{(string.IsNullOrWhiteSpace(SubJob) ? "Player's Choice" : SubJob)}",
                 _ => "Any Role"
             };
             return string.IsNullOrWhiteSpace(Label) ? core : $"{core} ({Label})";

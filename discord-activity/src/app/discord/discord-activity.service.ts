@@ -29,13 +29,18 @@ import type {
   ActivityChannelRoutesResponse,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
+  ActivityEditEventHistoryInput,
   ActivityEventAddMemberCandidate,
+  ActivityEventCommentsResponse,
+  ActivityEventHistoryResponse,
   ActivityHistory,
   ActivityLootEditInput,
   ActivityLootHistoryList,
   ActivityHistoryDetail,
   ActivityItemInput,
   ActivityGuildOption,
+  ActivityJobRatingCommentSummary,
+  ActivityJobRatingsResponse,
   ActivityJobsRoster,
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
@@ -506,7 +511,13 @@ export class DiscordActivityService {
         alt2JobLevels: input.alt2JobLevels ?? null,
         strongJobs: input.strongJobs ?? null,
         alt1StrongJobs: input.alt1StrongJobs ?? null,
-        alt2StrongJobs: input.alt2StrongJobs ?? null
+        alt2StrongJobs: input.alt2StrongJobs ?? null,
+        craftLevels: input.craftLevels ?? null,
+        alt1CraftLevels: input.alt1CraftLevels ?? null,
+        alt2CraftLevels: input.alt2CraftLevels ?? null,
+        meritJobs: input.meritJobs ?? null,
+        alt1MeritJobs: input.alt1MeritJobs ?? null,
+        alt2MeritJobs: input.alt2MeritJobs ?? null
       });
       await this.auth.refreshOverview();
 
@@ -796,6 +807,12 @@ export class DiscordActivityService {
   leaveLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.leaveLinkshell(linkshellId); }
   removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> { return this.linkshellService.removeLinkshellMember(linkshellId, memberId); }
   updateLinkshellMemberRole(linkshellId: number, memberId: number, role: string, characterName?: string | null): Promise<void> { return this.linkshellService.updateLinkshellMemberRole(linkshellId, memberId, role, characterName); }
+  updateLinkshellMemberStatus(linkshellId: number, memberId: number, status: string, characterName?: string | null): Promise<void> { return this.linkshellService.updateLinkshellMemberStatus(linkshellId, memberId, status, characterName); }
+  setMemberActiveCreditCount(linkshellId: number, memberId: number, count: number, characterName?: string | null, streakType: 'credit' | 'absent' = 'credit'): Promise<void> { return this.linkshellService.setMemberActiveCreditCount(linkshellId, memberId, count, characterName, streakType); }
+  loadJobRatings(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingsResponse | null> { return this.linkshellService.loadJobRatings(linkshellId, targetAppUserId, slot); }
+  rateJob(linkshellId: number, targetAppUserId: string, jobIndex: number, gear: number, skill: number, hasRelic: boolean, slot = 0, relicNames: string[] = []): Promise<boolean> { return this.linkshellService.rateJob(linkshellId, targetAppUserId, jobIndex, gear, skill, hasRelic, slot, relicNames); }
+  rateJobComment(linkshellId: number, targetAppUserId: string, comment: string, slot = 0): Promise<boolean> { return this.linkshellService.rateJobComment(linkshellId, targetAppUserId, comment, slot); }
+  loadJobRatingCommentSummary(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingCommentSummary | null> { return this.linkshellService.loadJobRatingCommentSummary(linkshellId, targetAppUserId, slot); }
   loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> { return this.linkshellService.loadLinkshellRoles(linkshellId); }
   loadJobsRoster(linkshellId: number): Promise<ActivityJobsRoster | null> { return this.linkshellService.loadJobsRoster(linkshellId); }
   createLinkshellRole(linkshellId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> { return this.linkshellService.createLinkshellRole(linkshellId, input); }
@@ -823,6 +840,28 @@ export class DiscordActivityService {
   addLoot(eventId: number, input: ActivityLootInput): Promise<void> { return this.eventService.addLoot(eventId, input); }
   quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> { return this.eventService.quickJoinLiveEvent(eventId, input); }
   removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> { return this.eventService.removeAttendanceWindowAttendee(attendeeId); }
+  loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> { return this.eventService.loadEventHistory(linkshellId); }
+  editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> { return this.eventService.editEventHistory(id, input); }
+  setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> { return this.eventService.setEventHistoryParticipantDkp(id, participantId, amount); }
+  setEventHistoryParticipantActiveCredit(id: number, participantId: number, credited: boolean): Promise<boolean> { return this.eventService.setEventHistoryParticipantActiveCredit(id, participantId, credited); }
+  clearEventHistoryActiveCredit(id: number): Promise<boolean> { return this.eventService.clearEventHistoryActiveCredit(id); }
+  removeEventHistoryParticipant(id: number, participantId: number): Promise<boolean> { return this.eventService.removeEventHistoryParticipant(id, participantId); }
+  loadEventComments(historyId: number): Promise<ActivityEventCommentsResponse | null> { return this.eventService.loadEventComments(historyId); }
+  addEventComment(historyId: number, body: string, isAnonymous: boolean): Promise<boolean> { return this.eventService.addEventComment(historyId, body, isAnonymous); }
+  deleteEventComment(commentId: number): Promise<boolean> { return this.eventService.deleteEventComment(commentId); }
+
+  // The current user's selectable signup characters (main + alts, de-duped).
+  // Drives the "sign up as" picker — only shown when there's more than one.
+  signupCharacterOptions(): string[] {
+    const u = this.overview()?.appUser;
+    const names = [u?.characterName, u?.altCharacterName1, u?.altCharacterName2];
+    const out: string[] = [];
+    for (const n of names) {
+      const trimmed = n?.trim();
+      if (trimmed && !out.some(x => x.toLowerCase() === trimmed.toLowerCase())) { out.push(trimmed); }
+    }
+    return out;
+  }
 
   // --- LinkshellContentService (rules / announcements / items / revenue) ---
   createRule(linkshellId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.createRule(linkshellId, title, details); }

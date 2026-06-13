@@ -4,11 +4,23 @@
     ViewData["BodyClass"] = "lsm-page";
     var message = ViewBag.Message as string;
     var selectedLinkshell = Model.Linkshells.FirstOrDefault(l => l.Id == Model.SelectedLinkshellId);
+    // appUserId -> current credit / absent streaks (consecutive recent counting events).
+    var memberStreaks = ViewBag.MemberStreaks as Dictionary<string, LinkshellManagerDiscordApp.Services.MemberStreaks>
+        ?? new Dictionary<string, LinkshellManagerDiscordApp.Services.MemberStreaks>();
 }
 
 @functions {
     // Tag color for the single membership Status (auto-driven Active/Inactive by
     // attendance, with Pending as the manual state).
+    // Rank tier icon shown beside the rank tag (matches the Activity rank icons).
+    static string RankIcon(string? rank) => (rank ?? "").ToLowerInvariant() switch
+    {
+        "leader" => "👑",
+        "officer" => "⭐",
+        "trial" => "🌱",
+        _ => "🛡️"
+    };
+
     static string StatusClass(string? status) =>
         string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase) ? "success"
         : string.Equals(status, "Pending", StringComparison.OrdinalIgnoreCase) ? "warning"
@@ -106,6 +118,8 @@ else
                         <th>Character</th>
                         <th>Rank</th>
                         <th>Status</th>
+                        <th style="text-align:right" title="Consecutive recent events credited toward active status">Active credit</th>
+                        <th style="text-align:right" title="Consecutive recent events missed (no active credit)">Absent streak</th>
                         <th style="text-align:right">DKP</th>
                         <th>Joined</th>
                         <th style="text-align:right">Actions</th>
@@ -116,8 +130,15 @@ else
                     {
                         <tr>
                             <td>@(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")</td>
-                            <td><span class="tag">@(member.Rank ?? "—")</span></td>
+                            <td><span class="tag">@RankIcon(member.Rank) @(member.Rank ?? "—")</span></td>
                             <td><span class="tag @StatusClass(member.Status)">@(member.Status ?? "Active")</span></td>
+                            @{ var streaks = memberStreaks.GetValueOrDefault(member.AppUserId ?? string.Empty); }
+                            <td style="text-align:right">
+                                <span class="tag @(streaks.Credit > 0 ? "success" : "")" title="Consecutive recent events credited toward active status">@streaks.Credit</span>
+                            </td>
+                            <td style="text-align:right">
+                                <span class="tag @(streaks.Absent > 0 ? "danger" : "")" title="Consecutive recent events missed (no active credit)">@streaks.Absent</span>
+                            </td>
                             <td class="num" style="text-align:right">@((member.LinkshellDkp ?? 0).ToString("N0"))</td>
                             <td style="font-size:12px;color:var(--fg-3)">
                                 @(member.DateJoined.HasValue ? member.DateJoined.Value.ToString("MMM d, yyyy") : "—")
@@ -132,7 +153,7 @@ else
                                                 data-rank="@member.Rank"
                                                 data-status="@member.Status"
                                                 data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)">
-                                            Modify Rank
+                                            Modify
                                         </button>
                                     }
                                 </div>
@@ -176,12 +197,11 @@ else
             <form asp-action="ModifyRankStatus" method="post" class="mt-modal__content">
                 @Html.AntiForgeryToken()
                 <div class="mt-modal__header">
-                    <h5 class="mt-modal__title">Modify rank</h5>
+                    <h5 class="mt-modal__title">Modify rank &amp; status</h5>
                     <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
                 </div>
                 <div class="mt-modal__body">
                     <input type="hidden" name="Id" id="modifyId" />
-                    <input type="hidden" name="Status" id="modifyStatus" />
                     <div class="field" style="margin-bottom:12px">
                         <label>Character</label>
                         <div id="modifyName" style="color:var(--fg-3)"></div>
@@ -194,6 +214,16 @@ else
                                 <option value="@rank">@rank</option>
                             }
                         </select>
+                    </div>
+                    <div class="field" style="margin-top:12px">
+                        <label for="modifyStatus">Status</label>
+                        <select name="Status" id="modifyStatus" class="form-select" required>
+                            @foreach (var status in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.StatusOptions)
+                            {
+                                <option value="@status">@status</option>
+                            }
+                        </select>
+                        <small style="color:var(--fg-3)">Set <strong>Active</strong> or <strong>Inactive</strong> manually. If automatic activity tracking is on for this linkshell, attendance may recompute this later.</small>
                     </div>
                 </div>
                 <div class="mt-modal__footer">

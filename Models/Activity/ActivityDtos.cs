@@ -42,7 +42,17 @@ public sealed record ActivityAppUserDto(
     // editor's per-job Strong toggles.
     IReadOnlyList<bool> StrongJobs,
     IReadOnlyList<bool> Alt1StrongJobs,
-    IReadOnlyList<bool> Alt2StrongJobs);
+    IReadOnlyList<bool> Alt2StrongJobs,
+    // Per-craft levels (main + alts) in CraftCatalog order (Alchemy … Fishing).
+    // Pre-fill the profile "Crafts" editor.
+    IReadOnlyList<int> CraftLevels,
+    IReadOnlyList<int> Alt1CraftLevels,
+    IReadOnlyList<int> Alt2CraftLevels,
+    // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … SMN).
+    // Pre-fill the "Merited" modal for each job.
+    IReadOnlyList<string> MeritJobs,
+    IReadOnlyList<string> Alt1MeritJobs,
+    IReadOnlyList<string> Alt2MeritJobs);
 
 public sealed record ActivityLinkshellDto(
     int Id,
@@ -55,7 +65,8 @@ public sealed record ActivityLinkshellDto(
     long Revenue,
     string? Details,
     ActivityPermissionsDto? Permissions,
-    ActivityLinkshellSettingsDto Settings);
+    ActivityLinkshellSettingsDto Settings,
+    bool AuctionsLocked = false);
 
 public sealed record ActivityLinkshellSettingsDto(
     string LootStructure,
@@ -206,6 +217,12 @@ public sealed record ActivityMemberDto(
     string? Status,
     double? LinkshellDkp,
     DateTime? DateJoined,
+    // Current active-credit streak: consecutive most-recent counting events the
+    // member was credited for. 0 = on an absence run / no counting events.
+    int ActiveCreditStreak = 0,
+    // Current absent streak: consecutive most-recent counting events NOT credited.
+    // Mutually exclusive with ActiveCreditStreak (one is always 0).
+    int AbsentStreak = 0,
     // Computed activity state (event-attendance streak). Null when the linkshell
     // hasn't enabled activity tracking, so the client hides the badge.
     bool? Active = null);
@@ -230,7 +247,20 @@ public sealed record ActivityJobsRosterMemberDto(
     // (true = well-geared/merited). Rendered as a marker on the job pills.
     IReadOnlyList<bool> StrongJobs,
     IReadOnlyList<bool> Alt1StrongJobs,
-    IReadOnlyList<bool> Alt2StrongJobs);
+    IReadOnlyList<bool> Alt2StrongJobs,
+    // Catalog-aligned relic flags (true = the member marked owning that job's
+    // relic on their profile). Rendered as a flaming border on the job pill.
+    IReadOnlyList<bool> RelicFlags,
+    IReadOnlyList<bool> Alt1RelicFlags,
+    IReadOnlyList<bool> Alt2RelicFlags,
+    // Catalog-aligned per-job merit notes (free text), shown on merited job pills.
+    IReadOnlyList<string> MeritJobs,
+    IReadOnlyList<string> Alt1MeritJobs,
+    IReadOnlyList<string> Alt2MeritJobs,
+    // Catalog-aligned per-job relic weapon names (e.g. "Bravura"); empty when none.
+    IReadOnlyList<string> RelicNames,
+    IReadOnlyList<string> Alt1RelicNames,
+    IReadOnlyList<string> Alt2RelicNames);
 
 public sealed record ActivityEventDto(
     int Id,
@@ -581,12 +611,15 @@ public sealed record ActivityEventSignupRequest(
     int JobId,
     string? JobName = null,
     string? SubJobName = null,
-    string? JobType = null);
+    string? JobType = null,
+    // Which character to sign up as (main or an alt name). Blank = main.
+    string? CharacterName = null);
 
 public sealed record ActivityQuickJoinRequest(
     [Required, StringLength(64, MinimumLength = 1)] string? JobName,
     [StringLength(64)] string? SubJobName,
-    [StringLength(64)] string? JobType);
+    [StringLength(64)] string? JobType,
+    [StringLength(64)] string? CharacterName = null);
 
 public sealed record ActivityAddEventMemberRequest(
     [Required] string AppUserId,
@@ -713,6 +746,28 @@ public sealed record ActivityCreateTodLootRequest(
 
 public sealed record ActivityUpdateMemberRoleRequest(string Role);
 
+// Manual Active/Pending/Inactive status set from the Activity roster. Auto
+// activity-tracking (if the linkshell enables it) may recompute this later.
+public sealed record ActivityUpdateMemberStatusRequest(string Status);
+
+// Officer override of a member's active-credit "Count" on the roster. Stored as a
+// manual streak override that drives Active/Inactive until the next recompute.
+public sealed record ActivitySetActiveCreditCountRequest(int Count, string? StreakType = "credit");
+
+// Edit a closed event (EventHistory). Changing DkpPerHour rescales every
+// attendee's earned DKP (balance + lifetime), via EventHistoryEditService.
+public sealed record ActivityEditEventHistoryRequest(
+    string? EventName,
+    string? EventType,
+    string? EventLocation,
+    string? Details,
+    double? Duration,
+    int? DkpPerHour);
+
+public sealed record ActivitySetParticipantDkpRequest(double Amount);
+
+public sealed record ActivitySetActiveCreditRequest(bool Credited);
+
 public sealed record ActivityUpdateProfileRequest(
     string CharacterName,
     string? TimeZone,
@@ -729,7 +784,17 @@ public sealed record ActivityUpdateProfileRequest(
     // leaves the existing flags unchanged.
     bool[]? StrongJobs = null,
     bool[]? Alt1StrongJobs = null,
-    bool[]? Alt2StrongJobs = null);
+    bool[]? Alt2StrongJobs = null,
+    // Per-craft levels (main + alts) in CraftCatalog order (Alchemy … Fishing),
+    // stored account-level on the AppUser. Null leaves the existing values.
+    int[]? CraftLevels = null,
+    int[]? Alt1CraftLevels = null,
+    int[]? Alt2CraftLevels = null,
+    // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … SMN).
+    // Null leaves the existing notes unchanged.
+    string[]? MeritJobs = null,
+    string[]? Alt1MeritJobs = null,
+    string[]? Alt2MeritJobs = null);
 
 // One user-defined channel route: a channel the bot posts the ticked post types
 // to. Id is null for a new route. EventTypeFilter (only meaningful when

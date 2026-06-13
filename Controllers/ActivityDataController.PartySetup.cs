@@ -79,7 +79,16 @@ public sealed partial class ActivityDataController
         string? AssignedMonsterName,
         string? Notes,
         bool CanManage,
-        IReadOnlyList<ActivityPartySetupAllianceDto> Alliances);
+        IReadOnlyList<ActivityPartySetupAllianceDto> Alliances,
+        // Event boards only: members attending WITHOUT a party slot. Null on the
+        // reusable template board (no event roster).
+        IReadOnlyList<ActivityAlsoAttendingDto>? AlsoAttending = null);
+
+    public sealed record ActivityAlsoAttendingDto(
+        string? CharacterName,
+        string? Role,
+        string? MainJob,
+        string? SubJob);
 
     public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false);
 

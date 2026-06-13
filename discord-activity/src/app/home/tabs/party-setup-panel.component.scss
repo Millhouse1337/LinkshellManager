@@ -354,3 +354,11 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+
+.ps-also-list { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; }
+.ps-also-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-sm);
+}
+.ps-also-name { font-weight: 600; font-size: 13px; }
+.ps-also-job { font-size: 12px; color: var(--fg-3); }

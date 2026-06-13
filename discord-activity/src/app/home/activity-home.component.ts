@@ -10,6 +10,7 @@ import {
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
 import { TAB_NAMES, type TabName } from './activity-home.types';
+import { rankIcon } from './activity-home.helpers';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
 import { DkpSheetTabComponent } from './tabs/dkp-sheet-tab.component';
@@ -249,6 +250,8 @@ export class ActivityHomeComponent {
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
+
+  protected readonly rankIcon = rankIcon;
 
   protected appUserRoleLabel(): string {
     const linkshells = this.activity.overview()?.linkshells ?? [];

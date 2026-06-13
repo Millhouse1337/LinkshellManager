@@ -86,6 +86,16 @@ export interface ActivityAppUser {
   strongJobs?: boolean[] | null;
   alt1StrongJobs?: boolean[] | null;
   alt2StrongJobs?: boolean[] | null;
+  // Per-craft levels (main + alts) in PROFILE_CRAFT_OPTIONS order
+  // (index 0 = Alchemy ... 8 = Fishing). Pre-fill the profile "Crafts" editor.
+  craftLevels?: number[] | null;
+  alt1CraftLevels?: number[] | null;
+  alt2CraftLevels?: number[] | null;
+  // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … SMN).
+  // Pre-fill the "Merited" modal for each job.
+  meritJobs?: string[] | null;
+  alt1MeritJobs?: string[] | null;
+  alt2MeritJobs?: string[] | null;
 }
 
 export interface ActivityLinkshell {
@@ -100,6 +110,7 @@ export interface ActivityLinkshell {
   details?: string | null;
   permissions?: ActivityLinkshellPermissions | null;
   settings?: ActivityLinkshellSettings | null;
+  auctionsLocked?: boolean;
 }
 
 export type ActivityLootStructure = 'Dkp' | 'LootCouncil' | 'Hybrid';
@@ -373,6 +384,12 @@ export interface ActivityMember {
   status?: string | null;
   linkshellDkp?: number | null;
   dateJoined?: string | null;
+  // Current active-credit streak: consecutive most-recent counting events the
+  // member was credited for (0 = on an absence run / no counting events).
+  activeCreditStreak?: number;
+  // Current absent streak: consecutive most-recent counting events NOT credited
+  // (mutually exclusive with activeCreditStreak — one is always 0).
+  absentStreak?: number;
   // Computed Active/Inactive from event attendance. Null when the linkshell has
   // not enabled activity tracking — the badge is hidden in that case.
   active?: boolean | null;
@@ -399,6 +416,19 @@ export interface ActivityJobsRosterMember {
   strongJobs: boolean[];
   alt1StrongJobs: boolean[];
   alt2StrongJobs: boolean[];
+  // Catalog-aligned relic flags (true = member marked owning that job's relic).
+  // Rendered as a flaming border on the job pill.
+  relicFlags: boolean[];
+  alt1RelicFlags: boolean[];
+  alt2RelicFlags: boolean[];
+  // Catalog-aligned per-job merit notes (free text), shown on merited job pills.
+  meritJobs: string[];
+  alt1MeritJobs: string[];
+  alt2MeritJobs: string[];
+  // Catalog-aligned per-job relic weapon names (e.g. "Bravura"); empty when none.
+  relicNames: string[];
+  alt1RelicNames: string[];
+  alt2RelicNames: string[];
 }
 
 export interface ActivityEventParticipant {
@@ -941,6 +971,62 @@ export interface ActivityQuickJoinInput {
   jobName: string;
   subJobName: string;
   jobType: string;
+  // Which character to sign up as (main or an alt name). Blank/undefined = main.
+  characterName?: string;
+}
+
+// A past (closed) event for the Activity event-history view.
+export interface ActivityEventHistoryParticipant {
+  id: number;
+  characterName?: string | null;
+  jobName?: string | null;
+  subJobName?: string | null;
+  duration?: number | null;
+  eventDkp?: number | null;
+  activeCredit?: boolean;
+}
+
+export interface ActivityEventHistory {
+  id: number;
+  eventName?: string | null;
+  eventType?: string | null;
+  eventLocation?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  duration?: number | null;
+  dkpPerHour?: number | null;
+  eventDkp?: number | null;
+  participants: ActivityEventHistoryParticipant[];
+}
+
+export interface ActivityEventHistoryResponse {
+  canManage: boolean;
+  histories: ActivityEventHistory[];
+}
+
+// Post-event discussion comment (author shows "Anonymous" when posted anonymously).
+export interface ActivityEventComment {
+  id: number;
+  author: string;
+  isAnonymous: boolean;
+  body: string;
+  createdAt: string;
+  canDelete: boolean;
+}
+
+export interface ActivityEventCommentsResponse {
+  canManage: boolean;
+  comments: ActivityEventComment[];
+}
+
+// Edit payload for a closed event (changing dkpPerHour rescales attendee DKP).
+export interface ActivityEditEventHistoryInput {
+  eventName?: string | null;
+  eventType?: string | null;
+  eventLocation?: string | null;
+  details?: string | null;
+  duration?: number | null;
+  dkpPerHour?: number | null;
 }
 
 export interface ActivityAuctionItemInput {
@@ -978,6 +1064,55 @@ export interface ActivityUpdateProfileInput {
   strongJobs?: boolean[] | null;
   alt1StrongJobs?: boolean[] | null;
   alt2StrongJobs?: boolean[] | null;
+  // Per-craft levels (main + alts) in PROFILE_CRAFT_OPTIONS order; null leaves
+  // the existing values unchanged (alts cleared when their name is removed).
+  craftLevels?: number[] | null;
+  alt1CraftLevels?: number[] | null;
+  alt2CraftLevels?: number[] | null;
+  // Per-job free-text merit notes (main + alts), catalog-aligned; null leaves
+  // the existing notes unchanged.
+  meritJobs?: string[] | null;
+  alt1MeritJobs?: string[] | null;
+  alt2MeritJobs?: string[] | null;
+}
+
+// One job's peer-rating summary for a target member (gear/skill are 1-5, 0 = unset).
+export interface ActivityJobRating {
+  jobIndex: number;
+  hasSelf: boolean;
+  selfGear: number;
+  selfSkill: number;
+  selfRelic: boolean;
+  selfRelicNames: string[];
+  myGear: number;
+  mySkill: number;
+  myRelic: boolean;
+  myRelicNames: string[];
+  peerCount: number;
+  peerAvgGear: number;
+  peerAvgSkill: number;
+  peerRelicYes: number;
+}
+
+export interface ActivityJobRatingsResponse {
+  isSelf: boolean;
+  jobs: ActivityJobRating[];
+  // Distinct teammates who rated this character (one teammate = one count across
+  // all jobs they rated). Per-job averages live on each ActivityJobRating.
+  peerRaterCount: number;
+  // Anonymous peer comments left about the target; the caller's own comment (editable).
+  peerComments: string[];
+  peerCommentCount: number;
+  myComment: string;
+}
+
+// AI summary of the peer comments a member has received. `summary` is null when
+// the AI service is unconfigured or the call failed — callers fall back to the
+// raw `peerComments` list. `configured` reports whether a key is present at all.
+export interface ActivityJobRatingCommentSummary {
+  commentCount: number;
+  summary: string | null;
+  configured: boolean;
 }
 
 export interface DiscordRpcErrorLike {
@@ -1056,6 +1191,15 @@ export interface ActivityPartySetupDetail {
   notes?: string | null;
   canManage: boolean;
   alliances: ActivityPartySetupAlliance[];
+  // Event boards only: members attending without a party slot.
+  alsoAttending?: ActivityAlsoAttending[] | null;
+}
+
+export interface ActivityAlsoAttending {
+  characterName?: string | null;
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
 }
 
 export interface ActivityPartySetupSignUpInput {

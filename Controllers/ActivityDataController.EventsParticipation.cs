@@ -27,7 +27,7 @@ public sealed partial class ActivityDataController
             });
         }
 
-        var displayName = appUser.CharacterName ?? appUser.UserName ?? "Unknown";
+        var displayName = SignupCharacters.Resolve(appUser, null, request.CharacterName);
 
         var eventEntity = await _dbContext.Events
             .AsNoTracking()
@@ -38,27 +38,34 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected event was not found." });
         }
 
+        static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
         var existing = await _dbContext.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
 
         if (existing is not null)
         {
-            _dbContext.AppUserEvents.Remove(existing);
+            // Switching jobs updates in place so accrued time (StartTime / Duration /
+            // break state) is preserved instead of restarting the clock.
+            existing.CharacterName = displayName;
+            existing.JobName = Clean(request.JobName);
+            existing.SubJobName = Clean(request.SubJobName);
+            existing.JobType = Clean(request.JobType);
         }
-
-        static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-
-        _dbContext.AppUserEvents.Add(new AppUserEvent
+        else
         {
-            AppUserId = appUser.Id,
-            EventId = eventId,
-            CharacterName = displayName,
-            JobName = Clean(request.JobName),
-            SubJobName = Clean(request.SubJobName),
-            JobType = Clean(request.JobType),
-            EventDkp = 0,
-            StartTime = eventEntity.CommencementStartTime
-        });
+            _dbContext.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = appUser.Id,
+                EventId = eventId,
+                CharacterName = displayName,
+                JobName = Clean(request.JobName),
+                SubJobName = Clean(request.SubJobName),
+                JobType = Clean(request.JobType),
+                EventDkp = 0,
+                StartTime = eventEntity.CommencementStartTime
+            });
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -104,26 +111,34 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        var character = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
         var existingSignup = await _dbContext.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
 
         if (existingSignup is not null)
         {
-            return BadRequest(new { error = "You are already attached to this live event." });
+            // Already attending → switching jobs updates in place, keeping their
+            // accrued time (StartTime / Duration / break state) intact.
+            existingSignup.CharacterName = character;
+            existingSignup.JobName = request.JobName.Trim();
+            existingSignup.SubJobName = request.SubJobName.Trim();
+            existingSignup.JobType = request.JobType.Trim();
         }
-
-        _dbContext.AppUserEvents.Add(new AppUserEvent
+        else
         {
-            AppUserId = appUser.Id,
-            EventId = eventId,
-            CharacterName = appUser.CharacterName,
-            JobName = request.JobName.Trim(),
-            SubJobName = request.SubJobName.Trim(),
-            JobType = request.JobType.Trim(),
-            StartTime = DateTime.UtcNow,
-            EventDkp = 0,
-            IsQuickJoin = true
-        });
+            _dbContext.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = appUser.Id,
+                EventId = eventId,
+                CharacterName = character,
+                JobName = request.JobName.Trim(),
+                SubJobName = request.SubJobName.Trim(),
+                JobType = request.JobType.Trim(),
+                StartTime = DateTime.UtcNow,
+                EventDkp = 0,
+                IsQuickJoin = true
+            });
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

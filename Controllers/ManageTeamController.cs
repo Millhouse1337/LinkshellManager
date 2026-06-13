@@ -89,6 +89,10 @@ public class ManageTeamController : Controller
         // backfills linkshells whose events closed before auto-status existed.
         await _memberActivity.ApplyComputedStatusAsync(targetId, HttpContext.RequestAborted);
 
+        // Current credit / absent streaks per member (consecutive most-recent
+        // counting events) for the roster's "Active credit" + "Absent streak" columns.
+        ViewBag.MemberStreaks = await _memberActivity.ComputeStreaksByAppUserAsync(targetId, HttpContext.RequestAborted);
+
         var totalCount = await filteredQuery.CountAsync();
         const int pageSize = ManageTeamViewModel.MembersPageSize;
         var totalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);

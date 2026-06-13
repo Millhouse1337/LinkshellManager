@@ -11,6 +11,9 @@
     var signUpRoleOptions = ViewBag.SignUpRoleOptions as List<string> ?? jobTypeOptions.ToList();
     var signUpMainOptions = ViewBag.SignUpMainJobOptions as List<string> ?? mainJobOptions.ToList();
     var signUpSubOptions = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList();
+    // Characters the current member can sign up as (main + alts). The "sign up
+    // as" picker only renders when there's more than one to choose from.
+    var signupCharacters = ViewBag.SignupCharacters as List<string> ?? new List<string>();
     var eventIndexUrl = Url.Action("Index", "Event") ?? "/Event";
 
     string RelativeTime(DateTime? when)
@@ -367,6 +370,12 @@ else
                                                     <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@item.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
                                                         @Html.AntiForgeryToken()
                                                         <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                        @if (signupCharacters.Count > 1)
+                                                        {
+                                                            <select name="selectedCharacter" class="form-select" title="Sign up as">
+                                                                @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                                            </select>
+                                                        }
                                                         @if (!slotRequiresRole)
                                                         {
                                                             <select name="role" required class="form-select">
@@ -456,8 +465,14 @@ else
                                     </button>
                                     @* Quick general join: on the attendance roster without a
                                        party slot or a job pick (mirrors the Discord "Join (no slot)"). *@
-                                    <form asp-action="SignUp" method="post" style="display:inline-block;margin-left:6px">
+                                    <form asp-action="SignUp" method="post" style="display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle">
                                         <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                        @if (signupCharacters.Count > 1)
+                                        {
+                                            <select name="characterName" class="form-select" title="Sign up as">
+                                                @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                            </select>
+                                        }
                                         <button class="btn sm" type="submit"
                                                 title="Join the roster without claiming a party slot">Join (no slot)</button>
                                     </form>
@@ -467,6 +482,15 @@ else
                                         </div>
                                         <form asp-action="SignUp" method="post">
                                             <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                            @if (signupCharacters.Count > 1)
+                                            {
+                                                <div class="field" style="margin-bottom:8px">
+                                                    <label>Character</label>
+                                                    <select class="form-select" name="characterName">
+                                                        @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                                    </select>
+                                                </div>
+                                            }
                                             <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
                                                 <div class="field">
                                                     <label>Role</label>
@@ -511,6 +535,15 @@ else
                         </div>
                         <form asp-action="SignUp" method="post">
                             <input type="hidden" name="eventId" value="@item.Event.Id" />
+                            @if (signupCharacters.Count > 1)
+                            {
+                                <div class="field" style="margin-bottom:8px">
+                                    <label>Character</label>
+                                    <select class="form-select" name="characterName">
+                                        @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                    </select>
+                                </div>
+                            }
                             <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
                                 <div class="field">
                                     <label>Role</label>

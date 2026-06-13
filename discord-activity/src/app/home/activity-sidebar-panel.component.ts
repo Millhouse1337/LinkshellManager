@@ -2,17 +2,129 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
-import { PROFILE_JOB_OPTIONS } from './event-job-options';
+import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
+import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
+import { JobRatingsPanelComponent } from './sidebar-panels/job-ratings-panel.component';
 import { RosterPanelComponent } from './sidebar-panels/roster-panel.component';
+import { StarRatingComponent } from './sidebar-panels/star-rating.component';
 
 @Component({
   selector: 'app-activity-sidebar-panel',
-  imports: [CommonModule, FormsModule, AuctionsPanelComponent, InvitesPanelComponent, RosterPanelComponent],
+  imports: [CommonModule, FormsModule, AuctionsPanelComponent, InvitesPanelComponent, JobRatingsPanelComponent, RosterPanelComponent, StarRatingComponent],
   templateUrl: './activity-sidebar-panel.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    .jobs-panel {
+      width: 100%;
+      padding: 22px 36px 34px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at top center, rgba(112, 117, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, #18191e 0%, #121318 100%);
+      color: #f4f4f6;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+    .jobs-header { text-align: center; margin-bottom: 18px; }
+    .jobs-header h2 { margin: 0 0 8px; font-size: 18px; font-weight: 800; letter-spacing: 0.04em; }
+    .jobs-header p { margin: 0 0 14px; color: #b8bac4; font-size: 13px; }
+    .character-tabs {
+      display: inline-grid;
+      grid-template-columns: repeat(3, 1fr);
+      width: 360px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      overflow: hidden;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    .character-tabs button {
+      height: 26px; border: 0; border-right: 1px solid rgba(255, 255, 255, 0.08);
+      background: transparent; color: #d6d7df; font-size: 12px; font-weight: 600;
+      font-family: inherit; cursor: pointer;
+    }
+    .character-tabs button:last-child { border-right: 0; }
+    .character-tabs button.active {
+      color: #fff;
+      background: linear-gradient(180deg, #8d91ff 0%, #6268ff 100%);
+      box-shadow: 0 0 16px rgba(104, 110, 255, 0.35);
+    }
+    .jobs-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px 16px; }
+    .job-card {
+      min-height: 112px; padding: 12px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.11); border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+        #131419;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(0, 0, 0, 0.18);
+    }
+    .job-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .job-top span { font-size: 14px; font-weight: 800; letter-spacing: 0.02em; }
+    .job-top input {
+      width: 54px; height: 22px; padding: 0 6px; text-align: center;
+      border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.13);
+      background: rgba(0, 0, 0, 0.22); color: #fff; font-size: 14px; font-weight: 800;
+      font-family: inherit; -moz-appearance: textfield;
+    }
+    .job-top input::-webkit-inner-spin-button,
+    .job-top input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .strength {
+      width: 100%; height: 22px; margin-bottom: 10px; padding: 0;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 999px; border: 1px solid rgba(124, 130, 255, 0.18);
+      background: rgba(255, 255, 255, 0.025); color: #8d92ff;
+      font-size: 12px; font-weight: 700; font-family: inherit; cursor: pointer;
+    }
+    .strength.gold { color: #ffbf2f; border-color: rgba(255, 191, 47, 0.18); }
+    .strength.empty { color: #858895; font-weight: 600; border-color: rgba(255, 255, 255, 0.08); }
+    .rating-row {
+      display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 8px;
+      margin-top: 4px; color: #80838e; font-size: 13px; line-height: 1;
+    }
+    .rating-row > span { color: #c8cad2; font-weight: 500; }
+    .relic-block { margin-top: 6px; }
+    .relic-block__label { display: block; font-size: 13px; color: #c8cad2; font-weight: 500; margin-bottom: 4px; }
+    .relic-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+    .relic-chip {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px;
+      font-size: 11px; font-weight: 600; color: #ffd9a0; border-radius: 999px;
+      border: 1px solid rgba(255,177,31,.45); background: rgba(255,120,0,.12);
+    }
+    .relic-chip button {
+      border: 0; background: none; color: inherit; cursor: pointer; line-height: 1;
+      font-size: 11px; padding: 0 2px; opacity: .8;
+    }
+    .relic-chip button:hover { opacity: 1; }
+    .relic-add {
+      width: 100%; padding: 3px 6px; font-size: 11px;
+      background: rgba(0,0,0,.22); color: #fff; border: 1px solid rgba(255,255,255,.13);
+      border-radius: 6px; font-family: inherit; cursor: pointer;
+    }
+    /* Merits modal */
+    .merit-modal-backdrop {
+      position: fixed; inset: 0; z-index: 300; background: rgba(0, 0, 0, 0.55);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .merit-modal {
+      width: 100%; max-width: 420px; padding: 16px 18px;
+      background: var(--surface, #1f1f23); border: 1px solid var(--border, rgba(255,255,255,.12));
+      border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.45);
+    }
+    .merit-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .merit-modal__head strong { font-size: 14px; }
+    .merit-modal__hint { margin: 0 0 10px; font-size: 12px; color: var(--fg-3); }
+    .merit-modal textarea { width: 100%; resize: vertical; font-family: inherit; }
+    .merit-modal__actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+    .merit-modal__clear { color: var(--danger, #e06c6c); }
+    @media (max-width: 1200px) { .jobs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 760px) {
+      .jobs-panel { padding: 20px; }
+      .character-tabs { width: 100%; }
+      .jobs-grid { grid-template-columns: 1fr; }
+    }
+  `]
 })
 export class ActivitySidebarPanelComponent {
   @Input() visibleSections?: readonly string[];
@@ -39,7 +151,17 @@ export class ActivitySidebarPanelComponent {
     // slot. Same index layout as the level arrays above.
     strongJobs: Array.from({ length: 15 }, () => false) as boolean[],
     alt1StrongJobs: Array.from({ length: 15 }, () => false) as boolean[],
-    alt2StrongJobs: Array.from({ length: 15 }, () => false) as boolean[]
+    alt2StrongJobs: Array.from({ length: 15 }, () => false) as boolean[],
+    // Per-craft levels (index 0 = Alchemy ... 8 = Fishing) for the main + two
+    // alts. Account-level (sent regardless of linkshell membership).
+    craftLevels: Array.from({ length: 9 }, () => 0) as number[],
+    alt1CraftLevels: Array.from({ length: 9 }, () => 0) as number[],
+    alt2CraftLevels: Array.from({ length: 9 }, () => 0) as number[],
+    // Per-job free-text merit notes (index 0 = WAR … 14 = SMN) for main + alts,
+    // set via the "Merited" modal. Parallel to the strong-flag arrays.
+    meritJobs: Array.from({ length: 15 }, () => '') as string[],
+    alt1MeritJobs: Array.from({ length: 15 }, () => '') as string[],
+    alt2MeritJobs: Array.from({ length: 15 }, () => '') as string[]
   };
 
   // The 15 classic jobs, in the exact order the API's catalog-aligned jobLevels
@@ -50,7 +172,23 @@ export class ActivitySidebarPanelComponent {
   // Which character's job grid the tabs are showing. The alt tabs only appear
   // once the matching alt character has a name.
   protected selectedJobTab: 'main' | 'alt1' | 'alt2' = 'main';
-  protected selectJobTab(tab: 'main' | 'alt1' | 'alt2'): void { this.selectedJobTab = tab; }
+  protected selectJobTab(tab: 'main' | 'alt1' | 'alt2'): void {
+    this.selectedJobTab = tab;
+    const slot = tab === 'alt1' ? 1 : tab === 'alt2' ? 2 : 0;
+    // Lazily pull this character's self gear/skill/relic the first time it's shown.
+    this.ensureSelfSlotLoaded(slot);
+    // Reflect this character's peer feedback immediately (from cache if loaded;
+    // loadMyRatings applies it when the fetch completes otherwise).
+    this.applyPeerBlockForSlot(slot);
+  }
+
+  // Number of visible character tabs (main + each named alt) — drives the
+  // character-tabs grid columns so 1–3 tabs always fill their row evenly.
+  protected jobTabCount(): number {
+    return 1
+      + (this.profileModel.altCharacterName1.trim() ? 1 : 0)
+      + (this.profileModel.altCharacterName2.trim() ? 1 : 0);
+  }
 
   // The job-level array for the active tab (a live reference into profileModel,
   // so edits write straight back to the right character).
@@ -68,9 +206,206 @@ export class ActivitySidebarPanelComponent {
     return this.profileModel.strongJobs;
   }
 
+  // Clicking the pill marks the job merited (if not already) and opens the modal
+  // to specify/edit which merits the member has. The modal can clear it again.
   protected toggleStrong(index: number): void {
-    const flags = this.activeStrongJobs;
-    flags[index] = !flags[index];
+    if (!this.activeStrongJobs[index]) { this.activeStrongJobs[index] = true; }
+    this.openMeritModal(index);
+  }
+
+  // Merit notes for the active tab (a live reference, like activeStrongJobs).
+  protected get activeMeritJobs(): string[] {
+    if (this.selectedJobTab === 'alt1' && this.profileModel.altCharacterName1.trim()) return this.profileModel.alt1MeritJobs;
+    if (this.selectedJobTab === 'alt2' && this.profileModel.altCharacterName2.trim()) return this.profileModel.alt2MeritJobs;
+    return this.profileModel.meritJobs;
+  }
+
+  // ----- "Specify your merits" modal (opened when a job is marked merited) -----
+  protected readonly meritModalJobIndex = signal<number | null>(null);
+  protected meritDraft = '';
+  protected meritModalJobName(): string {
+    const i = this.meritModalJobIndex();
+    return i === null ? '' : (this.profileJobOptions[i] ?? '');
+  }
+  protected openMeritModal(index: number): void {
+    this.meritDraft = this.activeMeritJobs[index] ?? '';
+    this.meritModalJobIndex.set(index);
+  }
+  protected saveMerit(): void {
+    const i = this.meritModalJobIndex();
+    if (i !== null) { this.activeMeritJobs[i] = this.meritDraft.trim(); }
+    this.meritModalJobIndex.set(null);
+  }
+  // "Not merited" — un-mark the job and drop its merit note.
+  protected clearMerited(): void {
+    const i = this.meritModalJobIndex();
+    if (i !== null) {
+      this.activeStrongJobs[i] = false;
+      this.activeMeritJobs[i] = '';
+    }
+    this.meritModalJobIndex.set(null);
+  }
+  protected closeMeritModal(): void {
+    this.meritModalJobIndex.set(null);
+  }
+
+  // The nine crafts, in the order the API's craftLevels array uses.
+  protected readonly profileCraftOptions = [...PROFILE_CRAFT_OPTIONS];
+  protected readonly profileCraftMaxLevel = 110;
+
+  // Craft levels for the active job tab (reuses selectedJobTab so the Crafts grid
+  // tracks the same character as the Jobs grid above it).
+  protected get activeCraftLevels(): number[] {
+    if (this.selectedJobTab === 'alt1' && this.profileModel.altCharacterName1.trim()) return this.profileModel.alt1CraftLevels;
+    if (this.selectedJobTab === 'alt2' && this.profileModel.altCharacterName2.trim()) return this.profileModel.alt2CraftLevels;
+    return this.profileModel.craftLevels;
+  }
+
+  // Inputs for the embedded "Rate teammates" panel (alt names drive its
+  // per-teammate character picker).
+  protected ratingLinkshellId(): number { return this.activity.overview()?.appUser?.primaryLinkshellId ?? 0; }
+  protected ratingMe(): string { return this.activity.overview()?.appUser?.id ?? ''; }
+  protected ratingMembers(): { appUserId: string; characterName: string; altCharacterName1?: string | null; altCharacterName2?: string | null }[] {
+    return (this.activity.overview()?.primaryLinkshell?.members ?? [])
+      .filter(m => !!m.appUserId)
+      .map(m => ({
+        appUserId: m.appUserId!,
+        characterName: m.characterName,
+        altCharacterName1: m.altCharacterName1,
+        altCharacterName2: m.altCharacterName2
+      }));
+  }
+
+  // The rating character slot for the active jobs tab (0 = main, 1 = alt 1, 2 = alt 2).
+  protected currentRatingSlot(): number {
+    return this.selectedJobTab === 'alt1' ? 1 : this.selectedJobTab === 'alt2' ? 2 : 0;
+  }
+
+  // Name of the character whose peer feedback is currently shown (active tab).
+  protected activeRatingCharacterName(): string {
+    if (this.selectedJobTab === 'alt1') return this.profileModel.altCharacterName1.trim();
+    if (this.selectedJobTab === 'alt2') return this.profileModel.altCharacterName2.trim();
+    return this.profileModel.characterName.trim();
+  }
+
+  // ----- My own ratings (jobs grid self gear/skill/relic stars + "what others think") -----
+  // Self gear/skill/relic are per character (main + each alt). One GET per slot
+  // seeds the grid stars; the slot-0 GET ALSO carries the peer averages/comments
+  // shown in the "what your linkshell thinks" block. AI summary is on-demand.
+  protected readonly myRatings = signal<ActivityJobRatingsResponse | null>(null);
+  protected readonly aiSummary = signal<ActivityJobRatingCommentSummary | null>(null);
+  protected readonly loadingAiSummary = signal(false);
+  // slot -> jobIndex -> { gear, skill, relicNames }
+  protected readonly selfBySlot: Record<number, Record<number, { gear: number; skill: number; relicNames: string[] }>> = {};
+  private readonly loadedSelfSlots = new Set<number>();
+  private myRatingsSeed = '';
+  // Peer block (averages + comments) and AI summary cached PER SLOT so switching
+  // to an alt's tab shows that character's feedback, not the main character's.
+  private readonly peerBySlot = new Map<number, ActivityJobRatingsResponse>();
+  private readonly summaryBySlot = new Map<number, ActivityJobRatingCommentSummary | null>();
+
+  private slotMap(slot: number): Record<number, { gear: number; skill: number; relicNames: string[] }> {
+    return (this.selfBySlot[slot] ??= {});
+  }
+
+  // Jobs that at least one teammate has rated — drives the per-job averages table.
+  protected peerRatedJobs() {
+    return (this.myRatings()?.jobs ?? []).filter(job => job.peerCount > 0);
+  }
+
+  protected selfGearValue(jobIndex: number): number { return this.slotMap(this.currentRatingSlot())[jobIndex]?.gear ?? 0; }
+  protected selfSkillValue(jobIndex: number): number { return this.slotMap(this.currentRatingSlot())[jobIndex]?.skill ?? 0; }
+  protected selfRelicsValue(jobIndex: number): string[] { return this.slotMap(this.currentRatingSlot())[jobIndex]?.relicNames ?? []; }
+
+  // The relic weapons the given job can equip (the full catalog for that job).
+  protected relicOptions(jobIndex: number): readonly string[] { return JOB_RELIC_OPTIONS[jobIndex] ?? []; }
+  // The job's relics the member hasn't added yet (for the "+ Add relic" dropdown).
+  protected availableRelics(jobIndex: number): string[] {
+    const owned = this.selfRelicsValue(jobIndex);
+    return this.relicOptions(jobIndex).filter(r => !owned.includes(r));
+  }
+
+  // Load my self ratings for one character slot. Slot 0 also feeds the peer block.
+  private async loadMyRatings(slot: number): Promise<void> {
+    const linkshellId = this.ratingLinkshellId();
+    const me = this.ratingMe();
+    if (!linkshellId || !me) { return; }
+    const res = await this.activity.loadJobRatings(linkshellId, me, slot);
+    if (!res) { return; }
+    const map = this.slotMap(slot);
+    for (const job of res.jobs) {
+      map[job.jobIndex] = { gear: job.selfGear, skill: job.selfSkill, relicNames: [...(job.selfRelicNames ?? [])] };
+    }
+    this.loadedSelfSlots.add(slot);
+    // Cache this character's peer block; reflect it if it's the active tab.
+    this.peerBySlot.set(slot, res);
+    if (slot === this.currentRatingSlot()) { this.applyPeerBlockForSlot(slot); }
+  }
+
+  // Push the cached peer block for `slot` into the signals the template reads,
+  // auto-loading that character's comment summary on demand (cached per slot).
+  private applyPeerBlockForSlot(slot: number): void {
+    const res = this.peerBySlot.get(slot) ?? null;
+    this.myRatings.set(res);
+    if (this.summaryBySlot.has(slot)) {
+      this.aiSummary.set(this.summaryBySlot.get(slot) ?? null);
+    } else {
+      this.aiSummary.set(null);
+      if ((res?.peerCommentCount ?? 0) > 0) { void this.generateAiSummary(slot); }
+    }
+  }
+
+  // Lazily load a tab's self ratings the first time it's shown.
+  protected ensureSelfSlotLoaded(slot: number): void {
+    if (!this.loadedSelfSlots.has(slot)) { void this.loadMyRatings(slot); }
+  }
+
+  private async saveSelf(jobIndex: number): Promise<void> {
+    const slot = this.currentRatingSlot();
+    const e = this.slotMap(slot)[jobIndex] ?? { gear: 0, skill: 0, relicNames: [] };
+    await this.activity.rateJob(this.ratingLinkshellId(), this.ratingMe(), jobIndex, e.gear, e.skill, e.relicNames.length > 0, slot, e.relicNames);
+  }
+
+  private current(jobIndex: number): { gear: number; skill: number; relicNames: string[] } {
+    const e = this.slotMap(this.currentRatingSlot())[jobIndex];
+    return { gear: e?.gear ?? 0, skill: e?.skill ?? 0, relicNames: e?.relicNames ?? [] };
+  }
+
+  protected setSelfGear(jobIndex: number, value: number): void {
+    this.slotMap(this.currentRatingSlot())[jobIndex] = { ...this.current(jobIndex), gear: value };
+    void this.saveSelf(jobIndex);
+  }
+
+  protected setSelfSkill(jobIndex: number, value: number): void {
+    this.slotMap(this.currentRatingSlot())[jobIndex] = { ...this.current(jobIndex), skill: value };
+    void this.saveSelf(jobIndex);
+  }
+
+  // Add one of the job's relics to this character (ignores blanks/dupes).
+  protected addRelic(jobIndex: number, name: string): void {
+    const relic = (name ?? '').trim();
+    if (!relic) { return; }
+    const cur = this.current(jobIndex);
+    if (cur.relicNames.includes(relic)) { return; }
+    this.slotMap(this.currentRatingSlot())[jobIndex] = { ...cur, relicNames: [...cur.relicNames, relic] };
+    void this.saveSelf(jobIndex);
+  }
+
+  protected removeRelic(jobIndex: number, name: string): void {
+    const cur = this.current(jobIndex);
+    this.slotMap(this.currentRatingSlot())[jobIndex] = { ...cur, relicNames: cur.relicNames.filter(r => r !== name) };
+    void this.saveSelf(jobIndex);
+  }
+
+  protected async generateAiSummary(slot: number = this.currentRatingSlot()): Promise<void> {
+    const linkshellId = this.ratingLinkshellId();
+    const me = this.ratingMe();
+    if (!linkshellId || !me) { return; }
+    this.loadingAiSummary.set(true);
+    const res = await this.activity.loadJobRatingCommentSummary(linkshellId, me, slot);
+    this.loadingAiSummary.set(false);
+    this.summaryBySlot.set(slot, res);
+    if (slot === this.currentRatingSlot()) { this.aiSummary.set(res); }
   }
 
   protected selectedLinkshellId = 0;
@@ -145,10 +480,24 @@ export class ActivitySidebarPanelComponent {
       const nextStrong = this.profileJobOptions.map((_, i) => sourceStrong[i] ?? false);
       const nextAlt1Strong = this.profileJobOptions.map((_, i) => sourceAlt1Strong[i] ?? false);
       const nextAlt2Strong = this.profileJobOptions.map((_, i) => sourceAlt2Strong[i] ?? false);
+      const sourceCrafts = appUser.craftLevels ?? [];
+      const sourceAlt1Crafts = appUser.alt1CraftLevels ?? [];
+      const sourceAlt2Crafts = appUser.alt2CraftLevels ?? [];
+      const nextCrafts = this.profileCraftOptions.map((_, i) => sourceCrafts[i] ?? 0);
+      const nextAlt1Crafts = this.profileCraftOptions.map((_, i) => sourceAlt1Crafts[i] ?? 0);
+      const nextAlt2Crafts = this.profileCraftOptions.map((_, i) => sourceAlt2Crafts[i] ?? 0);
+      const sourceMerits = appUser.meritJobs ?? [];
+      const sourceAlt1Merits = appUser.alt1MeritJobs ?? [];
+      const sourceAlt2Merits = appUser.alt2MeritJobs ?? [];
+      const nextMerits = this.profileJobOptions.map((_, i) => sourceMerits[i] ?? '');
+      const nextAlt1Merits = this.profileJobOptions.map((_, i) => sourceAlt1Merits[i] ?? '');
+      const nextAlt2Merits = this.profileJobOptions.map((_, i) => sourceAlt2Merits[i] ?? '');
       const nextSeed =
         `${appUser.id}|${nextCharacterName}|${nextTimeZone}|${nextAlt1}|${nextAlt2}|` +
         `${nextJobLevels.join(',')}|${nextAlt1Jobs.join(',')}|${nextAlt2Jobs.join(',')}|` +
-        `${nextStrong.join(',')}|${nextAlt1Strong.join(',')}|${nextAlt2Strong.join(',')}`;
+        `${nextStrong.join(',')}|${nextAlt1Strong.join(',')}|${nextAlt2Strong.join(',')}|` +
+        `${nextCrafts.join(',')}|${nextAlt1Crafts.join(',')}|${nextAlt2Crafts.join(',')}|` +
+        `${nextMerits.join('§')}|${nextAlt1Merits.join('§')}|${nextAlt2Merits.join('§')}`;
 
       if (nextSeed === this.profileSeed) {
         return;
@@ -165,6 +514,28 @@ export class ActivitySidebarPanelComponent {
       this.profileModel.strongJobs = nextStrong;
       this.profileModel.alt1StrongJobs = nextAlt1Strong;
       this.profileModel.alt2StrongJobs = nextAlt2Strong;
+      this.profileModel.craftLevels = nextCrafts;
+      this.profileModel.alt1CraftLevels = nextAlt1Crafts;
+      this.profileModel.alt2CraftLevels = nextAlt2Crafts;
+      this.profileModel.meritJobs = nextMerits;
+      this.profileModel.alt1MeritJobs = nextAlt1Merits;
+      this.profileModel.alt2MeritJobs = nextAlt2Merits;
+    });
+
+    // Load my own job ratings (self gear/skill seeds + peer averages/comments)
+    // once my primary linkshell + id are known, and whenever they change.
+    effect(() => {
+      const linkshellId = this.ratingLinkshellId();
+      const me = this.ratingMe();
+      if (!linkshellId || !me) { return; }
+      const seed = `${linkshellId}|${me}`;
+      if (seed === this.myRatingsSeed) { return; }
+      this.myRatingsSeed = seed;
+      this.loadedSelfSlots.clear();
+      this.peerBySlot.clear();
+      this.summaryBySlot.clear();
+      void this.loadMyRatings(0);
+      this.loadedSelfSlots.add(0);
     });
 
     effect(() => {
@@ -302,6 +673,21 @@ export class ActivitySidebarPanelComponent {
     const alt1StrongJobs = this.profileModel.altCharacterName1.trim() ? [...this.profileModel.alt1StrongJobs] : null;
     const alt2StrongJobs = this.profileModel.altCharacterName2.trim() ? [...this.profileModel.alt2StrongJobs] : null;
 
+    // Crafts are account-level: always send the main, plus each named alt's grid.
+    const clampCraft = (levels: number[]): number[] => levels.map(level => {
+      const value = Math.trunc(Number(level)) || 0;
+      return value < 0 ? 0 : value > this.profileCraftMaxLevel ? this.profileCraftMaxLevel : value;
+    });
+    const craftLevels = clampCraft(this.profileModel.craftLevels);
+    const alt1CraftLevels = this.profileModel.altCharacterName1.trim() ? clampCraft(this.profileModel.alt1CraftLevels) : null;
+    const alt2CraftLevels = this.profileModel.altCharacterName2.trim() ? clampCraft(this.profileModel.alt2CraftLevels) : null;
+
+    // Merit notes travel alongside the strong flags, same per-character gating.
+    const trimMerits = (notes: string[]): string[] => notes.map(note => (note ?? '').trim());
+    const meritJobs = this.hasLinkshell() ? trimMerits(this.profileModel.meritJobs) : null;
+    const alt1MeritJobs = this.profileModel.altCharacterName1.trim() ? trimMerits(this.profileModel.alt1MeritJobs) : null;
+    const alt2MeritJobs = this.profileModel.altCharacterName2.trim() ? trimMerits(this.profileModel.alt2MeritJobs) : null;
+
     await this.activity.updateProfile({
       characterName: this.profileModel.characterName.trim(),
       timeZone: this.profileModel.timeZone.trim() || null,
@@ -312,7 +698,13 @@ export class ActivitySidebarPanelComponent {
       alt2JobLevels,
       strongJobs,
       alt1StrongJobs,
-      alt2StrongJobs
+      alt2StrongJobs,
+      craftLevels,
+      alt1CraftLevels,
+      alt2CraftLevels,
+      meritJobs,
+      alt1MeritJobs,
+      alt2MeritJobs
     });
   }
 

@@ -77,6 +77,9 @@ public class LinkshellCustomizeViewModel
     public List<DiscordChannelOption> AvailableChannels { get; set; } = new();
     public List<ChannelRouteInput> ChannelRoutes { get; set; } = new();
 
+    // Optional channel where post-event discussion comments are mirrored.
+    public string? DiscussionChannelId { get; set; }
+
     public List<Linkshell> ManageableLinkshells { get; set; } = new();
 
     // Canonical names of monsters hidden from the ToD Tracker (Dashboard +

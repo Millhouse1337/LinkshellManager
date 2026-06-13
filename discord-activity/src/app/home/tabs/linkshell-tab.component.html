@@ -64,7 +64,7 @@
                 <div></div>
               </div>
               @for (member of pagedDashboardMembers(); track member.id) {
-                <div class="ac-roster-row">
+                <div class="ac-roster-row" [class.editing]="editingRankMemberId() === member.id">
                   <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
                   <div class="ac-roster-name-cell">
                     <div class="ac-roster-name">{{ member.characterName }}</div>
@@ -75,7 +75,7 @@
                     }
                   </div>
                   <div class="ac-roster-rank">
-                    @if (editingRankMemberId() === member.id) {
+                    @if (editingRankMemberId() === member.id && canEditRosterRank(member.appUserId)) {
                       <select
                         [(ngModel)]="editingRankValue"
                         [name]="'rankEdit_' + member.id"
@@ -85,14 +85,53 @@
                         }
                       </select>
                     } @else {
-                      {{ member.rank || 'Member' }}
+                      {{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}
                     }
                   </div>
                   <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
-                  <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+                  <div class="ac-roster-status-cell">
+                    @if (editingRankMemberId() === member.id) {
+                      <select
+                        [(ngModel)]="editingStatusValue"
+                        [name]="'statusEdit_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id">
+                        @for (s of statusOptions; track s) {
+                          <option [value]="s">{{ s }}</option>
+                        }
+                      </select>
+                      <!-- Which streak this Count edits — drives the chip color. -->
+                      <select
+                        class="ac-roster-streak-type"
+                        [(ngModel)]="editingStreakType"
+                        [name]="'streakType_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id"
+                        title="Choose which streak the Count edits — active credit (green) or absence (red).">
+                        <option value="credit">Active streak</option>
+                        <option value="absent">Absence streak</option>
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        class="ac-roster-count-input"
+                        [class.is-credit]="editingStreakType === 'credit'"
+                        [class.is-absent]="editingStreakType === 'absent'"
+                        [(ngModel)]="editingStreakValue"
+                        [name]="'streakValue_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id"
+                        title="Count for the selected streak — sets the member's Active/Inactive status by your threshold until the next event recomputes it." />
+                    } @else {
+                      <span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span>
+                      @if ((member.absentStreak ?? 0) > 0) {
+                        <span class="ac-roster-credit absent" title="Absence streak: consecutive uncredited events">{{ member.absentStreak ?? 0 }}</span>
+                      } @else {
+                        <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Active-credit streak: consecutive credited events">{{ member.activeCreditStreak ?? 0 }}</span>
+                      }
+                    }
+                  </div>
                   <div class="ac-roster-actions">
                     <button type="button" class="btn ghost sm" (click)="openMemberProfile(member.id)">View Profile</button>
-                    @if (canEditRosterRank(member.appUserId)) {
+                    @if (canEditRosterStatus(member.appUserId)) {
                       @if (editingRankMemberId() === member.id) {
                         <button
                           type="button"
@@ -113,7 +152,7 @@
                           type="button"
                           class="btn ghost sm"
                           (click)="beginEditRank(member.id, member.rank)">
-                          Modify Rank
+                          Modify
                         </button>
                       }
                     }
@@ -208,15 +247,15 @@
                           @if (ch.isAlt) {
                             <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
                           }
-                          @if (leveledJobs(ch.levels, ch.strong); as jobs) {
+                          @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
                             @if (jobs.length === 0) {
                               <div class="jobs-roster-member__empty">No jobs entered</div>
                             } @else {
                               <div class="jobs-roster-member__pills">
                                 @for (job of jobs; track job.name) {
-                                  <span class="tag default jobs-roster-member__pill" [class.is-strong]="job.strong">
+                                  <span class="tag default jobs-roster-member__pill" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)">
                                     <span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>
-                                    @if (job.strong) { <span class="jr-strong" title="Strong — well-geared / merited">★</span> }
+                                    @if (job.strong) { <span class="jr-strong" title="Merited">★</span> }
                                   </span>
                                 }
                               </div>
@@ -443,16 +482,66 @@
                     @if (ch.isAlt) {
                       <div style="font-size:12px;color:var(--fg-2);margin-bottom:4px">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
                     }
-                    @if (leveledJobs(ch.levels, ch.strong); as jobs) {
+                    @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
                       @if (jobs.length === 0) {
                         <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
                       } @else {
-                        <div style="display:flex;flex-wrap:wrap;gap:6px">
+                        <div style="display:flex;flex-wrap:wrap;gap:10px 6px">
                           @for (job of jobs; track job.name) {
-                            <span class="tag default" [class.is-strong]="job.strong" style="display:inline-flex;gap:5px"><span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>@if (job.strong) { <span class="jr-strong" title="Strong — well-geared / merited">★</span> }</span>
+                            <span class="tag default" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)" style="display:inline-flex;gap:5px"><span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>@if (job.strong) { <span class="jr-strong" title="Merited">★</span> }</span>
                           }
                         </div>
                       }
+                    }
+                  </div>
+                }
+
+                <!-- What the linkshell thinks of this member, PER CHARACTER
+                     (main + alts): per-job peer averages + anonymous comment
+                     summary. Each alt's feedback shows under that alt's name. -->
+                @if (viewingProfileRatingBlocks().length > 0) {
+                  <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+                    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">What the linkshell thinks</div>
+                    @if (viewingProfileHasFeedback()) {
+                      @for (block of viewingProfileRatingBlocks(); track block.slot) {
+                        @if ((block.ratings?.peerRaterCount ?? 0) > 0 || (block.ratings?.peerCommentCount ?? 0) > 0) {
+                          <div style="margin-top:12px">
+                            <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-bottom:6px">{{ block.name }}@if (block.isAlt) { <span style="opacity:.6;font-weight:400"> · alt</span> }</div>
+                            @if (block.ratings; as vr) {
+                              @if (vr.peerRaterCount > 0) {
+                                <div style="font-size:11px;color:var(--fg-3);margin-bottom:8px">Based on feedback from {{ vr.peerRaterCount }} teammate{{ vr.peerRaterCount === 1 ? '' : 's' }}.</div>
+                                <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
+                                  <span>Job</span><span>Gear</span><span>Skill</span><span title="Teammates who rated this job"># Rated</span>
+                                </div>
+                                @for (job of peerJobsFor(vr); track job.jobIndex) {
+                                  <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
+                                    <span style="font-weight:600">{{ ratingJobName(job.jobIndex) }}</span>
+                                    <app-star-rating [value]="job.peerAvgGear" [readonly]="true" [showValue]="true" />
+                                    <app-star-rating [value]="job.peerAvgSkill" [readonly]="true" [showValue]="true" />
+                                    <span style="opacity:.6">{{ job.peerCount }}</span>
+                                  </div>
+                                }
+                              }
+
+                              @if (vr.peerCommentCount > 0) {
+                                <div style="margin-top:12px">
+                                  <div style="font-size:12px;font-weight:600;color:var(--fg)">Summary</div>
+                                  @if (block.summary?.summary; as summary) {
+                                    <p style="font-size:12px;margin:6px 0 0;line-height:1.45;color:var(--fg-2)">{{ summary }}</p>
+                                  }
+                                  <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+                                    @for (c of vr.peerComments; track $index) {
+                                      <blockquote style="margin:0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;color:var(--fg-2)">{{ c }}</blockquote>
+                                    }
+                                  </div>
+                                </div>
+                              }
+                            }
+                          </div>
+                        }
+                      }
+                    } @else {
+                      <div style="font-size:12px;color:var(--fg-3)">No teammates have rated this member's jobs yet.</div>
                     }
                   </div>
                 }
