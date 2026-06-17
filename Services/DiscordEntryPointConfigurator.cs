@@ -30,6 +30,8 @@ public sealed class DiscordEntryPointConfigurator : IHostedService
             using var scope = _scopeFactory.CreateScope();
             var bot = scope.ServiceProvider.GetRequiredService<DiscordBotClient>();
             await bot.EnsureEntryPointAppHandledAsync(CancellationToken.None);
+            // Also register the "/lsm" command that posts an on-demand launch card.
+            await bot.EnsureLaunchCommandRegisteredAsync(CancellationToken.None);
         }
         catch
         {

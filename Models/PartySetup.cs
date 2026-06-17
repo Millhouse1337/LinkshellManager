@@ -31,6 +31,15 @@ public class PartySetup
     [MaxLength(1024)]
     public string? Notes { get; set; }
 
+    // Per-event SNAPSHOT marker. Null = a reusable template (officer-designed, shown
+    // in the template lists/pickers). Set = a private copy owned by ONE event, cloned
+    // lazily the first time that event's live board is edited, so board tweaks never
+    // touch the shared template or any other event. Cascade-deleted with the event.
+    public int? OwnerEventId { get; set; }
+
+    [ForeignKey(nameof(OwnerEventId))]
+    public Event? OwnerEvent { get; set; }
+
     [MaxLength(450)]
     public string? CreatedByAppUserId { get; set; }
 

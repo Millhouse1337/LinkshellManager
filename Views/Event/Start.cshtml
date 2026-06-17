@@ -102,6 +102,26 @@
     }
     .event-ps-chip .muted { opacity: 0.82; font-weight: 500; }
     .event-ps-empty { padding: 14px; color: var(--fg-3); font-size: 12.5px; }
+    /* Officer board editing: edit-only controls hidden until the panel toggles .ps-editing. */
+    .event-ps-board .ps-edit-only { display: none; }
+    .event-ps-board.ps-editing .ps-edit-only { display: inline-flex; }
+    .event-ps-board.ps-editing .ps-view-only { display: none; }
+    .event-ps-board.ps-editing .event-ps-slot { border-style: dashed; }
+    .event-ps-slot.ps-dragging { opacity: 0.4; }
+    .ps-edit-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .ps-drag-handle { cursor: grab; user-select: none; color: var(--fg-3); padding: 0 4px; }
+    .ps-icon-btn { margin-left: auto; border: 0; background: transparent; cursor: pointer; color: var(--fg-2);
+        font-size: 12px; padding: 2px 5px; border-radius: 4px; }
+    .ps-icon-btn + .ps-icon-btn { margin-left: 0; }
+    .ps-icon-btn--danger { color: var(--danger); }
+    .ps-icon-btn:hover { background: rgba(124, 92, 255, 0.12); }
+    .ps-rename { padding: 3px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px;
+        background: var(--surface-2); color: var(--fg); max-width: 160px; }
+    .ps-job-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0 2px; }
+    .ps-job-edit select { font-size: 12px; padding: 3px 6px; }
+    .ps-move-select { font-size: 12px; padding: 3px 6px; max-width: 150px; border: 1px solid var(--border);
+        border-radius: 6px; background: var(--surface-2); color: var(--fg); }
+    .btn.xs { padding: 2px 8px; font-size: 11px; }
     .lsm-toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000;
         display: flex; align-items: center; gap: 14px; max-width: 520px; padding: 12px 16px;
         border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
@@ -267,11 +287,35 @@
 
         @if (Model.LinkedPartySetupBoard is { } board)
         {
-            var psReturnUrl = Url.Action("Start", "Event", new { eventId = Model.Event.Id });
-            var canManageParties = ViewBag.CanManageParties is true;
-            var roleOpts = ViewBag.SignUpRoleOptions as List<string> ?? jobTypeOptions.ToList();
-            var mainOpts = ViewBag.SignUpMainJobOptions as List<string> ?? mainJobOptions.ToList();
-            var subOpts = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList();
+            var slotNames = new HashSet<string>(
+                board.Alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+                    .Where(s => !s.IsOpen && !string.IsNullOrWhiteSpace(s.SignedUpCharacterName))
+                    .Select(s => s.SignedUpCharacterName!.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            var panelVm = new LinkshellManagerDiscordApp.ViewModels.PartyBoardPanelViewModel
+            {
+                EventId = Model.Event.Id,
+                Board = board,
+                CanManageParties = ViewBag.CanManageParties is true,
+                CurrentUserId = currentUserId,
+                IsLive = Model.Event.CommencementStartTime != null,
+                SignupCharacters = signupCharacters,
+                RoleOptions = ViewBag.SignUpRoleOptions as List<string> ?? jobTypeOptions.ToList(),
+                MainJobOptions = ViewBag.SignUpMainJobOptions as List<string> ?? mainJobOptions.ToList(),
+                SubJobOptions = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList(),
+                ReturnUrl = Url.Action("Start", "Event", new { eventId = Model.Event.Id }) ?? string.Empty,
+                AlsoAttending = Model.AppUserEvents
+                    .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName) && !slotNames.Contains(p.CharacterName!.Trim()))
+                    .Select(p => new LinkshellManagerDiscordApp.ViewModels.PartyBoardPanelViewModel.AlsoAttendingRow
+                    {
+                        AppUserId = p.AppUserId,
+                        CharacterName = p.CharacterName,
+                        JobType = p.JobType,
+                        JobName = p.JobName,
+                        SubJobName = p.SubJobName
+                    })
+                    .ToList()
+            };
             <div class="card" style="margin-top:16px">
                 <div class="card-head">
                     <div class="card-title" style="display:inline-flex;align-items:center;gap:8px">
@@ -282,114 +326,10 @@
                             </svg>
                         </button>
                     </div>
-                    <span class="muted" style="font-size:12px">Claim an open slot to late-join into the party setup.</span>
+                    <span class="muted" style="font-size:12px">Claim an open slot to late-join, or use “Edit layout” to rearrange.</span>
                 </div>
                 <div class="event-ps-panel" id="partyBoardPanel" style="padding:12px 16px">
-                    @if (!board.Alliances.Any())
-                    {
-                        <div class="event-ps-empty">This party setup has no alliances yet.</div>
-                    }
-                    @foreach (var alliance in board.Alliances)
-                    {
-                        <div class="event-ps-alliance-title">@alliance.Name</div>
-                        <div class="event-ps-party-grid">
-                            @foreach (var party in alliance.Parties)
-                            {
-                                <div class="event-ps-party">
-                                    <div class="event-ps-party__head"><span>@party.Name</span><span class="event-ps-party__count">@party.Slots.Count</span></div>
-                                    @{ var partyHasLeader = party.Slots.Any(s => s.SignedUpIsPartyLeader); }
-                                    @foreach (var slot in party.Slots)
-                                    {
-                                        var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
-                                        var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
-                                        var slotRequiresSub = !string.IsNullOrWhiteSpace(slot.SubJob);
-                                        <div class="event-ps-slot @(slot.IsPartyLeader ? "event-ps-slot--leader" : null)">
-                                            <div class="event-ps-slot__label">
-                                                @if (slot.IsPartyLeader) { <span class="event-ps-leader-tag" title="Party leader">Leader</span> }
-                                                <span>@slot.Display</span>
-                                            </div>
-                                            @if (slot.IsOpen)
-                                            {
-                                                <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@Model.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="returnUrl" value="@psReturnUrl" />
-                                                    @if (signupCharacters.Count > 1)
-                                                    {
-                                                        <select name="selectedCharacter" class="form-select" title="Sign up as">@foreach (var c in signupCharacters) { <option value="@c">@c</option> }</select>
-                                                    }
-                                                    @if (!slotRequiresRole)
-                                                    {
-                                                        <select name="role" required class="form-select"><option value="">Role…</option>@foreach (var r in roleOpts) { <option value="@r">@r</option> }</select>
-                                                    }
-                                                    @if (!slotRequiresMain)
-                                                    {
-                                                        <select name="mainJob" required class="form-select"><option value="">Main…</option>@foreach (var j in mainOpts) { <option value="@j">@j</option> }</select>
-                                                    }
-                                                    @if (!slotRequiresSub)
-                                                    {
-                                                        <select name="subJob" class="form-select"><option value="">Sub (opt)</option>@foreach (var j in subOpts) { <option value="@j">@j</option> }</select>
-                                                    }
-                                                    <button type="submit" name="asLeader" value="false" class="btn primary sm">Sign up</button>
-                                                    @if (!partyHasLeader)
-                                                    {
-                                                        <button type="submit" name="asLeader" value="true" class="btn sm" title="Claim this party's leader spot">👑 Leader</button>
-                                                    }
-                                                </form>
-                                            }
-                                            else
-                                            {
-                                                <div class="event-ps-slot__controls">
-                                                    <span class="event-ps-chip @(slot.SignedUpAppUserId == currentUserId ? "event-ps-chip--mine" : null)">
-                                                        @if (slot.SignedUpIsPartyLeader) { <span title="Party leader">👑</span> }
-                                                        @slot.SignedUpCharacterName@(slot.SignedUpAppUserId == currentUserId ? " (you)" : "")
-                                                        @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay)) { <span class="muted">· @slot.SignedUpJobsDisplay</span> }
-                                                    </span>
-                                                    @if (canManageParties)
-                                                    {
-                                                        <form asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@Model.Event.Id" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
-                                                            @Html.AntiForgeryToken()
-                                                            <input type="hidden" name="returnUrl" value="@psReturnUrl" />
-                                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)" title="Free this slot (also removes them from the live roster)">Clear</button>
-                                                        </form>
-                                                    }
-                                                </div>
-                                            }
-                                        </div>
-                                    }
-                                    @if (!party.Slots.Any()) { <div class="event-ps-empty">No slots.</div> }
-                                </div>
-                            }
-                        </div>
-                    }
-
-                    @* Also attending: event participants who joined WITHOUT claiming a
-                       party slot (matches the Discord Activity's "Also attending" row). *@
-                    @{
-                        var slotNames = new HashSet<string>(
-                            board.Alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots)
-                                .Where(s => !s.IsOpen && !string.IsNullOrWhiteSpace(s.SignedUpCharacterName))
-                                .Select(s => s.SignedUpCharacterName!.Trim()),
-                            StringComparer.OrdinalIgnoreCase);
-                        var alsoAttending = Model.AppUserEvents
-                            .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName) && !slotNames.Contains(p.CharacterName!.Trim()))
-                            .ToList();
-                    }
-                    @if (alsoAttending.Count > 0)
-                    {
-                        <div class="event-ps-alliance-title">Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></div>
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 4px 8px">
-                            @foreach (var a in alsoAttending)
-                            {
-                                var jobBits = new List<string>();
-                                if (!string.IsNullOrWhiteSpace(a.JobType)) { jobBits.Add(a.JobType!); }
-                                if (!string.IsNullOrWhiteSpace(a.JobName)) { jobBits.Add(string.IsNullOrWhiteSpace(a.SubJobName) ? a.JobName! : $"{a.JobName}/{a.SubJobName}"); }
-                                <span class="event-ps-chip @(a.AppUserId == currentUserId ? "event-ps-chip--mine" : null)">
-                                    @a.CharacterName@(a.AppUserId == currentUserId ? " (you)" : "")
-                                    @if (jobBits.Count > 0) { <span class="muted">· @string.Join(" - ", jobBits)</span> }
-                                </span>
-                            }
-                        </div>
-                    }
+                    @await Html.PartialAsync("_PartyBoardPanel", panelVm)
                 </div>
             </div>
         }
@@ -733,6 +673,12 @@
             setTimeout(dismiss, 6000);
         })();
     </script>
+    <script nonce="@Html.CspNonce()">
+        // CSRF globals for the party-board editor's fetch() POSTs (event-party-board.js).
+        window.LSM_CSRF_HEADER = '@antiforgeryTokens.HeaderName';
+        window.LSM_CSRF_TOKEN = '@antiforgeryTokens.RequestToken';
+    </script>
+    <script src="~/js/event-party-board.js" nonce="@Html.CspNonce()" defer></script>
     <script nonce="@Html.CspNonce()">
         // Party Board: chevron toggle to hide/show the live sign-up board.
         (() => {

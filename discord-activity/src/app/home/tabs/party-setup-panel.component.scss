@@ -390,3 +390,47 @@
 .ps-also-name { font-weight: 600; font-size: 13px; }
 .ps-also-job { font-size: 12px; color: var(--fg-3); }
 .ps-also-withdraw { margin-left: auto; }
+
+/* ===== Officer board editing (live event boards) ===== */
+.ps-edit-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 2px; }
+.ps-edit-hint { font-size: 12px; color: var(--fg-2); }
+
+.btn.xs { padding: 2px 8px; font-size: 11px; line-height: 1.6; border-radius: var(--r-sm, 6px); }
+
+.ps-rename {
+  flex: 1 1 auto; min-width: 0; max-width: 200px;
+  padding: 3px 8px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: var(--r-sm, 6px);
+  background: var(--surface-2, var(--surface)); color: var(--fg);
+}
+.ps-rename--party { max-width: none; }
+.ps-add-party, .ps-add-slot { white-space: nowrap; }
+.ps-remove-party { color: var(--danger, #ef4444); }
+
+.ps-drag-handle { cursor: grab; user-select: none; color: var(--fg-2); font-size: 14px; line-height: 1; padding: 0 2px; }
+.ps-drag-handle:active { cursor: grabbing; }
+.ps-slot--editing { border-style: dashed; }
+
+.ps-slot-edit-btn, .ps-slot-del-btn {
+  margin-left: auto; border: none; background: transparent; cursor: pointer;
+  color: var(--fg-2); font-size: 12px; padding: 2px 4px; border-radius: 4px;
+}
+.ps-slot-del-btn { color: var(--danger, #ef4444); margin-left: 0; }
+.ps-slot-edit-btn:hover, .ps-slot-del-btn:hover { background: rgba(99, 102, 241, 0.10); }
+
+.ps-job-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0 2px; }
+.ps-job-edit select { font-size: 12px; padding: 3px 6px; }
+
+.ps-move-select {
+  font-size: 12px; padding: 3px 6px; max-width: 140px;
+  border: 1px solid var(--border); border-radius: var(--r-sm, 6px);
+  background: var(--surface-2, var(--surface)); color: var(--fg);
+}
+
+/* CDK drag-drop */
+.cdk-drag-preview { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); border-radius: var(--r-md, 8px); }
+.cdk-drag-placeholder { opacity: 0.35; }
+.cdk-drag-animating { transition: transform 180ms cubic-bezier(0, 0, 0.2, 1); }
+.ps-slots.cdk-drop-list-dragging .ps-slot:not(.cdk-drag-placeholder) {
+  transition: transform 180ms cubic-bezier(0, 0, 0.2, 1);
+}

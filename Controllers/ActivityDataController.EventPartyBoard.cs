@@ -54,10 +54,12 @@ public sealed partial class ActivityDataController
         var alliances = setup.Alliances
             .OrderBy(a => a.SortOrder)
             .Select(a => new ActivityPartySetupAllianceDto(
+                a.Id,
                 string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
                 a.Parties
                     .OrderBy(p => p.SortOrder)
                     .Select(p => new ActivityPartySetupPartyDto(
+                        p.Id,
                         string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
                         p.Slots
                             .OrderBy(s => s.SortOrder)
@@ -188,6 +190,119 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
+    // --- Officer board editing (drag-drop + per-slot job changes) ---------------------
+    // All gated by CanManageParties. Each delegates to EventPartyBoardEditService (which
+    // lazily clones the shared template into a per-event snapshot on first edit, so edits
+    // never touch the template/other events), then refreshes the Discord board. Responses
+    // are { success } — the client reloads the board via GET to render authoritative state
+    // (e.g. a displaced occupant appearing in "Also Attending").
+
+    [HttpPost("events/{eventId:int}/board/slots/{slotId:int}/requirement")]
+    public async Task<IActionResult> EditEventBoardSlotRequirementAsync(
+        int eventId, int slotId, [FromBody] EditSlotRequirementRequest request, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.ChangeSlotRequirementAsync(
+            _dbContext, eventId, slotId, request.Role, request.MainJob, request.SubJob, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/slots/{slotId:int}/move")]
+    public async Task<IActionResult> MoveEventBoardSlotAsync(
+        int eventId, int slotId, [FromBody] MoveSlotRequest request, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.MoveSlotAsync(
+            _dbContext, eventId, slotId, request.TargetPartyId, request.TargetIndex, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/members/move")]
+    public async Task<IActionResult> MoveEventBoardMemberAsync(
+        int eventId, [FromBody] MoveMemberRequest request, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.MoveMemberAsync(
+            _dbContext, eventId, request.FromSlotId, request.ToSlotId, request.AppUserId, request.DiscordUserId, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/slots")]
+    public async Task<IActionResult> AddEventBoardSlotAsync(
+        int eventId, [FromBody] AddSlotRequest request, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.AddSlotAsync(
+            _dbContext, eventId, request.PartyId, request.Role, request.MainJob, request.SubJob, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/slots/{slotId:int}/delete")]
+    public async Task<IActionResult> DeleteEventBoardSlotAsync(
+        int eventId, int slotId, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.DeleteSlotAsync(_dbContext, eventId, slotId, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/parties")]
+    public async Task<IActionResult> AddEventBoardPartyAsync(
+        int eventId, [FromBody] AddPartyRequest request, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.AddPartyAsync(_dbContext, eventId, request.AllianceId, request.Name, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/parties/{partyId:int}/delete")]
+    public async Task<IActionResult> RemoveEventBoardPartyAsync(
+        int eventId, int partyId, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.RemovePartyAsync(_dbContext, eventId, partyId, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    [HttpPost("events/{eventId:int}/board/rename")]
+    public async Task<IActionResult> RenameEventBoardAsync(
+        int eventId, [FromBody] RenameBoardRequest request, CancellationToken cancellationToken)
+    {
+        var guard = await GuardBoardEditAsync(eventId, cancellationToken);
+        if (guard is not null) return guard;
+        var result = await EventPartyBoardEditService.RenameAsync(
+            _dbContext, eventId, request.AllianceId, request.PartyId, request.Name, cancellationToken);
+        return BoardEditResult(eventId, result);
+    }
+
+    // Returns the error IActionResult to short-circuit a board edit, or null when the
+    // caller (an officer with CanManageParties on the event's linkshell) may proceed.
+    private async Task<IActionResult?> GuardBoardEditAsync(int eventId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Sign in to edit the board." });
+        var ev = await _dbContext.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+        if (ev is null) return NotFound(new { error = "Event not found." });
+        var membership = await GetMembershipAsync(appUser.Id, ev.LinkshellId, cancellationToken);
+        if (membership is null) return Forbid();
+        if (!await CanAsync(membership, r => r.CanManageParties, cancellationToken)) return Forbid();
+        return null;
+    }
+
+    private IActionResult BoardEditResult(int eventId, EventPartyBoardEditService.EditResult result)
+    {
+        if (!result.Success) return BadRequest(new { error = result.Error });
+        EnqueueEventBoardRefresh(eventId);
+        return Ok(new { success = true });
+    }
+
     // Queues an async re-render of the event's posted Discord channel board so
     // signups / withdrawals made from the Activity (or web) show up in the message.
     // The DbContext auto-enqueue only fires for Event-entity add/edit, not for the
@@ -197,3 +312,11 @@ public sealed partial class ActivityDataController
         HttpContext.RequestServices.GetService<DiscordEventChannelQueue>()?.Enqueue(eventId);
     }
 }
+
+// Officer board-edit request bodies (Activity + reused conceptually by the web JS).
+public sealed record EditSlotRequirementRequest(string? Role, string? MainJob, string? SubJob);
+public sealed record MoveSlotRequest(int TargetPartyId, int TargetIndex);
+public sealed record MoveMemberRequest(int? FromSlotId, int? ToSlotId, string? AppUserId, string? DiscordUserId);
+public sealed record AddSlotRequest(int PartyId, string? Role, string? MainJob, string? SubJob);
+public sealed record AddPartyRequest(int AllianceId, string? Name);
+public sealed record RenameBoardRequest(int? AllianceId, int? PartyId, string? Name);

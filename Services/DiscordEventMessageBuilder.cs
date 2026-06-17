@@ -397,8 +397,18 @@ public static class DiscordEventMessageBuilder
                 var allianceName = string.IsNullOrWhiteSpace(alliances[ai].Name)
                     ? $"Alliance {ai + 1}"
                     : alliances[ai].Name!.Trim();
-                fields.Add(new { name = Truncate(allianceName, 250), value = "​", inline = false });
+                // Discord embeds can't center field text, so frame the alliance label
+                // with box-drawing dashes — it reads as a tidy header divider rather
+                // than a bare left-aligned word. Kept short so it doesn't wrap on narrow
+                // mobile widths. (The rendered image board centers headers via CSS.)
+                var allianceHeader = $"────── {allianceName} ──────";
+                fields.Add(new { name = Truncate(allianceHeader, 250), value = "​", inline = false });
             }
+
+            // How many party columns share this row (Discord packs inline fields up to
+            // 3-across; the alliance header / divider breaks the row so an alliance's
+            // parties pack among themselves). Drives how hard a long name is trimmed.
+            var columns = partiesInline ? Math.Min(3, parties.Count) : 1;
 
             for (var pi = 0; pi < parties.Count && fields.Count < 24; pi++)
             {
@@ -415,7 +425,11 @@ public static class DiscordEventMessageBuilder
                     if (signup is not null)
                     {
                         var jobs = SignedUpJobs(signup);
-                        line = $"{icon} {crown}**{Escape(signup.CharacterName ?? "Member")}**"
+                        // Trim the name with an ellipsis so "name — jobs" stays on ONE line
+                        // in the narrow inline columns (it wraps otherwise, breaking the
+                        // grid). Full names stay legible on the rendered image board.
+                        var name = FitSlotName(signup.CharacterName ?? "Member", jobs, !string.IsNullOrEmpty(crown), columns);
+                        line = $"{icon} {crown}**{Escape(name)}**"
                              + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}");
                     }
                     else
@@ -609,6 +623,21 @@ public static class DiscordEventMessageBuilder
         return string.IsNullOrWhiteSpace(signup.SubJob)
             ? signup.MainJob!
             : $"{signup.MainJob}/{signup.SubJob}";
+    }
+
+    // Shorten a character name (…) so its slot line "🔵 name — JOB/SUB" doesn't wrap the
+    // column. An embed row is ~64 "characters" wide on desktop, shared by `columns`
+    // inline party fields; reserve the role dot (~3), the optional 👑 (~3) and " — {jobs}"
+    // and give the rest to the name. Capped at the FFXI 15-char max and floored at 4 so a
+    // name never collapses to just an ellipsis. Discord's proportional font makes this
+    // approximate — it errs toward fitting; the rendered image board shows the full name.
+    private static string FitSlotName(string? name, string jobs, bool hasCrown, int columns)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        var lineBudget = columns >= 2 ? 64 / columns : 64;
+        var reserved = 3 + (hasCrown ? 3 : 0) + (jobs.Length > 0 ? 3 + jobs.Length : 0);
+        var budget = Math.Clamp(lineBudget - reserved, 4, 15);
+        return Truncate(trimmed, budget);
     }
 
     // "Role - MAIN/SUB" for a no-slot attendee (mirrors SignedUpJobs for slots).

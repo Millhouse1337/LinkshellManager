@@ -57,6 +57,11 @@ public sealed class DiscordInteractionsController : ControllerBase
     private const string OutsideAlt1FieldId = "outside_alt1";
     private const string OutsideAlt2FieldId = "outside_alt2";
 
+    // The "/lsm" slash command (posts a launch card) and its "Join" button (launches the
+    // Activity for the clicker via the LAUNCH_ACTIVITY callback).
+    private const string LaunchCommandName = "lsm";
+    private const string LaunchButtonId = "evt:launch";
+
     private readonly DiscordInteractionVerifier _verifier;
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
@@ -147,11 +152,18 @@ public sealed class DiscordInteractionsController : ControllerBase
                 return await HandleModalSubmitAsync(root, cancellationToken);
             }
 
-            // The Activity's entry-point "Launch" command (now app-handled, so the
-            // public "Game Invitation" card is suppressed): just launch the Activity
-            // for the clicker with a quiet LAUNCH_ACTIVITY callback — no channel post.
             if (type == InteractionApplicationCommand)
             {
+                var commandName = root.TryGetProperty("data", out var cmdData)
+                    && cmdData.TryGetProperty("name", out var cmdName) ? cmdName.GetString() : null;
+                // "/lsm" → post an officer-only launch card into the channel.
+                if (string.Equals(commandName, LaunchCommandName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return await HandleLaunchCardCommandAsync(root, cancellationToken);
+                }
+                // The Activity's entry-point "Launch" command (now app-handled, so the
+                // public "Game Invitation" card is suppressed): just launch the Activity
+                // for the clicker with a quiet LAUNCH_ACTIVITY callback — no channel post.
                 return Ok(new { type = ResponseLaunchActivity, data = new { } });
             }
 
@@ -161,6 +173,68 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
     }
 
+    // "/lsm": post a public "Join" launch card into the channel — but only for a leader
+    // or officer of a linkshell linked to THIS Discord server (the card's Join button is
+    // then clickable by anyone). Non-officers get a private nudge instead.
+    private async Task<IActionResult> HandleLaunchCardCommandAsync(JsonElement root, CancellationToken cancellationToken)
+    {
+        var guildId = root.TryGetProperty("guild_id", out var guildEl) ? guildEl.GetString() : null;
+        if (string.IsNullOrEmpty(guildId))
+        {
+            return Ephemeral("Run /lsm in a server channel.");
+        }
+        var discordUserId = ResolveDiscordUserId(root);
+        if (string.IsNullOrEmpty(discordUserId))
+        {
+            return Ephemeral("Couldn't read your Discord account from that command.");
+        }
+
+        var appUserId = await _db.DiscordActivityUsers
+            .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
+            .Select(link => link.IdentityUserId!)
+            .FirstOrDefaultAsync(cancellationToken);
+        var isOfficer = !string.IsNullOrEmpty(appUserId) && await (
+            from membership in _db.AppUserLinkshells
+            join linkshell in _db.Linkshells on membership.LinkshellId equals linkshell.Id
+            where membership.AppUserId == appUserId
+                  && linkshell.DiscordGuildId == guildId
+                  && (membership.Rank == LinkshellRanks.Leader || membership.Rank == LinkshellRanks.Officer)
+            select membership.Id).AnyAsync(cancellationToken);
+        if (!isOfficer)
+        {
+            return Ephemeral("Only a linkshell leader or officer can post the launch card here.");
+        }
+
+        // Public channel message (no ephemeral flag) — a launch card with a Join button.
+        return Ok(new
+        {
+            type = ResponseChannelMessage,
+            data = new
+            {
+                embeds = new[]
+                {
+                    new
+                    {
+                        title = "🎮 LinkshellManager",
+                        description = "Tap **Join** to open the LinkshellManager app — DKP, events, party setups, and more.",
+                        color = 0x5865F2,
+                    }
+                },
+                components = new[]
+                {
+                    new
+                    {
+                        type = 1, // action row
+                        components = new object[]
+                        {
+                            new { type = 2, style = 1, label = "Join", custom_id = LaunchButtonId }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     private async Task<IActionResult> HandleComponentAsync(JsonElement root, CancellationToken cancellationToken)
     {
         if (!root.TryGetProperty("data", out var data)
@@ -168,6 +242,13 @@ public sealed class DiscordInteractionsController : ControllerBase
             || customIdEl.GetString() is not { Length: > 0 } customId)
         {
             return Ephemeral("That action isn't recognized.");
+        }
+
+        // The "Join" button on a posted launch card → launch the Activity for the clicker
+        // (per-user, quiet; Discord opens the embedded app). No identity/DB work needed.
+        if (string.Equals(customId, LaunchButtonId, StringComparison.Ordinal))
+        {
+            return Ok(new { type = ResponseLaunchActivity, data = new { } });
         }
 
         // Captured so a successful signup can silently dismiss the ephemeral

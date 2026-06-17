@@ -51,7 +51,8 @@ public class PartySetupController : Controller
 
         var items = linkshellId > 0
             ? await _context.PartySetups.AsNoTracking()
-                .Where(ps => ps.LinkshellId == linkshellId)
+                // OwnerEventId == null → reusable templates only (exclude per-event snapshots).
+                .Where(ps => ps.LinkshellId == linkshellId && ps.OwnerEventId == null)
                 .OrderByDescending(ps => ps.UpdatedAt)
                 .Select(ps => new PartySetupListRow
                 {
@@ -381,7 +382,7 @@ public class PartySetupController : Controller
         // OrdinalIgnoreCase convention used everywhere else for monster names
         // (rather than relying on the provider's default string collation).
         var assigned = await context.PartySetups
-            .Where(ps => ps.LinkshellId == linkshellId && ps.AssignedMonsterName != null)
+            .Where(ps => ps.LinkshellId == linkshellId && ps.AssignedMonsterName != null && ps.OwnerEventId == null)
             .Select(ps => new { ps.Id, ps.AssignedMonsterName })
             .ToListAsync(cancellationToken);
 

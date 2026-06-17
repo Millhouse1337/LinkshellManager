@@ -129,12 +129,17 @@ public class PartySetupDetailsViewModel
 
 public class PartySetupAllianceView
 {
+    // Underlying PartySetupAlliance.Id — populated on the editable event board so
+    // officer drag-drop / add-party / rename can target it. 0 elsewhere (unused).
+    public int AllianceId { get; set; }
     public string Name { get; set; } = string.Empty;
     public List<PartySetupPartyView> Parties { get; set; } = new();
 }
 
 public class PartySetupPartyView
 {
+    // Underlying PartySetupParty.Id — see AllianceId above.
+    public int PartyId { get; set; }
     public string Name { get; set; } = string.Empty;
     public List<PartySetupSlotView> Slots { get; set; } = new();
 }
@@ -211,5 +216,32 @@ public class PartySetupSlotView
             };
             return string.IsNullOrWhiteSpace(Label) ? core : $"{core} ({Label})";
         }
+    }
+}
+
+// Backing model for the web _PartyBoardPanel partial — the live event party board
+// with officer drag-drop + inline editing. Built by EventController.Start (inline)
+// and EventController.PartyBoardPartial (the post-edit refresh endpoint).
+public class PartyBoardPanelViewModel
+{
+    public int EventId { get; set; }
+    public PartySetupBoardViewModel Board { get; set; } = new();
+    public bool CanManageParties { get; set; }
+    public string? CurrentUserId { get; set; }
+    public bool IsLive { get; set; }
+    public List<string> SignupCharacters { get; set; } = new();
+    public List<string> RoleOptions { get; set; } = new();
+    public List<string> MainJobOptions { get; set; } = new();
+    public List<string> SubJobOptions { get; set; } = new();
+    public List<AlsoAttendingRow> AlsoAttending { get; set; } = new();
+    public string ReturnUrl { get; set; } = string.Empty;
+
+    public class AlsoAttendingRow
+    {
+        public string? AppUserId { get; set; }
+        public string? CharacterName { get; set; }
+        public string? JobType { get; set; }
+        public string? JobName { get; set; }
+        public string? SubJobName { get; set; }
     }
 }

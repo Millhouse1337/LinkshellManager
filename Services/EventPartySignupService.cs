@@ -390,45 +390,87 @@ public static class EventPartySignupService
         var moved = 0;
         foreach (var signup in signups)
         {
-            var hasUser = !string.IsNullOrEmpty(signup.AppUserId);
-            var hasName = !string.IsNullOrWhiteSpace(signup.CharacterName);
-            // Skip anyone already attending "no slot" (don't double-add).
-            if (hasUser && attendingUserIds.Contains(signup.AppUserId!))
+            if (ConvertSignupToNoSlot(db, eventId, signup, startTime, attendingUserIds, attendingNames))
             {
-                continue;
+                moved++;
             }
-            if (!hasUser && hasName && attendingNames.Contains(signup.CharacterName!.Trim()))
-            {
-                continue;
-            }
-
-            db.AppUserEvents.Add(new AppUserEvent
-            {
-                AppUserId = signup.AppUserId,
-                // Carry the Discord identity so an outside signup can still withdraw
-                // (and stays one-per-event) after a setup change moves it to no-slot.
-                DiscordUserId = signup.DiscordUserId,
-                EventId = eventId,
-                CharacterName = signup.CharacterName,
-                JobName = signup.MainJob,
-                SubJobName = signup.SubJob,
-                JobType = signup.Role,
-                StartTime = startTime,
-                EventDkp = 0,
-            });
-            if (hasUser)
-            {
-                attendingUserIds.Add(signup.AppUserId!);
-            }
-            if (hasName)
-            {
-                attendingNames.Add(signup.CharacterName!.Trim());
-            }
-            moved++;
         }
 
         db.EventPartySlotSignups.RemoveRange(signups);
         return moved;
+    }
+
+    // Moves ONE slot signup to "no slot" (the board's "Also Attending"): the member
+    // stays in the event with their job, but the party slot is freed. Pre-start there's
+    // no participation yet, so a no-slot AppUserEvent is created; once the event is LIVE
+    // the member already has a materialized AppUserEvent (left untouched ⇒ no StartTime
+    // / DKP change), so only the slot signup is dropped. Removes the slot signup. Returns
+    // the party id the slot was in (for leadership re-resolution). Does NOT commit.
+    public static async Task<int?> MoveSlotSignupToNoSlotAsync(
+        ApplicationDbContext db, int eventId, EventPartySlotSignup signup, DateTime? startTime, CancellationToken cancellationToken)
+    {
+        var partyId = await db.PartySetupSlots
+            .Where(s => s.Id == signup.PartySetupSlotId)
+            .Select(s => (int?)s.PartySetupPartyId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var existing = await db.AppUserEvents
+            .Where(p => p.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        var attendingUserIds = new HashSet<string>(
+            existing.Where(p => !string.IsNullOrEmpty(p.AppUserId)).Select(p => p.AppUserId!),
+            StringComparer.Ordinal);
+        var attendingNames = new HashSet<string>(
+            existing.Where(p => !string.IsNullOrWhiteSpace(p.CharacterName)).Select(p => p.CharacterName!.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        ConvertSignupToNoSlot(db, eventId, signup, startTime, attendingUserIds, attendingNames);
+        db.EventPartySlotSignups.Remove(signup);
+        return partyId;
+    }
+
+    // Adds a no-slot AppUserEvent mirroring `signup` UNLESS that member is already
+    // attending no-slot (deduped via the two sets, which it updates). Does not remove
+    // the signup or commit. Returns true if a row was added.
+    private static bool ConvertSignupToNoSlot(
+        ApplicationDbContext db, int eventId, EventPartySlotSignup signup, DateTime? startTime,
+        HashSet<string> attendingUserIds, HashSet<string> attendingNames)
+    {
+        var hasUser = !string.IsNullOrEmpty(signup.AppUserId);
+        var hasName = !string.IsNullOrWhiteSpace(signup.CharacterName);
+        // Skip anyone already attending "no slot" (don't double-add).
+        if (hasUser && attendingUserIds.Contains(signup.AppUserId!))
+        {
+            return false;
+        }
+        if (!hasUser && hasName && attendingNames.Contains(signup.CharacterName!.Trim()))
+        {
+            return false;
+        }
+
+        db.AppUserEvents.Add(new AppUserEvent
+        {
+            AppUserId = signup.AppUserId,
+            // Carry the Discord identity so an outside signup can still withdraw
+            // (and stays one-per-event) after being moved to no-slot.
+            DiscordUserId = signup.DiscordUserId,
+            EventId = eventId,
+            CharacterName = signup.CharacterName,
+            JobName = signup.MainJob,
+            SubJobName = signup.SubJob,
+            JobType = signup.Role,
+            StartTime = startTime,
+            EventDkp = 0,
+        });
+        if (hasUser)
+        {
+            attendingUserIds.Add(signup.AppUserId!);
+        }
+        if (hasName)
+        {
+            attendingNames.Add(signup.CharacterName!.Trim());
+        }
+        return true;
     }
 
     // Map of PartySetupSlotId -> the event's signup for that slot, for rendering.

@@ -1185,11 +1185,15 @@ export interface ActivityPartySetupSlot {
 }
 
 export interface ActivityPartySetupParty {
+  // partyId/allianceId are 0 on the reusable-template board and the real ids on an
+  // event board (so officers can target slots/parties for drag-drop + inline edits).
+  partyId: number;
   name: string;
   slots: ActivityPartySetupSlot[];
 }
 
 export interface ActivityPartySetupAlliance {
+  allianceId: number;
   name: string;
   parties: ActivityPartySetupParty[];
 }
@@ -1225,6 +1229,36 @@ export interface ActivityPartySetupSignUpInput {
   // Event boards only: sign up as a specific character (main or an alt). Omitted
   // / null = the member's main character.
   characterName?: string | null;
+}
+
+// ----- Officer board-edit request bodies (live event party board) -----
+export interface BoardSlotRequirementInput {
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
+}
+
+export interface BoardMoveMemberInput {
+  // null fromSlotId = the member is currently in "Also Attending"; null toSlotId =
+  // move them TO "Also Attending". Identify the member by app-user id (or Discord id
+  // for an unsynced/outside member) when moving from Also Attending.
+  fromSlotId?: number | null;
+  toSlotId?: number | null;
+  appUserId?: string | null;
+  discordUserId?: string | null;
+}
+
+export interface BoardAddSlotInput {
+  partyId: number;
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
+}
+
+export interface BoardRenameInput {
+  allianceId?: number | null;
+  partyId?: number | null;
+  name?: string | null;
 }
 
 // Officer editor: a flat slot list (each row carries its alliance/party/slot

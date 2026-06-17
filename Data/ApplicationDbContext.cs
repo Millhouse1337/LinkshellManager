@@ -968,6 +968,18 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithOne(item => item.PartySetup)
                     .HasForeignKey(item => item.PartySetupId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // Per-event snapshot ownership: deleting the event removes its private
+                // copy. (Postgres permits this second Event<->PartySetup FK path; the
+                // reverse Event.PartySetupId FK is SetNull, so there is no delete cycle.)
+                entity.HasOne(item => item.OwnerEvent)
+                    .WithMany()
+                    .HasForeignKey(item => item.OwnerEventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // One snapshot per event — also the concurrency guard against a racing
+                // double-clone on first edit (the loser trips this unique index).
+                entity.HasIndex(item => item.OwnerEventId)
+                    .IsUnique()
+                    .HasFilter("\"OwnerEventId\" IS NOT NULL");
                 entity.HasIndex(item => new { item.LinkshellId, item.AssignedMonsterName });
                 entity.HasIndex(item => new { item.LinkshellId, item.Name });
             });

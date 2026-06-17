@@ -1,10 +1,16 @@
 import { CommonModule } from '@angular/common';
+import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { PartySetupService } from '../../discord/party-setup.service';
-import type { ActivityPartySetupSlot } from '../../discord/discord-activity.types';
+import type {
+  ActivityAlsoAttending,
+  ActivityPartySetupAlliance,
+  ActivityPartySetupParty,
+  ActivityPartySetupSlot
+} from '../../discord/discord-activity.types';
 
 interface SlotSignupDraft {
   role: string;
@@ -26,7 +32,7 @@ interface SlotSignupDraft {
 // which the embedding tabs always load.
 @Component({
   selector: 'app-party-setup-panel',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DragDropModule],
   templateUrl: './party-setup-panel.component.html',
   styleUrl: './party-setup-panel.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -219,5 +225,131 @@ export class PartySetupPanelComponent {
     if (eventId <= 0) { return; }
     await this.activity.unsignFromEvent(eventId);
     await this.partySetup.loadEventBoard(eventId);
+  }
+
+  // ===== Officer board editing (live event boards only) =============================
+  // Drag slots to rearrange the comp (occupants ride along), edit a slot's job inline
+  // (an occupied slot's job change moves the occupant to "Also Attending"), move members
+  // between slots / to-from Also Attending, and add/remove/rename slots + parties. All
+  // gated behind an explicit "Edit layout" toggle so the normal board stays clean.
+
+  protected readonly editing = signal(false);
+  protected readonly editingSlotId = signal<number | null>(null);
+  private readonly jobEdits = signal<Record<number, { role: string; mainJob: string; subJob: string }>>({});
+
+  // Officer + a live event board (never the reusable template or a read-only recap).
+  protected canEdit(): boolean {
+    return this.isEventBoard() && !this.templateOnly() && !this.readOnly() && this.canManage();
+  }
+
+  protected toggleEditing(): void {
+    this.editing.update(v => !v);
+    this.editingSlotId.set(null);
+  }
+
+  protected editEnabled(): boolean {
+    return this.canEdit() && this.editing();
+  }
+
+  // ----- slot drag (reorder within / move between parties; occupant rides along) -----
+  protected onSlotDropped(event: CdkDragDrop<ActivityPartySetupSlot[]>, targetParty: ActivityPartySetupParty): void {
+    if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) {
+      return;
+    }
+    const slot = event.item.data as ActivityPartySetupSlot;
+    void this.partySetup.moveSlot(this.eventId(), slot.slotId, targetParty.partyId, event.currentIndex);
+  }
+
+  // ----- inline slot job edit -----
+  protected jobEditFor(slotId: number): { role: string; mainJob: string; subJob: string } {
+    return this.jobEdits()[slotId] ?? { role: '', mainJob: '', subJob: '' };
+  }
+
+  protected openJobEdit(slot: ActivityPartySetupSlot): void {
+    this.jobEdits.update(m => ({
+      ...m,
+      [slot.slotId]: { role: slot.role ?? '', mainJob: slot.mainJob ?? '', subJob: slot.subJob ?? '' }
+    }));
+    this.editingSlotId.set(slot.slotId);
+  }
+
+  protected setJobEdit(slotId: number, patch: Partial<{ role: string; mainJob: string; subJob: string }>): void {
+    this.jobEdits.update(m => ({ ...m, [slotId]: { ...this.jobEditFor(slotId), ...patch } }));
+  }
+
+  protected async saveJobEdit(slot: ActivityPartySetupSlot): Promise<void> {
+    const e = this.jobEditFor(slot.slotId);
+    const ok = await this.partySetup.editSlotRequirement(this.eventId(), slot.slotId, {
+      role: e.role || null,
+      mainJob: e.mainJob || null,
+      subJob: e.subJob || null
+    });
+    if (ok) { this.editingSlotId.set(null); }
+  }
+
+  // ----- member moves (precise dropdown, touch-friendly) -----
+  // Every OPEN slot across the board, labeled, as a move target.
+  protected openSlotTargets(): { slotId: number; label: string }[] {
+    const detail = this.detail();
+    if (!detail) { return []; }
+    const out: { slotId: number; label: string }[] = [];
+    detail.alliances.forEach((a, ai) =>
+      a.parties.forEach((p, pi) =>
+        p.slots.forEach(s => {
+          if (!s.signedUpAppUserId) {
+            out.push({ slotId: s.slotId, label: `A${ai + 1} ${p.name || 'Party ' + (pi + 1)}: ${this.slotRequirement(s)}` });
+          }
+        })));
+    return out;
+  }
+
+  protected async moveMemberToSlot(fromSlotId: number, value: string): Promise<void> {
+    if (!value) { return; }
+    await this.partySetup.moveMember(this.eventId(), {
+      fromSlotId,
+      toSlotId: value === 'also' ? null : Number(value)
+    });
+  }
+
+  protected async seatAttendee(attendee: ActivityAlsoAttending, value: string): Promise<void> {
+    if (!value) { return; }
+    await this.partySetup.moveMember(this.eventId(), {
+      fromSlotId: null,
+      toSlotId: Number(value),
+      appUserId: attendee.appUserId ?? null
+    });
+  }
+
+  // ----- structure (add / delete / rename) -----
+  protected partyAtCap(party: ActivityPartySetupParty): boolean {
+    return party.slots.length >= 6;
+  }
+
+  protected allianceAtCap(alliance: ActivityPartySetupAlliance): boolean {
+    return alliance.parties.length >= 3;
+  }
+
+  protected async addSlot(party: ActivityPartySetupParty): Promise<void> {
+    await this.partySetup.addSlot(this.eventId(), { partyId: party.partyId });
+  }
+
+  protected async deleteSlot(slot: ActivityPartySetupSlot): Promise<void> {
+    await this.partySetup.deleteSlot(this.eventId(), slot.slotId);
+  }
+
+  protected async addParty(alliance: ActivityPartySetupAlliance): Promise<void> {
+    await this.partySetup.addParty(this.eventId(), alliance.allianceId);
+  }
+
+  protected async removeParty(party: ActivityPartySetupParty): Promise<void> {
+    await this.partySetup.removeParty(this.eventId(), party.partyId);
+  }
+
+  protected async renameParty(party: ActivityPartySetupParty, name: string): Promise<void> {
+    await this.partySetup.rename(this.eventId(), { partyId: party.partyId, name });
+  }
+
+  protected async renameAlliance(alliance: ActivityPartySetupAlliance, name: string): Promise<void> {
+    await this.partySetup.rename(this.eventId(), { allianceId: alliance.allianceId, name });
   }
 }

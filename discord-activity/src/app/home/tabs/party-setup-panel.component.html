@@ -1,5 +1,16 @@
 @if (detail(); as detail) {
-  <div class="ps-panel">
+  <div class="ps-panel" cdkDropListGroup>
+    @if (canEdit()) {
+      <div class="ps-edit-bar">
+        <button type="button" class="btn sm" [class.primary]="editing()" (click)="toggleEditing()">
+          {{ editing() ? 'Done editing' : 'Edit layout' }}
+        </button>
+        @if (editing()) {
+          <span class="ps-edit-hint">Drag slots to rearrange. Changes save live to the channel board.</span>
+        }
+      </div>
+    }
+
     @if (detail.notes) {
       <div class="ps-notes">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -13,13 +24,20 @@
       <section class="ps-alliance">
         <header class="ps-alliance-head">
           <span class="ps-alliance-tag">Alliance {{ ai + 1 }}</span>
-          @if (alliance.name && alliance.name !== ('Alliance ' + (ai + 1))) {
+          @if (editEnabled()) {
+            <input class="ps-rename" type="text" [value]="alliance.name" placeholder="Alliance name"
+              (change)="renameAlliance(alliance, $any($event.target).value)" />
+          } @else if (alliance.name && alliance.name !== ('Alliance ' + (ai + 1))) {
             <span class="ps-alliance-name">{{ alliance.name }}</span>
+          }
+          @if (editEnabled()) {
+            <button type="button" class="btn xs ghost ps-add-party" (click)="addParty(alliance)"
+              [disabled]="allianceAtCap(alliance) || partySetup.busy()" title="Add a party">+ Party</button>
           }
         </header>
 
         <div class="ps-party-grid">
-          @for (party of alliance.parties; track $index; let pi = $index) {
+          @for (party of alliance.parties; track party.partyId; let pi = $index) {
             <article class="ps-party">
               <header class="ps-party-head">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -28,15 +46,28 @@
                   <circle cx="17" cy="9" r="2.5"/>
                   <path d="M15 18c0-2 2-3.5 4-3.5s2 .7 2 2"/>
                 </svg>
-                <span class="ps-party-name">{{ party.name || 'Party ' + (pi + 1) }}</span>
+                @if (editEnabled()) {
+                  <input class="ps-rename ps-rename--party" type="text" [value]="party.name || ''" placeholder="Party {{ pi + 1 }}"
+                    (change)="renameParty(party, $any($event.target).value)" />
+                  <button type="button" class="btn xs ghost ps-remove-party" (click)="removeParty(party)"
+                    [disabled]="partySetup.busy()" title="Remove party">✕</button>
+                } @else {
+                  <span class="ps-party-name">{{ party.name || 'Party ' + (pi + 1) }}</span>
+                }
                 <span class="ps-party-count">{{ party.slots.length }}/{{ 6 }}</span>
               </header>
 
-              <div class="ps-slots">
+              <div class="ps-slots" cdkDropList [cdkDropListData]="party.slots"
+                   [cdkDropListDisabled]="!editEnabled()" (cdkDropListDropped)="onSlotDropped($event, party)">
                 @for (slot of party.slots; track slot.slotId) {
                   <div class="ps-slot" [class.is-open]="isOpen(slot)" [class.is-leader]="slot.isPartyLeader"
-                       [class.ps-slot--inline]="isOpen(slot) && !needsRole(slot) && !needsMainJob(slot) && !needsSubJob(slot)">
+                       [class.ps-slot--editing]="editEnabled()"
+                       [class.ps-slot--inline]="isOpen(slot) && !needsRole(slot) && !needsMainJob(slot) && !needsSubJob(slot)"
+                       cdkDrag [cdkDragData]="slot" [cdkDragDisabled]="!editEnabled()" [cdkDragStartDelay]="120">
                     <div class="ps-slot-req">
+                      @if (editEnabled()) {
+                        <span class="ps-drag-handle" cdkDragHandle title="Drag to move slot" aria-label="Drag to move slot">⠿</span>
+                      }
                       @if (slot.isPartyLeader) {
                         <span class="ps-crown" title="Party leader" aria-label="Party leader">
                           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -45,7 +76,13 @@
                         </span>
                       }
                       <span class="ps-slot-req-label">{{ slotRequirement(slot) }}</span>
-                      @if (!templateOnly() && isOpen(slot) && !readOnly() && isEventBoard() && signupCharacterOptions().length > 1) {
+                      @if (editEnabled()) {
+                        <button type="button" class="ps-slot-edit-btn" (click)="editingSlotId() === slot.slotId ? editingSlotId.set(null) : openJobEdit(slot)"
+                          title="Change this slot's job">✎</button>
+                        <button type="button" class="ps-slot-del-btn" (click)="deleteSlot(slot)" [disabled]="partySetup.busy()"
+                          title="Remove this slot">✕</button>
+                      }
+                      @if (!templateOnly() && isOpen(slot) && !readOnly() && isEventBoard() && !editEnabled() && signupCharacterOptions().length > 1) {
                         <select class="ps-slot-char" [ngModel]="draftFor(slot.slotId).characterName" (ngModelChange)="setDraft(slot.slotId, { characterName: $event })" title="Sign up as your main or an alt">
                           @for (c of signupCharacterOptions(); track c; let first = $first) {
                             <option [value]="first ? '' : c">{{ c }}{{ first ? ' (main)' : '' }}</option>
@@ -54,9 +91,32 @@
                       }
                     </div>
 
+                    @if (editEnabled() && editingSlotId() === slot.slotId) {
+                      <div class="ps-job-edit">
+                        <select [ngModel]="jobEditFor(slot.slotId).role" (ngModelChange)="setJobEdit(slot.slotId, { role: $event })">
+                          <option value="">Any role</option>
+                          @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
+                        </select>
+                        <select [ngModel]="jobEditFor(slot.slotId).mainJob" (ngModelChange)="setJobEdit(slot.slotId, { mainJob: $event })">
+                          <option value="">Any job</option>
+                          @for (j of mainJobOptions(); track j) {
+                            @if (j !== jobEditFor(slot.slotId).subJob) { <option [value]="j">{{ j }}</option> }
+                          }
+                        </select>
+                        <select [ngModel]="jobEditFor(slot.slotId).subJob" (ngModelChange)="setJobEdit(slot.slotId, { subJob: $event })"
+                          [disabled]="!jobEditFor(slot.slotId).mainJob">
+                          <option value="">Player's choice</option>
+                          @for (j of subJobOptions(); track j) {
+                            @if (j !== jobEditFor(slot.slotId).mainJob) { <option [value]="j">{{ j }}</option> }
+                          }
+                        </select>
+                        <button type="button" class="btn xs primary" (click)="saveJobEdit(slot)" [disabled]="partySetup.busy()">Save</button>
+                      </div>
+                    }
+
                     @if (!templateOnly()) {
                     @if (isOpen(slot)) {
-                      @if (readOnly()) {
+                      @if (readOnly() || editEnabled()) {
                         <div class="ps-slot-open-readonly">Open</div>
                       } @else {
                         <div class="ps-signup">
@@ -108,7 +168,14 @@
                           </span>
                           @if (signedUpJobs(slot)) { <span class="ps-jobs">{{ signedUpJobs(slot) }}</span> }
                         </span>
-                        @if (!readOnly()) {
+                        @if (editEnabled()) {
+                          <select class="ps-move-select" (change)="moveMemberToSlot(slot.slotId, $any($event.target).value); $any($event.target).value = ''"
+                            title="Move this member">
+                            <option value="">Move&hellip;</option>
+                            <option value="also">→ Also Attending</option>
+                            @for (t of openSlotTargets(); track t.slotId) { <option [value]="t.slotId">→ {{ t.label }}</option> }
+                          </select>
+                        } @else if (!readOnly()) {
                           @if (isMine(slot) && !live()) {
                             <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Withdraw</button>
                           } @else if (canManage()) {
@@ -122,6 +189,10 @@
                 }
                 @if (party.slots.length === 0) {
                   <div class="ps-empty">No slots</div>
+                }
+                @if (editEnabled()) {
+                  <button type="button" class="btn xs ghost ps-add-slot" (click)="addSlot(party)"
+                    [disabled]="partyAtCap(party) || partySetup.busy()" title="Add a slot">+ Slot</button>
                 }
               </div>
             </article>
@@ -141,7 +212,13 @@
             <div class="ps-also-row">
               <span class="ps-also-name">{{ a.characterName || 'Member' }}</span>
               <span class="ps-also-job">{{ a.role || 'Any' }}@if (a.mainJob) { · {{ a.mainJob }}@if (a.subJob) {/{{ a.subJob }}}}</span>
-              @if (isEventBoard() && a.appUserId && a.appUserId === myAppUserId() && (!live() || canManage())) {
+              @if (editEnabled() && a.appUserId && openSlotTargets().length > 0) {
+                <select class="ps-move-select" (change)="seatAttendee(a, $any($event.target).value); $any($event.target).value = ''"
+                  title="Seat this member into a slot">
+                  <option value="">Seat&hellip;</option>
+                  @for (t of openSlotTargets(); track t.slotId) { <option [value]="t.slotId">→ {{ t.label }}</option> }
+                </select>
+              } @else if (isEventBoard() && a.appUserId && a.appUserId === myAppUserId() && (!live() || canManage())) {
                 <button type="button" class="btn sm ghost ps-also-withdraw" (click)="withdrawNoSlot()" [disabled]="partySetup.busy()">Withdraw</button>
               }
             </div>

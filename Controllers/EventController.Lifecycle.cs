@@ -315,9 +315,11 @@ public partial class EventController
         Name = ps.Name,
         Alliances = ps.Alliances.OrderBy(a => a.SortOrder).Select(a => new PartySetupAllianceView
         {
+            AllianceId = a.Id,
             Name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
             Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
             {
+                PartyId = p.Id,
                 Name = string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
                 Slots = p.Slots.OrderBy(s => s.SortOrder).Select(s =>
                 {
@@ -482,12 +484,11 @@ public partial class EventController
             return Forbid();
         }
 
-        var requestedPartySetupId = eventViewModel.PartySetupId;
-        if (requestedPartySetupId.HasValue &&
-            !await PartySetupBelongsToLinkshellAsync(requestedPartySetupId.Value, eventViewModel.Event.LinkshellId))
-        {
-            requestedPartySetupId = null;
-        }
+        // If this event's board was customized into a per-event snapshot (which the
+        // template picker can't represent), keep it — its slots are managed from the
+        // board editor, not this form — so editing event details never wipes the board.
+        var currentIsSnapshot = eventToUpdate.PartySetupId is { } curSetupId
+            && await _context.PartySetups.AnyAsync(ps => ps.Id == curSetupId && ps.OwnerEventId == eventToUpdate.Id);
 
         eventToUpdate.LinkshellId = eventViewModel.Event.LinkshellId;
         eventToUpdate.EventName = eventViewModel.Event.EventName;
@@ -500,7 +501,25 @@ public partial class EventController
         eventToUpdate.Details = eventViewModel.Event.Details;
         eventToUpdate.AutoStart = eventViewModel.Event.AutoStart;
         eventToUpdate.CountsTowardActive = eventViewModel.Event.CountsTowardActive;
-        eventToUpdate.PartySetupId = requestedPartySetupId;
+
+        if (!currentIsSnapshot)
+        {
+            var requestedPartySetupId = eventViewModel.PartySetupId;
+            if (requestedPartySetupId.HasValue &&
+                !await PartySetupBelongsToLinkshellAsync(requestedPartySetupId.Value, eventViewModel.Event.LinkshellId))
+            {
+                requestedPartySetupId = null;
+            }
+            // Changing the linked setup orphans the old slot signups (they're keyed to the
+            // old setup's slots), so move them to "Also Attending" rather than silently
+            // dropping the roster (parity with the Activity UpdateEvent path).
+            if (requestedPartySetupId != eventToUpdate.PartySetupId)
+            {
+                await EventPartySignupService.MoveSlotSignupsToNoSlotAsync(
+                    _context, eventToUpdate.Id, eventToUpdate.StartTime, HttpContext.RequestAborted);
+            }
+            eventToUpdate.PartySetupId = requestedPartySetupId;
+        }
 
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));

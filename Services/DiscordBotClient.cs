@@ -121,6 +121,46 @@ public sealed class DiscordBotClient
         }
     }
 
+    // Registers the global "/lsm" slash command — running it posts a "Join" card that
+    // launches the Activity (officer-gated in the interactions handler). POSTing a global
+    // command upserts it by name, so this is idempotent. Best-effort: logs + returns on
+    // any failure, never throws. Run once at startup.
+    public async Task EnsureLaunchCommandRegisteredAsync(CancellationToken cancellationToken)
+    {
+        const int ChatInputType = 1; // CHAT_INPUT slash command
+
+        if (!IsConfigured || string.IsNullOrWhiteSpace(_options.ClientId))
+        {
+            return;
+        }
+
+        var commandsUrl = $"{ApiBase}/applications/{Uri.EscapeDataString(_options.ClientId)}/commands";
+        try
+        {
+            using var client = CreateClient();
+            using var body = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    name = "lsm",
+                    description = "Post a button to launch the LinkshellManager app in this channel.",
+                    type = ChatInputType,
+                }, JsonOptions), Encoding.UTF8, "application/json");
+            using var response = await client.PostAsync(commandsUrl, body, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Registered the /lsm launch-card slash command.");
+            }
+            else
+            {
+                _logger.LogWarning("Couldn't register the /lsm command: {Status}.", response.StatusCode);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Registering the /lsm command failed.");
+        }
+    }
+
     // Text/announcement channels of a guild (id + name) for the config pick-list.
     // Null when no bot token, the bot isn't in the guild, or the call fails.
     public async Task<IReadOnlyList<DiscordChannelInfo>?> ListTextChannelsAsync(

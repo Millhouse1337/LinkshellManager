@@ -52,7 +52,8 @@ public partial class EventController : Controller
 
         var availablePartySetups = selectedLinkshellId > 0
             ? await _context.PartySetups
-                .Where(setup => setup.LinkshellId == selectedLinkshellId)
+                // OwnerEventId == null → reusable templates only (exclude per-event snapshots).
+                .Where(setup => setup.LinkshellId == selectedLinkshellId && setup.OwnerEventId == null)
                 .OrderBy(setup => setup.Name)
                 .Select(setup => new PartySetupOption
                 {

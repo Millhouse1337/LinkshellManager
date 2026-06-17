@@ -64,10 +64,12 @@ public sealed partial class ActivityDataController
         bool SignedUpIsPartyLeader);
 
     public sealed record ActivityPartySetupPartyDto(
+        int PartyId,
         string Name,
         IReadOnlyList<ActivityPartySetupSlotDto> Slots);
 
     public sealed record ActivityPartySetupAllianceDto(
+        int AllianceId,
         string Name,
         IReadOnlyList<ActivityPartySetupPartyDto> Parties);
 
@@ -107,7 +109,8 @@ public sealed partial class ActivityDataController
 
         var items = await _dbContext.PartySetups
             .AsNoTracking()
-            .Where(ps => ps.LinkshellId == linkshellId)
+            // OwnerEventId == null → reusable templates only (exclude per-event snapshots).
+            .Where(ps => ps.LinkshellId == linkshellId && ps.OwnerEventId == null)
             .OrderByDescending(ps => ps.UpdatedAt)
             .Select(ps => new ActivityPartySetupListRow(
                 ps.Id,
@@ -151,10 +154,12 @@ public sealed partial class ActivityDataController
         var alliances = partySetup.Alliances
             .OrderBy(a => a.SortOrder)
             .Select(a => new ActivityPartySetupAllianceDto(
+                a.Id,
                 string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
                 a.Parties
                     .OrderBy(p => p.SortOrder)
                     .Select(p => new ActivityPartySetupPartyDto(
+                        p.Id,
                         string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
                         p.Slots
                             .OrderBy(s => s.SortOrder)

@@ -94,7 +94,10 @@ public sealed partial class ActivityDataController
         int partySetupId, int linkshellId, CancellationToken cancellationToken)
     {
         return await _dbContext.PartySetups
-            .AnyAsync(setup => setup.Id == partySetupId && setup.LinkshellId == linkshellId, cancellationToken);
+            // OwnerEventId == null → only a reusable template may be attached to an event,
+            // never another event's private snapshot.
+            .AnyAsync(setup => setup.Id == partySetupId && setup.LinkshellId == linkshellId
+                && setup.OwnerEventId == null, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/update")]
@@ -173,17 +176,26 @@ public sealed partial class ActivityDataController
         eventEntity.Duration = request.Duration;
         eventEntity.DkpPerHour = request.DkpPerHour;
         eventEntity.Details = request.Details?.Trim();
-        // Changing (or removing) the linked party setup orphans the event's slot
-        // signups — they're keyed to the OLD setup's slot ids. Rather than drop
-        // those members, move them to the event's "no slot" attendance so they
-        // still show on the new board (under "Also attending — no slot"). The
-        // Activity warns the user first.
-        if (eventEntity.PartySetupId != request.PartySetupId)
+        // If the board was customized into a per-event snapshot (which the template
+        // picker can't represent), keep it — its slots are managed from the board editor,
+        // not this form — so editing event details never wipes the customized board.
+        var currentIsSnapshot = eventEntity.PartySetupId is { } curSetupId
+            && await _dbContext.PartySetups.AnyAsync(
+                ps => ps.Id == curSetupId && ps.OwnerEventId == eventEntity.Id, cancellationToken);
+        if (!currentIsSnapshot)
         {
-            await EventPartySignupService.MoveSlotSignupsToNoSlotAsync(
-                _dbContext, eventEntity.Id, eventEntity.CommencementStartTime, cancellationToken);
+            // Changing (or removing) the linked party setup orphans the event's slot
+            // signups — they're keyed to the OLD setup's slot ids. Rather than drop
+            // those members, move them to the event's "no slot" attendance so they
+            // still show on the new board (under "Also attending — no slot"). The
+            // Activity warns the user first.
+            if (eventEntity.PartySetupId != request.PartySetupId)
+            {
+                await EventPartySignupService.MoveSlotSignupsToNoSlotAsync(
+                    _dbContext, eventEntity.Id, eventEntity.CommencementStartTime, cancellationToken);
+            }
+            eventEntity.PartySetupId = request.PartySetupId;
         }
-        eventEntity.PartySetupId = request.PartySetupId;
         eventEntity.AutoStart = request.AutoStart;
         eventEntity.CountsTowardActive = request.CountsTowardActive;
 

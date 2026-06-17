@@ -7,7 +7,11 @@ import type {
   ActivityPartySetupDetail,
   ActivityPartySetupEditorInput,
   ActivityPartySetupListResponse,
-  ActivityPartySetupSignUpInput
+  ActivityPartySetupSignUpInput,
+  BoardAddSlotInput,
+  BoardMoveMemberInput,
+  BoardRenameInput,
+  BoardSlotRequirementInput
 } from './discord-activity.types';
 
 // Discord Activity client for the raid-composition planner (Party Setup).
@@ -130,6 +134,50 @@ export class PartySetupService {
       undefined,
       'Slot released.'
     );
+  }
+
+  // ----- Officer board editing (drag-drop + per-slot job changes) -----
+  // Each posts then reloads the event board, so the panel renders authoritative state
+  // (e.g. a displaced occupant moving into "Also Attending").
+
+  async editSlotRequirement(eventId: number, slotId: number, input: BoardSlotRequirementInput): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/slots/${slotId}/requirement`, input, 'Slot updated.');
+  }
+
+  async moveSlot(eventId: number, slotId: number, targetPartyId: number, targetIndex: number): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/slots/${slotId}/move`, { targetPartyId, targetIndex }, 'Slot moved.');
+  }
+
+  async moveMember(eventId: number, input: BoardMoveMemberInput): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/members/move`, input, 'Member moved.');
+  }
+
+  async addSlot(eventId: number, input: BoardAddSlotInput): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/slots`, input, 'Slot added.');
+  }
+
+  async deleteSlot(eventId: number, slotId: number): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/slots/${slotId}/delete`, undefined, 'Slot removed.');
+  }
+
+  async addParty(eventId: number, allianceId: number, name?: string | null): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/parties`, { allianceId, name: name ?? null }, 'Party added.');
+  }
+
+  async removeParty(eventId: number, partyId: number): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/parties/${partyId}/delete`, undefined, 'Party removed.');
+  }
+
+  async rename(eventId: number, input: BoardRenameInput): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId, `/api/activity/events/${eventId}/board/rename`, input, 'Renamed.');
   }
 
   private async mutateEventSlot(eventId: number, path: string, body: unknown, message: string): Promise<boolean> {
