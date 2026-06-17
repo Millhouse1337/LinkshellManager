@@ -224,6 +224,10 @@ public static class EventPartySignupService
             eventEntity.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = signup.AppUserId,
+                // Carry the slot's Discord id too (dual-stamp), so a Discord-board
+                // withdrawal — which matches an unsynced/placeholder member by Discord
+                // id — can find and drop this materialized participation.
+                DiscordUserId = signup.DiscordUserId,
                 EventId = eventEntity.Id,
                 CharacterName = signup.CharacterName,
                 JobName = signup.MainJob,
@@ -315,6 +319,9 @@ public static class EventPartySignupService
             db.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = appUserId,
+                // Dual-stamp the Discord id (see MaterializeSignupsAsParticipantsAsync)
+                // so a placeholder member's Discord-board withdrawal can drop this row.
+                DiscordUserId = signup.DiscordUserId,
                 EventId = eventEntity.Id,
                 CharacterName = signup.CharacterName,
                 JobName = signup.MainJob,

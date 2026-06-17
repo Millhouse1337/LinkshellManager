@@ -1317,43 +1317,57 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        // Once the event is live, members can't drop themselves from the board —
-        // only an officer can free a slot (from the website / Activity).
-        if (!EventPartySignupService.MemberCanWithdraw(ev))
-        {
-            return Ephemeral("The event is live — ask an officer to remove you.");
-        }
-
+        // Self-withdraw is allowed even after the event is live: many players only ever
+        // use the Discord board (never the app), so they must be able to free their slot
+        // and re-sign mid-run rather than waiting on an officer. The live Event row is
+        // deleted when the event ends, so this is naturally bounded — a post-end click
+        // finds no event and is rejected above. (The web/Activity path stays officer-
+        // gated; see EventController.Lifecycle's MemberCanWithdraw check.)
         var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
         if (identity is null)
         {
             return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
         }
         var (idAppUser, idDiscord) = identity.Value;
+        var isLive = ev.CommencementStartTime is not null;
 
         var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, idAppUser, cancellationToken, idDiscord);
 
-        // Also drop their general-attendance row (the "Join (no slot)" roster).
-        var attendance = idAppUser is not null
-            ? await _db.AppUserEvents
-                .Where(p => p.EventId == eventId && p.AppUserId == idAppUser)
-                .ToListAsync(cancellationToken)
-            // Outside clicker: match by Discord id ALONE so it also finds a
-            // placeholder-matched row (which carries a non-null AppUserId).
-            : await _db.AppUserEvents
-                .Where(p => p.EventId == eventId && p.DiscordUserId == idDiscord)
-                .ToListAsync(cancellationToken);
-        if (attendance.Count > 0)
+        // Before the event starts there's no DKP yet, so a withdrawal is a clean full
+        // exit — also drop any "Join (no slot)" attendance they hold. Once the event is
+        // LIVE we deliberately KEEP their materialized participation: withdrawing from a
+        // slot must NOT wipe the event DKP they've earned by attending. Only the party
+        // slot is freed — they remain an attendee and can re-sign into a new slot with no
+        // DKP reset (the re-claim adopts the kept participation). An officer can still
+        // fully remove a live participant from the app if truly needed.
+        var droppedAttendance = false;
+        if (!isLive)
         {
-            _db.AppUserEvents.RemoveRange(attendance);
+            var attendance = idAppUser is not null
+                ? await _db.AppUserEvents
+                    .Where(p => p.EventId == eventId && p.AppUserId == idAppUser)
+                    .ToListAsync(cancellationToken)
+                // Outside clicker: match by Discord id ALONE so it also finds a
+                // placeholder-matched row (which carries a non-null AppUserId).
+                : await _db.AppUserEvents
+                    .Where(p => p.EventId == eventId && p.DiscordUserId == idDiscord)
+                    .ToListAsync(cancellationToken);
+            if (attendance.Count > 0)
+            {
+                _db.AppUserEvents.RemoveRange(attendance);
+                droppedAttendance = true;
+            }
         }
 
-        if (leftPartyId is null && attendance.Count == 0)
+        if (leftPartyId is null && !droppedAttendance)
         {
             // Leave lives on the shared board (the same button for everyone, which
-            // Discord can't hide/grey per-user), so a not-signed-up click just gets
-            // a private "nothing to leave" notice instead of refreshing the board.
-            return Ephemeral("You're not signed up for this event, so there's nothing to leave.");
+            // Discord can't hide/grey per-user), so a click with nothing to free gets a
+            // private notice instead of refreshing the board. Once live, that means they
+            // hold no slot but keep any attendance/DKP — point them at an officer.
+            return Ephemeral(isLive
+                ? "You're attending this live event, so your DKP stays. Withdraw only frees a party slot — ask an officer if you need to be removed entirely."
+                : "You're not signed up for this event, so there's nothing to leave.");
         }
 
         await _db.SaveChangesAsync(cancellationToken);
