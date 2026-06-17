@@ -51,6 +51,23 @@ export class LootHistoryPanelComponent implements OnInit {
   protected readonly addingLoot = signal(false);
   protected addFormModel: LootAddFormModel = this.emptyAddForm();
   protected addError = signal<string | null>(null);
+  // "Event / source" is a dropdown of this linkshell's events plus an "Other…"
+  // option; picking Other reveals a free-text field to name a one-off source.
+  protected readonly OTHER_EVENT = '__other__';
+  protected addEventChoice = '';
+  protected addCustomEvent = '';
+
+  // Distinct names of the selected linkshell's current events, for the
+  // "Event / source" picker. (Past events aren't in the overview — use "Other…"
+  // to name one.)
+  protected eventOptions(): string[] {
+    const events = this.activity.overview()?.activeEvents ?? [];
+    const names = events
+      .filter(event => event.linkshellId === this.selectedLinkshellId)
+      .map(event => (event.name ?? '').trim())
+      .filter(name => name.length > 0);
+    return Array.from(new Set(names));
+  }
 
   // Whether the current user may add loot to the selected linkshell (drives the
   // "+ Add loot" button). The server re-checks CanAddLoot regardless.
@@ -61,6 +78,8 @@ export class LootHistoryPanelComponent implements OnInit {
 
   protected openAdd(): void {
     this.addFormModel = this.emptyAddForm();
+    this.addEventChoice = '';
+    this.addCustomEvent = '';
     this.addError.set(null);
     this.addingLoot.set(true);
   }
@@ -68,6 +87,8 @@ export class LootHistoryPanelComponent implements OnInit {
   protected closeAdd(): void {
     this.addingLoot.set(false);
     this.addFormModel = this.emptyAddForm();
+    this.addEventChoice = '';
+    this.addCustomEvent = '';
     this.addError.set(null);
   }
 
@@ -93,9 +114,14 @@ export class LootHistoryPanelComponent implements OnInit {
       return;
     }
 
+    // Source = the picked event name, or the custom name when "Other…" is chosen.
+    const context = this.addEventChoice === this.OTHER_EVENT
+      ? (this.addCustomEvent ?? '').trim()
+      : (this.addEventChoice ?? '').trim();
+
     this.addError.set(null);
     const ok = await this.activity.addManualLoot({
-      context: (this.addFormModel.context ?? '').trim() || null,
+      context: context || null,
       itemName,
       itemWinner,
       winningDkpSpent: dkp

@@ -258,20 +258,23 @@
     <nav class="nav-section">
         <div class="nav-label">Management</div>
 
-        @if (Allow(p => p.CanManageMembers))
-        {
-            <button type="button" class="nav-item nav-group @IsExpanded("ManageTeam")" data-target="#nav-team">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
-                Manage Team
-                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-            </button>
-            <div id="nav-team" class="nav-sub">
-                <a class="nav-sub-item @IsSubActive("ManageTeam", "Index")" asp-controller="ManageTeam" asp-action="Index">View Team</a>
-                <a class="nav-sub-item @IsSubActive("ManageTeam", "JobsRoster")" asp-controller="ManageTeam" asp-action="JobsRoster">Jobs Roster</a>
+        @* Manage Team is visible to every member: View Team, Jobs Roster, and
+           View Invites are read-only/self-service (no manage permission needed
+           server-side). Only "Add Members" requires CanManageMembers. *@
+        <button type="button" class="nav-item nav-group @IsExpanded("ManageTeam")" data-target="#nav-team">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
+            Manage Team
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div id="nav-team" class="nav-sub">
+            <a class="nav-sub-item @IsSubActive("ManageTeam", "Index")" asp-controller="ManageTeam" asp-action="Index">View Team</a>
+            <a class="nav-sub-item @IsSubActive("ManageTeam", "JobsRoster")" asp-controller="ManageTeam" asp-action="JobsRoster">Jobs Roster</a>
+            @if (Allow(p => p.CanManageMembers))
+            {
                 <a class="nav-sub-item create @IsSubActive("ManageTeam", "SearchPlayers")" asp-controller="ManageTeam" asp-action="SearchPlayers">Add Members</a>
-                <a class="nav-sub-item @IsSubActive("ManageTeam", "ViewInvites")" asp-controller="ManageTeam" asp-action="ViewInvites">View Invites</a>
-            </div>
-        }
+            }
+            <a class="nav-sub-item @IsSubActive("ManageTeam", "ViewInvites")" asp-controller="ManageTeam" asp-action="ViewInvites">View Invites</a>
+        </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("ManageItem")" data-target="#nav-items">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
@@ -286,18 +289,21 @@
             }
         </div>
 
-        @if (Allow(p => p.CanManageTreasury))
-        {
-            <button type="button" class="nav-item nav-group @IsExpanded("ManageRevenue")" data-target="#nav-revenue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
-                Manage Finances
-                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-            </button>
-            <div id="nav-revenue" class="nav-sub">
-                <a class="nav-sub-item @IsSubActive("ManageRevenue", "Index")" asp-controller="ManageRevenue" asp-action="Index">View Income</a>
+        @* Manage Finances is visible to every member: View Income is read-only
+           (no manage permission needed server-side). Only "Add Income" requires
+           CanManageTreasury. *@
+        <button type="button" class="nav-item nav-group @IsExpanded("ManageRevenue")" data-target="#nav-revenue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
+            Manage Finances
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div id="nav-revenue" class="nav-sub">
+            <a class="nav-sub-item @IsSubActive("ManageRevenue", "Index")" asp-controller="ManageRevenue" asp-action="Index">View Income</a>
+            @if (Allow(p => p.CanManageTreasury))
+            {
                 <a class="nav-sub-item create @IsSubActive("ManageRevenue", "AddIncome")" asp-controller="ManageRevenue" asp-action="AddIncome">Add Income</a>
-            </div>
-        }
+            }
+        </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("DkpHistory", "DkpAdjustment", "LinkshellAppDkpSheet")" data-target="#nav-dkp">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg>

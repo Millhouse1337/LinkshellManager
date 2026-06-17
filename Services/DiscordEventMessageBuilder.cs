@@ -125,53 +125,70 @@ public static class DiscordEventMessageBuilder
     }
 
     // Action rows for the ephemeral "pick a slot" message shown when someone hits
-    // Sign Up: a select of the OPEN slots (≤25; Discord's select cap). Returns an
-    // empty array when nothing is open (caller shows a "full" notice instead).
+    // Sign Up. Returns an empty array when nothing is open (caller shows a "full"
+    // notice instead).
+    //
+    // Discord caps a string select at 25 options AND a message at 5 action rows. A
+    // board can hold far more than 25 open slots (e.g. Sky = 3 alliances × 18), so a
+    // single flat select would silently drop every open slot past #25 — in practice
+    // the whole last alliance. So we give EACH alliance its own select (≤25 options),
+    // up to Discord's 5-row limit, so every alliance's open slots stay reachable.
+    // Each select needs a custom_id unique within the message (Discord requires it),
+    // so the alliance index rides after the event id; the claim handler parses the
+    // leading id and ignores that suffix.
     public static object[] BuildSlotPickerComponents(
         int eventId, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
         bool asLeader = false)
     {
-        var options = new List<object>();
-        foreach (var (party, label) in LabeledParties(setup))
+        var alliances = setup.Alliances.OrderBy(a => a.SortOrder).ToList();
+        var multiAlliance = alliances.Count > 1;
+        var claimPrefix = asLeader ? PartySlotClaimLeaderPrefix : PartySlotClaimPrefix;
+        var action = asLeader ? "to lead" : "to claim";
+
+        var rows = new List<object>();
+        for (var ai = 0; ai < alliances.Count && rows.Count < 5; ai++)
         {
-            // For the leader flow, only offer slots in parties that don't already
-            // have a leader (first-claim-wins). A full party always has a leader
-            // (auto-promoted on fill), so leaderless parties always have open slots.
-            if (asLeader && party.Slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader))
+            var parties = alliances[ai].Parties.OrderBy(p => p.SortOrder).ToList();
+            var options = new List<object>();
+            for (var pi = 0; pi < parties.Count && options.Count < 25; pi++)
             {
-                continue;
-            }
-            foreach (var slot in party.Slots.OrderBy(s => s.SortOrder))
-            {
-                if (slotSignups.ContainsKey(slot.Id))
+                var party = parties[pi];
+                // Leader flow: only offer slots in parties without a leader yet
+                // (first-claim-wins). A full party always has a leader (auto-promoted
+                // on fill), so leaderless parties always have open slots.
+                if (asLeader && party.Slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader))
                 {
                     continue;
                 }
-                if (options.Count >= 25)
+                var partyName = string.IsNullOrWhiteSpace(party.Name) ? $"Party {pi + 1}" : party.Name!.Trim();
+                foreach (var slot in party.Slots.OrderBy(s => s.SortOrder))
                 {
-                    break;
+                    if (slotSignups.ContainsKey(slot.Id) || options.Count >= 25)
+                    {
+                        continue;
+                    }
+                    options.Add(new
+                    {
+                        label = Truncate($"{partyName}: {SlotShortLabel(slot)}", 100),
+                        value = slot.Id.ToString(),
+                        emoji = new { name = RoleIcon(slot, null) },
+                    });
                 }
-                options.Add(new
-                {
-                    label = Truncate($"{label}: {SlotShortLabel(slot)}", 100),
-                    value = slot.Id.ToString(),
-                    emoji = new { name = RoleIcon(slot, null) },
-                });
             }
-            if (options.Count >= 25)
+
+            if (options.Count == 0)
             {
-                break;
+                continue;
             }
-        }
 
-        if (options.Count == 0)
-        {
-            return Array.Empty<object>();
-        }
+            var allianceName = string.IsNullOrWhiteSpace(alliances[ai].Name)
+                ? $"Alliance {ai + 1}"
+                : alliances[ai].Name!.Trim();
+            var placeholder = multiAlliance
+                ? Truncate($"{allianceName} — pick a slot {action}", 150)
+                : $"Pick a slot {action}";
 
-        return new object[]
-        {
-            new
+            rows.Add(new
             {
                 type = 1, // action row
                 components = new object[]
@@ -179,15 +196,19 @@ public static class DiscordEventMessageBuilder
                     new
                     {
                         type = 3, // string select
-                        custom_id = $"{(asLeader ? PartySlotClaimLeaderPrefix : PartySlotClaimPrefix)}{eventId}",
-                        placeholder = asLeader ? "Pick a slot to lead" : "Pick a slot to claim",
+                        // Suffix the alliance index so each select is unique in the
+                        // message; ParseTrailingId reads just the leading event id.
+                        custom_id = multiAlliance ? $"{claimPrefix}{eventId}:{ai}" : $"{claimPrefix}{eventId}",
+                        placeholder,
                         min_values = 1,
                         max_values = 1,
                         options = options.ToArray(),
                     },
                 },
-            },
-        };
+            });
+        }
+
+        return rows.ToArray();
     }
 
     private static object BuildEmbed(Event ev, IReadOnlyList<EventSignupLine> signups)
@@ -350,6 +371,10 @@ public static class DiscordEventMessageBuilder
         var totalParties = alliances.Sum(a => a.Parties.Count);
         var partiesInline = totalParties > 1;
 
+        // The per-party text columns ALWAYS render (alongside the image, if any).
+        // Discord embed fields can't be told not to wrap, so the lines are kept as
+        // short as possible (role dropped — the colored dot conveys it — and the long
+        // "Player's Choice" sub abbreviated to "PC") to minimize the ⅓-width wrapping.
         if (partiesInline && !multiAlliance)
         {
             // Zero-width space (U+200B) — a thin full-width divider that breaks the row
@@ -395,9 +420,14 @@ public static class DiscordEventMessageBuilder
                     }
                     else
                     {
-                        line = $"{icon} {crown}{Escape(SlotRequirement(slot))}";
+                        line = $"{icon} {crown}{Escape(SlotRequirement(slot, compact: true))}";
                     }
                     if (sb.Length > 0) { sb.Append('\n'); }
+                    // Empty slots render as Discord "subtext" (greyed) so they read as
+                    // open; a FILLED slot drops the prefix so the claimed line stays
+                    // full-brightness white and pops. (Subtext doesn't shrink text in
+                    // embeds — but the dimming gives a clean empty-vs-filled cue.)
+                    if (signup is null) { sb.Append("-# "); }
                     sb.Append(line);
                 }
                 if (sb.Length == 0) { sb.Append("_No slots_"); }
@@ -508,24 +538,6 @@ public static class DiscordEventMessageBuilder
         };
     }
 
-    // Flattens the setup to its parties in board order, each with a display label
-    // ("Party 1", a custom name, or "A2 · {name}" when there's more than one
-    // alliance). Used by the embed fields + the slot picker so they line up.
-    private static IEnumerable<(PartySetupParty Party, string Label)> LabeledParties(PartySetup setup)
-    {
-        var alliances = setup.Alliances.OrderBy(a => a.SortOrder).ToList();
-        var multiAlliance = alliances.Count > 1;
-        for (var ai = 0; ai < alliances.Count; ai++)
-        {
-            var parties = alliances[ai].Parties.OrderBy(p => p.SortOrder).ToList();
-            for (var pi = 0; pi < parties.Count; pi++)
-            {
-                var name = string.IsNullOrWhiteSpace(parties[pi].Name) ? $"Party {pi + 1}" : parties[pi].Name!;
-                yield return (parties[pi], multiAlliance ? $"A{ai + 1} · {name}" : name);
-            }
-        }
-    }
-
     // A role-colored dot for a slot: the signed-up role when filled, else the
     // pinned role; job/any slots get a neutral dot. Used in the embed lines + the
     // picker option emoji.
@@ -563,8 +575,10 @@ public static class DiscordEventMessageBuilder
     }
 
     // Mirrors the in-app slot requirement label (Any Role / Any {role} /
-    // {main}[/{sub}]).
-    public static string SlotRequirement(PartySetupSlot slot)
+    // {main}[/{sub}]). `compact` abbreviates the long "Player's Choice" sub to "PC"
+    // so the 3-column board embed fits each requirement on one line (Discord embed
+    // fields wrap, and we can't widen them); the full label is kept everywhere else.
+    public static string SlotRequirement(PartySetupSlot slot, bool compact = false)
     {
         var label = string.IsNullOrWhiteSpace(slot.Label) ? string.Empty : $" ({slot.Label})";
         string core;
@@ -574,9 +588,10 @@ public static class DiscordEventMessageBuilder
         }
         else if (string.Equals(slot.RequirementType, PartySetupSlotRequirementTypes.Job, StringComparison.OrdinalIgnoreCase))
         {
+            var freeSub = compact ? "PC" : "Player's Choice";
             core = string.IsNullOrWhiteSpace(slot.MainJob)
                 ? "Any job"
-                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? "Player's Choice" : slot.SubJob)}";
+                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? freeSub : slot.SubJob)}";
         }
         else
         {
@@ -585,17 +600,15 @@ public static class DiscordEventMessageBuilder
         return core + label;
     }
 
+    // Just MAIN/SUB (no role) for the board embed: the slot's colored role dot
+    // already conveys the role, and dropping the "Tank - " / "DPS - " prefix keeps
+    // each line short enough to fit one embed column without wrapping.
     private static string SignedUpJobs(EventPartySlotSignup signup)
     {
-        var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(signup.Role)) { parts.Add(signup.Role!); }
-        if (!string.IsNullOrWhiteSpace(signup.MainJob))
-        {
-            parts.Add(string.IsNullOrWhiteSpace(signup.SubJob)
-                ? signup.MainJob!
-                : $"{signup.MainJob}/{signup.SubJob}");
-        }
-        return string.Join(" - ", parts);
+        if (string.IsNullOrWhiteSpace(signup.MainJob)) { return string.Empty; }
+        return string.IsNullOrWhiteSpace(signup.SubJob)
+            ? signup.MainJob!
+            : $"{signup.MainJob}/{signup.SubJob}";
     }
 
     // "Role - MAIN/SUB" for a no-slot attendee (mirrors SignedUpJobs for slots).

@@ -132,6 +132,25 @@ public sealed class EventHistoryEditService
         return changed;
     }
 
+    // "Undo absences for the whole event" — stop this event counting toward
+    // active tracking so members who MISSED it are no longer marked absent for it
+    // (absences are derived from counting events a member wasn't credited on, so
+    // there's no per-member absence row to clear — toggling the event's
+    // CountsTowardActive is the mechanism). Also removes the event from credit
+    // counting; pair with "undo active credit" to fully neutralize a mistaken
+    // event. Returns true when the flag changed. Recomputes statuses after.
+    public async Task<bool> SetEventCountsTowardActiveAsync(int historyId, bool counts, CancellationToken cancellationToken)
+    {
+        var history = await _db.EventHistories.FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
+        if (history is null) return false;
+        if (history.CountsTowardActive == counts) return false;
+
+        history.CountsTowardActive = counts;
+        await _db.SaveChangesAsync(cancellationToken);
+        await new MemberActivityService(_db).ApplyComputedStatusAsync(history.LinkshellId, cancellationToken);
+        return true;
+    }
+
     // Remove a member from the event: refund their earned DKP (subtract from
     // balance, delete the EventEarned ledger row) and drop the attendance record.
     public async Task<bool> RemoveParticipantAsync(int historyId, int participantId, CancellationToken cancellationToken)
@@ -164,6 +183,51 @@ public sealed class EventHistoryEditService
 
         // Attendance changed → recompute the activity streak (no-op if tracking off).
         await new MemberActivityService(_db).ApplyComputedStatusAsync(history.LinkshellId, cancellationToken);
+        return true;
+    }
+
+    // Delete a CLOSED event entirely and undo everything it did to DKP. The member's
+    // LinkshellDkp balance was built by SUMMING every ledger amount this event added
+    // (positive EventEarned + negative LootSpent), so we reverse by subtracting each
+    // entry's amount, then delete those ledger rows, the event's loot rows, its
+    // attendance rows, and the history itself (discussion comments cascade in the DB).
+    // Recomputes active status after. Returns false when the history doesn't exist.
+    public async Task<bool> DeleteEventAsync(int historyId, CancellationToken cancellationToken)
+    {
+        var history = await _db.EventHistories
+            .Include(h => h.AppUserEventHistories)
+            .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
+        if (history is null) return false;
+
+        var linkshellId = history.LinkshellId;
+        var memberships = await MembershipsAsync(linkshellId, cancellationToken);
+
+        var ledgerEntries = await _db.DkpLedgerEntries
+            .Where(e => e.EventHistoryId == historyId)
+            .ToListAsync(cancellationToken);
+        foreach (var entry in ledgerEntries)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.AppUserId)
+                && memberships.TryGetValue(entry.AppUserId, out var membership))
+            {
+                membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) - entry.Amount;
+            }
+        }
+        _db.DkpLedgerEntries.RemoveRange(ledgerEntries);
+
+        // The event's loot rows were re-parented to this history at close (FK is
+        // SetNull on history delete, so remove them explicitly to avoid orphans).
+        var lootDetails = await _db.EventLootDetails
+            .Where(d => d.EventHistoryId == historyId)
+            .ToListAsync(cancellationToken);
+        _db.EventLootDetails.RemoveRange(lootDetails);
+
+        _db.RemoveRange(history.AppUserEventHistories);
+        _db.EventHistories.Remove(history);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        // Attendance is gone → recompute the activity streak (no-op if tracking off).
+        await new MemberActivityService(_db).ApplyComputedStatusAsync(linkshellId, cancellationToken);
         return true;
     }
 

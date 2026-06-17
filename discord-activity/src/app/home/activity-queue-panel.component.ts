@@ -164,7 +164,7 @@ export class ActivityQueuePanelComponent {
   protected durationLabel(): string {
     const hours = this.createModel.duration;
     if (hours == null || hours <= 0) {
-      return '—';
+      return 'Not Specified';
     }
     const totalMinutes = Math.round(hours * 60);
     const h = Math.floor(totalMinutes / 60);

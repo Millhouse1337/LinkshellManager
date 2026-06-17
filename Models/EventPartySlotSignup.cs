@@ -31,6 +31,12 @@ public class EventPartySlotSignup
     [MaxLength(450)]
     public string? AppUserId { get; set; }
 
+    // Set INSTEAD of AppUserId for "Outside Party Signup" (a Discord member with no
+    // linked LSM account). Identity for one-slot-per-event / withdraw / switch is then
+    // keyed by this Discord snowflake. Null for normal account signups.
+    [MaxLength(32)]
+    public string? DiscordUserId { get; set; }
+
     [MaxLength(256)]
     public string? CharacterName { get; set; }
 

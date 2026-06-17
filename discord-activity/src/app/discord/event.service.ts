@@ -430,6 +430,20 @@ export class EventService {
     }
   }
 
+  async deleteEventHistory(id: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/${id}/delete`, {});
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Event deleted — its DKP was reversed.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting the event failed.'));
+      return false;
+    }
+  }
+
   async setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> {
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
@@ -475,6 +489,20 @@ export class EventService {
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Removing active credit failed.'));
+      return false;
+    }
+  }
+
+  async clearEventHistoryAbsences(id: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/${id}/absences/clear`, {});
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Absences undone — this event no longer counts toward active tracking.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Undoing absences failed.'));
       return false;
     }
   }

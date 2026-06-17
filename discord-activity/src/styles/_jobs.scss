@@ -125,54 +125,69 @@
   line-height: 1;
 }
 
-/* Relic weapon: a glowing, shimmering flame border on job pills the member
-   marked as having the relic for. Layers onto the existing .tag pill. */
+/* Relic weapon: a glowing aurora flame border (blue → purple → magenta) on job
+   pills the member marked as having the relic for. Layers onto the .tag pill. */
 .tag.relic-flame {
   position: relative;
   overflow: visible;
-  color: #fff;
-  border: 2px solid #ffb31f;
-  background: linear-gradient(180deg, #241f16, #111218);
+  color: #e8ebff;
+  border: 2px solid rgba(135, 170, 255, 0.95);
+  background: linear-gradient(180deg, rgba(28, 31, 47, 0.96), rgba(10, 12, 22, 0.98));
   box-shadow:
-    0 0 8px rgba(255, 177, 31, 0.9),
-    0 0 20px rgba(255, 95, 0, 0.45);
+    0 0 8px rgba(110, 145, 255, 1),
+    0 0 18px rgba(84, 104, 255, 0.9),
+    0 0 30px rgba(120, 70, 255, 0.55),
+    inset 0 0 14px rgba(120, 145, 255, 0.22);
 }
-/* flames licking up from behind the chip */
+/* aurora border pulse behind the chip */
 .tag.relic-flame::before {
   content: "";
   position: absolute;
-  left: -6px;
-  right: -6px;
-  bottom: 70%;
-  height: 34px;
-  background:
-    radial-gradient(ellipse at 15% 100%, #ffd05a 0%, #ff7a00 35%, transparent 68%),
-    radial-gradient(ellipse at 35% 100%, #fff0a6 0%, #ff9b00 35%, transparent 70%),
-    radial-gradient(ellipse at 55% 100%, #ffd05a 0%, #ff6200 38%, transparent 72%),
-    radial-gradient(ellipse at 75% 100%, #fff0a6 0%, #ff8a00 35%, transparent 70%);
-  filter: blur(1px);
-  opacity: 0.9;
-  animation: relicFlameFlicker 0.9s infinite alternate ease-in-out;
+  inset: -4px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #4b7cff, #695cff, #9b4dff, #ff4dff, #4b7cff);
+  filter: blur(8px);
+  opacity: 0.85;
+  animation: relicBorderPulse 2.2s ease-in-out infinite;
   pointer-events: none;
   z-index: -1;
 }
-/* soft orange glow under the flames */
+/* multi-color flames licking up from behind the chip */
 .tag.relic-flame::after {
   content: "";
   position: absolute;
-  inset: -8px;
-  border-radius: inherit;
-  background: rgba(255, 120, 0, 0.22);
-  filter: blur(14px);
-  z-index: -2;
+  left: 2px;
+  right: 2px;
+  bottom: 58%;
+  height: 26px;
+  background:
+    radial-gradient(ellipse at 8% 100%, rgba(65, 115, 255, 0.95) 0%, transparent 42%),
+    radial-gradient(ellipse at 18% 100%, rgba(70, 95, 255, 0.9) 0%, transparent 45%),
+    radial-gradient(ellipse at 31% 100%, rgba(55, 135, 255, 0.9) 0%, transparent 43%),
+    radial-gradient(ellipse at 46% 100%, rgba(92, 70, 255, 0.95) 0%, transparent 45%),
+    radial-gradient(ellipse at 62% 100%, rgba(110, 60, 255, 0.95) 0%, transparent 46%),
+    radial-gradient(ellipse at 78% 100%, rgba(158, 55, 255, 0.95) 0%, transparent 44%),
+    radial-gradient(ellipse at 92% 100%, rgba(255, 70, 255, 0.9) 0%, transparent 42%);
+  filter: blur(6px);
+  opacity: 0.95;
+  transform-origin: bottom;
+  animation: relicFlameFlicker 0.9s infinite alternate ease-in-out;
   pointer-events: none;
+  z-index: -2;
 }
 @keyframes relicFlameFlicker {
-  from { transform: translateY(2px) scaleY(0.9); opacity: 0.7; }
-  to { transform: translateY(-4px) scaleY(1.15); opacity: 1; }
+  0%   { transform: scaleY(0.85) translateY(4px);  opacity: 0.65; filter: blur(7px); }
+  35%  { transform: scaleY(1.12) translateY(-3px); opacity: 0.95; filter: blur(5px); }
+  70%  { transform: scaleY(0.95) translateY(2px);  opacity: 0.78; filter: blur(8px); }
+  100% { transform: scaleY(1.22) translateY(-6px); opacity: 1;    filter: blur(5px); }
+}
+@keyframes relicBorderPulse {
+  0%, 100% { opacity: 0.55; filter: blur(7px); }
+  50%      { opacity: 1;    filter: blur(11px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tag.relic-flame::before { animation: none; }
+  .tag.relic-flame::before,
+  .tag.relic-flame::after { animation: none; }
 }
 
 .panel-tab .jobs-roster-toolbar {

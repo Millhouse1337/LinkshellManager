@@ -1069,6 +1069,8 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.EventId, item.PartySetupSlotId }).IsUnique();
                 // Find a member's signup within an event (one-slot-per-event + leave).
                 entity.HasIndex(item => new { item.EventId, item.AppUserId });
+                // Same, for "Outside Party Signup" rows keyed by Discord user id.
+                entity.HasIndex(item => new { item.EventId, item.DiscordUserId });
             });
 
             builder.Entity<Rule>(entity =>

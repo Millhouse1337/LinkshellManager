@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
@@ -203,7 +204,16 @@ public partial class EventController
             });
         }
         await _context.SaveChangesAsync();
+        EnqueueEventBoardRefresh(eventId);
         return RedirectToAction(nameof(Index));
+    }
+
+    // Queues an async re-render of the event's posted Discord channel board so a
+    // signup / withdrawal made on the web shows in the message (the DbContext
+    // auto-enqueue only fires for Event-entity add/edit, not signup rows).
+    private void EnqueueEventBoardRefresh(int eventId)
+    {
+        HttpContext.RequestServices.GetService<DiscordEventChannelQueue>()?.Enqueue(eventId);
     }
 
     [HttpPost]
@@ -235,6 +245,7 @@ public partial class EventController
         }
 
         await _context.SaveChangesAsync();
+        EnqueueEventBoardRefresh(eventId);
         return RedirectToAction(nameof(Index));
     }
 
@@ -355,6 +366,7 @@ public partial class EventController
         }
 
         await _context.SaveChangesAsync();
+        EnqueueEventBoardRefresh(eventId);
 
         return RedirectToAction(nameof(Start), new { eventId });
     }

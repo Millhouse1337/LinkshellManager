@@ -193,3 +193,117 @@
     background: var(--bg-panel-light); color: var(--text-main);
 }
 .lsm-page .form-control::placeholder { color: var(--text-muted); }
+
+/* Profile job cards — mirror the Discord Activity's .job-card (defined border,
+   subtle gradient, inset highlight + drop shadow) so the web matches. */
+.lsm-page .jobcard {
+    min-height: 112px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+        #131419;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+/* Relic weapon: glowing aurora flame border (blue → purple → magenta). Mirrors
+   the Discord Activity's .tag.relic-flame. The OVERLAY (animated aurora border
+   pulse, dark gradient, multi-color glow + flames) is shared; each base keeps its
+   own shape — the profile relic CHIPS take the Activity's squarish pill, the
+   roster/profile job PILLS (.jr-pill) keep their rounded shape. */
+.lsm-page .tag.relic-flame,
+.lsm-page .jr-pill.relic-flame,
+.relic-flame {
+    position: relative; overflow: visible;
+    color: #e8ebff;
+    border: 2px solid rgba(135,170,255,.95);
+    background: linear-gradient(180deg, rgba(28,31,47,.96), rgba(10,12,22,.98));
+    box-shadow:
+        0 0 8px rgba(110,145,255,1),
+        0 0 18px rgba(84,104,255,.9),
+        0 0 30px rgba(120,70,255,.55),
+        inset 0 0 14px rgba(120,145,255,.22);
+}
+/* Profile relic chips: the Activity's squarish base (3px radius, tight padding). */
+.lsm-page .tag.relic-flame,
+.relic-flame {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 6px; border-radius: 3px;
+    font-size: 11px; font-weight: 500; line-height: 1.4;
+}
+/* Roster/profile job pills keep their rounded pill shape, but their inner job
+   name/level text must stay readable over the dark flame background. */
+.lsm-page .jr-pill.relic-flame .jr-pill-job,
+.lsm-page .jr-pill.relic-flame .jr-pill-lvl { color: #e8ebff; }
+/* aurora border pulse behind the chip */
+.lsm-page .tag.relic-flame::before,
+.lsm-page .jr-pill.relic-flame::before,
+.relic-flame::before {
+    content: ""; position: absolute; inset: -4px; border-radius: 12px;
+    background: linear-gradient(90deg, #4b7cff, #695cff, #9b4dff, #ff4dff, #4b7cff);
+    filter: blur(8px); opacity: .85;
+    animation: relicBorderPulse 2.2s ease-in-out infinite;
+    pointer-events: none; z-index: -1;
+}
+/* multi-color flames licking up from behind the chip */
+.lsm-page .tag.relic-flame::after,
+.lsm-page .jr-pill.relic-flame::after,
+.relic-flame::after {
+    content: ""; position: absolute; left: 2px; right: 2px; bottom: 58%; height: 26px;
+    background:
+        radial-gradient(ellipse at 8% 100%, rgba(65,115,255,.95) 0%, transparent 42%),
+        radial-gradient(ellipse at 18% 100%, rgba(70,95,255,.9) 0%, transparent 45%),
+        radial-gradient(ellipse at 31% 100%, rgba(55,135,255,.9) 0%, transparent 43%),
+        radial-gradient(ellipse at 46% 100%, rgba(92,70,255,.95) 0%, transparent 45%),
+        radial-gradient(ellipse at 62% 100%, rgba(110,60,255,.95) 0%, transparent 46%),
+        radial-gradient(ellipse at 78% 100%, rgba(158,55,255,.95) 0%, transparent 44%),
+        radial-gradient(ellipse at 92% 100%, rgba(255,70,255,.9) 0%, transparent 42%);
+    filter: blur(6px); opacity: .95; transform-origin: bottom;
+    animation: relicFlameFlicker .9s infinite alternate ease-in-out;
+    pointer-events: none; z-index: -2;
+}
+@keyframes relicFlameFlicker {
+    0%   { transform: scaleY(.85) translateY(4px);  opacity: .65; filter: blur(7px); }
+    35%  { transform: scaleY(1.12) translateY(-3px); opacity: .95; filter: blur(5px); }
+    70%  { transform: scaleY(.95) translateY(2px);  opacity: .78; filter: blur(8px); }
+    100% { transform: scaleY(1.22) translateY(-6px); opacity: 1;   filter: blur(5px); }
+}
+@keyframes relicBorderPulse {
+    0%, 100% { opacity: .55; filter: blur(7px); }
+    50%      { opacity: 1;   filter: blur(11px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lsm-page .tag.relic-flame::before,
+    .lsm-page .jr-pill.relic-flame::before,
+    .lsm-page .tag.relic-flame::after,
+    .lsm-page .jr-pill.relic-flame::after,
+    .relic-flame::before,
+    .relic-flame::after { animation: none; }
+}
+
+/* ---------- Modal centering (bulletproof) ----------
+   The .mt-modal flex overlay was rendering its dialog off to the right on some
+   pages (Customize Linkshell's entry modal). Rather than rely on the flex
+   container's justify-content, pin the dialog itself to the true viewport centre
+   with fixed positioning. These modals are top-level (no transformed ancestor),
+   so position:fixed resolves against the viewport. Loaded last + !important so it
+   wins over any earlier rule. The backdrop still covers the full viewport. */
+.mt-modal.mt-modal--open {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+}
+.mt-modal.mt-modal--open > .mt-modal__dialog {
+    position: fixed !important;
+    top: 56px;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    margin: 0 !important;
+    width: calc(100% - 32px);
+    max-width: 520px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+}
+.mt-modal.mt-modal--open > .mt-modal__dialog.mt-modal__dialog--lg { max-width: 780px; }

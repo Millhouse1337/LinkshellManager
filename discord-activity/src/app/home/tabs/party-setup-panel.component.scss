@@ -178,6 +178,33 @@
   color: var(--fg);
 }
 
+/* Character (main/alt) picker — moved up onto the slot-label row (right-aligned)
+   so the sign-up controls all fit on the row below. Event boards w/ alts only. */
+.ps-slot-char {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  margin-left: auto;
+  flex: 0 0 auto;
+  max-width: 200px;
+  height: 30px;
+  padding: 0 26px 0 10px;
+  font-size: 12px;
+  color: var(--fg);
+  background-color: var(--bg-elev);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23a1a1aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 10px 6px;
+  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-radius: var(--r-md);
+  cursor: pointer;
+  outline: none;
+}
+.ps-slot-char:hover { border-color: rgba(255, 255, 255, 0.22); }
+.ps-slot-char:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-weak); }
+.ps-slot-char option { background: var(--surface); color: var(--fg); }
+
 .ps-crown {
   display: inline-flex;
   align-items: center;
@@ -362,3 +389,4 @@
 }
 .ps-also-name { font-weight: 600; font-size: 13px; }
 .ps-also-job { font-size: 12px; color: var(--fg-3); }
+.ps-also-withdraw { margin-left: auto; }

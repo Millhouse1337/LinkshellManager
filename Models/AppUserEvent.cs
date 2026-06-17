@@ -13,6 +13,13 @@ public class AppUserEvent
     [ForeignKey(nameof(AppUserId))]
     public AppUser? AppUser { get; set; }
 
+    // Set INSTEAD of AppUserId for "Outside Party Signup" (a Discord member with no
+    // linked LSM account, e.g. a "Sign Up (No Slot)" attendance row). Identity for
+    // withdraw / switch / one-per-event is keyed by this Discord snowflake. Such rows
+    // earn no DKP and write no history — they're cleared when the event ends.
+    [MaxLength(32)]
+    public string? DiscordUserId { get; set; }
+
     public int EventId { get; set; }
 
     [ForeignKey(nameof(EventId))]

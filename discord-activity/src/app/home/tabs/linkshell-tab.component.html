@@ -56,23 +56,27 @@
             </div>
             <div class="ac-roster ac-roster--with-actions">
               <div class="ac-roster-head">
-                <div></div>
                 <div>Character</div>
                 <div>Rank</div>
-                <div class="ac-roster-dkp-head">DKP</div>
                 <div>Status</div>
-                <div></div>
+                <div class="ac-roster-num-head">Active credit</div>
+                <div class="ac-roster-num-head">Absent streak</div>
+                <div class="ac-roster-dkp-head">DKP</div>
+                <div>Joined</div>
+                <div class="ac-roster-actions-head">Actions</div>
               </div>
               @for (member of pagedDashboardMembers(); track member.id) {
                 <div class="ac-roster-row" [class.editing]="editingRankMemberId() === member.id">
-                  <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
-                  <div class="ac-roster-name-cell">
-                    <div class="ac-roster-name">{{ member.characterName }}</div>
-                    @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
-                      @if (alts) {
-                        <div class="ac-roster-name-sub">Alts: {{ alts }}</div>
+                  <div class="ac-roster-char">
+                    <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
+                    <div class="ac-roster-name-cell">
+                      <div class="ac-roster-name">{{ member.characterName }}</div>
+                      @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
+                        @if (alts) {
+                          <div class="ac-roster-name-sub">Alts: {{ alts }}</div>
+                        }
                       }
-                    }
+                    </div>
                   </div>
                   <div class="ac-roster-rank">
                     @if (editingRankMemberId() === member.id && canEditRosterRank(member.appUserId)) {
@@ -85,11 +89,10 @@
                         }
                       </select>
                     } @else {
-                      {{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}
+                      <span class="tag default">{{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}</span>
                     }
                   </div>
-                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
-                  <div class="ac-roster-status-cell">
+                  <div class="ac-roster-status">
                     @if (editingRankMemberId() === member.id) {
                       <select
                         [(ngModel)]="editingStatusValue"
@@ -99,36 +102,32 @@
                           <option [value]="s">{{ s }}</option>
                         }
                       </select>
-                      <!-- Which streak this Count edits — drives the chip color. -->
-                      <select
-                        class="ac-roster-streak-type"
-                        [(ngModel)]="editingStreakType"
-                        [name]="'streakType_' + member.id"
-                        [disabled]="activity.busyMemberId() === member.id"
-                        title="Choose which streak the Count edits — active credit (green) or absence (red).">
-                        <option value="credit">Active streak</option>
-                        <option value="absent">Absence streak</option>
-                      </select>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        class="ac-roster-count-input"
-                        [class.is-credit]="editingStreakType === 'credit'"
-                        [class.is-absent]="editingStreakType === 'absent'"
-                        [(ngModel)]="editingStreakValue"
-                        [name]="'streakValue_' + member.id"
-                        [disabled]="activity.busyMemberId() === member.id"
-                        title="Count for the selected streak — sets the member's Active/Inactive status by your threshold until the next event recomputes it." />
                     } @else {
                       <span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span>
-                      @if ((member.absentStreak ?? 0) > 0) {
-                        <span class="ac-roster-credit absent" title="Absence streak: consecutive uncredited events">{{ member.absentStreak ?? 0 }}</span>
-                      } @else {
-                        <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Active-credit streak: consecutive credited events">{{ member.activeCreditStreak ?? 0 }}</span>
-                      }
                     }
                   </div>
+                  <div class="ac-roster-num">
+                    @if (editingRankMemberId() === member.id) {
+                      <input type="number" min="0" step="1" class="ac-roster-count-input"
+                        [(ngModel)]="editingCreditValue" [name]="'credit_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id"
+                        title="Active-credit override (green) — sets Active by your threshold until the next event recomputes it." />
+                    } @else {
+                      <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Active-credit streak: consecutive credited events">{{ member.activeCreditStreak ?? 0 }}</span>
+                    }
+                  </div>
+                  <div class="ac-roster-num">
+                    @if (editingRankMemberId() === member.id) {
+                      <input type="number" min="0" step="1" class="ac-roster-count-input"
+                        [(ngModel)]="editingAbsentValue" [name]="'absent_' + member.id"
+                        [disabled]="activity.busyMemberId() === member.id"
+                        title="Absence-streak override (red) — sets Inactive by your threshold until the next event recomputes it." />
+                    } @else {
+                      <span class="ac-roster-credit" [class.absent]="(member.absentStreak ?? 0) > 0" title="Absence streak: consecutive uncredited events">{{ member.absentStreak ?? 0 }}</span>
+                    }
+                  </div>
+                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+                  <div class="ac-roster-joined">{{ formatJoined(member.dateJoined) }}</div>
                   <div class="ac-roster-actions">
                     <button type="button" class="btn ghost sm" (click)="openMemberProfile(member.id)">View Profile</button>
                     @if (canEditRosterStatus(member.appUserId)) {

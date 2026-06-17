@@ -194,9 +194,21 @@
           <div class="loot-edit-form__body">
             <label>
               <span>Event / source <span class="muted">(optional)</span></span>
-              <input class="bid-input" [(ngModel)]="addFormModel.context" name="addContext" maxlength="256"
-                     placeholder="e.g. Sky, Fafnir, Dynamis-Beaucedine" />
+              <select class="form-select" [(ngModel)]="addEventChoice" name="addEventChoice">
+                <option value="">— None —</option>
+                @for (name of eventOptions(); track name) {
+                  <option [value]="name">{{ name }}</option>
+                }
+                <option [value]="OTHER_EVENT">Other…</option>
+              </select>
             </label>
+            @if (addEventChoice === OTHER_EVENT) {
+              <label>
+                <span>Event name</span>
+                <input class="bid-input" [(ngModel)]="addCustomEvent" name="addCustomEvent" maxlength="256"
+                       placeholder="e.g. Sky, Fafnir, Dynamis-Beaucedine" />
+              </label>
+            }
 
             <label>
               <span>Item name</span>

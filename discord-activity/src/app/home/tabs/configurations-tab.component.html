@@ -280,6 +280,21 @@
                   </div>
                 }
               </div>
+
+              <div class="customize-form__section" style="flex:0 0 280px">
+                <strong>Outside Party Signup</strong>
+                <p class="muted">
+                  Let Discord-server members who have <strong>never launched the app</strong> sign up for
+                  events from the party board, identified by their Discord account. Their signups show on the
+                  board and clear when the event ends — they earn no DKP and no attendance history.
+                </p>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="outsidePartySignupEnabledDraft"
+                    [ngModel]="customizeDraft.outsidePartySignupEnabled"
+                    (ngModelChange)="customizeDraft.outsidePartySignupEnabled = $event; onCustomizeFieldChange()" />
+                  <span>Allow outside (non-account) Discord signups</span>
+                </label>
+              </div>
             </div>
 
             <div class="customize-form__row" style="margin-top:24px">
@@ -491,11 +506,6 @@
                 <div class="route-main">
                   <div class="route-top">
                     <label class="route-field grow">
-                      <span>Name <em style="font-style:italic;color:var(--fg-3);font-weight:500">(optional)</em></span>
-                      <input type="text" maxlength="64" placeholder="e.g. Sky alerts"
-                        [name]="'rname_' + $index" [(ngModel)]="route.name" (ngModelChange)="markRouteDirty(route)" />
-                    </label>
-                    <label class="route-field grow">
                       <span>Channel</span>
                       @if (discordChannelsAvailable().length > 0) {
                         <select [name]="'rchan_' + $index" [(ngModel)]="route.channelId" (ngModelChange)="markRouteDirty(route)">
@@ -530,7 +540,7 @@
 
                 @if (route.postEvents) {
                   <div class="event-filter">
-                    <h4>Event types <span>(leave all unchecked = all events)</span></h4>
+                    <h4>Event types</h4>
                     <div class="event-grid">
                       @for (et of channelEventTypes(); track et) {
                         <label class="check">
@@ -558,6 +568,11 @@
 
             <div class="routes-footer">
               <button type="button" class="btn ghost sm" (click)="addRoute()">+ Add route</button>
+              <button type="button" class="btn success sm" (click)="loadDiscordChannels(true)"
+                [disabled]="activity.busyDiscordChannels()"
+                title="Pull the latest channels from Discord — use after creating a new channel">
+                {{ activity.busyDiscordChannels() ? 'Refreshing…' : 'Refresh channels' }}
+              </button>
               <button type="button" class="btn primary" (click)="saveDiscordChannels()"
                 [disabled]="activity.busyDiscordChannels() || !!channelRoutesError()">
                 {{ activity.busyDiscordChannels() ? 'Saving…' : 'Save channels' }}
@@ -566,10 +581,40 @@
                 <span class="routes-error">{{ err }}</span>
               }
             </div>
-            <p class="muted" style="font-size:12px;margin-top:10px">
-              A specific event-type route wins over an unfiltered one; each of Loot / Auctions /
-              Attendance / ToD goes to its single assigned channel.
+          </div>
+        </div>
+      }
+
+      @if (canCustomizeSelectedLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">💬 Post-event discussion channel</div>
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Discussion channel for the currently active linkshell">{{ activeName }}</span>
+            }
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+            <p class="muted" style="font-size:12px;margin:0">
+              Optional. New comments on a completed event are mirrored to this channel. Leave blank to keep discussion in-app only.
             </p>
+            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+              <label class="route-field grow" style="max-width:340px">
+                <span>Discussion channel</span>
+                @if (discordChannelsAvailable().length > 0) {
+                  <select name="discussionChannel" [(ngModel)]="discussionChannelDraft">
+                    <option value="">— none (in-app only) —</option>
+                    @for (channel of discordChannelsAvailable(); track channel.id) {
+                      <option [value]="channel.id">#{{ channel.name }}</option>
+                    }
+                  </select>
+                } @else {
+                  <input type="text" inputmode="numeric" maxlength="20" placeholder="Channel ID (blank = none)"
+                    name="discussionChannel" [(ngModel)]="discussionChannelDraft" />
+                }
+              </label>
+              <button type="button" class="btn primary" (click)="saveDiscussionChannel()"
+                [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">Save</button>
+            </div>
           </div>
         </div>
       }

@@ -68,6 +68,7 @@ public sealed partial class ActivityDataController
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
 
@@ -141,6 +142,7 @@ public sealed partial class ActivityDataController
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
 
@@ -280,6 +282,7 @@ public sealed partial class ActivityDataController
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
 
@@ -295,16 +298,34 @@ public sealed partial class ActivityDataController
             });
         }
 
+        // Full withdrawal: drop the member's party slot (if any) AND their
+        // attendance row, so "Withdraw From Event" removes them everywhere — not
+        // just the live roster. Mirrors the Discord board's Withdraw button.
+        var affectedPartyId = await EventPartySignupService.LeaveAsync(
+            _dbContext, eventId, appUser.Id, cancellationToken);
+
         var participation = await _dbContext.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
+        if (participation is not null)
+        {
+            _dbContext.AppUserEvents.Remove(participation);
+        }
 
-        if (participation is null)
+        if (participation is null && affectedPartyId is null)
         {
             return NotFound(new { error = "No signup was found for the current app user." });
         }
 
-        _dbContext.AppUserEvents.Remove(participation);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // If they vacated a party slot, re-resolve that party's leadership.
+        if (affectedPartyId is not null)
+        {
+            await EventPartySignupService.ResolvePartyLeadershipAsync(
+                _dbContext, eventId, affectedPartyId, cancellationToken);
+        }
+
+        EnqueueEventBoardRefresh(eventId);
 
         return Ok(new { success = true });
     }

@@ -1,8 +1,20 @@
 @model ProfileViewModel
 @using LinkshellManagerDiscordApp.Utils
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     ViewData["Title"] = "Profile";
     ViewData["BodyClass"] = "lsm-page";
+    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
+    // Config consumed by profile-ratings.js (reuses the Activity job-rating API).
+    var ratingsConfig = JsonSerializer.Serialize(new
+    {
+        linkshellId = Model.PrimaryLinkshellId,
+        myAppUserId = Model.MyAppUserId,
+        jobs = EventJobCatalog.MainJobOptions,
+        relicOptions = JobRelicCatalog.Options,
+        members = Model.RatingTeammates.Select(t => new { t.AppUserId, t.Name, t.Alt1, t.Alt2 })
+    }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     var imageSource = Model.ProfileImageData is { Length: > 0 }
         ? $"data:image/png;base64,{Convert.ToBase64String(Model.ProfileImageData)}"
         : null;
@@ -25,7 +37,7 @@
     </div>
 </div>
 
-<div class="card fade d2" style="padding:20px;max-width:720px;margin:0 auto">
+<div class="card fade d2" style="padding:20px;max-width:1100px;margin:0 auto">
     <form asp-action="UpdateProfile" method="post">
         <div asp-validation-summary="All" class="text-danger" style="margin-bottom:12px"></div>
         <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
@@ -103,72 +115,66 @@
                     }
                 </div>
 
-                <div class="jobtab-panel" data-jobpanel="main">
-                    <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@mainTabLabel job levels</div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
-                        @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
-                        {
-                            var level = i < Model.JobLevels.Count ? Model.JobLevels[i] : 0;
-                            var strong = i < Model.StrongJobs.Count && Model.StrongJobs[i];
-                            <div class="field" style="margin:0">
-                                <label for="job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
-                                <input id="job-@i" type="number" class="form-control" name="JobLevels[@i]"
-                                       value="@level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
-                                <label class="job-strong" title="Mark this job as well-geared / merited">
-                                    <input type="checkbox" name="StrongJobs[@i]" value="true" @(strong ? "checked" : "") />
-                                    <input type="hidden" name="StrongJobs[@i]" value="false" />
-                                    <span>★ Strong</span>
-                                </label>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                @if (hasAlt1)
-                {
-                    <div class="jobtab-panel" data-jobpanel="alt1" hidden>
-                        <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@Model.AltCharacterName1 job levels</div>
-                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
-                            @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
-                            {
-                                var alt1Level = i < Model.Alt1JobLevels.Count ? Model.Alt1JobLevels[i] : 0;
-                                var alt1Strong = i < Model.Alt1StrongJobs.Count && Model.Alt1StrongJobs[i];
-                                <div class="field" style="margin:0">
-                                    <label for="alt1-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
-                                    <input id="alt1-job-@i" type="number" class="form-control" name="Alt1JobLevels[@i]"
-                                           value="@alt1Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
-                                    <label class="job-strong" title="Mark this job as well-geared / merited">
-                                        <input type="checkbox" name="Alt1StrongJobs[@i]" value="true" @(alt1Strong ? "checked" : "") />
-                                        <input type="hidden" name="Alt1StrongJobs[@i]" value="false" />
-                                        <span>★ Strong</span>
-                                    </label>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                @{
+                    // One descriptor per character panel (level + merited + merit
+                    // notes + a JS ratings container, then a crafts grid). Alt panels
+                    // are added only once the alt is named.
+                    var jobPanels = new List<(string Key, int Slot, string Title, string JobsPrefix, string StrongPrefix, string MeritPrefix, string CraftsPrefix, List<int> Levels, List<bool> Strongs, List<string> Merits, List<int> Crafts, bool Hidden)>
+                    {
+                        ("main", 0, mainTabLabel, "JobLevels", "StrongJobs", "MeritJobs", "CraftLevels", Model.JobLevels, Model.StrongJobs, Model.MeritJobs, Model.CraftLevels, false)
+                    };
+                    if (hasAlt1)
+                    {
+                        jobPanels.Add(("alt1", 1, Model.AltCharacterName1!, "Alt1JobLevels", "Alt1StrongJobs", "Alt1MeritJobs", "Alt1CraftLevels", Model.Alt1JobLevels, Model.Alt1StrongJobs, Model.Alt1MeritJobs, Model.Alt1CraftLevels, true));
+                    }
+                    if (hasAlt2)
+                    {
+                        jobPanels.Add(("alt2", 2, Model.AltCharacterName2!, "Alt2JobLevels", "Alt2StrongJobs", "Alt2MeritJobs", "Alt2CraftLevels", Model.Alt2JobLevels, Model.Alt2StrongJobs, Model.Alt2MeritJobs, Model.Alt2CraftLevels, true));
+                    }
                 }
 
-                @if (hasAlt2)
+                @foreach (var p in jobPanels)
                 {
-                    <div class="jobtab-panel" data-jobpanel="alt2" hidden>
-                        <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@Model.AltCharacterName2 job levels</div>
-                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                    <div class="jobtab-panel" data-jobpanel="@p.Key" hidden="@(p.Hidden ? "hidden" : null)">
+                        <div style="font-size:13px;font-weight:500;color:var(--fg);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@p.Title job levels &amp; ratings</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px">
                             @for (var i = 0; i < EventJobCatalog.MainJobOptions.Length; i++)
                             {
-                                var alt2Level = i < Model.Alt2JobLevels.Count ? Model.Alt2JobLevels[i] : 0;
-                                var alt2Strong = i < Model.Alt2StrongJobs.Count && Model.Alt2StrongJobs[i];
-                                <div class="field" style="margin:0">
-                                    <label for="alt2-job-@i" style="font-size:12px">@EventJobCatalog.MainJobOptions[i]</label>
-                                    <input id="alt2-job-@i" type="number" class="form-control" name="Alt2JobLevels[@i]"
-                                           value="@alt2Level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" />
-                                    <label class="job-strong" title="Mark this job as well-geared / merited">
-                                        <input type="checkbox" name="Alt2StrongJobs[@i]" value="true" @(alt2Strong ? "checked" : "") />
-                                        <input type="hidden" name="Alt2StrongJobs[@i]" value="false" />
-                                        <span>★ Strong</span>
+                                var level = i < p.Levels.Count ? p.Levels[i] : 0;
+                                var strong = i < p.Strongs.Count && p.Strongs[i];
+                                var merit = i < p.Merits.Count ? p.Merits[i] : "";
+                                <div class="jobcard" data-slot="@p.Slot" data-job="@i">
+                                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                                        <span style="font-size:12px;font-weight:600">@EventJobCatalog.MainJobOptions[i]</span>
+                                        <input type="number" class="form-control" name="@(p.JobsPrefix)[@i]"
+                                               value="@level" min="0" max="@ProfileJobLevels.MaxLevel" step="1" inputmode="numeric" style="width:64px;text-align:center" />
+                                    </div>
+                                    <label class="job-strong" title="Mark this job as merited" style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:11px">
+                                        <input type="checkbox" name="@(p.StrongPrefix)[@i]" value="true" @(strong ? "checked" : "") />
+                                        <input type="hidden" name="@(p.StrongPrefix)[@i]" value="false" />
+                                        <span>★ Merited</span>
                                     </label>
+                                    <input type="text" class="form-control" name="@(p.MeritPrefix)[@i]"
+                                           value="@merit" maxlength="500" placeholder="Describe merits" style="font-size:11px;margin-top:6px" />
+                                    <div class="job-ratings" data-slot="@p.Slot" data-job="@i" style="margin-top:8px"></div>
                                 </div>
                             }
                         </div>
+
+                        <div style="font-size:13px;font-weight:500;color:var(--fg);margin:18px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)">@p.Title crafts</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px 16px">
+                            @for (var c = 0; c < CraftCatalog.Names.Count; c++)
+                            {
+                                var clvl = c < p.Crafts.Count ? p.Crafts[c] : 0;
+                                <div class="field" style="margin:0">
+                                    <label style="font-size:12px">@CraftCatalog.Names[c]</label>
+                                    <input type="number" class="form-control" name="@(p.CraftsPrefix)[@c]"
+                                           value="@clvl" min="0" max="110" step="1" inputmode="numeric" />
+                                </div>
+                            }
+                        </div>
+
+                        <div class="peer-feedback" data-slot="@p.Slot" data-name="@p.Title" style="margin-top:18px"></div>
                     </div>
                 }
             </div>
@@ -181,11 +187,44 @@
     </form>
 </div>
 
+@if (Model.HasLinkshell && Model.PrimaryLinkshellId > 0)
+{
+    <div class="card fade d3" id="rateTeammatesCard" style="padding:20px;max-width:1100px;margin:16px auto 0">
+        <div style="margin-bottom:12px">
+            <div style="font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent)">Feedback</div>
+            <h2 style="font-size:18px;font-weight:600;margin:4px 0 0">Rate teammates</h2>
+            <div style="font-size:12px;color:var(--fg-3);margin-top:4px">Rate another member's gear &amp; skill per job, and leave a short note. They see anonymous averages and an AI summary.</div>
+        </div>
+        <div class="field" style="max-width:340px">
+            <label for="rateMemberSearch" style="font-size:12px">Search member</label>
+            <input id="rateMemberSearch" class="form-control" placeholder="Filter by character name…" autocomplete="off" />
+        </div>
+        <div class="field" style="max-width:340px;margin-top:10px">
+            <label for="rateMemberSelect" style="font-size:12px">Member</label>
+            <select id="rateMemberSelect" class="form-select"></select>
+        </div>
+        <div class="field" id="rateCharacterField" style="max-width:340px;margin-top:10px;display:none">
+            <label for="rateCharacterSelect" style="font-size:12px">Character</label>
+            <select id="rateCharacterSelect" class="form-select"></select>
+        </div>
+        <div id="rateGrid" style="margin-top:14px"></div>
+        <div id="rateComment" style="margin-top:14px;display:none">
+            <label for="rateCommentBox" style="font-size:12px;font-weight:500">Note about this teammate (private to them, anonymous)</label>
+            <textarea id="rateCommentBox" class="form-control" rows="3" maxlength="1000" placeholder="e.g. Great on WHM, needs gear on BLM…"></textarea>
+            <button type="button" class="btn ghost sm" id="rateCommentSave" style="margin-top:8px">Save note</button>
+            <span id="rateCommentStatus" style="font-size:11px;color:var(--fg-3);margin-left:8px"></span>
+        </div>
+    </div>
+}
+
 @{
+    // The addon step only counts toward onboarding when the addon is available
+    // (global kill-switch off).
+    var totalSteps = Model.AddonAvailable ? 3 : 2;
     var completedSteps =
         (Model.ProfileComplete ? 1 : 0) +
         (Model.HasLinkshell ? 1 : 0) +
-        (Model.AddonConfigured ? 1 : 0);
+        (Model.AddonAvailable && Model.AddonConfigured ? 1 : 0);
 }
 
 <div class="card fade d3" style="padding:20px;max-width:720px;margin:16px auto 0">
@@ -194,7 +233,7 @@
             <div style="font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent)">Onboarding</div>
             <h2 style="font-size:18px;font-weight:600;margin:4px 0 0">Next Steps</h2>
         </div>
-        <span class="tag">@completedSteps/3</span>
+        <span class="tag">@completedSteps/@totalSteps</span>
     </div>
 
     <ul style="list-style:none;padding:0;margin:0;display:grid;gap:8px">
@@ -233,26 +272,29 @@
                 }
             </div>
         </li>
-        <li style="display:flex;gap:12px;align-items:start;padding:12px;border:1px solid var(--border);border-radius:8px">
-            @if (Model.AddonConfigured)
-            {
-                <span class="tag success">Done</span>
-            }
-            else
-            {
-                <span class="tag">3</span>
-            }
-            <div style="flex:1">
-                <div style="font-weight:500;color:var(--fg)">Set up the addon</div>
-                <div style="font-size:12px;color:var(--fg-3);margin-top:2px">Pair the in-game addon to this account so kills, attendance, and loot drops post automatically.</div>
-                @if (!Model.AddonConfigured && Model.HasLinkshell)
+        @if (Model.AddonAvailable)
+        {
+            <li style="display:flex;gap:12px;align-items:start;padding:12px;border:1px solid var(--border);border-radius:8px">
+                @if (Model.AddonConfigured)
                 {
-                    <div style="margin-top:8px">
-                        <a class="btn primary sm" asp-controller="Linkshell" asp-action="Customize">Open pairing</a>
-                    </div>
+                    <span class="tag success">Done</span>
                 }
-            </div>
-        </li>
+                else
+                {
+                    <span class="tag">3</span>
+                }
+                <div style="flex:1">
+                    <div style="font-weight:500;color:var(--fg)">Set up the addon</div>
+                    <div style="font-size:12px;color:var(--fg-3);margin-top:2px">Pair the in-game addon to this account so kills, attendance, and loot drops post automatically.</div>
+                    @if (!Model.AddonConfigured && Model.HasLinkshell)
+                    {
+                        <div style="margin-top:8px">
+                            <a class="btn primary sm" asp-controller="Linkshell" asp-action="Customize">Open pairing</a>
+                        </div>
+                    }
+                </div>
+            </li>
+        }
     </ul>
 </div>
 
@@ -269,8 +311,18 @@
                     panels.forEach(function (p) {
                         p.hidden = p.getAttribute('data-jobpanel') !== target;
                     });
+                    if (window.LSMProfileRatings) { window.LSMProfileRatings.onTabShown(target); }
                 });
             });
         })();
     </script>
+    @if (Model.HasLinkshell && Model.PrimaryLinkshellId > 0)
+    {
+        <script type="application/json" id="profile-ratings-config" nonce="@Html.CspNonce()">@Html.Raw(ratingsConfig)</script>
+        <script nonce="@Html.CspNonce()">
+            window.LSM_CSRF_HEADER = '@antiforgeryTokens.HeaderName';
+            window.LSM_CSRF_TOKEN = '@antiforgeryTokens.RequestToken';
+        </script>
+        <script src="~/js/profile-ratings.js" asp-append-version="true" defer></script>
+    }
 }

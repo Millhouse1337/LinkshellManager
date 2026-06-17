@@ -69,6 +69,14 @@ public class AppUser : IdentityUser
     // Seeded on startup for the configured SuperAdmin account; see Program.cs.
     public bool IsSuperAdmin { get; set; }
 
+    // A "linkshell-only" placeholder account a leader created for a player who has
+    // no real login (they never launched the app). It has no password and no Discord
+    // link, so it can never sign in or appear in invite search — it exists only to
+    // give that player a real AppUserId so the (AppUserId-keyed) DKP/history/loot
+    // systems can track them, and so an Outside Party Signup matching their character
+    // name can be attributed here. See Services/ManualMemberService.
+    public bool IsPlaceholder { get; set; }
+
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();

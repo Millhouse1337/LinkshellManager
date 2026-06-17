@@ -16,6 +16,11 @@ public sealed class SignupCharacterChoiceCache
     public void Set(string appUserId, int eventId, string characterName)
         => _choices[Key(appUserId, eventId)] = (characterName, DateTime.UtcNow + Ttl);
 
+    // Forget the choice for (user, event). Called on withdrawal so the next signup
+    // re-prompts for a character instead of silently reusing the prior pick.
+    public void Clear(string appUserId, int eventId)
+        => _choices.TryRemove(Key(appUserId, eventId), out _);
+
     public string? Peek(string appUserId, int eventId)
     {
         var key = Key(appUserId, eventId);

@@ -46,13 +46,23 @@ import type {
             <div class="evt-history__body">
               @if (canManage() && edit[h.id]; as draft) {
                 <div class="evt-history__edit">
-                  <label><span>Name</span><input [(ngModel)]="draft.eventName" [name]="'eName' + h.id" /></label>
-                  <label><span>Type</span><input [(ngModel)]="draft.eventType" [name]="'eType' + h.id" /></label>
-                  <label><span>Location</span><input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
-                  <label><span>Duration (h)</span><input type="number" step="0.01" [(ngModel)]="draft.duration" [name]="'eDur' + h.id" /></label>
-                  <label><span>DKP / hour</span><input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
+                  <div class="evt-history__edit-row">
+                    <label><span>Name</span><input [(ngModel)]="draft.eventName" [name]="'eName' + h.id" /></label>
+                    <label><span>Type</span><input [(ngModel)]="draft.eventType" [name]="'eType' + h.id" /></label>
+                    <label><span>Location</span><input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
+                  </div>
+                  <div class="evt-history__edit-row2">
+                    <label class="evt-dur"><span>Duration</span>
+                      <span class="evt-dur__inputs">
+                        <input type="number" min="0" [value]="durationPart(draft, 'h')" (change)="setDurationPart(draft, 'h', $any($event.target).value)" [name]="'eDurH' + h.id" /><small>h</small>
+                        <input type="number" min="0" max="59" [value]="durationPart(draft, 'm')" (change)="setDurationPart(draft, 'm', $any($event.target).value)" [name]="'eDurM' + h.id" /><small>m</small>
+                        <input type="number" min="0" max="59" [value]="durationPart(draft, 's')" (change)="setDurationPart(draft, 's', $any($event.target).value)" [name]="'eDurS' + h.id" /><small>s</small>
+                      </span>
+                    </label>
+                    <label><span>DKP / hour</span><input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
+                    <button type="button" class="btn primary sm" (click)="saveEvent(h)">Save event</button>
+                  </div>
                   <p class="evt-history__hint">Changing DKP / hour rescales every attendee's earned DKP and balance.</p>
-                  <button type="button" class="btn primary sm" (click)="saveEvent(h)">Save event</button>
                 </div>
               }
 
@@ -106,10 +116,18 @@ import type {
                     <span class="evt-history__bulk-q">Remove active credit from all {{ h.participants.length }} attendees?</span>
                     <button type="button" class="btn sm danger-outline" (click)="clearActiveCredit(h)">Confirm undo</button>
                     <button type="button" class="btn ghost sm" (click)="cancelClearActiveCredit()">Cancel</button>
+                  } @else if (confirmingClearAbsencesId() === h.id) {
+                    <span class="evt-history__bulk-q">Stop this event counting toward active tracking (undo absences for members who missed it)?</span>
+                    <button type="button" class="btn sm danger-outline" (click)="clearAbsences(h)">Confirm undo</button>
+                    <button type="button" class="btn ghost sm" (click)="cancelClearAbsences()">Cancel</button>
                   } @else {
                     <button type="button" class="btn ghost sm" (click)="requestClearActiveCredit(h)"
                             title="Uncheck active credit for every attendee — for an event credited by accident.">
                       Undo active credit (whole event)
+                    </button>
+                    <button type="button" class="btn ghost sm" (click)="requestClearAbsences(h)"
+                            title="Stop this event counting toward active tracking so members who missed it aren't marked absent for it.">
+                      Undo absences (whole event)
                     </button>
                   }
                 </div>
@@ -141,6 +159,19 @@ import type {
                   </div>
                 </div>
               </div>
+
+              @if (canManage()) {
+                <div class="evt-history__danger">
+                  @if (confirmingDeleteId() === h.id) {
+                    <span class="evt-history__bulk-q">Delete this event permanently? Reverses all DKP it awarded/spent and removes its attendance, loot &amp; comments — can't be undone.</span>
+                    <button type="button" class="btn sm danger-outline" (click)="deleteEvent(h)">Confirm delete</button>
+                    <button type="button" class="btn ghost sm" (click)="cancelDelete()">Cancel</button>
+                  } @else {
+                    <button type="button" class="btn sm danger-outline" (click)="requestDelete(h)"
+                            title="Permanently delete this event and reverse its DKP.">Delete event</button>
+                  }
+                </div>
+              }
             </div>
           }
         </div>
@@ -163,6 +194,13 @@ import type {
     .evt-history__body { padding: 12px; border-top: 1px solid var(--border); background: var(--bg-elev); }
     .evt-history__edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
     .evt-history__edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg-2); }
+    .evt-history__edit-row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+    .evt-history__edit-row2 { grid-column: 1 / -1; display: flex; gap: 12px; align-items: flex-end; }
+    .evt-history__edit-row2 label { flex: 1; }
+    .evt-history__edit-row2 button { flex: 0 0 auto; white-space: nowrap; }
+    .evt-dur__inputs { display: flex; align-items: center; gap: 4px; }
+    .evt-dur__inputs input { width: 52px; text-align: right; }
+    .evt-dur__inputs small { color: var(--fg-3); margin-right: 4px; }
     .evt-history__hint { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--fg-3); }
     .evt-history__attendee { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
     .evt-history__who small { color: var(--fg-3); margin-left: 6px; }
@@ -181,6 +219,7 @@ import type {
     .evt-att__actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
     .evt-history__bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .evt-history__bulk-q { font-size: 12px; color: var(--fg-2); }
+    .evt-history__danger { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
     .evt-disc { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
     .evt-disc__head { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     .evt-disc__row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
@@ -251,6 +290,26 @@ export class EventHistoryPanelComponent {
     return this.comments()[historyId] ?? [];
   }
 
+  // Duration is stored as decimal hours but edited as whole hours / minutes /
+  // seconds. Derive a single unit from the draft, and write a unit back by
+  // recombining all three into decimal hours (null when the total is zero).
+  protected durationPart(draft: ActivityEditEventHistoryInput, unit: 'h' | 'm' | 's'): number {
+    const total = Math.max(0, Math.round((draft.duration ?? 0) * 3600));
+    if (unit === 'h') return Math.floor(total / 3600);
+    if (unit === 'm') return Math.floor((total % 3600) / 60);
+    return total % 60;
+  }
+
+  protected setDurationPart(draft: ActivityEditEventHistoryInput, unit: 'h' | 'm' | 's', value: string | number): void {
+    const n = Math.max(0, Math.floor(Number(value) || 0));
+    let h = this.durationPart(draft, 'h');
+    let m = this.durationPart(draft, 'm');
+    let s = this.durationPart(draft, 's');
+    if (unit === 'h') { h = n; } else if (unit === 'm') { m = n; } else { s = n; }
+    const totalSeconds = h * 3600 + m * 60 + s;
+    draft.duration = totalSeconds > 0 ? totalSeconds / 3600 : null;
+  }
+
   // Step the DKP inputs by this linkshell's rounding increment (Quarter → 0.25,
   // Half → 0.5) so manual edits stay on the same grid as earned DKP.
   protected dkpStep(): number {
@@ -297,10 +356,31 @@ export class EventHistoryPanelComponent {
   // Two-step inline confirm (native confirm() is unreliable in the Activity iframe)
   // for undoing active credit across the whole event.
   protected readonly confirmingClearCreditId = signal<number | null>(null);
-  protected requestClearActiveCredit(h: ActivityEventHistory): void { this.confirmingClearCreditId.set(h.id); }
+  protected requestClearActiveCredit(h: ActivityEventHistory): void { this.confirmingClearCreditId.set(h.id); this.confirmingClearAbsencesId.set(null); }
   protected cancelClearActiveCredit(): void { this.confirmingClearCreditId.set(null); }
   async clearActiveCredit(h: ActivityEventHistory): Promise<void> {
     this.confirmingClearCreditId.set(null);
     if (await this.activity.clearEventHistoryActiveCredit(h.id)) { await this.load(); }
+  }
+
+  protected readonly confirmingClearAbsencesId = signal<number | null>(null);
+  protected requestClearAbsences(h: ActivityEventHistory): void { this.confirmingClearAbsencesId.set(h.id); this.confirmingClearCreditId.set(null); }
+  protected cancelClearAbsences(): void { this.confirmingClearAbsencesId.set(null); }
+  async clearAbsences(h: ActivityEventHistory): Promise<void> {
+    this.confirmingClearAbsencesId.set(null);
+    if (await this.activity.clearEventHistoryAbsences(h.id)) { await this.load(); }
+  }
+
+  // Delete the whole event (reverses its DKP) — leader/officer only, behind a
+  // two-step confirm since it's destructive and can't be auto-undone.
+  protected readonly confirmingDeleteId = signal<number | null>(null);
+  protected requestDelete(h: ActivityEventHistory): void { this.confirmingDeleteId.set(h.id); }
+  protected cancelDelete(): void { this.confirmingDeleteId.set(null); }
+  async deleteEvent(h: ActivityEventHistory): Promise<void> {
+    this.confirmingDeleteId.set(null);
+    if (await this.activity.deleteEventHistory(h.id)) {
+      this.expandedId.set(null);
+      await this.load();
+    }
   }
 }

@@ -344,6 +344,15 @@ a { color: inherit; text-decoration: none; }
 .jr-pill-lvl { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
 .jr-empty { font-size: 12px; color: var(--fg-3); font-style: italic; }
 
+/* The member's OWN gear/skill self-rating, shown read-only inside a job pill on
+   the View Profile page: two compact star rows (G = gear, S = skill). */
+.jr-pill-rate { display: inline-flex; flex-direction: column; gap: 1px; line-height: 1; margin-left: 1px; }
+.jr-rate { display: inline-flex; align-items: center; gap: 2px; }
+.jr-rate-k { font-size: 8px; font-weight: 700; color: var(--fg-3); width: 8px; }
+.jr-stars { font-size: 9px; letter-spacing: .5px; }
+.jr-stars span { color: var(--fg-3); opacity: .35; }
+.jr-stars span.on { color: var(--accent); opacity: 1; }
+
 /* "Strong" job marker — a member's well-geared/merited jobs. */
 .jr-pill--strong {
   border-color: rgba(245, 197, 66, .55);
@@ -682,6 +691,10 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   width: 100%;
   max-width: 520px;
+  /* Belt-and-suspenders horizontal centering: works even if a flex/justify
+     quirk on the overlay would otherwise push the dialog to one side. */
+  margin-left: auto;
+  margin-right: auto;
   z-index: 1;
 }
 .mt-modal__dialog--lg { max-width: 780px; }

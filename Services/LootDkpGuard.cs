@@ -60,7 +60,13 @@ public static class LootDkpGuard
 
         // Subtract loot already awarded to this winner in this event but not yet
         // deducted (deduction happens at close), so two items in one event can't
-        // each pass the check and together overdraw the member.
+        // each pass the check and together overdraw the member. Match ALL of the
+        // member's characters (main + both alts) so loot won on an alt and loot won
+        // on the main both count against the one shared account balance.
+        var memberNames = new[] { member.CharacterName, member.AppUser?.AltCharacterName1, member.AppUser?.AltCharacterName2 }
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var pending = await db.EventLootDetails
             .Where(d => d.EventId == eventId
                         && d.ItemWinner != null
@@ -68,7 +74,7 @@ public static class LootDkpGuard
             .Select(d => new { d.ItemWinner, d.WinningDkpSpent })
             .ToListAsync(cancellationToken);
         var pendingForWinner = pending
-            .Where(d => string.Equals(d.ItemWinner, name, StringComparison.OrdinalIgnoreCase))
+            .Where(d => d.ItemWinner != null && memberNames.Contains(d.ItemWinner.Trim()))
             .Sum(d => (double)d.WinningDkpSpent!.Value);
 
         var effective = available - pendingForWinner;

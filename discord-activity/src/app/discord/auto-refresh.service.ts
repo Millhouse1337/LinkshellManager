@@ -142,6 +142,12 @@ export class AutoRefreshService {
     try {
       this.refreshInFlight ??= this.doRefresh(tab);
       await this.refreshInFlight;
+      // Manual (button) refresh only — confirm it visibly via the success banner so
+      // the user can see the page actually reloaded. The silent background timer
+      // (showBusy=false) never flashes this.
+      if (showBusy) {
+        this.auth.setActionMessage('Page refreshed.');
+      }
     } catch (error) {
       if (showBusy) {
         this.auth.setActionError(formatActionError(error, 'Refresh failed — try again.'));

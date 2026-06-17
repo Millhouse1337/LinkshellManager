@@ -297,8 +297,9 @@ public sealed partial class ActivityDataController
         }
 
         // Can't end while attendees are still pending confirmation (IsVerified == null).
-        // Every pending member must be confirmed present or removed first.
-        var pendingCount = eventEntity.AppUserEvents.Count(p => p.IsVerified == null);
+        // Every pending member must be confirmed present or removed first. Outside
+        // (account-less) signups can't be verified/credited, so they never block close.
+        var pendingCount = eventEntity.AppUserEvents.Count(p => p.IsVerified == null && p.AppUserId != null);
         if (pendingCount > 0)
         {
             return BadRequest(new
@@ -340,6 +341,7 @@ public sealed partial class ActivityDataController
         };
 
         var linkshellMemberships = await _dbContext.AppUserLinkshells
+            .Include(link => link.AppUser) // alt names, for resolving alt-won loot to the account
             .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
             .ToListAsync(cancellationToken);
         var membershipsByAppUserId = linkshellMemberships
@@ -355,6 +357,13 @@ public sealed partial class ActivityDataController
 
         foreach (var participation in eventEntity.AppUserEvents)
         {
+            // Outside (account-less) signups accrue NO DKP and write NO history —
+            // they're board-only and cleared with the event below.
+            if (string.IsNullOrWhiteSpace(participation.AppUserId))
+            {
+                continue;
+            }
+
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
             // Pay DKP for the ACTUAL time present, snapping the DKP value (not the
             // duration) to the linkshell's increment. Rounding the duration first

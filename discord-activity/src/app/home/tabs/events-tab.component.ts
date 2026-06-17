@@ -174,6 +174,21 @@ export class EventsTabComponent {
     this.queuePanel().openEditEventForm(event);
   }
 
+  // Whether the current member is attending this event (in a slot or the roster),
+  // so the self-service "Withdraw From Event" button only shows when there's
+  // something to withdraw from.
+  protected isParticipant(event: ActivityEvent): boolean {
+    const myId = this.activity.overview()?.appUser?.id;
+    if (!myId) return false;
+    return (event.participants ?? []).some(participant => participant.appUserId === myId);
+  }
+
+  // Drop the current member from the event entirely (their party slot + their
+  // attendance row); the overview refresh removes them from the live roster.
+  protected async withdrawFromEvent(event: ActivityEvent): Promise<void> {
+    await this.activity.unsignFromEvent(event.id);
+  }
+
   protected isAddMemberExpanded(eventId: number): boolean {
     return this.expandedAddMemberEventIds().has(eventId);
   }

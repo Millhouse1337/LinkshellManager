@@ -13,12 +13,12 @@
     }
 
     // Main + each named alt, as labeled characters to render.
-    var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong)>
+    var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong, IReadOnlyList<bool> Relic, IReadOnlyList<string> RelicName, IReadOnlyList<string> Merit, IReadOnlyList<int> Gear, IReadOnlyList<int> Skill)>
     {
-        (Model.Entry.CharacterName, false, Model.Entry.JobLevels, Model.Entry.StrongJobs)
+        (Model.Entry.CharacterName, false, Model.Entry.JobLevels, Model.Entry.StrongJobs, Model.Entry.RelicFlags, Model.Entry.RelicNames, Model.Entry.MeritJobs, Model.Entry.GearRatings, Model.Entry.SkillRatings)
     };
-    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, Model.Entry.Alt1JobLevels, Model.Entry.Alt1StrongJobs)); }
-    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, Model.Entry.Alt2JobLevels, Model.Entry.Alt2StrongJobs)); }
+    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, Model.Entry.Alt1JobLevels, Model.Entry.Alt1StrongJobs, Model.Entry.Alt1RelicFlags, Model.Entry.Alt1RelicNames, Model.Entry.Alt1MeritJobs, Model.Entry.Alt1GearRatings, Model.Entry.Alt1SkillRatings)); }
+    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, Model.Entry.Alt2JobLevels, Model.Entry.Alt2StrongJobs, Model.Entry.Alt2RelicFlags, Model.Entry.Alt2RelicNames, Model.Entry.Alt2MeritJobs, Model.Entry.Alt2GearRatings, Model.Entry.Alt2SkillRatings)); }
 }
 
 <div class="page-head fade d1">
@@ -51,7 +51,17 @@
     @foreach (var ch in characters)
     {
         var leveled = ch.Levels
-            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl, Strong = i < ch.Strong.Count && ch.Strong[i] })
+            .Select((lvl, i) => new
+            {
+                Name = Model.JobCatalog[i],
+                Level = lvl,
+                Strong = i < ch.Strong.Count && ch.Strong[i],
+                Relic = i < ch.Relic.Count && ch.Relic[i],
+                RelicName = i < ch.RelicName.Count ? ch.RelicName[i] : "",
+                Merit = i < ch.Merit.Count ? ch.Merit[i] : "",
+                Gear = i < ch.Gear.Count ? ch.Gear[i] : 0,
+                Skill = i < ch.Skill.Count ? ch.Skill[i] : 0
+            })
             .Where(x => x.Level > 0)
             .OrderByDescending(x => x.Level)
             .ToList();
@@ -70,7 +80,15 @@
                 <div class="jr-pills">
                     @foreach (var job in leveled)
                     {
-                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "")"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong" title="Strong — well-geared / merited">★</span>}</span>
+                        var tipParts = new List<string>();
+                        if (job.Relic) { tipParts.Add(string.IsNullOrWhiteSpace(job.RelicName) ? "Relic weapon" : "Relic: " + job.RelicName); }
+                        if (job.Strong && !string.IsNullOrWhiteSpace(job.Merit)) { tipParts.Add("Merits: " + job.Merit); }
+                        else if (job.Strong) { tipParts.Add("Merited"); }
+                        var tip = tipParts.Count > 0 ? string.Join(" · ", tipParts) : null;
+                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "") @(job.Relic ? "relic-flame" : "")" title="@tip"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong">★</span>}@if (job.Gear > 0 || job.Skill > 0)
+                        {
+                            <span class="jr-pill-rate" title="Self-rated — Gear @job.Gear/5 · Skill @job.Skill/5"><span class="jr-rate"><span class="jr-rate-k">G</span><span class="jr-stars">@for (var s = 1; s <= 5; s++){<span class="@(s <= job.Gear ? "on" : "")">★</span>}</span></span><span class="jr-rate"><span class="jr-rate-k">S</span><span class="jr-stars">@for (var s = 1; s <= 5; s++){<span class="@(s <= job.Skill ? "on" : "")">★</span>}</span></span></span>
+                        }</span>
                     }
                 </div>
             }

@@ -129,7 +129,24 @@ else
                     @foreach (var member in Model.Members)
                     {
                         <tr>
-                            <td>@(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")</td>
+                            <td>
+                                <div>
+                                    @(member.CharacterName ?? member.AppUser?.CharacterName ?? "—")
+                                    @if (member.AppUser?.IsPlaceholder == true)
+                                    {
+                                        <span class="tag" style="font-size:10px" title="Player who hasn't synced their account — created by a leader">Unsynced</span>
+                                    }
+                                </div>
+                                @{
+                                    var altNames = new[] { member.AppUser?.AltCharacterName1, member.AppUser?.AltCharacterName2 }
+                                        .Where(a => !string.IsNullOrWhiteSpace(a))
+                                        .ToList();
+                                }
+                                @if (altNames.Count > 0)
+                                {
+                                    <div style="font-size:11px;color:var(--fg-3)">Alts: @string.Join(", ", altNames)</div>
+                                }
+                            </td>
                             <td><span class="tag">@RankIcon(member.Rank) @(member.Rank ?? "—")</span></td>
                             <td><span class="tag @StatusClass(member.Status)">@(member.Status ?? "Active")</span></td>
                             @{ var streaks = memberStreaks.GetValueOrDefault(member.AppUserId ?? string.Empty); }
@@ -152,6 +169,8 @@ else
                                                 data-id="@member.Id"
                                                 data-rank="@member.Rank"
                                                 data-status="@member.Status"
+                                                data-credit="@streaks.Credit"
+                                                data-absent="@streaks.Absent"
                                                 data-name="@(member.CharacterName ?? member.AppUser?.CharacterName)">
                                             Modify
                                         </button>
@@ -224,6 +243,17 @@ else
                             }
                         </select>
                         <small style="color:var(--fg-3)">Set <strong>Active</strong> or <strong>Inactive</strong> manually. If automatic activity tracking is on for this linkshell, attendance may recompute this later.</small>
+                    </div>
+                    <div class="field" style="margin-top:12px">
+                        <label for="modifyStreakType">Streak count override</label>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <select name="StreakType" id="modifyStreakType" class="form-select" style="flex:1">
+                                <option value="credit">Active streak (green)</option>
+                                <option value="absent">Absence streak (red)</option>
+                            </select>
+                            <input type="number" name="StreakCount" id="modifyStreakCount" class="form-control" min="0" step="1" style="width:90px" />
+                        </div>
+                        <small style="color:var(--fg-3)">Override the counted streak. Choose which streak the number targets — that controls the color and drives Active/Inactive until the next event recompute.</small>
                     </div>
                 </div>
                 <div class="mt-modal__footer">

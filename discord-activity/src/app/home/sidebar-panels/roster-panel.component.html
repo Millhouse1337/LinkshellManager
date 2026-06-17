@@ -188,7 +188,12 @@
           <div class="ac-roster-row">
             <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ memberInitials(member.characterName) }}</div>
             <div class="ac-roster-name-cell">
-              <div class="ac-roster-name">{{ member.characterName }}</div>
+              <div class="ac-roster-name">
+                {{ member.characterName }}
+                @if (member.isPlaceholder) {
+                  <span class="tag" style="font-size:9px" title="Player who hasn't synced their account">Unsynced</span>
+                }
+              </div>
               @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
                 @if (alts) {
                   <div class="ac-roster-name-sub">Alts: {{ alts }}</div>

@@ -151,6 +151,12 @@ export interface ActivityLinkshellSettings {
   // Palette key for this linkshell's rendered event-board image. One of the
   // EVENT_BOARD_THEMES keys (Crystal, Abyss, Ember, Verdant, Royal, Tome).
   eventBoardTheme: string;
+  // Allow Discord members with no LSM account to sign up for events from the party
+  // board (tracked by Discord id; cleared when the event ends).
+  outsidePartySignupEnabled?: boolean;
+  // Discord channel id new post-event discussion comments mirror to, or null to
+  // keep discussion in-app only.
+  discussionChannelId?: string | null;
 }
 
 // One Discord server the caller can lock a linkshell to (the bot is in it and so
@@ -393,6 +399,9 @@ export interface ActivityMember {
   // Computed Active/Inactive from event attendance. Null when the linkshell has
   // not enabled activity tracking — the badge is hidden in that case.
   active?: boolean | null;
+  // True for an "unsynced" member (a player who hasn't linked an account) — badged in
+  // the roster. (Backed by a placeholder account server-side; see AppUser.IsPlaceholder.)
+  isPlaceholder?: boolean;
 }
 
 // "Jobs Roster" — every member's leveled jobs. jobCatalog is the job-name order
@@ -1079,6 +1088,9 @@ export interface ActivityUpdateProfileInput {
 // One job's peer-rating summary for a target member (gear/skill are 1-5, 0 = unset).
 export interface ActivityJobRating {
   jobIndex: number;
+  // The target character's level for this job (0 = unleveled / unknown), so the
+  // rater can see what they're scoring.
+  level: number;
   hasSelf: boolean;
   selfGear: number;
   selfSkill: number;
@@ -1200,6 +1212,8 @@ export interface ActivityAlsoAttending {
   role?: string | null;
   mainJob?: string | null;
   subJob?: string | null;
+  // Present on event boards so a member can withdraw their own no-slot signup.
+  appUserId?: string | null;
 }
 
 export interface ActivityPartySetupSignUpInput {
@@ -1208,6 +1222,9 @@ export interface ActivityPartySetupSignUpInput {
   subJob?: string | null;
   // Event boards only: also claim this party's leader spot (first-claim-wins).
   asLeader?: boolean;
+  // Event boards only: sign up as a specific character (main or an alt). Omitted
+  // / null = the member's main character.
+  characterName?: string | null;
 }
 
 // Officer editor: a flat slot list (each row carries its alliance/party/slot

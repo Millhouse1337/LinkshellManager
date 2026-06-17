@@ -155,6 +155,47 @@ public class ManageTeamController : Controller
             .OrderBy(ul => ul.CharacterName)
             .ToListAsync();
 
+        // Relic flags/names from every member's OWN job ratings (self rows with
+        // HasRelic), keyed by (AppUserId, CharacterSlot) — mirrors the Activity.
+        var jobCount = EventJobCatalog.MainJobOptions.Length;
+        var relicRows = await _context.JobRatings.AsNoTracking()
+            .Where(r => r.LinkshellId == targetId
+                && r.RaterAppUserId == r.TargetAppUserId
+                && r.HasRelic
+                && r.JobIndex >= 0)
+            .Select(r => new { r.TargetAppUserId, r.CharacterSlot, r.JobIndex, r.RelicNames })
+            .ToListAsync();
+        var relicLookup = relicRows
+            .GroupBy(r => (r.TargetAppUserId, r.CharacterSlot))
+            .ToDictionary(g => g.Key, g => g.Select(x => x.JobIndex).ToHashSet());
+        var relicNameLookup = relicRows
+            .GroupBy(r => (r.TargetAppUserId, r.CharacterSlot))
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(x => x.JobIndex).ToDictionary(
+                    j => j.Key,
+                    j => string.Join(", ", j.First().RelicNames ?? Array.Empty<string>())));
+
+        bool[] RelicFlags(string? appUserId, int slot)
+        {
+            var flags = new bool[jobCount];
+            if (appUserId != null && relicLookup.TryGetValue((appUserId, slot), out var set))
+            {
+                for (var i = 0; i < jobCount; i++) { flags[i] = set.Contains(i); }
+            }
+            return flags;
+        }
+        string[] RelicNames(string? appUserId, int slot)
+        {
+            var names = new string[jobCount];
+            for (var i = 0; i < jobCount; i++) { names[i] = string.Empty; }
+            if (appUserId != null && relicNameLookup.TryGetValue((appUserId, slot), out var map))
+            {
+                foreach (var kv in map) { if (kv.Key >= 0 && kv.Key < jobCount) { names[kv.Key] = kv.Value; } }
+            }
+            return names;
+        }
+
         var entries = members.Select(m => new JobsRosterEntry
         {
             CharacterName = m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown",
@@ -166,7 +207,16 @@ public class ManageTeamController : Controller
             Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt2JobLevels),
             StrongJobs = ProfileJobLevels.ToCatalogFlags(m.StrongJobs),
             Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt1StrongJobs),
-            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt2StrongJobs)
+            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt2StrongJobs),
+            RelicFlags = RelicFlags(m.AppUserId, 0),
+            Alt1RelicFlags = RelicFlags(m.AppUserId, 1),
+            Alt2RelicFlags = RelicFlags(m.AppUserId, 2),
+            RelicNames = RelicNames(m.AppUserId, 0),
+            Alt1RelicNames = RelicNames(m.AppUserId, 1),
+            Alt2RelicNames = RelicNames(m.AppUserId, 2),
+            MeritJobs = ProfileJobLevels.NormalizeMerits(m.MeritJobs),
+            Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(m.AppUser?.Alt1MeritJobs),
+            Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(m.AppUser?.Alt2MeritJobs)
         }).ToList();
 
         return View(new JobsRosterViewModel
@@ -196,6 +246,49 @@ public class ManageTeamController : Controller
             .AnyAsync(l => l.AppUserId == user.Id && l.LinkshellId == member.LinkshellId);
         if (!callerIsMember) return Forbid();
 
+        // The member's OWN job ratings (self rows: rater == target), keyed by
+        // character slot. Drives the relic pill/tooltip AND the read-only gear/skill
+        // stars shown on the profile. Scoped to this linkshell, like the rest of the
+        // page (ratings don't carry between linkshells).
+        var jobCount = EventJobCatalog.MainJobOptions.Length;
+        var selfRows = member.AppUserId is null
+            ? new List<(int CharacterSlot, int JobIndex, int Gear, int Skill, bool HasRelic, string Names)>()
+            : (await _context.JobRatings.AsNoTracking()
+                .Where(r => r.LinkshellId == member.LinkshellId
+                    && r.RaterAppUserId == r.TargetAppUserId
+                    && r.TargetAppUserId == member.AppUserId
+                    && r.JobIndex >= 0)
+                .Select(r => new { r.CharacterSlot, r.JobIndex, r.Gear, r.Skill, r.HasRelic, r.RelicNames })
+                .ToListAsync())
+                .Select(r => (r.CharacterSlot, r.JobIndex, r.Gear, r.Skill, r.HasRelic, Names: string.Join(", ", r.RelicNames ?? Array.Empty<string>())))
+                .ToList();
+
+        bool[] RelicFlags(int slot)
+        {
+            var flags = new bool[jobCount];
+            foreach (var r in selfRows) { if (r.CharacterSlot == slot && r.HasRelic && r.JobIndex < jobCount) { flags[r.JobIndex] = true; } }
+            return flags;
+        }
+        string[] RelicNames(int slot)
+        {
+            var names = new string[jobCount];
+            for (var i = 0; i < jobCount; i++) { names[i] = string.Empty; }
+            foreach (var r in selfRows) { if (r.CharacterSlot == slot && r.HasRelic && r.JobIndex < jobCount) { names[r.JobIndex] = r.Names; } }
+            return names;
+        }
+        int[] GearRatings(int slot)
+        {
+            var vals = new int[jobCount];
+            foreach (var r in selfRows) { if (r.CharacterSlot == slot && r.JobIndex < jobCount) { vals[r.JobIndex] = r.Gear; } }
+            return vals;
+        }
+        int[] SkillRatings(int slot)
+        {
+            var vals = new int[jobCount];
+            foreach (var r in selfRows) { if (r.CharacterSlot == slot && r.JobIndex < jobCount) { vals[r.JobIndex] = r.Skill; } }
+            return vals;
+        }
+
         var entry = new JobsRosterEntry
         {
             CharacterName = member.CharacterName ?? member.AppUser?.CharacterName ?? member.AppUser?.UserName ?? "Unknown",
@@ -207,7 +300,22 @@ public class ManageTeamController : Controller
             Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(member.AppUser?.Alt2JobLevels),
             StrongJobs = ProfileJobLevels.ToCatalogFlags(member.StrongJobs),
             Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(member.AppUser?.Alt1StrongJobs),
-            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(member.AppUser?.Alt2StrongJobs)
+            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(member.AppUser?.Alt2StrongJobs),
+            RelicFlags = RelicFlags(0),
+            Alt1RelicFlags = RelicFlags(1),
+            Alt2RelicFlags = RelicFlags(2),
+            RelicNames = RelicNames(0),
+            Alt1RelicNames = RelicNames(1),
+            Alt2RelicNames = RelicNames(2),
+            MeritJobs = ProfileJobLevels.NormalizeMerits(member.MeritJobs),
+            Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(member.AppUser?.Alt1MeritJobs),
+            Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(member.AppUser?.Alt2MeritJobs),
+            GearRatings = GearRatings(0),
+            Alt1GearRatings = GearRatings(1),
+            Alt2GearRatings = GearRatings(2),
+            SkillRatings = SkillRatings(0),
+            Alt1SkillRatings = SkillRatings(1),
+            Alt2SkillRatings = SkillRatings(2)
         };
 
         return View(new MemberProfileViewModel
@@ -547,6 +655,40 @@ public class ManageTeamController : Controller
 
         member.Rank = input.Rank;
         member.Status = input.Status;
+
+        // Officer streak "Count" override (optional). Mirrors the Discord Activity
+        // SetMemberActiveCreditCountAsync: credit and absent overrides are mutually
+        // exclusive, and the chosen streak drives Status by the linkshell's
+        // thresholds (sticks until the next attendance recompute clears it).
+        if (input.StreakCount.HasValue)
+        {
+            var count = input.StreakCount.Value < 0 ? 0 : input.StreakCount.Value;
+            var thresholds = await _context.Linkshells
+                .Where(l => l.Id == member.LinkshellId)
+                .Select(l => new { l.ActiveAfterAttendances, l.InactiveAfterAbsences })
+                .FirstOrDefaultAsync();
+            var activeAfter = thresholds?.ActiveAfterAttendances ?? 1;
+            if (activeAfter < 1) activeAfter = 1;
+            var inactiveAfter = thresholds?.InactiveAfterAbsences ?? 1;
+            if (inactiveAfter < 1) inactiveAfter = 1;
+
+            if (string.Equals(input.StreakType, "absent", StringComparison.OrdinalIgnoreCase))
+            {
+                member.ManualAbsentStreak = count;
+                member.ManualActiveCreditStreak = null;
+                member.Status = count >= inactiveAfter ? "Inactive" : "Active";
+            }
+            else
+            {
+                member.ManualActiveCreditStreak = count;
+                member.ManualAbsentStreak = null;
+                member.Status = count >= activeAfter ? "Active" : "Inactive";
+            }
+            // Seed timestamp so the state machine replays only events after this and
+            // the manual count accumulates with subsequent attendance.
+            member.ManualStreakSetAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync();
 
         return RedirectToAction(nameof(Index), new { selectedLinkshellId = member.LinkshellId });

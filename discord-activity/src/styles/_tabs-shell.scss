@@ -112,20 +112,22 @@ body {
 }
 .identity-role { font-size: 10px; color: var(--fg-3); }
 .identity-refresh {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--fg-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0;
-  transition: color 120ms, border-color 120ms;
+  transition: background 120ms, filter 120ms;
 }
-.identity-refresh svg { width: 12px; height: 12px; display: block; }
-.identity-refresh:hover:not(:disabled) { color: var(--fg); border-color: var(--fg-3); }
+.identity-refresh svg { width: 13px; height: 13px; display: block; }
+.identity-refresh:hover:not(:disabled) { background: var(--accent-hover); }
 .identity-refresh:disabled { cursor: wait; opacity: 0.7; }
 .identity-refresh svg.spinning { animation: identity-refresh-spin 0.9s linear infinite; }
 @keyframes identity-refresh-spin { to { transform: rotate(360deg); } }

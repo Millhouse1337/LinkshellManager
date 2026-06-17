@@ -59,11 +59,14 @@ public class AccountController : Controller
 
         var jobLevelRows = await _context.AppUserLinkshells
             .Where(link => link.AppUserId == user.Id)
-            .Select(link => new { link.LinkshellId, link.JobLevels, link.StrongJobs })
+            .Select(link => new { link.LinkshellId, link.JobLevels, link.StrongJobs, link.MeritJobs })
             .ToListAsync();
         var hasLinkshell = jobLevelRows.Count > 0;
         var addonConfigured = await _context.AddonApiTokens
             .AnyAsync(token => token.IssuedToAppUserId == user.Id && token.RevokedAt == null);
+        // Hide the "Set up the addon" onboarding step when the global addon
+        // kill-switch is on (no one can pair while it's disabled).
+        var addonAvailable = !await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
 
         // Prefer the primary linkshell's stored job levels; otherwise any
         // membership that has them — it's the same character's jobs everywhere.
@@ -73,9 +76,35 @@ public class AccountController : Controller
         var storedStrongJobs =
             jobLevelRows.FirstOrDefault(row => row.LinkshellId == user.PrimaryLinkshellId)?.StrongJobs
             ?? jobLevelRows.FirstOrDefault(row => row.StrongJobs != null)?.StrongJobs;
+        var storedMerits =
+            jobLevelRows.FirstOrDefault(row => row.LinkshellId == user.PrimaryLinkshellId)?.MeritJobs
+            ?? jobLevelRows.FirstOrDefault(row => row.MeritJobs != null)?.MeritJobs;
+
+        // The gear/skill/relic ratings + rate-teammates panel reuse the Activity
+        // job-rating API and operate within one linkshell. Use the member's
+        // primary (or any) linkshell, and list its other members as rate targets.
+        var ratingLinkshellId = user.PrimaryLinkshellId
+            ?? jobLevelRows.Select(r => (int?)r.LinkshellId).FirstOrDefault()
+            ?? 0;
+        var ratingTeammates = ratingLinkshellId == 0
+            ? new List<ProfileViewModel.RatingTeammate>()
+            : await _context.AppUserLinkshells
+                .Where(link => link.LinkshellId == ratingLinkshellId && link.AppUserId != null)
+                .OrderBy(link => link.CharacterName)
+                .Select(link => new ProfileViewModel.RatingTeammate
+                {
+                    AppUserId = link.AppUserId!,
+                    Name = link.CharacterName ?? link.AppUser!.CharacterName ?? "Member",
+                    Alt1 = link.AppUser!.AltCharacterName1,
+                    Alt2 = link.AppUser!.AltCharacterName2
+                })
+                .ToListAsync();
 
         return View(new ProfileViewModel
         {
+            PrimaryLinkshellId = ratingLinkshellId,
+            MyAppUserId = user.Id,
+            RatingTeammates = ratingTeammates,
             CharacterName = user.CharacterName,
             AltCharacterName1 = user.AltCharacterName1,
             AltCharacterName2 = user.AltCharacterName2,
@@ -86,12 +115,19 @@ public class AccountController : Controller
                 && !string.IsNullOrWhiteSpace(user.TimeZone),
             HasLinkshell = hasLinkshell,
             AddonConfigured = addonConfigured,
+            AddonAvailable = addonAvailable,
             JobLevels = ProfileJobLevels.ToCatalogLevels(storedJobLevels),
             Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt1JobLevels),
             Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(user.Alt2JobLevels),
             StrongJobs = ProfileJobLevels.ToCatalogFlags(storedStrongJobs),
             Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(user.Alt1StrongJobs),
-            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(user.Alt2StrongJobs)
+            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(user.Alt2StrongJobs),
+            MeritJobs = ProfileJobLevels.NormalizeMerits(storedMerits).ToList(),
+            Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(user.Alt1MeritJobs).ToList(),
+            Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(user.Alt2MeritJobs).ToList(),
+            CraftLevels = CraftCatalog.Normalize(user.CraftLevels).ToList(),
+            Alt1CraftLevels = CraftCatalog.Normalize(user.Alt1CraftLevels).ToList(),
+            Alt2CraftLevels = CraftCatalog.Normalize(user.Alt2CraftLevels).ToList()
         });
     }
 
@@ -159,12 +195,32 @@ public class AccountController : Controller
             }
         }
 
+        // Main-character merit notes ride on every membership (like StrongJobs).
+        if (model.MeritJobs.Count > 0)
+        {
+            var memberships = await _context.AppUserLinkshells
+                .Where(link => link.AppUserId == user.Id)
+                .ToListAsync();
+            foreach (var membership in memberships)
+            {
+                membership.MeritJobs = ProfileJobLevels.NormalizeMerits(model.MeritJobs.ToArray());
+            }
+        }
+
+        // Crafts are account-level. Main on AppUser.CraftLevels.
+        if (model.CraftLevels.Count > 0)
+        {
+            user.CraftLevels = CraftCatalog.Normalize(model.CraftLevels.ToArray()).ToArray();
+        }
+
         // Alt job levels + strong flags: clear when the alt has no name, otherwise
         // save what was posted (the grid only renders when the alt has a name).
         if (string.IsNullOrWhiteSpace(user.AltCharacterName1))
         {
             user.Alt1JobLevels = null;
             user.Alt1StrongJobs = null;
+            user.Alt1MeritJobs = null;
+            user.Alt1CraftLevels = null;
         }
         else
         {
@@ -176,12 +232,22 @@ public class AccountController : Controller
             {
                 user.Alt1StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(user.Alt1StrongJobs, model.Alt1StrongJobs);
             }
+            if (model.Alt1MeritJobs.Count > 0)
+            {
+                user.Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(model.Alt1MeritJobs.ToArray());
+            }
+            if (model.Alt1CraftLevels.Count > 0)
+            {
+                user.Alt1CraftLevels = CraftCatalog.Normalize(model.Alt1CraftLevels.ToArray()).ToArray();
+            }
         }
 
         if (string.IsNullOrWhiteSpace(user.AltCharacterName2))
         {
             user.Alt2JobLevels = null;
             user.Alt2StrongJobs = null;
+            user.Alt2MeritJobs = null;
+            user.Alt2CraftLevels = null;
         }
         else
         {
@@ -192,6 +258,14 @@ public class AccountController : Controller
             if (model.Alt2StrongJobs.Count > 0)
             {
                 user.Alt2StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(user.Alt2StrongJobs, model.Alt2StrongJobs);
+            }
+            if (model.Alt2MeritJobs.Count > 0)
+            {
+                user.Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(model.Alt2MeritJobs.ToArray());
+            }
+            if (model.Alt2CraftLevels.Count > 0)
+            {
+                user.Alt2CraftLevels = CraftCatalog.Normalize(model.Alt2CraftLevels.ToArray()).ToArray();
             }
         }
 

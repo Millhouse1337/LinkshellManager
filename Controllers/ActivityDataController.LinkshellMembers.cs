@@ -279,6 +279,9 @@ public sealed partial class ActivityDataController
             targetMembership.ManualAbsentStreak = null;
             targetMembership.Status = count >= activeAfter ? "Active" : "Inactive";
         }
+        // The seed timestamp: the state machine replays only events that end after
+        // this, so the manual count accumulates with subsequent attendance.
+        targetMembership.ManualStreakSetAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }

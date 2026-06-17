@@ -1,6 +1,7 @@
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -46,7 +47,7 @@ public sealed partial class ActivityDataController
         var alsoAttending = participants
             .Where(p => p.AppUserId == null || !slotUserIds.Contains(p.AppUserId))
             .OrderBy(p => p.CharacterName)
-            .Select(p => new ActivityAlsoAttendingDto(p.CharacterName, p.JobType, p.JobName, p.SubJobName))
+            .Select(p => new ActivityAlsoAttendingDto(p.CharacterName, p.JobType, p.JobName, p.SubJobName, p.AppUserId))
             .ToList();
 
         var setup = ev.PartySetup;
@@ -111,9 +112,9 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, ev.LinkshellId, cancellationToken);
         if (membership is null) return Forbid();
 
-        var characterName = string.IsNullOrWhiteSpace(membership.CharacterName)
-            ? (appUser.CharacterName ?? appUser.UserName ?? "Member")
-            : membership.CharacterName;
+        // Sign up as the member's main OR a chosen alt (validated against their
+        // real characters; falls back to main if the requested name isn't theirs).
+        var characterName = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
         var result = await EventPartySignupService.ClaimSlotAsync(
             _dbContext, eventId, slot, appUser.Id, characterName, request.Role, request.MainJob, request.SubJob,
             cancellationToken, request.AsLeader);
@@ -139,6 +140,7 @@ public sealed partial class ActivityDataController
         // without anyone claiming leadership.
         await EventPartySignupService.ResolvePartyLeadershipAsync(
             _dbContext, eventId, slot.PartySetupPartyId, cancellationToken);
+        EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
 
@@ -180,8 +182,18 @@ public sealed partial class ActivityDataController
                 await EventPartySignupService.RemoveParticipationAsync(_dbContext, eventId, signup.AppUserId, cancellationToken);
             }
             await _dbContext.SaveChangesAsync(cancellationToken);
+            EnqueueEventBoardRefresh(eventId);
         }
 
         return Ok(new { success = true });
+    }
+
+    // Queues an async re-render of the event's posted Discord channel board so
+    // signups / withdrawals made from the Activity (or web) show up in the message.
+    // The DbContext auto-enqueue only fires for Event-entity add/edit, not for the
+    // signup/participation rows a sign-up touches, so these paths enqueue directly.
+    private void EnqueueEventBoardRefresh(int eventId)
+    {
+        HttpContext.RequestServices.GetService<DiscordEventChannelQueue>()?.Enqueue(eventId);
     }
 }

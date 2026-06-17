@@ -102,7 +102,21 @@
     }
     .event-ps-chip .muted { opacity: 0.82; font-weight: 500; }
     .event-ps-empty { padding: 14px; color: var(--fg-3); font-size: 12.5px; }
+    .lsm-toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 1000;
+        display: flex; align-items: center; gap: 14px; max-width: 520px; padding: 12px 16px;
+        border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
+        box-shadow: 0 8px 30px rgba(0,0,0,.45); font-size: 13px; color: var(--fg); }
+    .lsm-toast--error { border-color: var(--danger); }
+    .lsm-toast__close { background: none; border: 0; color: var(--fg-3); cursor: pointer; font-size: 18px; line-height: 1; padding: 0; }
 </style>
+
+@if (TempData["LootError"] is string lootError && !string.IsNullOrWhiteSpace(lootError))
+{
+    <div class="lsm-toast lsm-toast--error" data-lsm-toast role="alert">
+        <span>@lootError</span>
+        <button type="button" class="lsm-toast__close" data-lsm-toast-close aria-label="Dismiss">&times;</button>
+    </div>
+}
 
 <div class="card fade d2"
      data-live-event-dashboard
@@ -117,7 +131,7 @@
     <div style="font-family:var(--font-mono);font-size:32px;font-weight:600;color:var(--fg);letter-spacing:0.02em" data-live-event-timer>00:00:00</div>
 </div>
 
-<div class="grid fade d2">
+<div class="fade d2">
     <div class="col">
         <div class="card">
             <div class="card-head">
@@ -260,10 +274,17 @@
             var subOpts = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList();
             <div class="card" style="margin-top:16px">
                 <div class="card-head">
-                    <div class="card-title">Party Board</div>
+                    <div class="card-title" style="display:inline-flex;align-items:center;gap:8px">
+                        Party Board
+                        <button type="button" class="btn ghost sm" data-party-board-toggle aria-expanded="true" aria-controls="partyBoardPanel" title="Hide / show the party board" style="padding:0 4px;line-height:1">
+                            <svg data-party-board-chevron viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </button>
+                    </div>
                     <span class="muted" style="font-size:12px">Claim an open slot to late-join into the party setup.</span>
                 </div>
-                <div class="event-ps-panel" style="padding:12px 16px">
+                <div class="event-ps-panel" id="partyBoardPanel" style="padding:12px 16px">
                     @if (!board.Alliances.Any())
                     {
                         <div class="event-ps-empty">This party setup has no alliances yet.</div>
@@ -340,11 +361,42 @@
                             }
                         </div>
                     }
+
+                    @* Also attending: event participants who joined WITHOUT claiming a
+                       party slot (matches the Discord Activity's "Also attending" row). *@
+                    @{
+                        var slotNames = new HashSet<string>(
+                            board.Alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+                                .Where(s => !s.IsOpen && !string.IsNullOrWhiteSpace(s.SignedUpCharacterName))
+                                .Select(s => s.SignedUpCharacterName!.Trim()),
+                            StringComparer.OrdinalIgnoreCase);
+                        var alsoAttending = Model.AppUserEvents
+                            .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName) && !slotNames.Contains(p.CharacterName!.Trim()))
+                            .ToList();
+                    }
+                    @if (alsoAttending.Count > 0)
+                    {
+                        <div class="event-ps-alliance-title">Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></div>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 4px 8px">
+                            @foreach (var a in alsoAttending)
+                            {
+                                var jobBits = new List<string>();
+                                if (!string.IsNullOrWhiteSpace(a.JobType)) { jobBits.Add(a.JobType!); }
+                                if (!string.IsNullOrWhiteSpace(a.JobName)) { jobBits.Add(string.IsNullOrWhiteSpace(a.SubJobName) ? a.JobName! : $"{a.JobName}/{a.SubJobName}"); }
+                                <span class="event-ps-chip @(a.AppUserId == currentUserId ? "event-ps-chip--mine" : null)">
+                                    @a.CharacterName@(a.AppUserId == currentUserId ? " (you)" : "")
+                                    @if (jobBits.Count > 0) { <span class="muted">· @string.Join(" - ", jobBits)</span> }
+                                </span>
+                            }
+                        </div>
+                    }
                 </div>
             </div>
         }
 
-        <div class="card" style="margin-top:16px">
+        @* order:-1 floats the Participants card to the top of the stack (between the
+           global timer and Event details) while keeping its markup here. *@
+        <div class="card" style="order:-1">
             <div class="card-head">
                 <div class="card-title">Participants <span class="tag">@Model.AppUserEvents.Count</span></div>
             </div>
@@ -476,6 +528,16 @@
                                                 <button class="btn ghost sm" type="submit">Absent</button>
                                             </form>
                                         }
+                                        @if (participant.IsVerified == false)
+                                        {
+                                            @* Reopen a denied attendee back to Pending so they can be re-judged. *@
+                                            <form asp-action="UndoVerification" method="post" style="display:inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="eventId" value="@Model.Event.Id" />
+                                                <input type="hidden" name="characterName" value="@participant.CharacterName" />
+                                                <button class="btn ghost sm" type="submit">Undo Denied Attendance</button>
+                                            </form>
+                                        }
                                     </div>
                                     @if (participant.StatusLedgerEntries.Count > 0)
                                     {
@@ -535,7 +597,9 @@
         </div>
     </div>
 
-    <div class="col">
+    @* Quick join / Loot log / Complete this event sit in a row UNDER the full-width
+       Party Board now (auto-fit wraps them on narrow screens). *@
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:16px;align-items:start">
         <div class="card">
             <div class="card-head">
                 <div class="card-title">Quick join</div>
@@ -594,7 +658,7 @@
             </form>
         </div>
 
-        <div class="card" style="margin-top:16px">
+        <div class="card">
             <div class="card-head">
                 <div class="card-title">Loot log</div>
             </div>
@@ -642,7 +706,7 @@
             }
         </div>
 
-        <div class="card" style="margin-top:16px;border-color:var(--warning)">
+        <div class="card" style="border-color:var(--warning)">
             <div style="padding:16px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px">
                 <div>
                     <div style="font-size:14px;font-weight:600;color:var(--fg);margin-bottom:4px">Complete this event</div>
@@ -658,6 +722,32 @@
 </div>
 
 @section Scripts {
+    <script nonce="@Html.CspNonce()">
+        // Loot/validation toast: auto-dismiss after a few seconds or on close.
+        (() => {
+            const toast = document.querySelector('[data-lsm-toast]');
+            if (!toast) return;
+            const dismiss = () => toast.remove();
+            const closeBtn = toast.querySelector('[data-lsm-toast-close]');
+            if (closeBtn) closeBtn.addEventListener('click', dismiss);
+            setTimeout(dismiss, 6000);
+        })();
+    </script>
+    <script nonce="@Html.CspNonce()">
+        // Party Board: chevron toggle to hide/show the live sign-up board.
+        (() => {
+            const btn = document.querySelector('[data-party-board-toggle]');
+            const panel = document.getElementById('partyBoardPanel');
+            if (!btn || !panel) return;
+            const chevron = btn.querySelector('[data-party-board-chevron]');
+            btn.addEventListener('click', () => {
+                const collapsed = panel.style.display === 'none';
+                panel.style.display = collapsed ? '' : 'none';
+                btn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+                if (chevron) chevron.style.transform = collapsed ? '' : 'rotate(-90deg)';
+            });
+        })();
+    </script>
     <script nonce="@Html.CspNonce()">
         // Attendance Windows: vanilla-JS tab switcher + per-row Remove. The
         // Bootstrap data-toggle="tab" plugin wasn't switching panes here (likely

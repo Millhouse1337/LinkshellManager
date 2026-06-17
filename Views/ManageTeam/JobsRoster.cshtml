@@ -61,12 +61,12 @@ else
         <div class="jr-grid fade d3">
             @foreach (var entry in Model.Entries)
             {
-                var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong)>
+                var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong, IReadOnlyList<bool> Relic, IReadOnlyList<string> RelicName, IReadOnlyList<string> Merit)>
                 {
-                    (entry.CharacterName, false, entry.JobLevels, entry.StrongJobs)
+                    (entry.CharacterName, false, entry.JobLevels, entry.StrongJobs, entry.RelicFlags, entry.RelicNames, entry.MeritJobs)
                 };
-                if (entry.Alt1Name is not null) { characters.Add((entry.Alt1Name, true, entry.Alt1JobLevels, entry.Alt1StrongJobs)); }
-                if (entry.Alt2Name is not null) { characters.Add((entry.Alt2Name, true, entry.Alt2JobLevels, entry.Alt2StrongJobs)); }
+                if (entry.Alt1Name is not null) { characters.Add((entry.Alt1Name, true, entry.Alt1JobLevels, entry.Alt1StrongJobs, entry.Alt1RelicFlags, entry.Alt1RelicNames, entry.Alt1MeritJobs)); }
+                if (entry.Alt2Name is not null) { characters.Add((entry.Alt2Name, true, entry.Alt2JobLevels, entry.Alt2StrongJobs, entry.Alt2RelicFlags, entry.Alt2RelicNames, entry.Alt2MeritJobs)); }
 
                 <div class="card jr-card">
                     <div class="jr-card-head">
@@ -80,7 +80,15 @@ else
                     @foreach (var ch in characters)
                     {
                         var leveled = ch.Levels
-                            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl, Strong = i < ch.Strong.Count && ch.Strong[i] })
+                            .Select((lvl, i) => new
+                            {
+                                Name = Model.JobCatalog[i],
+                                Level = lvl,
+                                Strong = i < ch.Strong.Count && ch.Strong[i],
+                                Relic = i < ch.Relic.Count && ch.Relic[i],
+                                RelicName = i < ch.RelicName.Count ? ch.RelicName[i] : "",
+                                Merit = i < ch.Merit.Count ? ch.Merit[i] : ""
+                            })
                             .Where(x => x.Level > 0)
                             .OrderByDescending(x => x.Level)
                             .ToList();
@@ -99,7 +107,12 @@ else
                                 <div class="jr-pills">
                                     @foreach (var job in leveled)
                                     {
-                                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "")"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong" title="Strong — well-geared / merited">★</span>}</span>
+                                        var tipParts = new List<string>();
+                                        if (job.Relic) { tipParts.Add(string.IsNullOrWhiteSpace(job.RelicName) ? "Relic weapon" : "Relic: " + job.RelicName); }
+                                        if (job.Strong && !string.IsNullOrWhiteSpace(job.Merit)) { tipParts.Add("Merits: " + job.Merit); }
+                                        else if (job.Strong) { tipParts.Add("Merited"); }
+                                        var tip = tipParts.Count > 0 ? string.Join(" · ", tipParts) : null;
+                                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "") @(job.Relic ? "relic-flame" : "")" title="@tip"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong">★</span>}</span>
                                     }
                                 </div>
                             }

@@ -45,6 +45,13 @@
                         </span>
                       }
                       <span class="ps-slot-req-label">{{ slotRequirement(slot) }}</span>
+                      @if (!templateOnly() && isOpen(slot) && !readOnly() && isEventBoard() && signupCharacterOptions().length > 1) {
+                        <select class="ps-slot-char" [ngModel]="draftFor(slot.slotId).characterName" (ngModelChange)="setDraft(slot.slotId, { characterName: $event })" title="Sign up as your main or an alt">
+                          @for (c of signupCharacterOptions(); track c; let first = $first) {
+                            <option [value]="first ? '' : c">{{ c }}{{ first ? ' (main)' : '' }}</option>
+                          }
+                        </select>
+                      }
                     </div>
 
                     @if (!templateOnly()) {
@@ -134,6 +141,9 @@
             <div class="ps-also-row">
               <span class="ps-also-name">{{ a.characterName || 'Member' }}</span>
               <span class="ps-also-job">{{ a.role || 'Any' }}@if (a.mainJob) { · {{ a.mainJob }}@if (a.subJob) {/{{ a.subJob }}}}</span>
+              @if (isEventBoard() && a.appUserId && a.appUserId === myAppUserId() && (!live() || canManage())) {
+                <button type="button" class="btn sm ghost ps-also-withdraw" (click)="withdrawNoSlot()" [disabled]="partySetup.busy()">Withdraw</button>
+              }
             </div>
           }
         </div>

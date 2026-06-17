@@ -93,13 +93,14 @@ public static class ChannelPostTypes
 }
 
 // The event types officers can route by (the filter option list). Mirrors the
-// Activity create-event dropdown. Used only to populate the UI multiselect and
-// validate the stored filter — it is NOT an exhaustive gate: events of an
-// unknown/legacy type fall through to the unfiltered catch-all route.
+// Activity create-event dropdown. Populates the route filter multiselect and
+// validates the stored filter. "Other" covers any event whose type isn't one of
+// the named ones, so a route can explicitly catch those (there is no
+// unfiltered catch-all — a route only receives the event types it checks).
 public static class EventTypeVocabulary
 {
     public static readonly IReadOnlyList<string> All = new[]
     {
-        "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM"
+        "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM", "Other"
     };
 }

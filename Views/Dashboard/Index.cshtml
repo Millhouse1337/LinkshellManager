@@ -202,9 +202,10 @@ else
                         }
                         @foreach (var evt in Model.Events)
                         {
-                            var href = evt.CommencementStartTime.HasValue
-                                ? Url.Action("Start", "Event", new { eventId = evt.Id })
-                                : Url.Action("Edit", "Event", new { id = evt.Id });
+                            // The whole row opens the read-only event board (the "View" page
+                            // every member can reach, same as Event System → Timed Events →
+                            // View) — never the manager-only Edit page, which 403s for members.
+                            var href = Url.Action("Start", "Event", new { eventId = evt.Id });
                             var isLive = evt.CommencementStartTime.HasValue;
                             <a class="row plain" href="@href">
                                 <div class="row-main">

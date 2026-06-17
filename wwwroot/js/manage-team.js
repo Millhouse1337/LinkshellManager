@@ -35,6 +35,17 @@
             document.getElementById('modifyRank').value = btn.dataset.rank || 'Member';
             document.getElementById('modifyStatus').value = btn.dataset.status || 'Active';
             document.getElementById('modifyName').textContent = btn.dataset.name || '';
+            // Seed the streak-count override with the member's current streak:
+            // an absence run defaults to the red "absent" type, otherwise the
+            // green "credit" type.
+            var credit = parseInt(btn.dataset.credit || '0', 10) || 0;
+            var absent = parseInt(btn.dataset.absent || '0', 10) || 0;
+            var typeEl = document.getElementById('modifyStreakType');
+            var countEl = document.getElementById('modifyStreakCount');
+            if (typeEl && countEl) {
+                if (absent > 0) { typeEl.value = 'absent'; countEl.value = absent; }
+                else { typeEl.value = 'credit'; countEl.value = credit; }
+            }
             openModal('modifyRankModal');
         });
     });

@@ -97,11 +97,34 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
       font-size: 11px; padding: 0 2px; opacity: .8;
     }
     .relic-chip button:hover { opacity: 1; }
+    /* Modern "+ Add relic" control (provided design). A native select can't hold a
+       separate icon span, so the "+ Add relic" option text carries the glyph and
+       text-align-last centres it; the rest mirrors the supplied .add-relic-btn. */
     .relic-add {
-      width: 100%; padding: 3px 6px; font-size: 11px;
-      background: rgba(0,0,0,.22); color: #fff; border: 1px solid rgba(255,255,255,.13);
-      border-radius: 6px; font-family: inherit; cursor: pointer;
+      width: 100%; height: 44px; margin-top: 4px;
+      text-align: center; text-align-last: center;
+      border: 1px solid rgba(125, 145, 255, 0.85); border-radius: 6px;
+      background:
+        linear-gradient(180deg, rgba(32, 34, 45, 0.95), rgba(13, 15, 22, 0.95)),
+        radial-gradient(circle at top, rgba(105, 123, 255, 0.18), transparent 55%);
+      color: #9fadff; font-size: 14px; font-weight: 800; letter-spacing: 0.2px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 0 12px rgba(91, 105, 255, 0.18);
+      cursor: pointer; font-family: inherit;
+      transition: border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
     }
+    .relic-add:hover {
+      color: #c6ceff; border-color: rgba(155, 170, 255, 1);
+      background:
+        linear-gradient(180deg, rgba(38, 41, 56, 0.98), rgba(15, 18, 28, 0.98)),
+        radial-gradient(circle at top, rgba(125, 145, 255, 0.28), transparent 60%);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 18px rgba(105, 123, 255, 0.35);
+    }
+    .relic-add:active { transform: translateY(1px); }
+    .relic-add:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(125, 145, 255, 0.25), 0 0 18px rgba(105, 123, 255, 0.4);
+    }
+    .relic-add option { color: #fff; background: #14161d; font-weight: 600; }
     /* Merits modal */
     .merit-modal-backdrop {
       position: fixed; inset: 0; z-index: 300; background: rgba(0, 0, 0, 0.55);

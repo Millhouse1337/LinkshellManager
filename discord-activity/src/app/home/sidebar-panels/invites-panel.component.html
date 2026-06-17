@@ -4,7 +4,7 @@
         <p class="eyebrow eyebrow--small">Membership</p>
         <h2 id="invites-heading">Invites</h2>
       </div>
-      <span class="pill">{{ (activity.overview()?.pendingInvites?.length ?? 0) + (activity.overview()?.sentInvites?.length ?? 0) }}</span>
+      <span class="pill">{{ (activity.overview()?.pendingInvites?.length ?? 0) + sentInvitesForTarget().length }}</span>
     </div>
 
     @if (activity.overview()?.pendingInvites?.length) {
@@ -233,11 +233,11 @@
       </div>
     </div>
 
-    @if (!isMemberMode() && activity.overview()?.sentInvites?.length) {
+    @if (!isMemberMode() && sentInvitesForTarget().length) {
       <div class="invite-section">
         <h3>Sent</h3>
         <ul class="compact-list compact-list--dense">
-          @for (invite of activity.overview()?.sentInvites ?? []; track invite.id) {
+          @for (invite of sentInvitesForTarget(); track invite.id) {
             <li>
               <div>
                 <strong>{{ invite.appUserDisplayName }}</strong>

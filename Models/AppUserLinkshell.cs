@@ -13,6 +13,14 @@ public class AppUserLinkshell
     [ForeignKey(nameof(AppUserId))]
     public AppUser? AppUser { get; set; }
 
+    // For an UNSYNCED member (a placeholder AppUser, IsPlaceholder=true): the Discord
+    // user id of the player it belongs to. Set when they self-register via the Discord
+    // board's "you're not synced" modal, so later board signups auto-recognize them by
+    // Discord id (no re-typing). Null for real, synced members. See ManualMemberService
+    // + DiscordInteractionsController.ResolveSignupContextAsync.
+    [MaxLength(32)]
+    public string? DiscordUserId { get; set; }
+
     public int LinkshellId { get; set; }
 
     [ForeignKey(nameof(LinkshellId))]
@@ -25,16 +33,21 @@ public class AppUserLinkshell
     public string? Status { get; set; }
 
     // Officer override of the computed active-credit streak (the roster "Count").
-    // When set, it's shown instead of the attendance-computed credit streak and
-    // drives Status by the linkshell's thresholds. Cleared the next time the
-    // attendance status is recomputed (event close), so auto-tracking resumes.
+    // Acts as a SEED/baseline for the activity state machine: the machine starts
+    // from this value at ManualStreakSetAt and processes counting events that
+    // ended AFTER it, so a manually-set credit accumulates with subsequent
+    // attendance instead of being discarded.
     public int? ManualActiveCreditStreak { get; set; }
 
     // Officer override of the computed ABSENT streak (the roster red "Count").
     // Mutually exclusive with ManualActiveCreditStreak — setting one nulls the
-    // other. When set, drives Status toward Inactive by the absence threshold.
-    // Cleared on the next attendance recompute so auto-tracking resumes.
+    // other. Same SEED semantics: drives the machine's starting state.
     public int? ManualAbsentStreak { get; set; }
+
+    // When the manual streak seed above was set. The state machine only replays
+    // counting events that ended after this instant (events before are superseded
+    // by the manual baseline). Null when there's no manual seed.
+    public DateTime? ManualStreakSetAt { get; set; }
 
     public double? LinkshellDkp { get; set; }
 

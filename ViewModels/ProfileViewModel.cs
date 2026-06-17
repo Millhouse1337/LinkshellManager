@@ -33,6 +33,20 @@ public class ProfileViewModel
     public List<bool> Alt1StrongJobs { get; set; } = new();
     public List<bool> Alt2StrongJobs { get; set; } = new();
 
+    // Per-job merit NOTES (catalog order), parallel to the level lists. Free text
+    // describing the merits a member has on a job (shown when the job is marked
+    // strong/merited). Persisted via ProfileJobLevels.NormalizeMerits — main on
+    // the membership (MeritJobs), alts on the AppUser.
+    public List<string> MeritJobs { get; set; } = new();
+    public List<string> Alt1MeritJobs { get; set; } = new();
+    public List<string> Alt2MeritJobs { get; set; } = new();
+
+    // Per-craft levels (CraftCatalog order, index 0 = Alchemy … 8 = Fishing).
+    // Account-level: main on AppUser.CraftLevels, alts on Alt1/Alt2CraftLevels.
+    public List<int> CraftLevels { get; set; } = new();
+    public List<int> Alt1CraftLevels { get; set; } = new();
+    public List<int> Alt2CraftLevels { get; set; } = new();
+
     // Populated by the controller from IDateTimeZoneProvider so the Profile view
     // can render a dropdown instead of a free-form input. Not posted back: the
     // server validates the submitted TimeZone against the provider directly.
@@ -44,4 +58,24 @@ public class ProfileViewModel
     public bool ProfileComplete { get; set; }
     public bool HasLinkshell { get; set; }
     public bool AddonConfigured { get; set; }
+
+    // False when the super-admin global addon kill-switch is on. Hides the
+    // "Set up the addon" onboarding step entirely when the addon is disabled.
+    public bool AddonAvailable { get; set; } = true;
+
+    // Context for the JS-driven gear/skill/relic ratings + rate-teammates panel,
+    // which reuse the Discord Activity job-rating API (/api/activity/job-ratings).
+    public int PrimaryLinkshellId { get; set; }
+    public string MyAppUserId { get; set; } = string.Empty;
+
+    // Teammates in the primary linkshell the member can rate (excludes self).
+    public List<RatingTeammate> RatingTeammates { get; set; } = new();
+
+    public sealed class RatingTeammate
+    {
+        public string AppUserId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? Alt1 { get; set; }
+        public string? Alt2 { get; set; }
+    }
 }

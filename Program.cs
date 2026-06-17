@@ -197,6 +197,7 @@ builder.Services.AddOptions<GoogleSheetsOptions>()
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<DiscordIdentityService>();
 builder.Services.AddScoped<InviteCandidateService>();
+builder.Services.AddScoped<ManualMemberService>();
 builder.Services.AddScoped<AltCharacterValidator>();
 builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
@@ -256,6 +257,8 @@ builder.Services.AddHostedService<DiscordAuctionChannelBackgroundService>();
 // Phase 2: bot-posts-to-channel event announcements + the inline-signup
 // interactions endpoint.
 builder.Services.AddScoped<DiscordBotClient>();
+// Suppress the public Activity "launch" card by making the entry-point app-handled.
+builder.Services.AddHostedService<DiscordEntryPointConfigurator>();
 builder.Services.AddSingleton<DiscordInteractionVerifier>();
 builder.Services.AddSingleton<DiscordEventChannelQueue>();
 // Renders the party board to a PNG (headless Chromium); singleton so the browser

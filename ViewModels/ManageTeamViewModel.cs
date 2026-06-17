@@ -101,4 +101,13 @@ public class ModifyRankStatusInput
     [Required]
     [StringLength(32)]
     public string Status { get; set; } = string.Empty;
+
+    // Optional officer override of the member's streak "Count". When set, it
+    // overrides the computed streak and drives Active/Inactive until the next
+    // event recompute. StreakType chooses which streak the count targets:
+    // "credit" (green, active-credit run) or "absent" (red, absence run).
+    public int? StreakCount { get; set; }
+
+    [StringLength(16)]
+    public string? StreakType { get; set; }
 }

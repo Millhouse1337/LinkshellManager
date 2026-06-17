@@ -34,30 +34,67 @@ public sealed class MemberActivityService
     {
         var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
-        var config = await _db.Linkshells
+        var trackingOn = await _db.Linkshells
             .AsNoTracking()
             .Where(l => l.Id == linkshellId)
-            .Select(l => new { l.EnableActivityTracking, l.InactiveAfterAbsences, l.ActiveAfterAttendances })
+            .Select(l => l.EnableActivityTracking)
             .FirstOrDefaultAsync(cancellationToken);
-        if (config is null || !config.EnableActivityTracking)
+        if (!trackingOn)
         {
+            // Tracking off → no auto Active/Inactive; callers hide the badge.
             return result;
         }
 
-        var inactiveAfter = Math.Max(1, config.InactiveAfterAbsences);
-        var activeAfter = Math.Max(1, config.ActiveAfterAttendances);
+        var machine = await ComputeActivityMachineAsync(linkshellId, cancellationToken);
+        foreach (var kv in machine)
+        {
+            result[kv.Key] = kv.Value.Active;
+        }
+        return result;
+    }
+
+    // The single source of truth for both the Active/Inactive STATE and the two
+    // streak columns, so they always agree. Per the linkshell's config thresholds
+    // (InactiveAfterAbsences / ActiveAfterAttendances), processing counting events
+    // oldest → newest with each member starting ACTIVE:
+    //   * While ACTIVE: count consecutive ABSENCES in `Absent` (an attendance resets
+    //     it to 0; `Credit` stays 0). On reaching InactiveAfterAbsences → flip to
+    //     Inactive and reset BOTH counters to 0 ("until the next event").
+    //   * While INACTIVE: count consecutive CREDITS in `Credit` (an absence resets it
+    //     to 0; `Absent` stays 0). On reaching ActiveAfterAttendances → flip to Active
+    //     and reset BOTH counters to 0.
+    // Computed regardless of EnableActivityTracking so the roster can always show the
+    // numbers; thresholds fall back to 3 / 2 if the linkshell row is missing.
+    private async Task<Dictionary<string, (bool Active, int Credit, int Absent)>> ComputeActivityMachineAsync(
+        int linkshellId, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, (bool Active, int Credit, int Absent)>(StringComparer.OrdinalIgnoreCase);
+
+        var config = await _db.Linkshells
+            .AsNoTracking()
+            .Where(l => l.Id == linkshellId)
+            .Select(l => new { l.InactiveAfterAbsences, l.ActiveAfterAttendances })
+            .FirstOrDefaultAsync(cancellationToken);
+        var inactiveAfter = Math.Max(1, config?.InactiveAfterAbsences ?? 3);
+        var activeAfter = Math.Max(1, config?.ActiveAfterAttendances ?? 2);
 
         var members = await _db.AppUserLinkshells
             .AsNoTracking()
             .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
-            .Select(m => new { AppUserId = m.AppUserId!, m.DateJoined })
+            .Select(m => new
+            {
+                AppUserId = m.AppUserId!,
+                m.DateJoined,
+                m.ManualActiveCreditStreak,
+                m.ManualAbsentStreak,
+                m.ManualStreakSetAt
+            })
             .ToListAsync(cancellationToken);
         if (members.Count == 0)
         {
             return result;
         }
 
-        // Counting events for this linkshell, oldest first.
         var countingEvents = await _db.EventHistories
             .AsNoTracking()
             .Where(h => h.LinkshellId == linkshellId && h.CountsTowardActive && h.EndTime != null)
@@ -65,22 +102,16 @@ public sealed class MemberActivityService
             .Select(h => new { h.Id, h.EndTime })
             .ToListAsync(cancellationToken);
 
-        if (countingEvents.Count == 0)
-        {
-            // No counting events yet → everyone is Active.
-            foreach (var member in members)
-            {
-                result[member.AppUserId] = true;
-            }
-            return result;
-        }
-
         var historyIds = countingEvents.Select(e => e.Id).ToList();
-        var creditedRows = await _db.AppUserEventHistories
-            .AsNoTracking()
-            .Where(r => historyIds.Contains(r.EventHistoryId) && r.ActiveCredit && r.AppUserId != null)
-            .Select(r => new { r.EventHistoryId, AppUserId = r.AppUserId! })
-            .ToListAsync(cancellationToken);
+        var creditedRows = historyIds.Count == 0
+            ? new List<(int EventHistoryId, string AppUserId)>()
+            : (await _db.AppUserEventHistories
+                .AsNoTracking()
+                .Where(r => historyIds.Contains(r.EventHistoryId) && r.ActiveCredit && r.AppUserId != null)
+                .Select(r => new { r.EventHistoryId, AppUserId = r.AppUserId! })
+                .ToListAsync(cancellationToken))
+                .Select(r => (r.EventHistoryId, r.AppUserId))
+                .ToList();
         var creditedByEvent = creditedRows
             .GroupBy(r => r.EventHistoryId)
             .ToDictionary(
@@ -89,14 +120,36 @@ public sealed class MemberActivityService
 
         foreach (var member in members)
         {
-            var isActive = true; // members start Active
-            var absenceStreak = 0;
-            var attendanceStreak = 0;
+            // Seed the machine: a manual override is a baseline set at
+            // ManualStreakSetAt that subsequent events build on (so a manually-set
+            // credit accumulates with later attendance). The seed maps the override
+            // value to a starting (state, credit, absent); events that ended at/before
+            // the seed time are superseded by it. With no override, members start
+            // Active and replay everything after they joined.
+            var active = true;
+            var absent = 0;
+            var credit = 0;
+            DateTime? cutoff = member.DateJoined; // exclusive lower bound: events must end after this
 
-            foreach (var ev in countingEvents)
+            if (member.ManualActiveCreditStreak.HasValue)
             {
-                // Only events that ended after the member joined count for/against them.
-                if (member.DateJoined.HasValue && ev.EndTime.HasValue && ev.EndTime.Value < member.DateJoined.Value)
+                var v = Math.Max(0, member.ManualActiveCreditStreak.Value);
+                if (v >= activeAfter) { active = true; credit = 0; }   // already reactivated
+                else { active = false; credit = v; }                   // inactive, building credit
+                cutoff = member.ManualStreakSetAt ?? member.DateJoined;
+            }
+            else if (member.ManualAbsentStreak.HasValue)
+            {
+                var v = Math.Max(0, member.ManualAbsentStreak.Value);
+                if (v >= inactiveAfter) { active = false; absent = 0; } // already went inactive
+                else { active = true; absent = v; }                    // active, building absences
+                cutoff = member.ManualStreakSetAt ?? member.DateJoined;
+            }
+
+            foreach (var ev in countingEvents) // oldest -> newest
+            {
+                // Skip events at/before the cutoff (member join, or the manual seed time).
+                if (cutoff.HasValue && ev.EndTime.HasValue && ev.EndTime.Value <= cutoff.Value)
                 {
                     continue;
                 }
@@ -104,27 +157,45 @@ public sealed class MemberActivityService
                 var attended = creditedByEvent.TryGetValue(ev.Id, out var credited)
                     && credited.Contains(member.AppUserId);
 
-                if (attended)
+                if (active)
                 {
-                    attendanceStreak++;
-                    absenceStreak = 0;
-                    if (!isActive && attendanceStreak >= activeAfter)
+                    credit = 0; // active-credit column is dormant while active
+                    if (attended)
                     {
-                        isActive = true;
+                        absent = 0; // one attendance resets the absence streak
+                    }
+                    else
+                    {
+                        absent++;
+                        if (absent >= inactiveAfter)
+                        {
+                            active = false;
+                            absent = 0; // both columns reset until the next event
+                            credit = 0;
+                        }
                     }
                 }
                 else
                 {
-                    absenceStreak++;
-                    attendanceStreak = 0;
-                    if (isActive && absenceStreak >= inactiveAfter)
+                    absent = 0; // absent-streak column is dormant while inactive
+                    if (attended)
                     {
-                        isActive = false;
+                        credit++;
+                        if (credit >= activeAfter)
+                        {
+                            active = true;
+                            credit = 0; // both columns reset until the next event
+                            absent = 0;
+                        }
+                    }
+                    else
+                    {
+                        credit = 0; // one absence resets the active-credit streak
                     }
                 }
             }
 
-            result[member.AppUserId] = isActive;
+            result[member.AppUserId] = (active, credit, absent);
         }
 
         return result;
@@ -140,79 +211,16 @@ public sealed class MemberActivityService
     {
         var result = new Dictionary<string, MemberStreaks>(StringComparer.OrdinalIgnoreCase);
 
-        var members = await _db.AppUserLinkshells
-            .AsNoTracking()
-            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
-            .Select(m => new { AppUserId = m.AppUserId!, m.DateJoined, m.ManualActiveCreditStreak, m.ManualAbsentStreak })
-            .ToListAsync(cancellationToken);
-        if (members.Count == 0)
+        // The same state machine drives Active/Inactive AND the two columns, and it
+        // already seeds from any manual override (the roster "Count" set via Modify),
+        // so a manual value accumulates with later attendance. The column the member
+        // is NOT currently accumulating always shows 0 (an inactive member shows a
+        // climbing active-credit count + a 0 absent streak, and vice-versa).
+        var machine = await ComputeActivityMachineAsync(linkshellId, cancellationToken);
+        foreach (var kv in machine)
         {
-            return result;
+            result[kv.Key] = new MemberStreaks(kv.Value.Credit, kv.Value.Absent);
         }
-
-        // An officer override (the roster "Count", set via Modify) wins over the
-        // computed streak until the next attendance recompute clears it. Credit
-        // and absent overrides are mutually exclusive; credit takes precedence if
-        // both somehow exist.
-        var creditOverrides = members
-            .Where(m => m.ManualActiveCreditStreak.HasValue)
-            .ToDictionary(m => m.AppUserId, m => m.ManualActiveCreditStreak!.Value, StringComparer.OrdinalIgnoreCase);
-        var absentOverrides = members
-            .Where(m => m.ManualAbsentStreak.HasValue)
-            .ToDictionary(m => m.AppUserId, m => m.ManualAbsentStreak!.Value, StringComparer.OrdinalIgnoreCase);
-
-        MemberStreaks WithOverride(string appUserId, MemberStreaks computed)
-        {
-            if (creditOverrides.TryGetValue(appUserId, out var creditOv)) { return new MemberStreaks(creditOv, 0); }
-            if (absentOverrides.TryGetValue(appUserId, out var absentOv)) { return new MemberStreaks(0, absentOv); }
-            return computed;
-        }
-
-        var countingEvents = await _db.EventHistories
-            .AsNoTracking()
-            .Where(h => h.LinkshellId == linkshellId && h.CountsTowardActive && h.EndTime != null)
-            .OrderBy(h => h.EndTime)
-            .Select(h => new { h.Id, h.EndTime })
-            .ToListAsync(cancellationToken);
-        if (countingEvents.Count == 0)
-        {
-            foreach (var member in members)
-            {
-                result[member.AppUserId] = WithOverride(member.AppUserId, new MemberStreaks(0, 0));
-            }
-            return result;
-        }
-
-        var historyIds = countingEvents.Select(e => e.Id).ToList();
-        var creditedRows = await _db.AppUserEventHistories
-            .AsNoTracking()
-            .Where(r => historyIds.Contains(r.EventHistoryId) && r.ActiveCredit && r.AppUserId != null)
-            .Select(r => new { r.EventHistoryId, AppUserId = r.AppUserId! })
-            .ToListAsync(cancellationToken);
-        var creditedByEvent = creditedRows
-            .GroupBy(r => r.EventHistoryId)
-            .ToDictionary(
-                g => g.Key,
-                g => new HashSet<string>(g.Select(x => x.AppUserId), StringComparer.OrdinalIgnoreCase));
-
-        foreach (var member in members)
-        {
-            var creditStreak = 0;
-            var absentStreak = 0;
-            foreach (var ev in countingEvents) // oldest -> newest; trailing run wins
-            {
-                if (member.DateJoined.HasValue && ev.EndTime.HasValue && ev.EndTime.Value < member.DateJoined.Value)
-                {
-                    continue;
-                }
-                var attended = creditedByEvent.TryGetValue(ev.Id, out var credited)
-                    && credited.Contains(member.AppUserId);
-                if (attended) { creditStreak++; absentStreak = 0; }
-                else { absentStreak++; creditStreak = 0; }
-            }
-            result[member.AppUserId] = WithOverride(member.AppUserId, new MemberStreaks(creditStreak, absentStreak));
-        }
-
         return result;
     }
 
@@ -245,18 +253,9 @@ public sealed class MemberActivityService
         var changed = 0;
         foreach (var member in members)
         {
-            // A recompute supersedes any officer "Count" override: clear it so the
-            // attendance-computed streak/status takes over from here.
-            if (member.ManualActiveCreditStreak.HasValue)
-            {
-                member.ManualActiveCreditStreak = null;
-                changed++;
-            }
-            if (member.ManualAbsentStreak.HasValue)
-            {
-                member.ManualAbsentStreak = null;
-                changed++;
-            }
+            // NOTE: a manual "Count" override is NOT cleared here — it's a persistent
+            // seed the state machine builds on (ComputeActivityMachineAsync), so a
+            // manually-set credit/absence accumulates with subsequent attendance.
             if (member.AppUserId is null || !map.TryGetValue(member.AppUserId, out var active))
             {
                 continue;

@@ -169,6 +169,16 @@ export class InvitesPanelComponent {
     );
   }
 
+  // Sent invites for the linkshell currently being managed only — never invites
+  // belonging to OTHER linkshells the caller happens to be a member of. Keeps the
+  // "Sent" list consistent with the rest of this card, which is all scoped to the
+  // selected invite-target linkshell.
+  protected sentInvitesForTarget() {
+    const targetId = this.inviteTargetLinkshellId();
+    return (this.activity.overview()?.sentInvites ?? [])
+      .filter(invite => invite.linkshellId === targetId);
+  }
+
   protected connectedInviteCandidates() {
     const seen = new Set<string>();
     return this.activity.participantInviteCandidates().filter(candidate => {

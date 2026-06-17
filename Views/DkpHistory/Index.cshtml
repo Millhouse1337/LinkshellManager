@@ -37,7 +37,7 @@
                     <form method="get">
                         <div class="field">
                             <label for="appUserId">Member</label>
-                            <select class="form-select" id="appUserId" name="appUserId" onchange="this.form.submit()">
+                            <select class="form-select" id="appUserId" name="appUserId">
                                 @foreach (var member in Model.Members)
                                 {
                                     @if (Model.SelectedAppUserId == member.AppUserId)
@@ -168,6 +168,17 @@
 @section Scripts {
     <script nonce="@Html.CspNonce()">
         (function () {
+            // Member filter: reload the ledger for the picked member. Wired here
+            // (not via inline onchange) because the CSP is nonce-locked and blocks
+            // inline event-handler attributes. Runs before the table early-return
+            // below so it works even when the current member has no entries.
+            var memberSelect = document.getElementById('appUserId');
+            if (memberSelect) {
+                memberSelect.addEventListener('change', function () {
+                    if (memberSelect.form) { memberSelect.form.submit(); }
+                });
+            }
+
             var PAGE_SIZE = 10;
             var searchInput = document.getElementById('ledgerSearch');
             var table = document.getElementById('ledgerTable');

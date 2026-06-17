@@ -46,8 +46,10 @@ public sealed class ChannelRouteResolver
     }
 
     // The channel an event of the given type posts to: the PostEvents route whose
-    // event-type filter contains the type, else the unfiltered (catch-all)
-    // PostEvents route. Null when no event route is configured.
+    // event-type filter explicitly contains the type. There is NO unfiltered
+    // catch-all — a route only receives the event types it checks; any type that
+    // isn't one of the named ones maps to "Other" (so a route can catch those by
+    // checking "Other"). Null when no matching event route is configured.
     public async Task<string?> ResolveEventChannelIdAsync(
         int linkshellId, string? eventType, CancellationToken cancellationToken)
     {
@@ -62,14 +64,17 @@ public sealed class ChannelRouteResolver
         }
 
         var type = (eventType ?? string.Empty).Trim();
-        var match = rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, type))
-            ?? rows.FirstOrDefault(route => string.IsNullOrWhiteSpace(route.EventTypeFilter));
+        var isNamed = EventTypeVocabulary.All.Any(t =>
+            !string.Equals(t, "Other", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(t, type, StringComparison.OrdinalIgnoreCase));
+        var matchType = isNamed ? type : "Other";
+        var match = rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, matchType));
         return string.IsNullOrEmpty(match?.ChannelId) ? null : match!.ChannelId;
     }
 
-    // True when the pipe-delimited filter contains the given event type. An empty
-    // filter is the catch-all and is handled separately (it does NOT match here,
-    // so a specific-type route is always preferred over the catch-all).
+    // True when the pipe-delimited filter explicitly contains the given event
+    // type. An empty filter matches nothing (no catch-all): a route must check the
+    // type to receive it.
     private static bool FilterContains(string? filter, string eventType)
     {
         if (string.IsNullOrWhiteSpace(filter) || string.IsNullOrWhiteSpace(eventType))

@@ -237,6 +237,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPlaceholder")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("boolean");
 
@@ -310,6 +313,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("CharacterName")
                         .HasColumnType("text");
+
+                    b.Property<string>("DiscordUserId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<double?>("Duration")
                         .HasColumnType("double precision");
@@ -532,6 +539,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("DateJoined")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DiscordUserId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("DkpSeedLedgerId")
                         .HasColumnType("integer");
 
@@ -549,6 +560,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int?>("ManualActiveCreditStreak")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ManualStreakSetAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string[]>("MeritJobs")
                         .HasColumnType("jsonb");
@@ -1419,6 +1433,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("DiscordUserId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("EventId")
                         .HasColumnType("integer");
 
@@ -1448,6 +1466,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("PartySetupSlotId");
 
                     b.HasIndex("EventId", "AppUserId");
+
+                    b.HasIndex("EventId", "DiscordUserId");
 
                     b.HasIndex("EventId", "PartySetupSlotId")
                         .IsUnique();
@@ -1717,6 +1737,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("OutsidePartySignupEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("SheetTemplateSyncEnabled")
                         .HasColumnType("boolean");

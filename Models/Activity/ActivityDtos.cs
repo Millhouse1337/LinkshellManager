@@ -105,7 +105,13 @@ public sealed record ActivityLinkshellSettingsDto(
     int ActiveAfterAttendances,
     // Palette key for this linkshell's rendered event-board image (one of the
     // EventBoardThemes keys: Crystal, Abyss, Ember, Verdant, Royal, Tome).
-    string EventBoardTheme);
+    string EventBoardTheme,
+    // Allow Discord members with no LSM account to sign up for events from the
+    // party board (tracked by Discord id; cleared when the event ends).
+    bool OutsidePartySignupEnabled,
+    // Discord channel id new post-event discussion comments are mirrored to, or
+    // null to keep discussion in-app only.
+    string? DiscussionChannelId = null);
 
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
@@ -225,7 +231,10 @@ public sealed record ActivityMemberDto(
     int AbsentStreak = 0,
     // Computed activity state (event-attendance streak). Null when the linkshell
     // hasn't enabled activity tracking, so the client hides the badge.
-    bool? Active = null);
+    bool? Active = null,
+    // True for a "linkshell-only" member (a placeholder account with no real login),
+    // so the roster can badge it. See Services/ManualMemberService.
+    bool IsPlaceholder = false);
 
 // "Jobs Roster" — every member's leveled jobs (the levels they entered on their
 // Profile), for the linkshell's main + alt characters. JobCatalog is the job
@@ -677,7 +686,13 @@ public sealed record ActivityUpdateLinkshellRequest(
     int? ActiveAfterAttendances = null,
     // null/blank = leave unchanged. One of the EventBoardThemes keys; an unknown
     // value is normalised to the default server-side.
-    string? EventBoardTheme = null);
+    string? EventBoardTheme = null,
+    // null = leave unchanged. Allow account-less Discord party-board signups.
+    bool? OutsidePartySignupEnabled = null);
+
+// Set/clear the post-event discussion mirror channel. ChannelId blank = clear
+// (discussion stays in-app); a non-empty value must be a numeric Discord channel id.
+public sealed record ActivitySetDiscussionChannelRequest(string? ChannelId);
 
 // Associate a linkshell with a Discord server (does NOT lock access). GuildId is
 // a server chosen from the eligible-guilds dropdown (the bot's servers the caller

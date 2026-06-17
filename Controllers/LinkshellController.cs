@@ -469,6 +469,7 @@ public class LinkshellController : Controller
         linkshell.EnableItems    = model.EnableItems;
         linkshell.EnableRevenue  = model.EnableRevenue;
         linkshell.EnableActivityTracking = model.EnableActivityTracking;
+        linkshell.OutsidePartySignupEnabled = model.OutsidePartySignupEnabled;
         // Clamp to >= 1 so the streak rule can't be configured into a no-op.
         linkshell.InactiveAfterAbsences   = Math.Max(1, model.InactiveAfterAbsences);
         linkshell.ActiveAfterAttendances  = Math.Max(1, model.ActiveAfterAttendances);
@@ -801,6 +802,7 @@ public class LinkshellController : Controller
             EnableItems           = target.EnableItems,
             EnableRevenue         = target.EnableRevenue,
             EnableActivityTracking = target.EnableActivityTracking,
+            OutsidePartySignupEnabled = target.OutsidePartySignupEnabled,
             InactiveAfterAbsences  = target.InactiveAfterAbsences,
             ActiveAfterAttendances = target.ActiveAfterAttendances,
             HiddenTodMonsters     = (target.HiddenTodMonsters ?? string.Empty)

@@ -143,8 +143,13 @@ public partial class EventController : Controller
             return participantMembership;
         }
 
+        // Match the winner by the membership's MAIN character OR either ALT (alts
+        // share the main's account, so loot won on an alt deducts from the one
+        // account balance). Requires the memberships to be loaded WITH AppUser.
         return linkshellMemberships.FirstOrDefault(link =>
-            string.Equals(NormalizeLookupKey(link.CharacterName), normalizedWinner, StringComparison.OrdinalIgnoreCase));
+            string.Equals(NormalizeLookupKey(link.CharacterName), normalizedWinner, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(NormalizeLookupKey(link.AppUser?.AltCharacterName1), normalizedWinner, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(NormalizeLookupKey(link.AppUser?.AltCharacterName2), normalizedWinner, StringComparison.OrdinalIgnoreCase));
     }
 
     internal static string? NormalizeLookupKey(string? value)

@@ -60,10 +60,71 @@ public sealed class DiscordBotClient
         return client;
     }
 
+    // Make the Activity's default "Launch" entry-point command APP-HANDLED (handler 1)
+    // instead of DISCORD_LAUNCH_ACTIVITY (handler 2). With Discord's default handler,
+    // Discord itself auto-posts the public "Game Invitation / Join" card to the channel
+    // whenever someone launches the Activity. App-handled means our interactions endpoint
+    // receives the launch and responds with a quiet LAUNCH_ACTIVITY callback instead — no
+    // public card. Idempotent + best-effort (only patches when needed; logs and returns on
+    // any failure, never throws). Run once at startup.
+    public async Task EnsureEntryPointAppHandledAsync(CancellationToken cancellationToken)
+    {
+        const int PrimaryEntryPointType = 4; // PRIMARY_ENTRY_POINT command type
+        const int AppHandler = 1;            // vs 2 = DISCORD_LAUNCH_ACTIVITY
+
+        if (!IsConfigured || string.IsNullOrWhiteSpace(_options.ClientId))
+        {
+            return;
+        }
+
+        var commandsUrl = $"{ApiBase}/applications/{Uri.EscapeDataString(_options.ClientId)}/commands";
+        try
+        {
+            using var client = CreateClient();
+            using var listResponse = await client.GetAsync(commandsUrl, cancellationToken);
+            if (!listResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Couldn't list application commands to suppress the launch card: {Status}.", listResponse.StatusCode);
+                return;
+            }
+
+            var commands = await listResponse.Content.ReadFromJsonAsync<List<ApplicationCommandPayload>>(
+                cancellationToken: cancellationToken);
+            var entryPoint = commands?.FirstOrDefault(c => c.Type == PrimaryEntryPointType);
+            if (entryPoint is null || string.IsNullOrWhiteSpace(entryPoint.Id))
+            {
+                _logger.LogInformation("No Activity entry-point command found; nothing to suppress.");
+                return;
+            }
+            if (entryPoint.Handler == AppHandler)
+            {
+                return; // already app-handled
+            }
+
+            using var body = new StringContent(
+                JsonSerializer.Serialize(new { handler = AppHandler }, JsonOptions), Encoding.UTF8, "application/json");
+            using var patchResponse = await client.PatchAsync($"{commandsUrl}/{entryPoint.Id}", body, cancellationToken);
+            if (patchResponse.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Activity entry-point set to APP_HANDLER — the public launch card is now suppressed.");
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Couldn't set the entry-point command to APP_HANDLER: {Status}.", patchResponse.StatusCode);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Configuring the Activity entry-point command failed.");
+        }
+    }
+
     // Text/announcement channels of a guild (id + name) for the config pick-list.
     // Null when no bot token, the bot isn't in the guild, or the call fails.
     public async Task<IReadOnlyList<DiscordChannelInfo>?> ListTextChannelsAsync(
-        string guildId, CancellationToken cancellationToken)
+        string guildId, CancellationToken cancellationToken, bool forceRefresh = false)
     {
         if (!IsConfigured || string.IsNullOrWhiteSpace(guildId))
         {
@@ -71,7 +132,10 @@ public sealed class DiscordBotClient
         }
 
         var cacheKey = $"discord-bot-channels:{guildId}";
-        if (_cache.TryGetValue<IReadOnlyList<DiscordChannelInfo>>(cacheKey, out var cached) && cached is not null)
+        // forceRefresh skips the cached copy (still refreshing it below) so a just-
+        // created Discord channel shows up immediately instead of after the TTL.
+        if (!forceRefresh
+            && _cache.TryGetValue<IReadOnlyList<DiscordChannelInfo>>(cacheKey, out var cached) && cached is not null)
         {
             return cached;
         }
@@ -312,6 +376,11 @@ public sealed class DiscordBotClient
 
     private sealed record DiscordMessagePayload(
         [property: JsonPropertyName("id")] string Id);
+
+    private sealed record ApplicationCommandPayload(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("type")] int Type,
+        [property: JsonPropertyName("handler")] int? Handler);
 }
 
 // A Discord channel (id + name + position) the bot can post to.

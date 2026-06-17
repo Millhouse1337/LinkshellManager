@@ -103,6 +103,8 @@ export class LinkshellService {
       discordGuildId?: string | null;
       // null/blank = leave unchanged. One of the EVENT_BOARD_THEMES keys.
       eventBoardTheme?: string | null;
+      // null = leave unchanged. Allow account-less Discord party-board signups.
+      outsidePartySignupEnabled?: boolean | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -130,7 +132,8 @@ export class LinkshellService {
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
         linkshellType: input.linkshellType ?? null,
         discordGuildId: input.discordGuildId ?? null,
-        eventBoardTheme: input.eventBoardTheme ?? null
+        eventBoardTheme: input.eventBoardTheme ?? null,
+        outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');
@@ -232,17 +235,48 @@ export class LinkshellService {
     }
   }
 
+  // Set (or clear with null) the channel new post-event discussion comments
+  // mirror to. Mirrors the web "Post-event discussion channel" card.
+  async setDiscussionChannel(linkshellId: number, channelId: string | null): Promise<boolean> {
+    this.busyLinkshellId.set(linkshellId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/discussion-channel`, { channelId });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage(channelId
+        ? 'Discussion channel set — new post-event comments mirror there.'
+        : 'Discussion channel cleared — comments stay in-app.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the discussion channel failed.'));
+      return false;
+    } finally {
+      this.busyLinkshellId.set(null);
+    }
+  }
+
   // Phase 2 channel config: load the linkshell's channel bindings + the bot's
   // available channels (mirrors the web Customize "Discord Channels" card).
-  async loadDiscordChannels(linkshellId: number): Promise<ActivityChannelRoutesResponse | null> {
+  async loadDiscordChannels(linkshellId: number, refresh = false): Promise<ActivityChannelRoutesResponse | null> {
     this.busyDiscordChannels.set(true);
     this.auth.setActionError(null);
     try {
       const accessToken = this.auth.currentAccessToken();
-      return await this.http.fetchActivityJson<ActivityChannelRoutesResponse>(
-        `/api/activity/linkshells/${linkshellId}/discord-channels`,
+      // refresh=true bypasses the bot's channel cache so a just-created Discord
+      // channel appears immediately.
+      const query = refresh ? '?refresh=true' : '';
+      const data = await this.http.fetchActivityJson<ActivityChannelRoutesResponse>(
+        `/api/activity/linkshells/${linkshellId}/discord-channels${query}`,
         accessToken
       );
+      // Confirm a manual refresh visibly (the success flash banner) so the user
+      // can see the list actually re-pulled.
+      if (refresh && data) {
+        const count = data.availableChannels?.length ?? 0;
+        this.auth.setActionMessage(`Channel list refreshed — ${count} channel${count === 1 ? '' : 's'} found.`);
+      }
+      return data;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Loading Discord channels failed.'));
       return null;

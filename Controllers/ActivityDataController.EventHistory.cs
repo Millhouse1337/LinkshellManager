@@ -126,6 +126,31 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true, changed });
     }
 
+    // Undo absences for the ENTIRE event — stop it counting toward active tracking
+    // so members who missed it aren't marked absent for it. Recomputes statuses.
+    [HttpPost("event-history/{id:int}/absences/clear")]
+    public async Task<IActionResult> ClearEventHistoryAbsencesAsync(int id, CancellationToken cancellationToken)
+    {
+        var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
+        if (forbid is not null) return forbid;
+
+        var changed = await new EventHistoryEditService(_dbContext)
+            .SetEventCountsTowardActiveAsync(history!.Id, counts: false, cancellationToken);
+        return Ok(new { success = true, changed });
+    }
+
+    // Delete a closed event entirely (reverses its DKP — earned + loot spent — and
+    // removes its attendance/loot/comments). Leader/officer only (CanManageEvents).
+    [HttpPost("event-history/{id:int}/delete")]
+    public async Task<IActionResult> DeleteEventHistoryAsync(int id, CancellationToken cancellationToken)
+    {
+        var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
+        if (forbid is not null) return forbid;
+
+        var ok = await new EventHistoryEditService(_dbContext).DeleteEventAsync(history!.Id, cancellationToken);
+        return ok ? Ok(new { success = true }) : NotFound(new { error = "Event not found." });
+    }
+
     private async Task<(EventHistory? History, IActionResult? Result)> AuthorizeHistoryEditAsync(int id, CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);

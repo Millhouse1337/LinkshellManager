@@ -52,6 +52,10 @@ public class LinkshellCustomizeViewModel
     public int InactiveAfterAbsences   { get; set; } = 3;
     public int ActiveAfterAttendances  { get; set; } = 2;
 
+    // Allow Discord-server members with no LSM account to sign up for events from
+    // the party board (tracked by Discord id; cleared when the event ends).
+    public bool OutsidePartySignupEnabled { get; set; } = false;
+
     public bool CanManageRoles { get; set; }
 
     // True when a super admin has globally disabled the addon. The Game Addon

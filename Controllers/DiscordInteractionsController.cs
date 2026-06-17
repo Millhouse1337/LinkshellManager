@@ -25,6 +25,7 @@ public sealed class DiscordInteractionsController : ControllerBase
 {
     // Discord interaction request types.
     private const int InteractionPing = 1;
+    private const int InteractionApplicationCommand = 2;
     private const int InteractionMessageComponent = 3;
     private const int InteractionModalSubmit = 5;
 
@@ -34,6 +35,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private const int ResponseDeferredUpdate = 6;
     private const int ResponseUpdateMessage = 7;
     private const int ResponseModal = 9;
+    private const int ResponseLaunchActivity = 12; // launch the Activity (no public card)
     private const int EphemeralFlag = 64;
 
     // Prefix for the ephemeral "which character?" select shown before signup when
@@ -46,6 +48,15 @@ public sealed class DiscordInteractionsController : ControllerBase
     // claim a matching open slot, or "m" to fall through to the manual picker.
     private const string QuickComboPrefix = "evt:quickcombo:";
 
+    // Prefix for the "Outside Party Signup" character-name MODAL — shown when a
+    // Discord member with NO linked LSM account signs up (and the linkshell has the
+    // setting on). Tail mirrors CharPickPrefix: "{token}:{eventId}[:{job}]". The
+    // typed name is cached per (Discord user, event) so it's only asked once.
+    private const string OutsideNamePrefix = "evt:outsidename:";
+    private const string OutsideNameFieldId = "outside_name";
+    private const string OutsideAlt1FieldId = "outside_alt1";
+    private const string OutsideAlt2FieldId = "outside_alt2";
+
     private readonly DiscordInteractionVerifier _verifier;
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
@@ -53,10 +64,21 @@ public sealed class DiscordInteractionsController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _discordClientId;
     private readonly SignupCharacterChoiceCache _charChoice;
+    private readonly ManualMemberService _manualMembers;
 
     // This component interaction's token, captured per request so a success
     // handler can dismiss (delete) the ephemeral picker/wizard it lives on.
     private string? _interactionToken;
+
+    // The clicker's Discord user id + display name, captured per request so the
+    // outside-signup path (no linked account) can identify and name them.
+    private string? _discordUserId;
+    private string? _discordDisplayName;
+
+    // True when this component click is ON an ephemeral picker (a previous step in
+    // the same signup flow). The next picker step then MORPHS that message in place
+    // instead of stacking a new "Which character…/Quick sign up…" ephemeral.
+    private bool _isEphemeralSource;
 
     public DiscordInteractionsController(
         DiscordInteractionVerifier verifier,
@@ -65,7 +87,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         ILogger<DiscordInteractionsController> logger,
         IHttpClientFactory httpClientFactory,
         IOptions<DiscordOAuthOptions> discordOptions,
-        SignupCharacterChoiceCache charChoice)
+        SignupCharacterChoiceCache charChoice,
+        ManualMemberService manualMembers)
     {
         _verifier = verifier;
         _db = db;
@@ -74,6 +97,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         _httpClientFactory = httpClientFactory;
         _discordClientId = discordOptions.Value.ClientId;
         _charChoice = charChoice;
+        _manualMembers = manualMembers;
     }
 
     [HttpPost("interactions")]
@@ -123,6 +147,14 @@ public sealed class DiscordInteractionsController : ControllerBase
                 return await HandleModalSubmitAsync(root, cancellationToken);
             }
 
+            // The Activity's entry-point "Launch" command (now app-handled, so the
+            // public "Game Invitation" card is suppressed): just launch the Activity
+            // for the clicker with a quiet LAUNCH_ACTIVITY callback — no channel post.
+            if (type == InteractionApplicationCommand)
+            {
+                return Ok(new { type = ResponseLaunchActivity, data = new { } });
+            }
+
             // Unhandled interaction type — acknowledge with a no-op deferred
             // update so Discord doesn't surface an error to the user.
             return Ok(new { type = ResponseDeferredUpdate });
@@ -147,16 +179,25 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("Couldn't read your Discord account from that click.");
         }
+        // Captured for the outside-signup path (identity + a name modal prefill).
+        _discordUserId = discordUserId;
+        _discordDisplayName = ResolveDiscordDisplayName(root);
 
-        // Resolve the LSM account linked to this Discord user.
+        // Did this click come from an ephemeral picker (vs the public board)? If so,
+        // the next picker step morphs it in place instead of stacking a new message.
+        _isEphemeralSource = root.TryGetProperty("message", out var srcMsg)
+            && srcMsg.TryGetProperty("flags", out var srcFlags)
+            && srcFlags.ValueKind == JsonValueKind.Number
+            && (srcFlags.GetInt32() & EphemeralFlag) != 0;
+
+        // Resolve the LSM account linked to this Discord user. This MAY be null:
+        // a member who has never launched the app has no link. We no longer reject
+        // here — each flow resolves identity against its event's linkshell, so an
+        // unlinked user can still sign up when "Outside Party Signup" is enabled.
         var appUserId = await _db.DiscordActivityUsers
             .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
             .Select(link => link.IdentityUserId!)
             .FirstOrDefaultAsync(cancellationToken);
-        if (string.IsNullOrEmpty(appUserId))
-        {
-            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
-        }
 
         // The member chose which character to sign up as → remember it, then resume
         // the flow they were on. Tail: "{token}:{eventId}[:{job}]".
@@ -166,19 +207,30 @@ public sealed class DiscordInteractionsController : ControllerBase
             var token = parts.Length > 0 ? parts[0] : string.Empty;
             var pickEventId = parts.Length > 1 && int.TryParse(parts[1], out var eid) ? eid : 0;
             var chosen = SelectedValue(data);
-            if (pickEventId > 0 && !string.IsNullOrWhiteSpace(chosen))
+            var job = parts.Length > 2 ? string.Join(':', parts.Skip(2)) : null;
+
+            // The picker is shown to a linked account (keyed by AppUserId) OR to an
+            // "unsynced" placeholder member (no synced AppUserId — keyed by the clicker's
+            // Discord id). Cache the pick under that same identity and resume as it; a
+            // placeholder resumes with appUserId:null so ResolveSignupContextAsync re-finds
+            // it by Discord id (and now sees the cached pick, so it won't re-ask).
+            if (!string.IsNullOrEmpty(appUserId))
             {
-                _charChoice.Set(appUserId, pickEventId, chosen!);
+                if (pickEventId > 0 && !string.IsNullOrWhiteSpace(chosen))
+                {
+                    _charChoice.Set(appUserId, pickEventId, chosen!);
+                }
+                return await ResumeSignupFlowAsync(token, pickEventId, appUserId, job, cancellationToken);
             }
-            return token switch
+            if (!string.IsNullOrEmpty(_discordUserId))
             {
-                "slot" => await HandlePartySlotSignUpAsync(pickEventId, appUserId, asLeader: false, cancellationToken),
-                "slotL" => await HandlePartySlotSignUpAsync(pickEventId, appUserId, asLeader: true, cancellationToken),
-                "join" => await StartGeneralJoinAsync(pickEventId, appUserId, cancellationToken),
-                "job" => await HandleJobSignupAsync(pickEventId, appUserId,
-                    parts.Length > 2 ? string.Join(':', parts.Skip(2)) : null, cancellationToken),
-                _ => Ephemeral("That action isn't recognized.")
-            };
+                if (pickEventId > 0 && !string.IsNullOrWhiteSpace(chosen))
+                {
+                    _charChoice.Set(_discordUserId, pickEventId, chosen!);
+                }
+                return await ResumeSignupFlowAsync(token, pickEventId, appUserId: null, job, cancellationToken);
+            }
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
         }
 
         // Quick sign up: the member picked a recent job combo (auto-claim a matching
@@ -337,6 +389,209 @@ public sealed class DiscordInteractionsController : ControllerBase
         return Ephemeral("That action isn't recognized.");
     }
 
+    // ─── Outside Party Signup helpers ───────────────────────────────────────────
+
+    // Resume a signup flow after an identity step (the account character picker OR
+    // the outside-signup name modal). `appUserId` is null for the outside path —
+    // each handler re-resolves identity from the captured Discord id.
+    private Task<IActionResult> ResumeSignupFlowAsync(
+        string token, int eventId, string? appUserId, string? job, CancellationToken cancellationToken)
+        => token switch
+        {
+            "slot" => HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: false, cancellationToken),
+            "slotL" => HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: true, cancellationToken),
+            "join" => StartGeneralJoinAsync(eventId, appUserId, cancellationToken),
+            "job" => HandleJobSignupAsync(eventId, appUserId, job, cancellationToken),
+            _ => Task.FromResult(Ephemeral("That action isn't recognized."))
+        };
+
+    // The identity + character name a signup handler should use, OR an Interrupt to
+    // return instead (a "not a member" / "sign in" ephemeral, the alt-character
+    // picker, or the outside-signup name modal). Account = AppUserId only; Outside =
+    // DiscordUserId only; PlaceholderMatch = BOTH (an outside clicker whose typed name
+    // matched a linkshell-only member, so it's keyed by the placeholder's AppUserId for
+    // DKP but keeps the clicker's DiscordUserId so withdraw still finds the row).
+    private sealed record SignupContext(
+        IActionResult? Interrupt, string? AppUserId, string? DiscordUserId, string? CharacterName)
+    {
+        public bool ShouldStop => Interrupt is not null;
+        public static SignupContext Stop(IActionResult response) => new(response, null, null, null);
+        public static SignupContext Account(string appUserId, string characterName) => new(null, appUserId, null, characterName);
+        public static SignupContext Outside(string discordUserId, string characterName) => new(null, null, discordUserId, characterName);
+        public static SignupContext PlaceholderMatch(string appUserId, string discordUserId, string characterName) => new(null, appUserId, discordUserId, characterName);
+    }
+
+    // Resolves who is signing up and the character name to record. Account users go
+    // through the existing membership + alt-picker path. When there's no linked
+    // account, the linkshell must have OutsidePartySignupEnabled; the member is then
+    // identified by Discord id and named via a one-time modal (cached per event).
+    // `promptTail` ("slot:42", "join:42", "job:42:War", …) lets the picker/modal
+    // resume the right flow afterwards.
+    private async Task<SignupContext> ResolveSignupContextAsync(
+        Event ev, string? appUserId, string promptTail, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(appUserId))
+        {
+            var membership = await _db.AppUserLinkshells
+                .Include(link => link.AppUser)
+                .FirstOrDefaultAsync(
+                    link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
+            if (membership is null)
+            {
+                return SignupContext.Stop(Ephemeral("You're not a member of this linkshell, so you can't sign up for its events."));
+            }
+            if (NeedsCharacterPick(membership, ev.Id, appUserId))
+            {
+                return SignupContext.Stop(CharacterPicker(membership, promptTail, ev.EventName));
+            }
+            return SignupContext.Account(appUserId, ResolveSignupCharacter(membership, ev.Id, appUserId));
+        }
+
+        // No linked account → outside path, gated by the linkshell setting.
+        var enabled = await _db.Linkshells
+            .Where(l => l.Id == ev.LinkshellId)
+            .Select(l => l.OutsidePartySignupEnabled)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!enabled || string.IsNullOrEmpty(_discordUserId))
+        {
+            return SignupContext.Stop(Ephemeral("Open LSM and sign in with Discord once to link your account, then try again."));
+        }
+        // Already registered? An "unsynced" member (placeholder) linked to this Discord
+        // user is recognized automatically — attribute the signup to it (earns DKP), and
+        // keep the Discord id on the row so Withdraw still works. No re-typing needed.
+        var linkedMember = await _db.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .FirstOrDefaultAsync(
+                link => link.LinkshellId == ev.LinkshellId
+                        && link.DiscordUserId == _discordUserId
+                        && link.AppUserId != null
+                        && link.AppUser!.IsPlaceholder,
+                cancellationToken);
+        if (linkedMember?.AppUserId is not null)
+        {
+            // Same alt-picker as a linked account, but the choice is cached under the
+            // clicker's Discord id (a placeholder has no synced AppUserId of its own to
+            // key on). Their alts come from the onboarding modal (AppUser.AltCharacterName1/2).
+            if (NeedsCharacterPick(linkedMember, ev.Id, _discordUserId))
+            {
+                return SignupContext.Stop(CharacterPicker(linkedMember, promptTail, ev.EventName));
+            }
+            return SignupContext.PlaceholderMatch(
+                linkedMember.AppUserId, _discordUserId,
+                ResolveSignupCharacter(linkedMember, ev.Id, _discordUserId));
+        }
+
+        // Not registered yet → onboard via the "you're not synced" modal, which creates
+        // + links their member on submit (then this resolves to the branch above).
+        return SignupContext.Stop(OutsideOnboardModal(promptTail, ev.EventName));
+    }
+
+    // Lighter identity resolution for withdraw/leave (no character name, no name
+    // prompt). Null = the clicker can't act here (no account and the linkshell
+    // doesn't allow outside signups).
+    private async Task<(string? AppUserId, string? DiscordUserId)?> ResolveWithdrawIdentityAsync(
+        Event ev, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(appUserId))
+        {
+            return (appUserId, null);
+        }
+        var enabled = await _db.Linkshells
+            .Where(l => l.Id == ev.LinkshellId)
+            .Select(l => l.OutsidePartySignupEnabled)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!enabled || string.IsNullOrEmpty(_discordUserId))
+        {
+            return null;
+        }
+        return (null, _discordUserId);
+    }
+
+    // A Discord modal that ONBOARDS an outside (not-synced) player: they enter their
+    // main + two alt names (all required), and on submit we create — or adopt + link — an
+    // "unsynced" member for them keyed to their Discord id (so later signups recognize
+    // them). custom_id carries the flow to resume. (Discord modals have a title + text
+    // inputs only — no body text — so the "you're not synced" message lives in the
+    // title/labels; the main field is prefilled with their Discord display name.)
+    private IActionResult OutsideOnboardModal(string tail, string? eventName)
+    {
+        var prefill = string.IsNullOrWhiteSpace(_discordDisplayName) ? string.Empty : _discordDisplayName!.Trim();
+        if (prefill.Length > 64) prefill = prefill[..64];
+
+        static object NameRow(string fieldId, string label, bool required, string value, string placeholder) => new
+        {
+            type = 1, // action row
+            components = new object[]
+            {
+                new
+                {
+                    type = 4, // text input
+                    custom_id = fieldId,
+                    label,
+                    style = 1, // short
+                    min_length = required ? 1 : 0,
+                    max_length = 64,
+                    required,
+                    value,
+                    placeholder
+                }
+            }
+        };
+
+        return Ok(new
+        {
+            type = ResponseModal,
+            data = new
+            {
+                custom_id = $"{OutsideNamePrefix}{tail}",
+                title = "Not synced — register yourself", // 45-char cap
+                components = new object[]
+                {
+                    NameRow(OutsideNameFieldId, "Your MAIN FFXI character name", true, prefill, "e.g. Millhouse"),
+                    NameRow(OutsideAlt1FieldId, "Alt 1 character name", true, string.Empty, "e.g. Millhouse2401"),
+                    NameRow(OutsideAlt2FieldId, "Alt 2 character name", true, string.Empty, "e.g. Millhouse2402"),
+                }
+            }
+        });
+    }
+
+    // The clicker's Discord display name (guild nick → global name → username), for
+    // prefilling the outside-signup name modal. Not stored as the signup name.
+    private static string? ResolveDiscordDisplayName(JsonElement root)
+    {
+        if (root.TryGetProperty("member", out var member))
+        {
+            if (member.TryGetProperty("nick", out var nick) && nick.ValueKind == JsonValueKind.String
+                && nick.GetString() is { Length: > 0 } nickName)
+            {
+                return nickName;
+            }
+            if (member.TryGetProperty("user", out var memberUser))
+            {
+                return DisplayNameFromUser(memberUser);
+            }
+        }
+        if (root.TryGetProperty("user", out var user))
+        {
+            return DisplayNameFromUser(user);
+        }
+        return null;
+
+        static string? DisplayNameFromUser(JsonElement user)
+        {
+            if (user.TryGetProperty("global_name", out var global) && global.ValueKind == JsonValueKind.String
+                && global.GetString() is { Length: > 0 } globalName)
+            {
+                return globalName;
+            }
+            if (user.TryGetProperty("username", out var username) && username.GetString() is { Length: > 0 } userName)
+            {
+                return userName;
+            }
+            return null;
+        }
+    }
+
     // Returns a Discord modal (type 9) asking for the bid amount. custom_id
     // carries the auction item id so the submit handler knows what to bid on.
     private IActionResult BidModal(int itemId)
@@ -391,6 +646,56 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (string.IsNullOrEmpty(discordUserId))
         {
             return Ephemeral("Couldn't read your Discord account from that submission.");
+        }
+        _interactionToken = root.TryGetProperty("token", out var tokenEl) ? tokenEl.GetString() : null;
+        _discordUserId = discordUserId;
+        _discordDisplayName = ResolveDiscordDisplayName(root);
+
+        // Outside Party Signup ONBOARDING modal — no linked account required. Register
+        // (create or adopt + link) an "unsynced" member for this Discord user from the
+        // main + alt names, then resume; ResolveSignupContextAsync now recognizes them
+        // by their Discord id and the signup is attributed to that member (earns DKP).
+        if (customId.StartsWith(OutsideNamePrefix, StringComparison.Ordinal))
+        {
+            var parts = customId[OutsideNamePrefix.Length..].Split(':');
+            var token = parts.Length > 0 ? parts[0] : string.Empty;
+            var nameEventId = parts.Length > 1 && int.TryParse(parts[1], out var nid) ? nid : 0;
+            if (nameEventId <= 0)
+            {
+                return Ephemeral("That event isn't recognized.");
+            }
+
+            var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == nameEventId, cancellationToken);
+            if (ev is null)
+            {
+                return Ephemeral("That event is no longer open.");
+            }
+            var outsideEnabled = await _db.Linkshells
+                .Where(l => l.Id == ev.LinkshellId)
+                .Select(l => l.OutsidePartySignupEnabled)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!outsideEnabled)
+            {
+                return Ephemeral("Outside signups aren't enabled for this event.");
+            }
+
+            var main = ExtractModalValue(data, OutsideNameFieldId)?.Trim();
+            var alt1 = ExtractModalValue(data, OutsideAlt1FieldId)?.Trim();
+            var alt2 = ExtractModalValue(data, OutsideAlt2FieldId)?.Trim();
+            if (string.IsNullOrWhiteSpace(main))
+            {
+                return Ephemeral("Enter your main character name to register.");
+            }
+
+            var result = await _manualMembers.FindOrCreateForOutsideAsync(
+                ev.LinkshellId, main, alt1, alt2, discordUserId, cancellationToken);
+            if (!result.Success)
+            {
+                return Ephemeral(result.Error ?? "Couldn't register you for this event.");
+            }
+
+            var job = parts.Length > 2 ? string.Join(':', parts.Skip(2)) : null;
+            return await ResumeSignupFlowAsync(token, nameEventId, appUserId: null, job, cancellationToken);
         }
 
         var account = await _db.DiscordActivityUsers
@@ -455,7 +760,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     private async Task<IActionResult> HandleJobSignupAsync(
-        int eventId, string appUserId, string? job, CancellationToken cancellationToken)
+        int eventId, string? appUserId, string? job, CancellationToken cancellationToken)
     {
         if (eventId <= 0 || string.IsNullOrWhiteSpace(job))
         {
@@ -468,26 +773,20 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(
-                link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"job:{eventId}:{job}", cancellationToken);
+        if (ctx.ShouldStop)
         {
-            return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
+            return ctx.Interrupt!;
         }
-
-        if (NeedsCharacterPick(membership, eventId, appUserId))
-        {
-            return CharacterPicker(membership, $"job:{eventId}:{job}");
-        }
-
-        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
+        var characterName = ctx.CharacterName!;
 
         // Signing up again switches jobs IN PLACE so accrued time (StartTime /
         // Duration / break state) is preserved instead of restarting the clock.
-        var existing = await _db.AppUserEvents
-            .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUserId, cancellationToken);
+        var existing = ctx.AppUserId is not null
+            ? await _db.AppUserEvents.FirstOrDefaultAsync(
+                item => item.EventId == eventId && item.AppUserId == ctx.AppUserId, cancellationToken)
+            : await _db.AppUserEvents.FirstOrDefaultAsync(
+                item => item.EventId == eventId && item.AppUserId == null && item.DiscordUserId == ctx.DiscordUserId, cancellationToken);
         if (existing is not null)
         {
             existing.CharacterName = characterName;
@@ -497,7 +796,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             _db.AppUserEvents.Add(new AppUserEvent
             {
-                AppUserId = appUserId,
+                AppUserId = ctx.AppUserId,
+                DiscordUserId = ctx.DiscordUserId,
                 EventId = eventId,
                 CharacterName = characterName,
                 JobName = job!.Trim(),
@@ -511,7 +811,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     private async Task<IActionResult> HandleWithdrawAsync(
-        int eventId, string appUserId, CancellationToken cancellationToken)
+        int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -524,14 +824,26 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var existing = await _db.AppUserEvents
-            .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUserId, cancellationToken);
+        var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
+        if (identity is null)
+        {
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+
+        var existing = identity.Value.AppUserId is not null
+            ? await _db.AppUserEvents.FirstOrDefaultAsync(
+                item => item.EventId == eventId && item.AppUserId == identity.Value.AppUserId, cancellationToken)
+            // Outside clicker: match by Discord id ALONE (not also AppUserId == null) so
+            // it also finds a placeholder-matched row, which carries a non-null AppUserId.
+            : await _db.AppUserEvents.FirstOrDefaultAsync(
+                item => item.EventId == eventId && item.DiscordUserId == identity.Value.DiscordUserId, cancellationToken);
         if (existing is not null)
         {
             _db.AppUserEvents.Remove(existing);
             await _db.SaveChangesAsync(cancellationToken);
         }
 
+        ClearCharacterChoice(identity.Value.AppUserId, identity.Value.DiscordUserId, eventId);
         return await UpdatedEventMessageAsync(ev.Id, cancellationToken);
     }
 
@@ -540,7 +852,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // to leaderless parties (BuildSlotPickerComponents) and routes the select through
     // the leader claim prefix. Picking a slot runs HandlePartySlotClaimAsync.
     private async Task<IActionResult> HandlePartySlotSignUpAsync(
-        int eventId, string appUserId, bool asLeader, CancellationToken cancellationToken, bool skipQuickCombo = false)
+        int eventId, string? appUserId, bool asLeader, CancellationToken cancellationToken, bool skipQuickCombo = false)
     {
         if (eventId <= 0)
         {
@@ -553,31 +865,28 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
+        // Resolve identity (and prompt the alt picker / outside-name modal if needed)
+        // before showing the slot picker — the claim itself re-resolves the same way.
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
         {
-            return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
-        }
-        if (NeedsCharacterPick(membership, eventId, appUserId))
-        {
-            return CharacterPicker(membership, $"{(asLeader ? "slotL" : "slot")}:{eventId}");
+            return ctx.Interrupt!;
         }
 
         var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
 
         // Quick sign up (regular flow): offer the member's recent job combos that
         // have a matching open slot, so they can one-tap in. "Manual" or no
-        // available combo falls through to the full slot picker below.
-        if (!asLeader && !skipQuickCombo)
+        // available combo falls through to the full slot picker below. Outside
+        // (account-less) signups have no event history, so skip straight to the picker.
+        if (!asLeader && !skipQuickCombo && ctx.AppUserId is not null)
         {
-            var combos = await RecentCombosAsync(appUserId, ev.LinkshellId, cancellationToken);
+            var combos = await RecentCombosAsync(ctx.AppUserId!, ev.LinkshellId, cancellationToken);
             var available = combos.Where(c => FindBestOpenSlotForCombo(ev.PartySetup, slotSignups, c) is not null).ToList();
             if (available.Count > 0)
             {
                 var full = combos.Where(c => !available.Contains(c)).ToList();
-                return QuickComboPicker(eventId, available, full);
+                return QuickComboPicker(eventId, available, full, ev.EventName);
             }
         }
 
@@ -589,16 +898,9 @@ public sealed class DiscordInteractionsController : ControllerBase
                 : "Every slot is taken right now.");
         }
 
-        return Ok(new
-        {
-            type = ResponseChannelMessage,
-            data = new
-            {
-                content = asLeader ? "Pick a slot to claim as party leader 👑:" : "Pick a slot to claim:",
-                components = picker,
-                flags = EphemeralFlag
-            }
-        });
+        return PickerResponse(
+            EventHeading(ev.EventName, asLeader ? "Pick a slot to claim as party leader 👑:" : "Pick a slot to claim:"),
+            picker);
     }
 
     private sealed record JobCombo(string Main, string? Sub, string? Role);
@@ -685,7 +987,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // Ephemeral "quick sign up" select: one option per available recent combo (auto-
     // claims its matching slot) plus a manual fallback. Full recent combos are only
     // listed in the text, so an unavailable combo can't be selected.
-    private IActionResult QuickComboPicker(int eventId, List<JobCombo> available, List<JobCombo> full)
+    private IActionResult QuickComboPicker(int eventId, List<JobCombo> available, List<JobCombo> full, string? eventName)
     {
         var options = available
             .Select(c => (object)new { label = $"{ComboLabel(c)} · open", value = $"c|{c.Main}|{c.Sub}|{c.Role}" })
@@ -698,22 +1000,13 @@ public sealed class DiscordInteractionsController : ControllerBase
             content += $"\nFull right now: {string.Join(", ", full.Select(ComboLabel))}.";
         }
 
-        return Ok(new
-        {
-            type = ResponseChannelMessage,
-            data = new
-            {
-                content,
-                components = SelectRow(QuickComboPrefix, eventId.ToString(), "Pick a recent job", options),
-                flags = EphemeralFlag,
-            }
-        });
+        return PickerResponse(EventHeading(eventName, content), SelectRow(QuickComboPrefix, eventId.ToString(), "Pick a recent job", options));
     }
 
     // Auto-claim the best open slot matching a chosen recent combo. Refuses (no
     // signup) when nothing's open for it — including a last-moment race.
     private async Task<IActionResult> HandleQuickComboClaimAsync(
-        int eventId, string appUserId, string main, string? sub, string? role, CancellationToken cancellationToken)
+        int eventId, string? appUserId, string main, string? sub, string? role, CancellationToken cancellationToken)
     {
         if (eventId <= 0 || string.IsNullOrWhiteSpace(main))
         {
@@ -726,12 +1019,10 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"slot:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
         {
-            return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
+            return ctx.Interrupt!;
         }
 
         var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
@@ -742,9 +1033,9 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral($"No open slot for {ComboLabel(combo)} right now — sign up again to pick another, or choose a slot manually.");
         }
 
-        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
         var result = await EventPartySignupService.ClaimSlotAsync(
-            _db, eventId, slot, appUserId, characterName, role, main, sub, cancellationToken, claimAsLeader: false);
+            _db, eventId, slot, ctx.AppUserId, ctx.CharacterName!, role, main, sub, cancellationToken,
+            claimAsLeader: false, discordUserId: ctx.DiscordUserId);
         if (!result.Success)
         {
             return Ephemeral(result.Error ?? "Couldn't claim that slot.");
@@ -753,7 +1044,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That slot was just taken by another member. Sign up again to pick another.");
         }
-        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, appUserId, cancellationToken);
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
 
@@ -765,7 +1056,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // a role and a main job, claim immediately; otherwise open a modal to collect
     // the missing job pick(s) (the claim then happens on modal submit).
     private async Task<IActionResult> HandlePartySlotClaimAsync(
-        int eventId, int slotId, string appUserId, bool asLeader, CancellationToken cancellationToken)
+        int eventId, int slotId, string? appUserId, bool asLeader, CancellationToken cancellationToken)
     {
         if (eventId <= 0 || slotId <= 0)
         {
@@ -786,25 +1077,27 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That slot isn't part of this event.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(
-                link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
-        {
-            return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
-        }
-
-        // Needs a job pick whenever a required field (role / main) isn't pinned →
-        // start the ephemeral dropdown wizard (role → main → sub).
-        if (string.IsNullOrWhiteSpace(slot.Role) || string.IsNullOrWhiteSpace(slot.MainJob))
+        // Needs a job pick whenever a required field isn't pinned → start the
+        // ephemeral dropdown wizard (role → main → sub). A "Player's Choice" sub
+        // (slot pins the main but leaves the sub open) counts too: the member must
+        // still specify which sub they're bringing, so an empty SubJob enters the
+        // wizard and the pinned role/main steps are simply skipped inside it.
+        if (string.IsNullOrWhiteSpace(slot.Role)
+            || string.IsNullOrWhiteSpace(slot.MainJob)
+            || string.IsNullOrWhiteSpace(slot.SubJob))
         {
             return await AdvancePartyJobWizardAsync(eventId, slotId, null, null, null, false, appUserId, asLeader, cancellationToken);
         }
 
-        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
+        {
+            return ctx.Interrupt!;
+        }
+
         var result = await EventPartySignupService.ClaimSlotAsync(
-            _db, eventId, slot, appUserId, characterName, null, null, null, cancellationToken, asLeader);
+            _db, eventId, slot, ctx.AppUserId, ctx.CharacterName!, null, null, null, cancellationToken, asLeader,
+            discordUserId: ctx.DiscordUserId);
         if (!result.Success)
         {
             return Ephemeral(result.Error ?? "Couldn't claim that slot.");
@@ -815,7 +1108,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         // Pre-start: drop their no-slot attendance. Live: materialize the claim as a
         // participation so a late joiner lands in the running event immediately.
-        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, appUserId, cancellationToken);
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
         await _db.SaveChangesAsync(cancellationToken);
         // Auto-promote earliest signup if the party just filled with no leader.
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
@@ -833,7 +1126,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // picked, or pinned by the slot).
     private async Task<IActionResult> AdvancePartyJobWizardAsync(
         int eventId, int slotId, string? role, string? main, string? sub, bool subPicked,
-        string appUserId, bool asLeader, CancellationToken cancellationToken)
+        string? appUserId, bool asLeader, CancellationToken cancellationToken)
     {
         if (eventId <= 0 || slotId <= 0)
         {
@@ -854,13 +1147,12 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That slot isn't part of this event.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(
-                link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
+        // Resolve identity once (the name was cached at the signup entry, so this
+        // won't re-prompt). Used at the final claim below.
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
         {
-            return Ephemeral("You're not a member of this linkshell, so you can't sign up for its events.");
+            return ctx.Interrupt!;
         }
 
         // Carry the leader intent through the wizard via the leader-variant
@@ -874,38 +1166,37 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (string.IsNullOrWhiteSpace(slot.Role) && string.IsNullOrWhiteSpace(role))
         {
             return WizardStep(
-                $"Sign up{leaderTag} — {DiscordEventMessageBuilder.SlotRequirement(slot)}",
+                EventHeading(ev.EventName, $"Sign up{leaderTag} — {DiscordEventMessageBuilder.SlotRequirement(slot)}"),
                 JobSelectRow(rolePrefix, $"{eventId}:{slotId}",
                     "Pick a role", EventJobCatalog.JobTypeOptions));
         }
         if (string.IsNullOrWhiteSpace(slot.MainJob) && string.IsNullOrWhiteSpace(main))
         {
             return WizardStep(
-                "Pick your main job:",
+                EventHeading(ev.EventName, "Pick your main job:"),
                 JobSelectRow(mainPrefix, $"{eventId}:{slotId}:{role ?? "-"}",
                     "Pick your main job", EventJobCatalog.MainJobOptions));
         }
         if (string.IsNullOrWhiteSpace(slot.SubJob) && !subPicked)
         {
-            // Sub options exclude the effective main (collected or pinned) so a
-            // member can't pick e.g. PLD/PLD, plus an explicit "no sub" option.
+            // A sub job is REQUIRED — no "no sub" option. Options exclude the
+            // effective main (collected or pinned) so a member can't pick e.g. PLD/PLD.
             var effectiveMain = main ?? slot.MainJob;
-            var subOptions = new[] { (object)new { label = "No sub job", value = DiscordEventMessageBuilder.PartyWizardNoSub } }
-                .Concat(EventJobCatalog.SubJobOptions
-                    .Where(j => !string.Equals(j, effectiveMain, StringComparison.OrdinalIgnoreCase))
-                    .Select(j => (object)new { label = j, value = j }))
+            var subOptions = EventJobCatalog.SubJobOptions
+                .Where(j => !string.Equals(j, effectiveMain, StringComparison.OrdinalIgnoreCase))
+                .Select(j => (object)new { label = j, value = j })
                 .ToArray();
             return WizardStep(
-                "Pick your sub job (optional):",
+                EventHeading(ev.EventName, "Pick your sub job:"),
                 SelectRow(subPrefix, $"{eventId}:{slotId}:{role ?? "-"}:{main ?? "-"}",
                     "Pick your sub job", subOptions));
         }
 
         // Everything needed is collected → claim, edit the board, confirm.
-        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
         var result = await EventPartySignupService.ClaimSlotAsync(
-            _db, eventId, slot, appUserId, characterName,
-            NormalizeWizardValue(role), NormalizeWizardValue(main), NormalizeWizardValue(sub), cancellationToken, asLeader);
+            _db, eventId, slot, ctx.AppUserId, ctx.CharacterName!,
+            NormalizeWizardValue(role), NormalizeWizardValue(main), NormalizeWizardValue(sub), cancellationToken, asLeader,
+            discordUserId: ctx.DiscordUserId);
         if (!result.Success)
         {
             return WizardStep($"⚠️ {result.Error}", Array.Empty<object>());
@@ -916,7 +1207,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         // Pre-start: drop their no-slot attendance. Live: materialize the claim as a
         // participation so a late joiner lands in the running event immediately.
-        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, appUserId, cancellationToken);
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
         _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
@@ -976,6 +1267,22 @@ public sealed class DiscordInteractionsController : ControllerBase
     private IActionResult WizardStep(string content, object[] components) =>
         Ok(new { type = ResponseUpdateMessage, data = new { content, components } });
 
+    // A picker/select step in a signup flow. When the click came from an ephemeral
+    // picker (an earlier step), MORPH that message in place so the chain never piles
+    // up stale "Which character…/Quick sign up…" messages; otherwise (a board click)
+    // send a fresh ephemeral. The terminal step deletes the single message.
+    private IActionResult PickerResponse(string content, object[] components) =>
+        _isEphemeralSource
+            ? Ok(new { type = ResponseUpdateMessage, data = new { content, components } })
+            : Ok(new { type = ResponseChannelMessage, data = new { content, components, flags = EphemeralFlag } });
+
+    // Prefixes a picker/wizard line with the event's name. Discord always shows the
+    // ephemeral picker at the BOTTOM of the channel (its position can't be anchored
+    // to the board the button is on), so when there are several boards this is how the
+    // member tells which event the picker belongs to.
+    private static string EventHeading(string? eventName, string body)
+        => string.IsNullOrWhiteSpace(eventName) ? body : $"**{eventName.Trim()}**\n{body}";
+
     private static string? SelectedValue(JsonElement data) =>
         data.TryGetProperty("values", out var values)
         && values.ValueKind == JsonValueKind.Array
@@ -997,7 +1304,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // "Leave event" lives on the board itself, so refresh the board in place. Drops
     // BOTH the member's party slot (if any) AND their general attendance (if any).
     private async Task<IActionResult> HandlePartySlotLeaveAsync(
-        int eventId, string appUserId, CancellationToken cancellationToken)
+        int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -1017,12 +1324,25 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("The event is live — ask an officer to remove you.");
         }
 
-        var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, appUserId, cancellationToken);
+        var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
+        if (identity is null)
+        {
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+        var (idAppUser, idDiscord) = identity.Value;
+
+        var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, idAppUser, cancellationToken, idDiscord);
 
         // Also drop their general-attendance row (the "Join (no slot)" roster).
-        var attendance = await _db.AppUserEvents
-            .Where(p => p.EventId == eventId && p.AppUserId == appUserId)
-            .ToListAsync(cancellationToken);
+        var attendance = idAppUser is not null
+            ? await _db.AppUserEvents
+                .Where(p => p.EventId == eventId && p.AppUserId == idAppUser)
+                .ToListAsync(cancellationToken)
+            // Outside clicker: match by Discord id ALONE so it also finds a
+            // placeholder-matched row (which carries a non-null AppUserId).
+            : await _db.AppUserEvents
+                .Where(p => p.EventId == eventId && p.DiscordUserId == idDiscord)
+                .ToListAsync(cancellationToken);
         if (attendance.Count > 0)
         {
             _db.AppUserEvents.RemoveRange(attendance);
@@ -1037,6 +1357,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        ClearCharacterChoice(idAppUser, idDiscord, eventId);
         // The board is a rendered image — queue the refresh (render runs off the 3s
         // window) and silently acknowledge the click (no confirmation message); the
         // refreshed board is the feedback.
@@ -1048,7 +1369,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // board itself isn't replaced). Subsequent picks morph this ephemeral via
     // AdvanceGeneralJoinWizardAsync. Starts at the role step (optional).
     private async Task<IActionResult> StartGeneralJoinAsync(
-        int eventId, string appUserId, CancellationToken cancellationToken)
+        int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -1061,31 +1382,19 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
+        // Gate + name prompt (the role/job picks come next; the name is cached now).
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"join:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
         {
-            return Ephemeral("You're not a member of this linkshell, so you can't join its events.");
-        }
-        if (NeedsCharacterPick(membership, eventId, appUserId))
-        {
-            return CharacterPicker(membership, $"join:{eventId}");
+            return ctx.Interrupt!;
         }
 
         var roleOptions = new[] { (object)new { label = "No specific role", value = DiscordEventMessageBuilder.PartyWizardNoRole } }
             .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
             .ToArray();
-        return Ok(new
-        {
-            type = ResponseChannelMessage,
-            data = new
-            {
-                content = "Sign Up (No Slot) — pick your role (optional):",
-                components = SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions),
-                flags = EphemeralFlag
-            }
-        });
+        return PickerResponse(
+            EventHeading(ev.EventName, "Sign Up (No Slot) — pick your role (optional):"),
+            SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions));
     }
 
     // "Join (no slot)" job-pick wizard: role (optional) → main job (required) →
@@ -1095,7 +1404,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // Re-running replaces the member's existing attendance for this event.
     private async Task<IActionResult> AdvanceGeneralJoinWizardAsync(
         int eventId, string? role, string? main, string? sub, bool subPicked,
-        string appUserId, CancellationToken cancellationToken)
+        string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -1108,13 +1417,12 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("That event is no longer open.");
         }
 
-        var membership = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .FirstOrDefaultAsync(
-                link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
-        if (membership is null)
+        // Resolve identity once (the name was cached at the join entry) — used for
+        // the attendance row written at the end of the wizard.
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"join:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
         {
-            return Ephemeral("You're not a member of this linkshell, so you can't join its events.");
+            return ctx.Interrupt!;
         }
 
         // Step 1 — role (optional; an explicit "No specific role" choice lets a
@@ -1125,7 +1433,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                 .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
                 .ToArray();
             return WizardStep(
-                "Sign Up (No Slot) — pick your role (optional):",
+                EventHeading(ev.EventName, "Sign Up (No Slot) — pick your role (optional):"),
                 SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions));
         }
 
@@ -1133,7 +1441,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (string.IsNullOrWhiteSpace(main))
         {
             return WizardStep(
-                "Pick your main job:",
+                EventHeading(ev.EventName, "Pick your main job:"),
                 JobSelectRow(DiscordEventMessageBuilder.PartyJoinWizardMainPrefix, $"{eventId}:{role}",
                     "Pick your main job", EventJobCatalog.MainJobOptions));
         }
@@ -1147,21 +1455,25 @@ public sealed class DiscordInteractionsController : ControllerBase
                     .Select(j => (object)new { label = j, value = j }))
                 .ToArray();
             return WizardStep(
-                "Pick your sub job (optional):",
+                EventHeading(ev.EventName, "Pick your sub job (optional):"),
                 SelectRow(DiscordEventMessageBuilder.PartyJoinWizardSubPrefix, $"{eventId}:{role}:{main}",
                     "Pick your sub job", subOptions));
         }
 
         // Done — set the general-attendance row to the chosen job.
-        var characterName = ResolveSignupCharacter(membership, eventId, appUserId);
+        var characterName = ctx.CharacterName!;
 
-        var existing = await _db.AppUserEvents
-            .Where(p => p.EventId == eventId && p.AppUserId == appUserId)
-            .ToListAsync(cancellationToken);
+        var existing = ctx.AppUserId is not null
+            ? await _db.AppUserEvents
+                .Where(p => p.EventId == eventId && p.AppUserId == ctx.AppUserId)
+                .ToListAsync(cancellationToken)
+            : await _db.AppUserEvents
+                .Where(p => p.EventId == eventId && p.AppUserId == null && p.DiscordUserId == ctx.DiscordUserId)
+                .ToListAsync(cancellationToken);
 
         // One identity per event: joining "no slot" releases any party slot the
         // member currently holds, so they're never both in a slot and "no slot".
-        var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, appUserId, cancellationToken);
+        var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
 
         if (existing.Count > 0)
         {
@@ -1178,7 +1490,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             _db.AppUserEvents.Add(new AppUserEvent
             {
-                AppUserId = appUserId,
+                AppUserId = ctx.AppUserId,
+                DiscordUserId = ctx.DiscordUserId,
                 EventId = eventId,
                 CharacterName = characterName,
                 JobType = NormalizeWizardValue(role),
@@ -1288,6 +1601,12 @@ public sealed class DiscordInteractionsController : ControllerBase
     private static int ParseTrailingId(string customId, string prefix)
     {
         var tail = customId[prefix.Length..];
+        // Some components append a ":suffix" after the id to stay unique within a
+        // message (e.g. the per-alliance slot pickers add the alliance index so each
+        // select's custom_id differs). Parse just the leading id; the suffix, if any,
+        // carries no routing meaning here.
+        var colon = tail.IndexOf(':');
+        if (colon >= 0) { tail = tail[..colon]; }
         return int.TryParse(tail, out var id) ? id : 0;
     }
 
@@ -1295,32 +1614,38 @@ public sealed class DiscordInteractionsController : ControllerBase
         Ok(new { type = ResponseChannelMessage, data = new { content = message, flags = EphemeralFlag } });
 
     // Interrupt a signup with a "which character?" step only when it's meaningful:
-    // the member has alts AND hasn't already chosen for this event.
-    private bool NeedsCharacterPick(AppUserLinkshell membership, int eventId, string appUserId)
+    // the member has alts AND hasn't already chosen for this event. `choiceKey` is the
+    // identity the pick is cached under — a linked account's AppUserId, or an unsynced
+    // placeholder clicker's Discord id.
+    private bool NeedsCharacterPick(AppUserLinkshell membership, int eventId, string choiceKey)
         => SignupCharacters.HasAlternatives(membership.AppUser, membership)
-           && _charChoice.Peek(appUserId, eventId) is null;
+           && _charChoice.Peek(choiceKey, eventId) is null;
+
+    // Forget any cached "which character" pick for this event on withdrawal, so a
+    // later re-signup prompts the character picker / quick-select again instead of
+    // silently reusing the prior choice. The choice may be keyed by either identity
+    // (linked account → appUserId, outside signup → discordUserId), so clear both.
+    private void ClearCharacterChoice(string? appUserId, string? discordUserId, int eventId)
+    {
+        if (!string.IsNullOrEmpty(appUserId)) { _charChoice.Clear(appUserId, eventId); }
+        if (!string.IsNullOrEmpty(discordUserId)) { _charChoice.Clear(discordUserId, eventId); }
+    }
 
     // Ephemeral select of the member's characters (main + alts). `tail` resumes the
     // original flow after a pick (e.g. "slot:42", "slotL:42", "join:42", "job:42:Warrior").
-    private IActionResult CharacterPicker(AppUserLinkshell membership, string tail)
+    private IActionResult CharacterPicker(AppUserLinkshell membership, string tail, string? eventName)
     {
         var options = SignupCharacters.ForMember(membership.AppUser, membership)
             .Select(name => (object)new { label = name, value = name })
             .ToArray();
-        return Ok(new
-        {
-            type = ResponseChannelMessage,
-            data = new
-            {
-                content = "Which character are you signing up as?",
-                components = SelectRow(CharPickPrefix, tail, "Pick your character", options),
-                flags = EphemeralFlag
-            }
-        });
+        return PickerResponse(
+            EventHeading(eventName, "Which character are you signing up as?"),
+            SelectRow(CharPickPrefix, tail, "Pick your character", options));
     }
 
     // The character name to record for a Discord signup: the member's cached pick
-    // (from the character-pick step) or their main when none was chosen.
-    private string ResolveSignupCharacter(AppUserLinkshell membership, int eventId, string appUserId)
-        => SignupCharacters.Resolve(membership.AppUser, membership, _charChoice.Peek(appUserId, eventId));
+    // (from the character-pick step) or their main when none was chosen. `choiceKey` is
+    // the account's AppUserId or the placeholder clicker's Discord id (see NeedsCharacterPick).
+    private string ResolveSignupCharacter(AppUserLinkshell membership, int eventId, string choiceKey)
+        => SignupCharacters.Resolve(membership.AppUser, membership, _charChoice.Peek(choiceKey, eventId));
 }

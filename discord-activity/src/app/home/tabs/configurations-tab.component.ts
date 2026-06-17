@@ -458,6 +458,8 @@ export class ConfigurationsTabComponent {
     linkshellType: string;
     // Palette key for the rendered event-board image (one of EVENT_BOARD_THEMES).
     eventBoardTheme: string;
+    // Allow account-less Discord members to sign up from the party board.
+    outsidePartySignupEnabled: boolean;
     // Lower-cased names of monsters the linkshell wants hidden from the
     // ToD Tracker. Lower-case for comparison stability — re-cased to the
     // canonical built-in label on save.
@@ -479,6 +481,7 @@ export class ConfigurationsTabComponent {
     activeAfterAttendances: 2,
     linkshellType: 'Both',
     eventBoardTheme: 'Crystal',
+    outsidePartySignupEnabled: false,
     hiddenTodMonsters: new Set<string>()
   };
 
@@ -625,9 +628,28 @@ export class ConfigurationsTabComponent {
   // in place + structural add/remove happen in zone-run click handlers.
   protected channelRoutes: RouteDraft[] = [];
 
-  protected async loadDiscordChannels(): Promise<void> {
+  // Post-event discussion mirror channel ('' = none / in-app only). Seeded from
+  // the linkshell's settings when channels load; saved via its own Save button.
+  protected discussionChannelDraft = '';
+  protected discussionChannelId(): string {
+    const id = this.customizeTargetLinkshellId();
+    const link = this.dashboardLinkshells().find(l => l.id === id);
+    return link?.settings?.discussionChannelId ?? '';
+  }
+  protected async saveDiscussionChannel(): Promise<void> {
+    const id = this.customizeTargetLinkshellId();
+    if (!id) { return; }
+    const value = this.discussionChannelDraft.trim();
+    await this.activity.setDiscussionChannel(id, value.length > 0 ? value : null);
+  }
+
+  // refresh=true force-pulls the live Discord channel list (bypassing the bot's
+  // cache) so a just-created channel appears now, and ONLY updates the pick-list —
+  // in-progress (unsaved) route drafts are kept.
+  protected async loadDiscordChannels(refresh = false): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id || !this.canCustomizeSelectedLinkshell()) {
+      if (refresh) { return; }
       this.channelRoutes = [];
       this.discordChannelsAvailable.set([]);
       this.discordGuildConfigured.set(false);
@@ -635,25 +657,26 @@ export class ConfigurationsTabComponent {
       this.channelEventTypes.set([]);
       return;
     }
-    const data = await this.activity.loadDiscordChannels(id);
-    if (data) {
-      this.discordChannelsAvailable.set(data.availableChannels);
-      this.discordGuildConfigured.set(data.guildConfigured);
-      this.channelPostTypes.set(data.postTypes);
-      this.channelEventTypes.set(data.eventTypes);
-      this.channelRoutes = data.routes.map(route => ({
-        id: route.id,
-        name: route.name ?? '',
-        channelId: route.channelId,
-        postEvents: route.postEvents,
-        postLoot: route.postLoot,
-        postAuctions: route.postAuctions,
-        postAttendance: route.postAttendance,
-        postTodBoard: route.postTodBoard,
-        eventTypeFilter: [...route.eventTypeFilter],
-        dirty: false
-      }));
-    }
+    if (!refresh) { this.discussionChannelDraft = this.discussionChannelId(); }
+    const data = await this.activity.loadDiscordChannels(id, refresh);
+    if (!data) { return; }
+    this.discordChannelsAvailable.set(data.availableChannels);
+    if (refresh) { return; }
+    this.discordGuildConfigured.set(data.guildConfigured);
+    this.channelPostTypes.set(data.postTypes);
+    this.channelEventTypes.set(data.eventTypes);
+    this.channelRoutes = data.routes.map(route => ({
+      id: route.id,
+      name: route.name ?? '',
+      channelId: route.channelId,
+      postEvents: route.postEvents,
+      postLoot: route.postLoot,
+      postAuctions: route.postAuctions,
+      postAttendance: route.postAttendance,
+      postTodBoard: route.postTodBoard,
+      eventTypeFilter: [...route.eventTypeFilter],
+      dirty: false
+    }));
   }
 
   protected addRoute(): void {
@@ -750,6 +773,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.activeAfterAttendances = settings.activeAfterAttendances || 2;
     this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
     this.customizeDraft.eventBoardTheme = settings.eventBoardTheme || 'Crystal';
+    this.customizeDraft.outsidePartySignupEnabled = settings.outsidePartySignupEnabled ?? false;
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
     this.customizeDraft.hiddenTodMonsters = new Set(
@@ -820,7 +844,8 @@ export class ConfigurationsTabComponent {
         activeAfterAttendances: this.customizeDraft.activeAfterAttendances,
         hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
         linkshellType: this.customizeDraft.linkshellType,
-        eventBoardTheme: this.customizeDraft.eventBoardTheme
+        eventBoardTheme: this.customizeDraft.eventBoardTheme,
+        outsidePartySignupEnabled: this.customizeDraft.outsidePartySignupEnabled
         // The Discord server is set via the dedicated "Discord server" card
         // (setLinkshellGuild / clearLinkshellGuild), not the main save.
       });

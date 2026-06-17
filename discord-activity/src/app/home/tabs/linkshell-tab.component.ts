@@ -372,12 +372,21 @@ export class LinkshellTabComponent {
   protected editingRankMemberId = signal<number | null>(null);
   protected editingRankValue = '';
   protected editingStatusValue = '';
-  // Roster "Count" edit (only while modifying a row): which streak the number
-  // targets (active credit = green / absence = red) and its value.
-  protected editingStreakType: 'credit' | 'absent' = 'credit';
-  protected editingStreakValue = 0;
+  // Roster streak overrides while modifying a row — the Active Credit and Absent
+  // Streak columns each become editable. They're mutually exclusive: on Save we
+  // apply whichever the officer actually changed.
+  protected editingCreditValue = 0;
+  protected editingAbsentValue = 0;
   protected readonly rankIcon = rankIcon;
   protected readonly statusOptions = ['Active', 'Pending', 'Inactive'] as const;
+
+  // "Jun 7, 2026"-style joined date for the roster column.
+  protected formatJoined(value?: string | null): string {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
 
   // Roles are linkshell-specific (custom roles are persisted server-side via
   // createLinkshellRole). We load on demand and cache per-linkshell so the
@@ -402,15 +411,8 @@ export class LinkshellTabComponent {
     this.editingRankValue = currentRank || 'Member';
     const editing = this.selectedDashboardMembers().find(m => m.id === memberId);
     this.editingStatusValue = editing?.status || 'Active';
-    // Default the Count question to whichever streak the member is currently on:
-    // an absence run shows red, otherwise we edit the (green) active-credit run.
-    if ((editing?.absentStreak ?? 0) > 0) {
-      this.editingStreakType = 'absent';
-      this.editingStreakValue = editing?.absentStreak ?? 0;
-    } else {
-      this.editingStreakType = 'credit';
-      this.editingStreakValue = editing?.activeCreditStreak ?? 0;
-    }
+    this.editingCreditValue = editing?.activeCreditStreak ?? 0;
+    this.editingAbsentValue = editing?.absentStreak ?? 0;
     const id = this.selectedDashboardLinkshellId();
     if (id && !this.rolesByLinkshell()[id]) {
       const data = await this.activity.loadLinkshellRoles(id);
@@ -424,8 +426,8 @@ export class LinkshellTabComponent {
     this.editingRankMemberId.set(null);
     this.editingRankValue = '';
     this.editingStatusValue = '';
-    this.editingStreakType = 'credit';
-    this.editingStreakValue = 0;
+    this.editingCreditValue = 0;
+    this.editingAbsentValue = 0;
   }
 
   protected async saveEditRank(linkshellId: number, memberId: number): Promise<void> {
@@ -436,21 +438,23 @@ export class LinkshellTabComponent {
     const rankChanged = !!newRank && newRank !== (member?.rank || 'Member');
     const statusChanged = !!newStatus && newStatus !== (member?.status || 'Active');
 
-    // The roster "Count" override: compare the typed (type, value) against the
-    // member's current displayed streak (absence wins the color when present).
-    const curType: 'credit' | 'absent' = (member?.absentStreak ?? 0) > 0 ? 'absent' : 'credit';
-    const curVal = curType === 'absent' ? (member?.absentStreak ?? 0) : (member?.activeCreditStreak ?? 0);
-    const streakValue = Math.max(0, Math.trunc(Number(this.editingStreakValue) || 0));
-    const streakChanged = this.editingStreakType !== curType || streakValue !== curVal;
+    // The Active Credit / Absent Streak columns are editable overrides (mutually
+    // exclusive). Apply whichever the officer actually changed: credit wins if
+    // both differ.
+    const curCredit = member?.activeCreditStreak ?? 0;
+    const curAbsent = member?.absentStreak ?? 0;
+    const newCredit = Math.max(0, Math.trunc(Number(this.editingCreditValue) || 0));
+    const newAbsent = Math.max(0, Math.trunc(Number(this.editingAbsentValue) || 0));
 
     if (rankChanged) {
       await this.activity.updateLinkshellMemberRole(linkshellId, memberId, newRank, characterName);
     }
     // Apply the streak override before an explicit status change so a manually
     // chosen status (e.g. Pending) still wins as the final word.
-    if (streakChanged) {
-      await this.activity.setMemberActiveCreditCount(
-        linkshellId, memberId, streakValue, characterName, this.editingStreakType);
+    if (newCredit !== curCredit) {
+      await this.activity.setMemberActiveCreditCount(linkshellId, memberId, newCredit, characterName, 'credit');
+    } else if (newAbsent !== curAbsent) {
+      await this.activity.setMemberActiveCreditCount(linkshellId, memberId, newAbsent, characterName, 'absent');
     }
     if (statusChanged) {
       await this.activity.updateLinkshellMemberStatus(linkshellId, memberId, newStatus, characterName);

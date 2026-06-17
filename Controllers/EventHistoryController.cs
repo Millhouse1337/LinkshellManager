@@ -98,6 +98,14 @@ public class EventHistoryController : Controller
             .Select(l => l.EnableActivityTracking)
             .FirstOrDefaultAsync();
 
+        // Step the participant-DKP editor by the linkshell's rounding increment
+        // (Quarter = 0.25 / Half = 0.5) so the input matches the Discord Activity.
+        var roundingIncrement = await _context.Linkshells
+            .Where(l => l.Id == history.LinkshellId)
+            .Select(l => l.DkpRoundingIncrement)
+            .FirstOrDefaultAsync();
+        ViewBag.DkpStep = DkpRounding.StepFor(roundingIncrement);
+
         // Post-event discussion.
         ViewBag.Comments = await _comments.ListAsync(history.Id, HttpContext.RequestAborted);
         ViewBag.CommentUserId = user.Id;
@@ -192,6 +200,22 @@ public class EventHistoryController : Controller
         TempData["EventHistoryStatus"] = changed > 0
             ? $"Active-status credit removed for the whole event ({changed} attendee{(changed == 1 ? "" : "s")})."
             : "No attendees had active-status credit to remove.";
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    // Undo absences for the ENTIRE event — stop it counting toward active tracking
+    // so members who missed it aren't marked absent for it. Recomputes statuses.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearAbsences(int id)
+    {
+        var (history, forbid) = await LoadManageableAsync(id);
+        if (forbid is not null) return forbid;
+
+        var changed = await _editService.SetEventCountsTowardActiveAsync(history!.Id, counts: false, HttpContext.RequestAborted);
+        TempData["EventHistoryStatus"] = changed
+            ? "Absences undone — this event no longer counts toward active tracking."
+            : "This event already doesn't count toward active tracking.";
         return RedirectToAction(nameof(Details), new { id });
     }
 

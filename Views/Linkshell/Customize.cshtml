@@ -190,6 +190,14 @@
                             <input type="number" min="1" max="50" class="form-control" asp-for="ActiveAfterAttendances" />
                         </label>
                     </div>
+
+                    <div class="card-title" style="font-size:14px;margin-top:14px">Outside Party Signup</div>
+                    <div style="font-size:12px;color:var(--fg-3)">
+                        Let Discord-server members who have <strong>never launched the app</strong> sign up for
+                        events straight from the party board, identified by their Discord account. Their signups
+                        show on the board and clear when the event ends — they earn no DKP and no attendance history.
+                    </div>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="OutsidePartySignupEnabled" /> Allow outside (non-account) Discord signups</label>
                 </div>
             </div>
 
@@ -208,11 +216,11 @@
                 Colour palette for the event signup board image posted to your Discord channel.
                 Applies the next time a board is posted or refreshed.
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+            <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px">
                 @foreach (var theme in LinkshellManagerDiscordApp.Services.EventBoardThemes.All)
                 {
                     var selected = string.Equals(Model.EventBoardTheme, theme.Key, StringComparison.OrdinalIgnoreCase);
-                    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid @(selected ? theme.SwatchAccent : "var(--border)");background:var(--surface)">
+                    <label style="flex:0 0 auto;min-width:160px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid @(selected ? theme.SwatchAccent : "var(--border)");background:var(--surface)">
                         <input type="radio" asp-for="EventBoardTheme" value="@theme.Key" style="margin:0" />
                         <span style="width:34px;height:34px;border-radius:8px;flex-shrink:0;background:@theme.SwatchBg;border:2px solid @theme.SwatchAccent;box-shadow:0 0 10px @theme.SwatchAccent;display:flex;align-items:center;justify-content:center">
                             <span style="width:12px;height:12px;border-radius:3px;transform:rotate(45deg);background:@theme.SwatchAccent"></span>
@@ -267,7 +275,7 @@
     <div class="card-head">
         <div class="card-title">Discord Server</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px">
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;width:100%">
         <div style="font-size:12px;color:var(--fg-3)">
             Associate this linkshell with a Discord server to power the member roster, invites,
             and channel posting. Setting a server does <strong>not</strong> restrict who can view
@@ -326,7 +334,7 @@
                     numeric ID (in Discord, with Developer Mode on, right-click the server &rarr; Copy Server ID).
                 </div>
             }
-            <div>
+            <div style="display:flex;justify-content:flex-end">
                 <button class="btn primary" type="submit">
                     @(string.IsNullOrWhiteSpace(Model.DiscordGuildId) ? "Set server" : "Change server")
                 </button>
@@ -408,12 +416,8 @@
     {
         <div class="route-row" style="border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px">
             <input type="hidden" data-field="Id" name="channelRoutes[@i].Id" value="@r.Id" />
+            <input type="hidden" data-field="Name" name="channelRoutes[@i].Name" value="@r.Name" />
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-                <label class="field" style="flex:1 1 180px">
-                    <span>Name (optional)</span>
-                    <input class="input" type="text" maxlength="64" placeholder="e.g. Sky alerts"
-                           data-field="Name" name="channelRoutes[@i].Name" value="@r.Name" autocomplete="off" />
-                </label>
                 <label class="field" style="flex:1 1 200px">
                     <span>Channel</span>
                     @if (availableChannels.Count > 0)
@@ -457,7 +461,7 @@
             </div>
 
             <div class="route-event-types" style="@(!isTemplate && r.PostEvents ? "" : "display:none;")flex-direction:column;gap:4px">
-                <span style="font-size:12px;color:var(--fg-3)">Event types (none checked = all events):</span>
+                <span style="font-size:12px;color:var(--fg-3)">Event types:</span>
                 <div style="display:flex;gap:6px 14px;flex-wrap:wrap">
                     @foreach (var et in eventTypes)
                     {
@@ -476,11 +480,11 @@
     <div class="card-head">
         <div class="card-title">Discord channel routes</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:760px">
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:760px;margin:0 auto;width:100%">
         <div style="font-size:12px;color:var(--fg-3)">
             Add a route for each channel the bot should post to, then tick which kinds of post it
-            receives. Combine several into one channel, or give each its own. Events can optionally be
-            limited to specific event types (an unfiltered event route catches the rest). Requires the
+            receives. Combine several into one channel, or give each its own. Event posts go only to
+            the event types you check (use "Other" for anything not listed). Requires the
             bot to be in your server with permission to send messages in the chosen channels.
         </div>
 
@@ -509,7 +513,7 @@
                     await RouteRow(i, Model.ChannelRoutes[i], false);
                 }
             </div>
-            <div style="display:flex;gap:10px;align-items:center">
+            <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
                 <button type="button" class="btn ghost sm" id="routeAdd">+ Add route</button>
                 <button class="btn primary" type="submit">Save channels</button>
             </div>

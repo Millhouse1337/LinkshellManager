@@ -354,7 +354,8 @@ public sealed partial class ActivityDataController
                         member.LinkshellDkp,
                         member.DateJoined,
                         member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Credit : 0,
-                        member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Absent : 0)).ToList(),
+                        member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Absent : 0,
+                        IsPlaceholder: member.AppUser?.IsPlaceholder ?? false)).ToList(),
                     primaryRules.Select(rule => new ActivityRuleDto(
                         rule.Id,
                         rule.LinkshellId,

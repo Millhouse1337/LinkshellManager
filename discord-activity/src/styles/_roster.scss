@@ -75,28 +75,27 @@
   margin-top: 4px;
   border-top: 1px dashed var(--border);
 }
+/* Management roster — full table layout matching the web ManageTeam page:
+   Character (avatar + name + alts) | Rank | Status | Active credit | Absent
+   streak | DKP | Joined | Actions. Horizontal scroll on narrow screens so the
+   columns never collapse. */
+.panel-tab .ac-roster--with-actions { overflow-x: auto; }
 .panel-tab .ac-roster--with-actions .ac-roster-head,
 .panel-tab .ac-roster--with-actions .ac-roster-row {
-  grid-template-columns: 32px 1fr 110px 80px 150px 250px;
+  grid-template-columns: minmax(170px, 1.6fr) 120px 100px 100px 112px 60px 100px minmax(180px, 1fr);
+  min-width: 960px;
 }
-/* Status cell holds the status tag + the colored streak number (and, while a
-   row is being modified, the streak-type select + count input). */
-.panel-tab .ac-roster-status-cell { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-/* While a row is being modified, widen the Status column (borrowing from the
-   flexible name column) so the status + streak-type + count controls sit on one
-   horizontal line to the right instead of stacking. */
-.panel-tab .ac-roster--with-actions .ac-roster-row.editing {
-  grid-template-columns: 32px 1fr 110px 80px 300px 220px;
-}
-/* The streak-type question shown only while modifying a row. */
-.panel-tab .ac-roster-streak-type {
-  padding: 4px 6px;
-  background: var(--surface-2);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  font-size: 12px;
-}
+/* Character cell: avatar beside the name/alts stack. */
+.panel-tab .ac-roster-char { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.panel-tab .ac-roster-char .ac-roster-name-cell { min-width: 0; }
+/* Active credit / Absent streak number columns — centered chip + header. */
+.panel-tab .ac-roster-num { text-align: center; }
+.panel-tab .ac-roster-num-head { text-align: center; }
+/* The streak chip now stands alone in its own centered column (it used to sit
+   next to the status tag, which needed a left margin). */
+.panel-tab .ac-roster-num .ac-roster-credit { margin-left: 0; }
+.panel-tab .ac-roster-joined { font-size: 12px; color: var(--fg-3); }
+.panel-tab .ac-roster-actions-head { text-align: right; }
 .panel-tab .ac-roster-count-input {
   width: 52px;
   padding: 4px 6px;
@@ -171,7 +170,10 @@
 // the right. Nothing in the markup changes — the existing five flat
 // children are reassigned to named grid areas via CSS only.
 @media (max-width: 600px) {
-  .panel-tab .ac-roster-head {
+  // The management table (--with-actions) keeps its columns and scrolls
+  // horizontally on phones; only the simpler dashboard roster reflows into
+  // 2-row mini-cards below.
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-head {
     // Column headers stop carrying information once the data is
     // labeled by visual position; hide them so the card list reads
     // cleanly top-to-bottom.
@@ -185,7 +187,7 @@
   //
   // Explicit `width: 100%` belt-and-braces guarantees the grid spans
   // the full inner width even if a parent doesn't stretch the row.
-  .panel-tab .ac-roster .ac-roster-row {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row {
     width: 100%;
     grid-template-columns: 32px 1fr auto;
     grid-template-areas:
@@ -198,13 +200,13 @@
     justify-content: stretch;
   }
 
-  .panel-tab .ac-roster .ac-roster-row > .ac-roster-av {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > .ac-roster-av {
     grid-area: av;
     align-self: center;
     justify-self: start;
   }
 
-  .panel-tab .ac-roster .ac-roster-row > .ac-roster-name-cell {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > .ac-roster-name-cell {
     grid-area: name;
     // Minimum width 0 lets the name column shrink BELOW the intrinsic
     // text width when there isn't enough room, but with `white-space:
@@ -214,14 +216,14 @@
     justify-self: start;
   }
 
-  .panel-tab .ac-roster .ac-roster-row > .ac-roster-rank {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > .ac-roster-rank {
     grid-area: rank;
     font-size: 11px;
     color: var(--fg-3);
     justify-self: start;
   }
 
-  .panel-tab .ac-roster .ac-roster-row > .ac-roster-dkp {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > .ac-roster-dkp {
     grid-area: dkp;
     align-self: center;
     justify-self: end;
@@ -231,7 +233,7 @@
 
   // The status cell in the markup is a plain unnamed <div> wrapping
   // the .tag span — target it as the 5th child.
-  .panel-tab .ac-roster .ac-roster-row > div:nth-child(5) {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > div:nth-child(5) {
     grid-area: status;
     justify-self: end;
     align-self: center;
@@ -241,7 +243,7 @@
   // break into "Millh / ouse" mid-word. Overflow stays visible so an
   // unusually long name simply pushes against the DKP column rather
   // than getting truncated with an ellipsis.
-  .panel-tab .ac-roster .ac-roster-row > .ac-roster-name-cell .ac-roster-name {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > .ac-roster-name-cell .ac-roster-name {
     white-space: nowrap;
     overflow: visible;
     line-height: 1.25;
@@ -250,7 +252,7 @@
   // Alt names beneath can still wrap if needed — they're informational
   // and usually short, but allowing a fallback wrap avoids extreme
   // overflow on multi-alt rows.
-  .panel-tab .ac-roster .ac-roster-row > .ac-roster-name-cell .ac-roster-name-sub {
+  .panel-tab .ac-roster:not(.ac-roster--with-actions) .ac-roster-row > .ac-roster-name-cell .ac-roster-name-sub {
     white-space: normal;
     overflow-wrap: anywhere;
     line-height: 1.25;

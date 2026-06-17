@@ -88,9 +88,10 @@ public sealed partial class ActivityDataController
         string? CharacterName,
         string? Role,
         string? MainJob,
-        string? SubJob);
+        string? SubJob,
+        string? AppUserId = null);
 
-    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false);
+    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false, string? CharacterName = null);
 
     [HttpGet("party-setups")]
     public async Task<IActionResult> GetPartySetupsAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)

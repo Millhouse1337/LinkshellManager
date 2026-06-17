@@ -134,7 +134,8 @@ public sealed partial class ActivityDataController
                     link.LinkshellDkp,
                     link.DateJoined,
                     link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Credit : 0,
-                    link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Absent : 0))
+                    link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Absent : 0,
+                    IsPlaceholder: link.AppUser?.IsPlaceholder ?? false))
                 .ToList()));
     }
 
@@ -267,6 +268,10 @@ public sealed partial class ActivityDataController
         {
             linkshell.EnableActivityTracking = request.EnableActivityTracking.Value;
         }
+        if (request.OutsidePartySignupEnabled.HasValue)
+        {
+            linkshell.OutsidePartySignupEnabled = request.OutsidePartySignupEnabled.Value;
+        }
         if (request.InactiveAfterAbsences.HasValue)
         {
             linkshell.InactiveAfterAbsences = Math.Max(1, request.InactiveAfterAbsences.Value);
@@ -327,6 +332,44 @@ public sealed partial class ActivityDataController
         // recompute member statuses now (no-op when tracking is off).
         await _memberActivity.ApplyComputedStatusAsync(linkshellId, cancellationToken);
 
+        return Ok(new { success = true });
+    }
+
+    // Set (or clear) the channel new post-event discussion comments mirror to.
+    // Mirrors the web LinkshellController.SetDiscussionChannel. Gated on
+    // CanCustomizeLinkshell. Empty/blank clears it (discussion stays in-app).
+    [HttpPost("linkshells/{linkshellId:int}/discussion-channel")]
+    public async Task<IActionResult> SetDiscussionChannelAsync(
+        int linkshellId,
+        [FromBody] ActivitySetDiscussionChannelRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to set the discussion channel." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanCustomizeLinkshell, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
+        if (linkshell is null)
+        {
+            return NotFound(new { error = "The selected linkshell was not found." });
+        }
+
+        var trimmed = request.ChannelId?.Trim();
+        if (!string.IsNullOrEmpty(trimmed) && (trimmed.Length > 20 || !trimmed.All(char.IsDigit)))
+        {
+            return BadRequest(new { error = "Channel ID must be the numeric Discord channel ID (digits only), or blank to clear." });
+        }
+
+        linkshell.DiscussionChannelId = string.IsNullOrEmpty(trimmed) ? null : trimmed;
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
 
@@ -552,7 +595,8 @@ public sealed partial class ActivityDataController
     // bot posts there — combine several into one channel or split them out. ---
 
     [HttpGet("linkshells/{linkshellId:int}/discord-channels")]
-    public async Task<IActionResult> GetDiscordChannelsAsync(int linkshellId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetDiscordChannelsAsync(
+        int linkshellId, CancellationToken cancellationToken, [FromQuery] bool refresh = false)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -576,7 +620,7 @@ public sealed partial class ActivityDataController
         var guild = linkshell.DiscordGuildId;
         var available = string.IsNullOrWhiteSpace(guild)
             ? null
-            : await _discordBot.ListTextChannelsAsync(guild, cancellationToken);
+            : await _discordBot.ListTextChannelsAsync(guild, cancellationToken, forceRefresh: refresh);
 
         var routes = await _dbContext.LinkshellChannelRoutes
             .AsNoTracking()

@@ -93,6 +93,7 @@ public sealed class InviteCandidateService
         var eligible = _dbContext.Users
             .Where(user =>
                 user.Id != callerAppUserId &&
+                !user.IsPlaceholder && // linkshell-only placeholders aren't real, invitable accounts
                 !existingMemberIds.Contains(user.Id) &&
                 !pendingInviteIds.Contains(user.Id));
 

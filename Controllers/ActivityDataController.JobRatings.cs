@@ -26,11 +26,26 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
         if (membership is null) return Forbid();
 
-        var targetIsMember = await _dbContext.AppUserLinkshells
-            .AnyAsync(m => m.LinkshellId == linkshellId && m.AppUserId == targetAppUserId, cancellationToken);
-        if (!targetIsMember) return NotFound(new { error = "That member was not found in this linkshell." });
-
         var characterSlot = ClampSlot(slot);
+
+        // Load the target's membership (with account, for alt levels) so we can
+        // surface the picked character's per-job levels alongside the ratings —
+        // the rater needs to see what level a job is before scoring it.
+        var targetMembership = await _dbContext.AppUserLinkshells
+            .AsNoTracking()
+            .Include(m => m.AppUser)
+            .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == targetAppUserId, cancellationToken);
+        if (targetMembership is null) return NotFound(new { error = "That member was not found in this linkshell." });
+
+        // Main character levels live on the membership; alts live on the account.
+        var storedLevels = characterSlot switch
+        {
+            1 => targetMembership.AppUser?.Alt1JobLevels,
+            2 => targetMembership.AppUser?.Alt2JobLevels,
+            _ => targetMembership.JobLevels,
+        };
+        var jobLevels = ProfileJobLevels.ToCatalogLevels(storedLevels);
+
         var rows = await _dbContext.JobRatings
             .AsNoTracking()
             .Where(r => r.LinkshellId == linkshellId && r.TargetAppUserId == targetAppUserId && r.CharacterSlot == characterSlot)
@@ -50,6 +65,7 @@ public sealed partial class ActivityDataController
             return new
             {
                 jobIndex = idx,
+                level = idx < jobLevels.Count ? jobLevels[idx] : 0,
                 hasSelf = self is not null,
                 selfGear = self?.Gear ?? 0,
                 selfSkill = self?.Skill ?? 0,

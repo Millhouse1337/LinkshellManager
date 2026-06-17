@@ -106,6 +106,13 @@ public class Linkshell
     public int InactiveAfterAbsences { get; set; } = 3;
     public int ActiveAfterAttendances { get; set; } = 2;
 
+    // Outside Party Signup: when ON, Discord-server members who have NEVER linked an
+    // LSM account can still sign up for events from the party board, tracked by their
+    // Discord user id (no account). Their signups render/function on the board and are
+    // fully cleared when the event ends — they accrue NO DKP and NO permanent history.
+    // Off by default; account users' behavior is unaffected either way.
+    public bool OutsidePartySignupEnabled { get; set; } = false;
+
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing
     // hidden. Pipe separator avoids the comma collision risk if FFXI ever

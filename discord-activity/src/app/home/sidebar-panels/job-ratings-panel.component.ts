@@ -66,8 +66,15 @@ interface TargetCharacter {
             <span>Skill</span>
           </div>
           @for (name of jobNames(); track name; let i = $index) {
-            <div class="jr__row">
-              <span class="jr__job">{{ name }}</span>
+            <div class="jr__row" [class.jr__row--unleveled]="!levels()[i]">
+              <span class="jr__job">
+                {{ name }}
+                @if (levels()[i]) {
+                  <span class="jr__lvl">Lv {{ levels()[i] }}</span>
+                } @else {
+                  <span class="jr__lvl jr__lvl--none">—</span>
+                }
+              </span>
               <app-star-rating [value]="edit[i].gear" (valueChange)="setGear(i, $event)" />
               <app-star-rating [value]="edit[i].skill" (valueChange)="setSkill(i, $event)" />
             </div>
@@ -112,7 +119,10 @@ interface TargetCharacter {
     .jr__row { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 5px 0; border-top: 1px solid var(--border); }
     .jr__row--head { color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
     .jr__row--head span:not(:first-child) { text-align: center; min-width: 92px; }
-    .jr__job { font-weight: 600; font-size: 13px; }
+    .jr__job { font-weight: 600; font-size: 13px; display: inline-flex; align-items: baseline; gap: 7px; }
+    .jr__lvl { font-weight: 600; font-size: 11px; color: var(--accent, #8d91ff); letter-spacing: .02em; }
+    .jr__lvl--none { color: var(--fg-3); font-weight: 500; }
+    .jr__row--unleveled { opacity: .55; }
     .jr__comment { margin-top: 14px; text-align: left; }
     .jr__comment label { display: block; font-size: 12px; color: var(--fg-2); margin-bottom: 4px; }
     .jr__comment textarea { width: 100%; resize: vertical; }
@@ -136,6 +146,9 @@ export class JobRatingsPanelComponent {
   protected readonly commentSaved = signal(false);
   protected readonly savingComment = signal(false);
   protected readonly edit: Record<number, { gear: number; skill: number }> = {};
+  // The selected character's per-job levels (jobIndex -> level, 0 = unleveled),
+  // shown next to each job so the rater knows what they're scoring.
+  protected readonly levels = signal<Record<number, number>>({});
 
   // Other linkshell members (never yourself), filtered by the search box.
   protected readonly filteredMembers = computed<RatingMember[]>(() => {
@@ -185,9 +198,12 @@ export class JobRatingsPanelComponent {
   protected async load(target: string, slot: number, linkshellId: number): Promise<void> {
     const res = await this.activity.loadJobRatings(linkshellId, target, slot);
     if (!res) { return; }
+    const levels: Record<number, number> = {};
     for (const j of res.jobs) {
       this.edit[j.jobIndex] = { gear: j.myGear, skill: j.mySkill };
+      levels[j.jobIndex] = j.level ?? 0;
     }
+    this.levels.set(levels);
     this.commentDraft.set(res.myComment ?? '');
   }
 

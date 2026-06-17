@@ -27,17 +27,30 @@ public static class EventPartySignupService
         ApplicationDbContext db,
         int eventId,
         PartySetupSlot slot,
-        string appUserId,
+        string? appUserId,
         string characterName,
         string? requestedRole,
         string? requestedMainJob,
         string? requestedSubJob,
         CancellationToken cancellationToken,
-        bool claimAsLeader = false)
+        bool claimAsLeader = false,
+        string? discordUserId = null)
     {
+        // "Outside Party Signup" (no linked account) keys identity by Discord user id;
+        // a normal signup keys by AppUserId. Exactly one of the two is set.
+        var isOutside = string.IsNullOrEmpty(appUserId);
+
         var existing = await db.EventPartySlotSignups
             .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == slot.Id, cancellationToken);
-        if (existing is not null && existing.AppUserId != appUserId)
+        // A placeholder-matched claim carries BOTH ids; also treat the slot as "mine"
+        // if it's a row this Discord user already holds (e.g. one they claimed as a
+        // true-outside signup before the leader created their linkshell-only member),
+        // so re-signing up adopts it instead of being blocked as "taken".
+        var isMine = existing is not null && (isOutside
+            ? existing.AppUserId == null && existing.DiscordUserId == discordUserId
+            : existing.AppUserId == appUserId
+              || (!string.IsNullOrEmpty(discordUserId) && existing.DiscordUserId == discordUserId));
+        if (existing is not null && !isMine)
         {
             return new ClaimResult(false, $"That slot was just taken by {existing.CharacterName ?? "another member"}.");
         }
@@ -48,10 +61,20 @@ public static class EventPartySignupService
             return new ClaimResult(false, jobs.Error);
         }
 
-        // One slot per event: release any other slot the member holds in this event.
-        var others = await db.EventPartySlotSignups
-            .Where(s => s.EventId == eventId && s.AppUserId == appUserId && s.PartySetupSlotId != slot.Id)
-            .ToListAsync(cancellationToken);
+        // One slot per event: release any OTHER slot the member holds in this event,
+        // matched by whichever identity is in play — for a placeholder match that's the
+        // placeholder's AppUserId OR the clicker's Discord id (catches a prior
+        // true-outside slot the same person holds, so they're never double-slotted).
+        var others = isOutside
+            ? await db.EventPartySlotSignups
+                .Where(s => s.EventId == eventId && s.PartySetupSlotId != slot.Id
+                    && s.AppUserId == null && s.DiscordUserId == discordUserId)
+                .ToListAsync(cancellationToken)
+            : await db.EventPartySlotSignups
+                .Where(s => s.EventId == eventId && s.PartySetupSlotId != slot.Id
+                    && (s.AppUserId == appUserId
+                        || (discordUserId != null && s.DiscordUserId == discordUserId)))
+                .ToListAsync(cancellationToken);
         if (others.Count > 0)
         {
             db.EventPartySlotSignups.RemoveRange(others);
@@ -62,7 +85,9 @@ public static class EventPartySignupService
             existing = new EventPartySlotSignup { EventId = eventId, PartySetupSlotId = slot.Id };
             db.EventPartySlotSignups.Add(existing);
         }
+        // Stamp both ids (one is null) so a reused row never carries a stale identity.
         existing.AppUserId = appUserId;
+        existing.DiscordUserId = discordUserId;
         existing.CharacterName = characterName;
         existing.Role = jobs.Role;
         existing.MainJob = jobs.MainJob;
@@ -89,12 +114,21 @@ public static class EventPartySignupService
     // the member left (so the caller can re-resolve that party's leadership), or
     // null if they held no slot.
     public static async Task<int?> LeaveAsync(
-        ApplicationDbContext db, int eventId, string appUserId, CancellationToken cancellationToken)
+        ApplicationDbContext db, int eventId, string? appUserId, CancellationToken cancellationToken,
+        string? discordUserId = null)
     {
-        var held = await db.EventPartySlotSignups
-            .Include(s => s.PartySetupSlot)
-            .Where(s => s.EventId == eventId && s.AppUserId == appUserId)
-            .ToListAsync(cancellationToken);
+        var isOutside = string.IsNullOrEmpty(appUserId);
+        var held = isOutside
+            // Outside clicker: match by Discord id ALONE (not also AppUserId == null) so
+            // it also finds a placeholder-matched slot, which carries a non-null AppUserId.
+            ? await db.EventPartySlotSignups
+                .Include(s => s.PartySetupSlot)
+                .Where(s => s.EventId == eventId && s.DiscordUserId == discordUserId)
+                .ToListAsync(cancellationToken)
+            : await db.EventPartySlotSignups
+                .Include(s => s.PartySetupSlot)
+                .Where(s => s.EventId == eventId && s.AppUserId == appUserId)
+                .ToListAsync(cancellationToken);
         if (held.Count == 0)
         {
             return null;
@@ -219,11 +253,33 @@ public static class EventPartySignupService
     // claim into a live participation immediately so the late joiner appears in the
     // running event. Does NOT commit — the caller owns SaveChanges.
     public static async Task SyncParticipationAfterClaimAsync(
-        ApplicationDbContext db, Event eventEntity, string appUserId, CancellationToken cancellationToken)
+        ApplicationDbContext db, Event eventEntity, string? appUserId, CancellationToken cancellationToken,
+        string? discordUserId = null)
     {
+        var isOutside = string.IsNullOrEmpty(appUserId);
+
+        // Outside (no-account) signups are NEVER materialized into live participation —
+        // they have no account to accrue attendance/DKP, and stay board-only. Pre-start
+        // we still drop any stray no-slot attendance they hold (one identity per event).
+        if (isOutside)
+        {
+            if (eventEntity.CommencementStartTime is not null)
+            {
+                return;
+            }
+            var outsideRows = await db.AppUserEvents
+                .Where(p => p.EventId == eventEntity.Id && p.AppUserId == null && p.DiscordUserId == discordUserId)
+                .ToListAsync(cancellationToken);
+            if (outsideRows.Count > 0)
+            {
+                db.AppUserEvents.RemoveRange(outsideRows);
+            }
+            return;
+        }
+
         if (eventEntity.CommencementStartTime is not null)
         {
-            await MaterializeOneAsParticipantAsync(db, eventEntity, appUserId, cancellationToken);
+            await MaterializeOneAsParticipantAsync(db, eventEntity, appUserId!, cancellationToken);
             return;
         }
 
@@ -342,6 +398,9 @@ public static class EventPartySignupService
             db.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = signup.AppUserId,
+                // Carry the Discord identity so an outside signup can still withdraw
+                // (and stays one-per-event) after a setup change moves it to no-slot.
+                DiscordUserId = signup.DiscordUserId,
                 EventId = eventId,
                 CharacterName = signup.CharacterName,
                 JobName = signup.MainJob,

@@ -12,6 +12,9 @@ interface SlotSignupDraft {
   subJob: string;
   // When true, signing up also claims the party-leader spot (event board only).
   asLeader: boolean;
+  // Event board only: which character to sign up as ('' = main). Picker shows
+  // only when the member has alts.
+  characterName: string;
 }
 
 // Shared interactive view of a single party setup's alliance -> party -> slot
@@ -120,7 +123,7 @@ export class PartySetupPanelComponent {
   }
 
   protected draftFor(slotId: number): SlotSignupDraft {
-    return this.drafts()[slotId] ?? { role: '', mainJob: '', subJob: '', asLeader: false };
+    return this.drafts()[slotId] ?? { role: '', mainJob: '', subJob: '', asLeader: false, characterName: '' };
   }
 
   protected setDraft(slotId: number, patch: Partial<SlotSignupDraft>): void {
@@ -174,6 +177,12 @@ export class PartySetupPanelComponent {
     return this.eventId() > 0;
   }
 
+  // Characters the member can sign up as (main + alts). Only used on the event
+  // board; the picker renders when there's more than one.
+  protected signupCharacterOptions(): string[] {
+    return this.activity.signupCharacterOptions();
+  }
+
   // True once any slot in the party has a per-event leader, so the "Sign up as
   // leader" action is hidden (first-claim-wins).
   protected partyHasLeader(party: { slots: ActivityPartySetupSlot[] }): boolean {
@@ -188,10 +197,10 @@ export class PartySetupPanelComponent {
       subJob: this.needsSubJob(slot) ? (draft.subJob || null) : null
     };
     const ok = this.eventId() > 0
-      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader })
+      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader, characterName: draft.characterName || null })
       : await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
     if (ok) {
-      this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
+      this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false, characterName: '' });
     }
   }
 
@@ -201,5 +210,14 @@ export class PartySetupPanelComponent {
     } else {
       await this.partySetup.withdraw(this.setupId(), slot.slotId);
     }
+  }
+
+  // Drop a no-slot ("Also attending") signup for the current member, then reload
+  // the board so the row disappears. Event boards only.
+  protected async withdrawNoSlot(): Promise<void> {
+    const eventId = this.eventId();
+    if (eventId <= 0) { return; }
+    await this.activity.unsignFromEvent(eventId);
+    await this.partySetup.loadEventBoard(eventId);
   }
 }

@@ -65,6 +65,7 @@ public sealed partial class ActivityDataController
         var eligible = _dbContext.Users
             .Where(user =>
                 user.Id != appUser.Id &&
+                !user.IsPlaceholder && // linkshell-only placeholders aren't real, invitable accounts
                 !existingMemberIds.Contains(user.Id) &&
                 !pendingInviteIds.Contains(user.Id) &&
                 (

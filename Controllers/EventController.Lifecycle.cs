@@ -299,6 +299,7 @@ public partial class EventController
         await _context.SaveChangesAsync();
         // Auto-promote earliest signup if the party just filled with no leader.
         await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, slot.PartySetupPartyId, HttpContext.RequestAborted);
+        EnqueueEventBoardRefresh(eventId);
 
         return SafeLocalRedirect(returnUrl);
     }
@@ -396,6 +397,7 @@ public partial class EventController
         }
         await _context.SaveChangesAsync();
         await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, affectedPartyId, HttpContext.RequestAborted);
+        EnqueueEventBoardRefresh(eventId);
 
         return SafeLocalRedirect(returnUrl);
     }
@@ -645,6 +647,15 @@ public partial class EventController
             return Forbid();
         }
 
+        // Loot validation errors surface as a dismissable toast on the event page
+        // (the message rides back in TempData over a redirect) instead of replacing
+        // the page with a bare 400 body.
+        IActionResult LootError(string message)
+        {
+            TempData["LootError"] = message;
+            return RedirectToAction(nameof(Start), new { eventId });
+        }
+
         const int MaxItemNameLength = 200;
         const int MaxLootDkp = 1_000_000;
 
@@ -652,29 +663,36 @@ public partial class EventController
         var trimmedWinner = (itemWinner ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(trimmedItemName) || trimmedItemName.Length > MaxItemNameLength)
         {
-            return BadRequest("Item name is required and must be 200 characters or fewer.");
+            return LootError("Item name is required and must be 200 characters or fewer.");
         }
         if (string.IsNullOrEmpty(trimmedWinner) || trimmedWinner.Length > MaxItemNameLength)
         {
-            return BadRequest("Item winner is required and must be 200 characters or fewer.");
+            return LootError("Item winner is required and must be 200 characters or fewer.");
         }
         if (winningDkpSpent < 0 || winningDkpSpent > MaxLootDkp)
         {
-            return BadRequest($"Winning DKP must be between 0 and {MaxLootDkp:N0}.");
+            return LootError($"Winning DKP must be between 0 and {MaxLootDkp:N0}.");
         }
 
-        // Winner must be a current linkshell member (case-insensitive match on the
-        // trimmed CharacterName) so an officer can't accidentally — or maliciously —
-        // assign loot to a non-roster name.
-        var rosterMatch = await _context.AppUserLinkshells
-            .Where(link => link.LinkshellId == eventEntity.LinkshellId
-                        && link.CharacterName != null
-                        && link.CharacterName.ToLower() == trimmedWinner.ToLower())
-            .Select(link => link.CharacterName!)
-            .FirstOrDefaultAsync();
+        // Winner must be a current linkshell member's character — MAIN or either ALT
+        // (alts share the main's account). An officer can't assign loot to a non-roster
+        // name. The matched character name is stored as-is so the loot log shows who
+        // actually won; the DKP is deducted from the owning account at close (see
+        // ResolveLootWinnerMembership) and balance-checked against it here.
+        var rosterMembers = await _context.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
+            .ToListAsync();
+        string? MatchName(string? name) =>
+            !string.IsNullOrWhiteSpace(name) && string.Equals(name.Trim(), trimmedWinner, StringComparison.OrdinalIgnoreCase)
+                ? name.Trim()
+                : null;
+        var rosterMatch = rosterMembers
+            .Select(link => MatchName(link.CharacterName) ?? MatchName(link.AppUser?.AltCharacterName1) ?? MatchName(link.AppUser?.AltCharacterName2))
+            .FirstOrDefault(matched => matched is not null);
         if (rosterMatch is null)
         {
-            return BadRequest("Winner must be a current linkshell member.");
+            return LootError("Winner must be a current linkshell member (main or alt).");
         }
 
         // Block awarding loot the winner can't afford (DKP is deducted at close,
@@ -683,7 +701,7 @@ public partial class EventController
             _context, eventId, eventEntity.LinkshellId, rosterMatch, winningDkpSpent, default);
         if (insufficient is not null)
         {
-            return BadRequest(insufficient);
+            return LootError(insufficient);
         }
 
         _context.EventLootDetails.Add(new EventLootDetail
@@ -801,6 +819,7 @@ public partial class EventController
         };
 
         var linkshellMemberships = await dbContext.AppUserLinkshells
+            .Include(link => link.AppUser) // alt names, for resolving alt-won loot to the account
             .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
             .ToListAsync();
         var membershipsByAppUserId = linkshellMemberships
