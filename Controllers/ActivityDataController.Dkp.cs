@@ -75,12 +75,19 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        // DKP each member has spent on loot in still-live events but that hasn't been
+        // committed to the ledger yet. Shown as a pending deduction; already removed from
+        // biddable power so it can't be double-spent before the event closes.
+        var pendingLootByUser = await AuctionDkpService.ComputePendingLiveLootSpendByUserAsync(
+            _dbContext, selectedLinkshellId, cancellationToken);
+
         var memberDtos = linkshellMembers
             .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
             .Select(link => new ActivityDkpHistoryMemberDto(
                 link.AppUserId!,
                 link.CharacterName ?? "Unknown member",
-                link.LinkshellDkp ?? 0))
+                link.LinkshellDkp ?? 0,
+                pendingLootByUser.GetValueOrDefault(link.AppUserId!)))
             .ToList();
 
         if (memberDtos.Count == 0)
@@ -139,7 +146,8 @@ public sealed partial class ActivityDataController
             memberDtos.First(member => member.AppUserId == selectedAppUserId).CharacterName,
             memberDtos.First(member => member.AppUserId == selectedAppUserId).CurrentBalance,
             memberDtos,
-            projected));
+            projected,
+            pendingLootByUser.GetValueOrDefault(selectedAppUserId ?? string.Empty)));
     }
 
     [HttpPost("dkp-audit")]

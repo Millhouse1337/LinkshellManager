@@ -42,11 +42,11 @@
                                 {
                                     @if (Model.SelectedAppUserId == member.AppUserId)
                                     {
-                                        <option value="@member.AppUserId" selected>@member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)</option>
+                                        <option value="@member.AppUserId" selected>@member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP@(member.PendingLootSpend > 0 ? " −" + member.PendingLootSpend.ToString("0.##") + " pending loot" : ""))</option>
                                     }
                                     else
                                     {
-                                        <option value="@member.AppUserId">@member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP)</option>
+                                        <option value="@member.AppUserId">@member.CharacterName (@member.CurrentBalance.ToString("0.##") DKP@(member.PendingLootSpend > 0 ? " −" + member.PendingLootSpend.ToString("0.##") + " pending loot" : ""))</option>
                                     }
                                 }
                             </select>
@@ -56,6 +56,14 @@
                     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:grid;grid-template-columns:110px 1fr;gap:8px 12px;font-size:13px">
                         <div style="color:var(--fg-3)">Member</div><div>@Model.SelectedMemberName</div>
                         <div style="color:var(--fg-3)">Balance</div><div class="num" style="font-weight:600">@Model.CurrentBalance.ToString("0.##")</div>
+                        @if (Model.SelectedPendingLootSpend > 0)
+                        {
+                            <div style="color:var(--fg-3)">Pending loot</div>
+                            <div class="num" title="Spent on loot in a live event, not yet committed — blocked from biddable DKP until the event ends">
+                                <span style="color:var(--danger,#ff6b6b);font-weight:600">−@Model.SelectedPendingLootSpend.ToString("0.##")</span>
+                                <span style="color:var(--fg-3)"> (live · @((Model.CurrentBalance - Model.SelectedPendingLootSpend).ToString("0.##")) biddable)</span>
+                            </div>
+                        }
                     </div>
                 }
             </div>

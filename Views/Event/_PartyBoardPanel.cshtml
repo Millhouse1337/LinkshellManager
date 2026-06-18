@@ -8,6 +8,7 @@
 *@
 <div class="event-ps-board" data-event-party-board
      data-event-id="@Model.EventId"
+     data-linkshell-id="@Model.LinkshellId"
      data-can-manage="@(Model.CanManageParties ? "1" : "0")"
      data-return-url="@Model.ReturnUrl">
 
@@ -92,6 +93,7 @@
                                                 @foreach (var j in Model.SubJobOptions) { <option value="@j" selected="@(string.Equals(j, slot.SubJob, StringComparison.OrdinalIgnoreCase))">@j</option> }
                                             </select>
                                             <button type="button" class="btn xs primary" data-job-save>Save</button>
+                                            <button type="button" class="btn xs" data-job-cancel>Cancel</button>
                                         </div>
                                     }
 
@@ -141,7 +143,7 @@
                                                 <form class="ps-view-only" asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@Model.EventId" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-                                                    <button type="submit" class="btn ghost sm" style="color:var(--danger)" title="Free this slot (also removes them from the live roster)">Clear</button>
+                                                    <button type="submit" class="btn ghost sm" style="color:var(--danger)" title="Free this slot (also removes them from the live roster)">Withdraw from Slot</button>
                                                 </form>
                                             }
                                         </div>
@@ -161,12 +163,31 @@
         </div>
     }
 
-    @if (Model.AlsoAttending.Count > 0)
-    {
-        <div class="event-ps-alliance-title">Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></div>
-        <div class="event-ps-also" style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 4px 8px">
-            @foreach (var a in Model.AlsoAttending)
+    @* Also Attending always renders (underneath the parties) so the section is visible
+       even when empty, and the no-slot self sign-up lives in its header. *@
+    <div class="event-ps-alliance-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span>Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></span>
+        @* No-slot self sign-up for this event (mirrors the Discord/Activity "Join (no slot)"):
+           join the roster without claiming a party slot. event-party-board.js submits it via
+           fetch so the page doesn't reload. *@
+        <form class="ps-view-only" asp-controller="Event" asp-action="SignUp" method="post"
+              style="display:inline-flex;gap:6px;margin-left:auto;align-items:center">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="eventId" value="@Model.EventId" />
+            @if (Model.SignupCharacters.Count > 1)
             {
+                <select name="characterName" class="form-select" title="Sign up as">@foreach (var c in Model.SignupCharacters) { <option value="@c">@c</option> }</select>
+            }
+            <button type="submit" class="btn sm" title="Join the roster without claiming a party slot">Join (No Slot)</button>
+        </form>
+    </div>
+    <div class="event-ps-also" style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 4px 8px">
+        @if (Model.AlsoAttending.Count == 0)
+        {
+            <span class="muted" style="font-size:12px">No one is attending without a slot yet.</span>
+        }
+        @foreach (var a in Model.AlsoAttending)
+        {
                 var jobBits = new List<string>();
                 if (!string.IsNullOrWhiteSpace(a.JobType)) { jobBits.Add(a.JobType!); }
                 if (!string.IsNullOrWhiteSpace(a.JobName)) { jobBits.Add(string.IsNullOrWhiteSpace(a.SubJobName) ? a.JobName! : $"{a.JobName}/{a.SubJobName}"); }
@@ -175,12 +196,14 @@
                     @if (jobBits.Count > 0) { <span class="muted">· @string.Join(" - ", jobBits)</span> }
                     @if (Model.CanManageParties && !string.IsNullOrEmpty(a.AppUserId))
                     {
-                        <select class="ps-move-select ps-edit-only" data-seat-member title="Seat this member into a slot">
-                            <option value="">Seat…</option>
+                        @* Officers can assign an Also-Attending member to an open slot WITHOUT
+                           entering Edit layout, so this is NOT ps-edit-only. Options are filled
+                           by event-party-board.js (populateMoveTargets, on init + after refresh). *@
+                        <select class="ps-move-select" data-seat-member title="Assign this member to an open slot">
+                            <option value="">Assign to slot…</option>
                         </select>
                     }
                 </span>
-            }
-        </div>
-    }
+        }
+    </div>
 </div>

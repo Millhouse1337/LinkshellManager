@@ -111,6 +111,7 @@
                           }
                         </select>
                         <button type="button" class="btn xs primary" (click)="saveJobEdit(slot)" [disabled]="partySetup.busy()">Save</button>
+                        <button type="button" class="btn xs" (click)="cancelJobEdit()">Cancel</button>
                       </div>
                     }
 
@@ -179,7 +180,7 @@
                           @if (isMine(slot) && !live()) {
                             <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Withdraw</button>
                           } @else if (canManage()) {
-                            <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Clear</button>
+                            <button type="button" class="btn sm ghost" (click)="withdraw(slot)" [disabled]="partySetup.busy()">Withdraw from Slot</button>
                           }
                         }
                       </div>
@@ -212,13 +213,14 @@
             <div class="ps-also-row">
               <span class="ps-also-name">{{ a.characterName || 'Member' }}</span>
               <span class="ps-also-job">{{ a.role || 'Any' }}@if (a.mainJob) { · {{ a.mainJob }}@if (a.subJob) {/{{ a.subJob }}}}</span>
-              @if (editEnabled() && a.appUserId && openSlotTargets().length > 0) {
+              @if (canEdit() && a.appUserId && openSlotTargets().length > 0) {
                 <select class="ps-move-select" (change)="seatAttendee(a, $any($event.target).value); $any($event.target).value = ''"
-                  title="Seat this member into a slot">
-                  <option value="">Seat&hellip;</option>
+                  title="Assign this member to an open slot">
+                  <option value="">Assign to slot&hellip;</option>
                   @for (t of openSlotTargets(); track t.slotId) { <option [value]="t.slotId">→ {{ t.label }}</option> }
                 </select>
-              } @else if (isEventBoard() && a.appUserId && a.appUserId === myAppUserId() && (!live() || canManage())) {
+              }
+              @if (isEventBoard() && a.appUserId && a.appUserId === myAppUserId() && (!live() || canManage())) {
                 <button type="button" class="btn sm ghost ps-also-withdraw" (click)="withdrawNoSlot()" [disabled]="partySetup.busy()">Withdraw</button>
               }
             </div>

@@ -402,6 +402,8 @@ export interface ActivityMember {
   // True for an "unsynced" member (a player who hasn't linked an account) — badged in
   // the roster. (Backed by a placeholder account server-side; see AppUser.IsPlaceholder.)
   isPlaceholder?: boolean;
+  // Spendable DKP right now (committed − bid locks − pending live-event loot spend).
+  biddableDkp?: number;
 }
 
 // "Jobs Roster" — every member's leveled jobs. jobCatalog is the job-name order
@@ -450,6 +452,11 @@ export interface ActivityEventParticipant {
   isQuickJoin: boolean;
   isVerified?: boolean | null;
   isOnBreak?: boolean | null;
+  // True when they used "Withdraw From Event" (parked in the Break Room, not intending
+  // to return) vs a normal break — drives a "Not returning" label. Cleared on resume.
+  withdrewFromEvent?: boolean | null;
+  // Spendable DKP right now (committed − bid locks − pending live-event loot spend).
+  biddableDkp?: number;
   proctor?: string | null;
   startTime?: string | null;
   resumeTime?: string | null;
@@ -718,6 +725,9 @@ export interface ActivityDkpHistoryMember {
   appUserId: string;
   characterName: string;
   currentBalance: number;
+  // DKP spent on loot in still-live events, not yet committed. Shown as a pending
+  // deduction; already removed from biddable power so it can't be double-spent.
+  pendingLootSpend?: number;
 }
 
 export interface ActivityDkpLedgerEntry {
@@ -782,6 +792,9 @@ export interface ActivityDkpHistory {
   currentBalance: number;
   members: ActivityDkpHistoryMember[];
   entries: ActivityDkpLedgerEntry[];
+  // Selected member's DKP spent on loot in still-live events, not yet committed. Shown as
+  // a pending deduction; already removed from biddable power.
+  selectedPendingLootSpend?: number;
 }
 
 export interface ActivityAuctionItem {
@@ -987,12 +1000,20 @@ export interface ActivityQuickJoinInput {
 // A past (closed) event for the Activity event-history view.
 export interface ActivityEventHistoryParticipant {
   id: number;
+  appUserId?: string | null;
   characterName?: string | null;
   jobName?: string | null;
   subJobName?: string | null;
   duration?: number | null;
   eventDkp?: number | null;
   activeCredit?: boolean;
+}
+
+// A linkshell member who did NOT attend a given past event (so they can be marked
+// Absent — the default — or added with DKP).
+export interface ActivityEventHistoryAbsentee {
+  appUserId: string;
+  characterName?: string | null;
 }
 
 export interface ActivityEventHistory {
@@ -1006,6 +1027,7 @@ export interface ActivityEventHistory {
   dkpPerHour?: number | null;
   eventDkp?: number | null;
   participants: ActivityEventHistoryParticipant[];
+  absentees?: ActivityEventHistoryAbsentee[];
 }
 
 export interface ActivityEventHistoryResponse {

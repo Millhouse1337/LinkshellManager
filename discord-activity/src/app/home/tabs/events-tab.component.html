@@ -72,12 +72,24 @@
                   </button>
                 }
                 @if (isParticipant(event)) {
-                  <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
-                    [disabled]="activity.busyEventId() === event.id"
-                    (click)="withdrawFromEvent(event)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                    Withdraw From Event
-                  </button>
+                  @if (pendingWithdrawEventId() === event.id) {
+                    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:480px">
+                      <span style="font-size:12px;color:var(--fg-2)">{{ event.commencementStartTime
+                        ? 'Move to the Break Room? Your timer pauses — your DKP and attendance are kept, and you resume right where you left off.'
+                        : 'Withdraw your signup from this event?' }}</span>
+                      <button type="button" class="btn danger-fill sm"
+                        [disabled]="activity.busyEventId() === event.id"
+                        (click)="withdrawFromEvent(event)">Confirm</button>
+                      <button type="button" class="btn ghost sm" (click)="abortWithdraw()">Cancel</button>
+                    </div>
+                  } @else {
+                    <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="requestWithdraw(event.id)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                      Withdraw From Event
+                    </button>
+                  }
                 }
               </div>
             </div>
@@ -288,7 +300,11 @@
                   @for (participant of attendanceParticipants(event); track participant.id) {
                     <li>
                       <div class="participant-list__copy">
-                        <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
+                        <strong>{{ participant.characterName || 'Unknown participant' }}
+                          @if (participant.biddableDkp != null) {
+                            <span class="tag default num" title="Biddable DKP now = balance − bids they're winning − DKP spent on loot this event">{{ participant.biddableDkp }} biddable</span>
+                          }
+                        </strong>
                         <span>
                           {{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}
                           @if (participant.isQuickJoin) { <span> | late join</span> }
@@ -297,6 +313,7 @@
                           <span class="tag default">Role {{ participant.jobType || 'Unassigned' }}</span>
                           @if (participant.startTime) {
                             <span class="tag default num">Timer {{ participantTimerLabel(participant, event) }}</span>
+                            <span class="tag default num">DKP {{ participantCurrentDkp(participant, event) }}</span>
                           }
                         </div>
                       </div>
@@ -340,6 +357,9 @@
                       <div class="participant-list__copy">
                         <div class="participant-list__identity">
                           <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
+                          @if (participant.biddableDkp != null) {
+                            <span class="tag default num" title="Biddable DKP now = balance − bids they're winning − DKP spent on loot this event">{{ participant.biddableDkp }} biddable</span>
+                          }
                           <span class="verification-badge verification-badge--approved">
                             {{ attendanceBadgeLabel(participant) }}
                           </span>
@@ -424,6 +444,9 @@
                         </span>
                         <div class="live-metrics">
                           <span class="tag warning">On break</span>
+                          @if (participant.withdrewFromEvent) {
+                            <span class="tag danger" title="Withdrew from the event — kept here so they can resume if they come back">Not returning</span>
+                          }
                           <span class="tag default num">Accrued DKP {{ participantCurrentDkp(participant, event) }}</span>
                         </div>
                       </div>

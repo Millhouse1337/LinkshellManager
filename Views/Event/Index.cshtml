@@ -188,16 +188,38 @@ else
                 else panel.setAttribute('hidden', '');
             });
 
-            // Sign up / Withdraw / manual-signup forms live inside a party-setup
-            // panel and post with a full page reload. Remember which panel was
-            // open so we re-expand it after the redirect instead of collapsing
-            // back to the summary.
-            document.addEventListener('submit', function (e) {
+            // Sign up / Withdraw / manual-signup forms live inside a party-setup panel.
+            // Submit them via fetch and swap ONLY that panel in place — no full page
+            // reload. (Falls back to a normal submit on a network error, and to a reload
+            // if the panel can't be located in the response.)
+            document.addEventListener('submit', async function (e) {
                 var form = e.target;
                 if (!form || !form.closest) return;
                 var panel = form.closest('.event-ps-panel');
-                if (panel && panel.id) {
-                    try { sessionStorage.setItem(STORE_KEY, panel.id); } catch (err) { /* ignore */ }
+                if (!panel || !panel.id) return;
+                var panelId = panel.id;
+                // Remember the open panel so a fallback full reload re-expands it.
+                try { sessionStorage.setItem(STORE_KEY, panelId); } catch (err) { /* ignore */ }
+                e.preventDefault();
+                var fd = new FormData(form);
+                // FormData omits the clicked submit button — re-add it (e.g. asLeader=true/false).
+                if (e.submitter && e.submitter.name) { fd.append(e.submitter.name, e.submitter.value); }
+                var res;
+                try {
+                    res = await fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                } catch (err) { form.submit(); return; }
+                var fresh = null;
+                try {
+                    var doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+                    fresh = doc.getElementById(panelId);
+                } catch (err) { /* ignore */ }
+                var current = document.getElementById(panelId);
+                if (fresh && current) {
+                    current.replaceWith(fresh);
+                    fresh.removeAttribute('hidden'); // keep it expanded after the swap
+                    try { sessionStorage.removeItem(STORE_KEY); } catch (err) { /* ignore */ }
+                } else {
+                    window.location.reload();
                 }
             });
 
@@ -304,6 +326,15 @@ else
                     // controller's redirect lands back here AND re-opens the
                     // matching event's panel (page-load JS reads the hash).
                     var returnUrl = $"{eventIndexUrl}#{setupPanelId}";
+                    // "Also attending" = participants with no party slot (e.g. Join no-slot).
+                    var slotNames = item.LinkedPartySetupBoard?.Alliances
+                        .SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+                        .Where(s => !string.IsNullOrWhiteSpace(s.SignedUpCharacterName))
+                        .Select(s => s.SignedUpCharacterName!.Trim())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var alsoAttending = item.AppUserEvents
+                        .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName) && !slotNames.Contains(p.CharacterName!.Trim()))
+                        .ToList();
                 }
 
                 @if (hasLinkedBoard)
@@ -442,6 +473,23 @@ else
                                             <div class="event-ps-empty">No slots.</div>
                                         }
                                     </div>
+                                }
+                            </div>
+                        }
+
+                        @if (alsoAttending.Count > 0)
+                        {
+                            <div class="event-ps-alliance-title" style="margin-top:8px">Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></div>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 8px">
+                                @foreach (var a in alsoAttending)
+                                {
+                                    <span class="event-ps-chip @(a.CharacterName == currentCharacter ? "event-ps-chip--mine" : null)">
+                                        @a.CharacterName@(a.CharacterName == currentCharacter ? " (you)" : "")
+                                        @if (!string.IsNullOrEmpty(a.JobName))
+                                        {
+                                            <span class="muted">· @a.JobName@(string.IsNullOrEmpty(a.SubJobName) ? "" : "/" + a.SubJobName)</span>
+                                        }
+                                    </span>
                                 }
                             </div>
                         }

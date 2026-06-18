@@ -500,7 +500,7 @@
               name="selectedDkpHistoryAppUserId">
               @for (member of filteredDkpMembers(); track member.appUserId) {
                 <option [ngValue]="member.appUserId">
-                  {{ member.characterName }} ({{ member.currentBalance }} DKP)
+                  {{ member.characterName }} ({{ member.currentBalance }} DKP{{ member.pendingLootSpend ? ' −' + member.pendingLootSpend + ' pending loot' : '' }})
                 </option>
               }
             </select>
@@ -513,6 +513,11 @@
         <div class="summary-card dkp-summary-card">
           <strong>{{ dkpHistory.selectedMemberName || 'Unknown member' }}</strong>
           <p>Current DKP: {{ dkpHistory.currentBalance }}</p>
+          @if (dkpHistory.selectedPendingLootSpend && dkpHistory.selectedPendingLootSpend > 0) {
+            <p class="muted" title="Spent on loot in a live event, not yet committed — blocked from biddable DKP until the event ends">
+              − {{ dkpHistory.selectedPendingLootSpend }} pending loot (live) · {{ dkpHistory.currentBalance - dkpHistory.selectedPendingLootSpend }} biddable
+            </p>
+          }
           @if (dkpHistory.linkshellName) {
             <p class="muted">{{ dkpHistory.linkshellName }}</p>
           }

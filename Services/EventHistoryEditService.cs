@@ -88,6 +88,95 @@ public sealed class EventHistoryEditService
         return true;
     }
 
+    // Add a member to a CLOSED event after the fact and grant them DKP — tied into the
+    // DKP data exactly like an original attendee: creates the attendance row, the canonical
+    // per-member "EventEarned" ledger entry, and adds the DKP to their spendable balance
+    // (and lifetime Total via the ledger sum). Returns false if the history/member is
+    // missing or they're already on the event. Recomputes the activity streak after.
+    public async Task<bool> AddParticipantAsync(
+        int historyId,
+        string appUserId,
+        double dkp,
+        string? jobType,
+        string? jobName,
+        string? subJobName,
+        bool activeCredit,
+        CancellationToken cancellationToken)
+    {
+        var history = await _db.EventHistories
+            .Include(h => h.AppUserEventHistories)
+            .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
+        if (history is null) return false;
+        if (history.AppUserEventHistories.Any(p => string.Equals(p.AppUserId, appUserId, StringComparison.Ordinal)))
+        {
+            return false; // already on the event — correct their DKP via SetParticipantDkp instead
+        }
+
+        var membership = await _db.AppUserLinkshells
+            .Include(m => m.AppUser)
+            .FirstOrDefaultAsync(m => m.LinkshellId == history.LinkshellId && m.AppUserId == appUserId, cancellationToken);
+        if (membership is null) return false; // not a member of this linkshell
+
+        var step = await StepForAsync(history.LinkshellId, cancellationToken);
+        // Clamp to >= 0 on the SERVER (the client min=0 is only advisory and can be
+        // bypassed) so a granted amount can never silently penalise a member's balance.
+        var earned = DkpRounding.Round(Math.Max(0, dkp), step);
+        var characterName = membership.CharacterName ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Unknown member";
+
+        history.AppUserEventHistories.Add(new AppUserEventHistory
+        {
+            EventHistoryId = history.Id,
+            AppUserId = appUserId,
+            CharacterName = characterName,
+            JobType = Clean(jobType),
+            JobName = Clean(jobName),
+            SubJobName = Clean(subJobName),
+            StartTime = history.StartTime,
+            Duration = history.Duration,
+            EventDkp = earned,
+            IsQuickJoin = true, // added after the fact, not part of the original roster
+            IsVerified = true,  // an officer is adding them, so treat as verified
+            ActiveCredit = activeCredit,
+        });
+
+        // DKP tie-in: add to the spendable balance + record the canonical EventEarned
+        // ledger row (one per member per event — edits/removals rely on it existing).
+        membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) + earned;
+        _db.DkpLedgerEntries.Add(new DkpLedgerEntry
+        {
+            AppUserId = appUserId,
+            EventHistoryId = history.Id,
+            LinkshellId = history.LinkshellId,
+            EntryType = EventEarnedEntryType,
+            Amount = earned,
+            Sequence = 1,
+            OccurredAt = history.EndTime ?? DateTime.UtcNow,
+            CharacterName = characterName,
+            EventName = history.EventName,
+            EventType = history.EventType,
+            EventLocation = history.EventLocation,
+            EventStartTime = history.StartTime,
+            EventEndTime = history.EndTime,
+            Details = "DKP earned from completed event (member added afterward).",
+        });
+
+        history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrency: another officer added the same member to this event a moment
+            // earlier, so this insert hit the unique (EventHistoryId, AppUserId) index.
+            // Treat it as a no-op "already added" rather than surfacing a 500.
+            return false;
+        }
+
+        await new MemberActivityService(_db).ApplyComputedStatusAsync(history.LinkshellId, cancellationToken);
+        return true;
+    }
+
     // Toggle a member's active-status credit for this event. Drives the activity
     // streak (and the roster's active-credit column), so recompute statuses after.
     public async Task<bool> SetParticipantActiveCreditAsync(int historyId, int participantId, bool credited, CancellationToken cancellationToken)

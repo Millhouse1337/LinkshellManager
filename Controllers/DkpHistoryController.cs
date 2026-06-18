@@ -84,13 +84,19 @@ public class DkpHistoryController : Controller
 
         viewModel.SelectedLinkshellId = selectedLinkshellId;
         viewModel.SelectedLinkshellName = viewModel.Linkshells.First(link => link.Id == selectedLinkshellId).Name;
+        // DKP each member has spent on loot in still-live events but not yet committed.
+        // Shown as a pending deduction; already removed from biddable power so it can't be
+        // double-spent before the event closes.
+        var pendingLootByUser = await AuctionDkpService.ComputePendingLiveLootSpendByUserAsync(
+            _context, selectedLinkshellId, HttpContext.RequestAborted);
         viewModel.Members = linkshellMembers
             .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
             .Select(link => new DkpHistoryMemberOptionViewModel
             {
                 AppUserId = link.AppUserId!,
                 CharacterName = link.CharacterName ?? "Unknown member",
-                CurrentBalance = link.LinkshellDkp ?? 0
+                CurrentBalance = link.LinkshellDkp ?? 0,
+                PendingLootSpend = pendingLootByUser.GetValueOrDefault(link.AppUserId!)
             })
             .ToList();
 
@@ -124,6 +130,7 @@ public class DkpHistoryController : Controller
         viewModel.SelectedAppUserId = selectedAppUserId;
         viewModel.SelectedMemberName = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CharacterName;
         viewModel.CurrentBalance = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CurrentBalance;
+        viewModel.SelectedPendingLootSpend = pendingLootByUser.GetValueOrDefault(selectedAppUserId);
         var projected = ledgerEntries
             .Select(entry =>
             {

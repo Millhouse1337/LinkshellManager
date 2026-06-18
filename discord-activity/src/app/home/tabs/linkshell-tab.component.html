@@ -126,7 +126,12 @@
                       <span class="ac-roster-credit" [class.absent]="(member.absentStreak ?? 0) > 0" title="Absence streak: consecutive uncredited events">{{ member.absentStreak ?? 0 }}</span>
                     }
                   </div>
-                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+                  <div class="ac-roster-dkp">
+                    {{ member.linkshellDkp ?? 0 }}
+                    @if (member.biddableDkp != null && member.biddableDkp !== (member.linkshellDkp ?? 0)) {
+                      <div class="ac-roster-name-sub" title="Biddable now = balance − bids you're winning − DKP spent on loot in a live event">{{ member.biddableDkp }} biddable</div>
+                    }
+                  </div>
                   <div class="ac-roster-joined">{{ formatJoined(member.dateJoined) }}</div>
                   <div class="ac-roster-actions">
                     <button type="button" class="btn ghost sm" (click)="openMemberProfile(member.id)">View Profile</button>

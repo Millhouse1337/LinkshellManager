@@ -106,6 +106,26 @@ public class EventHistoryController : Controller
             .FirstOrDefaultAsync();
         ViewBag.DkpStep = DkpRounding.StepFor(roundingIncrement);
 
+        // Full-roster participants: surface members who did NOT attend so they can be
+        // marked Absent (default) or added to the event. The view renders attendees first,
+        // then these absentees A–Z. An absence here feeds the activity streak exactly like
+        // an uncredited attendee (no credited row = absence — see MemberActivityService).
+        var attendeeUserIds = history.AppUserEventHistories
+            .Where(p => p.AppUserId != null)
+            .Select(p => p.AppUserId!)
+            .ToHashSet(StringComparer.Ordinal);
+        var roster = await _context.AppUserLinkshells
+            .Include(m => m.AppUser)
+            .Where(m => m.LinkshellId == history.LinkshellId && m.AppUserId != null)
+            .ToListAsync();
+        ViewBag.Absentees = roster
+            .Where(m => !attendeeUserIds.Contains(m.AppUserId!))
+            .OrderBy(m => m.CharacterName ?? m.AppUser!.CharacterName ?? m.AppUser!.UserName,
+                StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        ViewBag.MemberStreaks = await new MemberActivityService(_context)
+            .ComputeStreaksByAppUserAsync(history.LinkshellId, HttpContext.RequestAborted);
+
         // Post-event discussion.
         ViewBag.Comments = await _comments.ListAsync(history.Id, HttpContext.RequestAborted);
         ViewBag.CommentUserId = user.Id;
@@ -260,6 +280,29 @@ public class EventHistoryController : Controller
 
         await _editService.RemoveParticipantAsync(history!.Id, participantId, HttpContext.RequestAborted);
         TempData["EventHistoryStatus"] = "Attendee removed and DKP refunded.";
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    // Add a member to a closed event after the fact and grant DKP — wired into the DKP
+    // ledger + balance via EventHistoryEditService.AddParticipantAsync.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddParticipant(
+        int id, string appUserId, double amount, string? jobType, string? jobName, string? subJobName)
+    {
+        var (history, forbid) = await LoadManageableAsync(id);
+        if (forbid is not null) return forbid;
+        if (string.IsNullOrWhiteSpace(appUserId))
+        {
+            TempData["EventHistoryError"] = "Select a member to add.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        var ok = await _editService.AddParticipantAsync(
+            history!.Id, appUserId, amount, jobType, jobName, subJobName, activeCredit: true, HttpContext.RequestAborted);
+        TempData[ok ? "EventHistoryStatus" : "EventHistoryError"] = ok
+            ? "Member added to the event and DKP granted."
+            : "Couldn't add that member (already on the event, or not a member of the linkshell).";
         return RedirectToAction(nameof(Details), new { id });
     }
 

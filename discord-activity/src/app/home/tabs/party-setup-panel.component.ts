@@ -287,6 +287,13 @@ export class PartySetupPanelComponent {
     if (ok) { this.editingSlotId.set(null); }
   }
 
+  // Back out of the inline job edit without saving. The draft is re-seeded from the
+  // slot's current values whenever the editor is reopened (openJobEdit), so just
+  // closing it is enough — the abandoned draft is discarded on next open.
+  protected cancelJobEdit(): void {
+    this.editingSlotId.set(null);
+  }
+
   // ----- member moves (precise dropdown, touch-friendly) -----
   // Every OPEN slot across the board, labeled, as a move target.
   protected openSlotTargets(): { slotId: number; label: string }[] {

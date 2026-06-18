@@ -846,6 +846,7 @@ export class DiscordActivityService {
   deleteEventHistory(id: number): Promise<boolean> { return this.eventService.deleteEventHistory(id); }
   setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> { return this.eventService.setEventHistoryParticipantDkp(id, participantId, amount); }
   setEventHistoryParticipantActiveCredit(id: number, participantId: number, credited: boolean): Promise<boolean> { return this.eventService.setEventHistoryParticipantActiveCredit(id, participantId, credited); }
+  addEventHistoryParticipant(id: number, input: { appUserId: string; dkp: number; jobType?: string | null; jobName?: string | null; subJobName?: string | null }): Promise<boolean> { return this.eventService.addEventHistoryParticipant(id, input); }
   clearEventHistoryActiveCredit(id: number): Promise<boolean> { return this.eventService.clearEventHistoryActiveCredit(id); }
   clearEventHistoryAbsences(id: number): Promise<boolean> { return this.eventService.clearEventHistoryAbsences(id); }
   removeEventHistoryParticipant(id: number, participantId: number): Promise<boolean> { return this.eventService.removeEventHistoryParticipant(id, participantId); }

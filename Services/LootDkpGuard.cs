@@ -55,32 +55,16 @@ public static class LootDkpGuard
             return null; // Unknown / free-text winner — can't balance-check.
         }
 
+        // ComputeAvailableDkpAsync already subtracts the DKP this member has committed to
+        // loot in still-live events that hasn't been deducted yet (their pending spend across
+        // ALL live events), so two items in one event can't each pass and together overdraw —
+        // no separate per-event subtraction is needed here (doing so would double-count).
         var available = await AuctionDkpService.ComputeAvailableDkpAsync(
             db, member.AppUserId, linkshellId, cancellationToken);
 
-        // Subtract loot already awarded to this winner in this event but not yet
-        // deducted (deduction happens at close), so two items in one event can't
-        // each pass the check and together overdraw the member. Match ALL of the
-        // member's characters (main + both alts) so loot won on an alt and loot won
-        // on the main both count against the one shared account balance.
-        var memberNames = new[] { member.CharacterName, member.AppUser?.AltCharacterName1, member.AppUser?.AltCharacterName2 }
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .Select(n => n!.Trim())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var pending = await db.EventLootDetails
-            .Where(d => d.EventId == eventId
-                        && d.ItemWinner != null
-                        && d.WinningDkpSpent != null)
-            .Select(d => new { d.ItemWinner, d.WinningDkpSpent })
-            .ToListAsync(cancellationToken);
-        var pendingForWinner = pending
-            .Where(d => d.ItemWinner != null && memberNames.Contains(d.ItemWinner.Trim()))
-            .Sum(d => (double)d.WinningDkpSpent!.Value);
-
-        var effective = available - pendingForWinner;
-        if (cost > effective + 0.0001)
+        if (cost > available + 0.0001)
         {
-            return $"{name} only has {effective:0.##} DKP available — not enough for this item ({cost:0.##} DKP).";
+            return $"{name} only has {available:0.##} DKP available — not enough for this item ({cost:0.##} DKP).";
         }
 
         return null;

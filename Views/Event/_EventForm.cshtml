@@ -25,6 +25,11 @@
     var endTimeNotSpecified    = isEditMode && Model.Event.EndTime is null;
     var durationNotSpecified   = isEditMode && Model.Event.Duration is null;
     var partySetupNotSpecified = isEditMode && !Model.PartySetupId.HasValue;
+    // A LIVE (commenced) event's party board is now edited inline on the board, so the
+    // setup picker is omitted while editing one (matches the Activity edit-live-event
+    // modal). A hidden input preserves the current PartySetupId so saving the event
+    // details doesn't clear it.
+    var isLiveEdit = isEditMode && Model.Event.CommencementStartTime.HasValue;
     // "No DKP" runs award nothing -- modelled as DkpPerHour == 0. Pre-tick the
     // toggle when editing such an event so it round-trips.
     var noDkp                  = Model.Event.DkpPerHour == 0;
@@ -350,6 +355,14 @@
     })();
 </script>
 
+@if (isLiveEdit)
+{
+    @* Live event: the party board is edited inline on the board itself. Keep the
+       current setup id so saving the event details doesn't null it out. *@
+    <input type="hidden" name="PartySetupId" value="@Model.PartySetupId" />
+}
+else
+{
 <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:12px;gap:12px;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:12px">
         <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
@@ -389,6 +402,7 @@
    Setup page (alliance card -> party columns -> requirement rows). Populated by
    JS from /PartySetup/Preview when a setup is picked; hidden otherwise. *@
 <div id="ps-preview" class="ps-preview" style="display:none;margin-top:14px"></div>
+}
 
 <script nonce="@Html.CspNonce()">
     // "Do Not Include" toggle: when checked, hide the dropdown, blank the value,

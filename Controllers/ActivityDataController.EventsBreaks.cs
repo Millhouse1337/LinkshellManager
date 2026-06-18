@@ -107,6 +107,8 @@ public sealed partial class ActivityDataController
         participation.IsOnBreak = false;
         participation.PauseTime = null;
         participation.ResumeTime = DateTime.UtcNow;
+        // They came back after all — drop the "not returning" mark a Withdraw set.
+        participation.WithdrewFromEvent = false;
         _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
@@ -234,6 +236,8 @@ public sealed partial class ActivityDataController
         participation.IsOnBreak = false;
         participation.PauseTime = null;
         participation.ResumeTime = nowUtc;
+        // Officer resumed them — clear any "not returning" mark from a Withdraw.
+        participation.WithdrewFromEvent = false;
 
         var pendingReturns = await _dbContext.AppUserEventStatusLedgers
             .Where(entry =>
@@ -367,5 +371,29 @@ public sealed partial class ActivityDataController
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
+    }
+
+    // Parks a live participant in the Break Room: banks their accrued time and pauses
+    // the timer (IsOnBreak) WITHOUT removing them, so DKP / attendance / event history
+    // are all preserved and a later return resumes exactly where they left off. Shared
+    // by the self-service break flow and "Withdraw From Event" (which now parks a live
+    // member here instead of deleting their participation). The caller saves; skip the
+    // call when the participant is already on break.
+    private void PutParticipationOnBreak(
+        AppUserEvent participation, int eventId, DateTime nowUtc, DateTime? commencementStart)
+    {
+        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, commencementStart);
+        participation.IsOnBreak = true;
+        participation.PauseTime = nowUtc;
+        participation.ResumeTime = null;
+        _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
+        {
+            AppUserEventId = participation.Id,
+            EventId = eventId,
+            AppUserId = participation.AppUserId,
+            ActionType = "BreakStart",
+            OccurredAt = nowUtc,
+            RequiresVerification = false
+        });
     }
 }

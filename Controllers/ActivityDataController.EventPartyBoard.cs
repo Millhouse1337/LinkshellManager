@@ -205,7 +205,7 @@ public sealed partial class ActivityDataController
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.ChangeSlotRequirementAsync(
             _dbContext, eventId, slotId, request.Role, request.MainJob, request.SubJob, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/slots/{slotId:int}/move")]
@@ -216,7 +216,7 @@ public sealed partial class ActivityDataController
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.MoveSlotAsync(
             _dbContext, eventId, slotId, request.TargetPartyId, request.TargetIndex, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/members/move")]
@@ -227,7 +227,7 @@ public sealed partial class ActivityDataController
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.MoveMemberAsync(
             _dbContext, eventId, request.FromSlotId, request.ToSlotId, request.AppUserId, request.DiscordUserId, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/slots")]
@@ -238,7 +238,7 @@ public sealed partial class ActivityDataController
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.AddSlotAsync(
             _dbContext, eventId, request.PartyId, request.Role, request.MainJob, request.SubJob, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/slots/{slotId:int}/delete")]
@@ -248,7 +248,7 @@ public sealed partial class ActivityDataController
         var guard = await GuardBoardEditAsync(eventId, cancellationToken);
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.DeleteSlotAsync(_dbContext, eventId, slotId, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/parties")]
@@ -258,7 +258,7 @@ public sealed partial class ActivityDataController
         var guard = await GuardBoardEditAsync(eventId, cancellationToken);
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.AddPartyAsync(_dbContext, eventId, request.AllianceId, request.Name, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/parties/{partyId:int}/delete")]
@@ -268,7 +268,7 @@ public sealed partial class ActivityDataController
         var guard = await GuardBoardEditAsync(eventId, cancellationToken);
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.RemovePartyAsync(_dbContext, eventId, partyId, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     [HttpPost("events/{eventId:int}/board/rename")]
@@ -279,7 +279,7 @@ public sealed partial class ActivityDataController
         if (guard is not null) return guard;
         var result = await EventPartyBoardEditService.RenameAsync(
             _dbContext, eventId, request.AllianceId, request.PartyId, request.Name, cancellationToken);
-        return BoardEditResult(eventId, result);
+        return await BoardEditResult(eventId, result, cancellationToken);
     }
 
     // Returns the error IActionResult to short-circuit a board edit, or null when the
@@ -296,10 +296,24 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    private IActionResult BoardEditResult(int eventId, EventPartyBoardEditService.EditResult result)
+    private async Task<IActionResult> BoardEditResult(
+        int eventId, EventPartyBoardEditService.EditResult result, CancellationToken cancellationToken)
     {
         if (!result.Success) return BadRequest(new { error = result.Error });
         EnqueueEventBoardRefresh(eventId);
+        // Push to the live change feed so other viewers (Activity + web long-poll)
+        // refresh instantly. Member-affecting edits already notify via the
+        // EventPartySlotSignup save hook; this covers structural edits (empty-slot job
+        // change, add/delete slot, add/remove party, rename) that only touch PartySetup* rows.
+        var linkshellId = await _dbContext.Events
+            .Where(e => e.Id == eventId)
+            .Select(e => e.LinkshellId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (linkshellId > 0)
+        {
+            HttpContext.RequestServices.GetRequiredService<LinkshellChangeNotifier>()
+                .Notify(linkshellId, LinkshellChangeNotifier.Areas.Parties);
+        }
         return Ok(new { success = true });
     }
 

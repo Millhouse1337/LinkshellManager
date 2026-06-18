@@ -49,6 +49,14 @@ public class AppUserEvent
 
     public bool? IsOnBreak { get; set; }
 
+    // Set when the member used "Withdraw From Event" (vs a normal Take Break): they're
+    // parked in the Break Room — timer paused, DKP/attendance/history preserved — but they
+    // signalled they don't intend to come back. Drives a "not returning" label in the Break
+    // Room. Cleared if they Return from break (they came back after all). See
+    // ActivityDataController UnsignAsync / ReturnFromBreakAsync / ForceResumeAsync and the
+    // web EventController.Participation TakeBreak/ReturnFromBreak.
+    public bool WithdrewFromEvent { get; set; }
+
     public DateTime? PauseTime { get; set; }
 
     public DateTime? ResumeTime { get; set; }

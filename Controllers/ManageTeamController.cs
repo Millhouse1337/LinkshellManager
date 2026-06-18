@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
@@ -92,6 +93,10 @@ public class ManageTeamController : Controller
         // Current credit / absent streaks per member (consecutive most-recent
         // counting events) for the roster's "Active credit" + "Absent streak" columns.
         ViewBag.MemberStreaks = await _memberActivity.ComputeStreaksByAppUserAsync(targetId, HttpContext.RequestAborted);
+
+        // Biddable DKP per member (committed − bid locks − pending live-event loot spend),
+        // shown under the DKP column so spendable power is clear (matches the Activity roster).
+        ViewBag.BiddableDkp = await AuctionDkpService.ComputeBiddableDkpByUserAsync(_context, targetId, HttpContext.RequestAborted);
 
         var totalCount = await filteredQuery.CountAsync();
         const int pageSize = ManageTeamViewModel.MembersPageSize;

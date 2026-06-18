@@ -8,6 +8,7 @@
     var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;
     var jobTypeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
     var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var biddableDkp = ViewBag.BiddableDkp as Dictionary<string, double> ?? new Dictionary<string, double>();
     string ToLocalIso(DateTime? value) => value?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty;
     // HNM-typed events get the multi-window roster card and a slimmer Participants table
     // (Timer + Progress columns are not meaningful per-spawn-window).
@@ -295,6 +296,7 @@
             var panelVm = new LinkshellManagerDiscordApp.ViewModels.PartyBoardPanelViewModel
             {
                 EventId = Model.Event.Id,
+                LinkshellId = Model.Event.LinkshellId,
                 Board = board,
                 CanManageParties = ViewBag.CanManageParties is true,
                 CurrentUserId = currentUserId,
@@ -373,7 +375,13 @@
                                 data-participant-base-hours="@(participant.Duration?.ToString(CultureInfo.InvariantCulture) ?? "0")"
                                 data-participant-on-break="@((participant.IsOnBreak == true).ToString().ToLowerInvariant())">
                                 <td>
-                                    <div style="font-weight:500">@participant.CharacterName</div>
+                                    <div style="font-weight:500">
+                                        @participant.CharacterName
+                                        @if (participant.AppUserId != null && biddableDkp.TryGetValue(participant.AppUserId, out var pBid))
+                                        {
+                                            <span class="tag" style="font-size:11px;font-weight:400" title="Biddable DKP now = balance − bids they're winning − DKP spent on loot this event">@pBid.ToString("0.##") biddable</span>
+                                        }
+                                    </div>
                                     <div style="color:var(--fg-4);font-size:11px">@(participant.StartTime?.ToString("g") ?? "Pending")</div>
                                 </td>
                                 <td>
@@ -384,9 +392,10 @@
                                 {
                                     <td style="font-family:var(--font-mono);font-size:12px" data-live-participant-timer>00:00:00</td>
                                     <td>
-                                        <div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden">
+                                        <div data-live-participant-progress-wrap style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden">
                                             <div data-live-participant-progress style="height:100%;width:0%;background:var(--accent);transition:width 0.5s"></div>
                                         </div>
+                                        <span data-live-participant-progress-na style="display:none;font-size:11px;color:var(--fg-3)" title="This event has no planned duration, so there's nothing to measure progress against.">— open-ended</span>
                                     </td>
                                 }
                                 <td style="text-align:right;font-family:var(--font-mono)" data-live-participant-dkp>0.00</td>
@@ -394,6 +403,10 @@
                                     @if (participant.IsOnBreak == true)
                                     {
                                         <span class="tag warning">On break</span>
+                                        @if (participant.WithdrewFromEvent)
+                                        {
+                                            <span class="tag danger" title="Withdrew from the event — kept here so they can resume if they return">Not returning</span>
+                                        }
                                     }
                                     else if (participant.IsVerified == true)
                                     {
@@ -796,24 +809,31 @@
                     const participantElapsedMs = (participantBaseHours * 3600000)
                         + (participantOnBreak ? 0 : (segmentStart ? Math.max(0, now.getTime() - segmentStart.getTime()) : 0));
                     const participantDkp = (participantElapsedMs / 3600000) * dkpPerHour;
-                    // Progress = how far through the planned duration we are; for
-                    // open-ended events (no planned end) fall back to the
-                    // participant's share of the event's elapsed time so the bar
-                    // still reflects attendance coverage instead of sitting at 0.
-                    const denominatorMs = (Number.isFinite(plannedHours) && plannedHours > 0)
-                        ? plannedHours * 3600000
-                        : eventElapsedMs;
-                    const progress = denominatorMs > 0
-                        ? Math.min(100, (participantElapsedMs / denominatorMs) * 100)
+                    // Progress = how far through the PLANNED duration we are. Open-ended
+                    // events (no planned end) have nothing to measure against, so we show
+                    // an "open-ended" note instead of a fabricated bar (the old fallback —
+                    // participant's share of elapsed time — read as an inaccurate ~50%).
+                    const hasDuration = Number.isFinite(plannedHours) && plannedHours > 0;
+                    const progress = hasDuration
+                        ? Math.min(100, (participantElapsedMs / (plannedHours * 3600000)) * 100)
                         : 0;
 
                     const timerCell = row.querySelector('[data-live-participant-timer]');
                     const dkpCell = row.querySelector('[data-live-participant-dkp]');
                     const progressBar = row.querySelector('[data-live-participant-progress]');
+                    const progressWrap = row.querySelector('[data-live-participant-progress-wrap]');
+                    const progressNa = row.querySelector('[data-live-participant-progress-na]');
 
                     if (timerCell) { timerCell.textContent = formatElapsed(participantElapsedMs); }
                     if (dkpCell) { dkpCell.textContent = participantDkp.toFixed(2); }
-                    if (progressBar) { progressBar.style.width = `${progress}%`; }
+                    if (hasDuration) {
+                        if (progressWrap) { progressWrap.style.display = ''; }
+                        if (progressNa) { progressNa.style.display = 'none'; }
+                        if (progressBar) { progressBar.style.width = `${progress}%`; }
+                    } else {
+                        if (progressWrap) { progressWrap.style.display = 'none'; }
+                        if (progressNa) { progressNa.style.display = ''; }
+                    }
                 }
             };
 

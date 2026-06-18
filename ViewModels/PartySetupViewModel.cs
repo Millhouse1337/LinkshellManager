@@ -225,6 +225,9 @@ public class PartySetupSlotView
 public class PartyBoardPanelViewModel
 {
     public int EventId { get; set; }
+    // The event's linkshell — the web board's live-update loop long-polls
+    // /api/activity/changes?linkshellId=… so passive viewers refresh on signups/edits.
+    public int LinkshellId { get; set; }
     public PartySetupBoardViewModel Board { get; set; } = new();
     public bool CanManageParties { get; set; }
     public string? CurrentUserId { get; set; }

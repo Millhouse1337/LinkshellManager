@@ -183,9 +183,23 @@ export class EventsTabComponent {
     return (event.participants ?? []).some(participant => participant.appUserId === myId);
   }
 
-  // Drop the current member from the event entirely (their party slot + their
-  // attendance row); the overview refresh removes them from the live roster.
+  // "Withdraw From Event" no longer deletes a live participant — the backend parks
+  // them in the Break Room (timer paused; DKP / attendance / event history all kept)
+  // so a return resumes exactly where they left off. Pre-start it still cancels the
+  // signup. window.confirm() is suppressed in the Discord iframe, so we use the same
+  // two-stage inline confirm as Remove Attendee.
+  protected readonly pendingWithdrawEventId = signal<number | null>(null);
+
+  protected requestWithdraw(eventId: number): void {
+    this.pendingWithdrawEventId.set(eventId);
+  }
+
+  protected abortWithdraw(): void {
+    this.pendingWithdrawEventId.set(null);
+  }
+
   protected async withdrawFromEvent(event: ActivityEvent): Promise<void> {
+    this.pendingWithdrawEventId.set(null);
     await this.activity.unsignFromEvent(event.id);
   }
 

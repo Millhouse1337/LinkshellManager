@@ -156,6 +156,10 @@
         </label>
       </div>
 
+      @if (!isEditingLiveEvent) {
+      <!-- Party setup is OMITTED while editing a LIVE event: officers edit the
+           live board inline (drag/job/assign) on the Party Setup panel instead.
+           Still shown for create + queued-event edits, where the setup is chosen. -->
       <div class="create-form__jobs">
         <!-- Header (title + Yes/No) and the linked-setup dropdown share one
              centered row; the hint + preview sit full-width below it. -->
@@ -209,6 +213,7 @@
           }
         }
       </div>
+      }
 
       <div class="create-form__actions create-form__actions--end">
         <button type="submit" class="action-button action-button--success" [disabled]="isSubmittingCreate">

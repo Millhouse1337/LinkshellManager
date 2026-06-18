@@ -82,6 +82,8 @@
         var countsTowardActive = activityTrackingEnabled && Model.CountsTowardActive;
         var showCredit = true;
         var participants = Model.AppUserEventHistories.OrderBy(p => p.CharacterName).ToList();
+        var absentees = ViewBag.Absentees as List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>
+            ?? new List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>();
     }
     <div class="card">
         <div class="card-head">
@@ -120,6 +122,7 @@
                             <th style="text-align:right">DKP</th>
                             <th>Verification</th>
                             <th style="text-align:center">Active credit</th>
+                            <th style="text-align:center" title="Absent = no active credit; counts toward the inactive threshold in this member's activity streak">Absent</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -132,7 +135,12 @@
                                 <td style="text-align:right;font-family:var(--font-mono)" class="num">@((participant.EventDkp ?? 0).ToString("0.##"))</td>
                                 <td>@Html.Raw(VerificationTag(participant.IsVerified))</td>
                                 <td style="text-align:center">
-                                    <input type="checkbox" name="credited" value="@participant.Id" @(participant.ActiveCredit ? "checked" : null) />
+                                    <input type="checkbox" name="credited" value="@participant.Id" class="js-credit" data-pid="@participant.Id" @(participant.ActiveCredit ? "checked" : null) />
+                                </td>
+                                <td style="text-align:center">
+                                    @* Absent is the inverse of Active credit — checking it unchecks credit (JS), so
+                                       saving records an absence for this event in the member's activity streak. *@
+                                    <input type="checkbox" class="js-absent" data-pid="@participant.Id" @(participant.ActiveCredit ? null : "checked") />
                                 </td>
                             </tr>
                         }
@@ -153,6 +161,48 @@
                     <button type="submit" class="btn danger sm">Undo active credit for entire event</button>
                 </form>
             </div>
+
+            @if (absentees.Count > 0)
+            {
+                <div style="padding:10px 16px 2px;font-weight:600;font-size:13px;border-top:1px solid var(--border)">Not at this event <span class="muted" style="font-weight:400">· absent (@absentees.Count)</span></div>
+                <div style="padding:0 16px 8px;font-size:12px;color:var(--fg-3)">These members were absent for this event (counts toward their inactive threshold). Add one to credit them &amp; grant DKP — it records to their balance and the DKP ledger.</div>
+                <div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:6px">
+                    @foreach (var m in absentees)
+                    {
+                        var name = m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Member";
+                        <form asp-action="AddParticipant" asp-route-id="@Model.Id" method="post"
+                              style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+                            <input type="hidden" name="appUserId" value="@m.AppUserId" />
+                            <span style="font-weight:500;min-width:120px">@name</span>
+                            <input type="checkbox" checked disabled title="Absent until you add them to the event" />
+                            <span style="font-size:11px;color:var(--fg-4)">Absent</span>
+                            <input type="text" name="jobType" class="form-control" placeholder="Role (opt)" style="width:84px" />
+                            <input type="text" name="jobName" class="form-control" placeholder="Main (opt)" style="width:84px" />
+                            <input type="text" name="subJobName" class="form-control" placeholder="Sub (opt)" style="width:84px" />
+                            <label style="font-size:12px;color:var(--fg-3);display:flex;gap:4px;align-items:center">DKP
+                                <input type="number" name="amount" value="0" step="@ViewBag.DkpStep" min="0" class="form-control num" style="width:80px;text-align:right" />
+                            </label>
+                            <button type="submit" class="btn primary sm" style="margin-left:auto">Add + DKP</button>
+                        </form>
+                    }
+                </div>
+            }
+            <script nonce="@Html.CspNonce()">
+                // "Absent" is the visual inverse of "Active credit" — keep the paired
+                // checkboxes in sync so saving active credit records the intended absence.
+                (function () {
+                    function pair(cls, otherCls) {
+                        document.querySelectorAll('.' + cls).forEach(function (box) {
+                            box.addEventListener('change', function () {
+                                var other = document.querySelector('.' + otherCls + '[data-pid="' + box.getAttribute('data-pid') + '"]');
+                                if (other) { other.checked = !box.checked; }
+                            });
+                        });
+                    }
+                    pair('js-absent', 'js-credit');
+                    pair('js-credit', 'js-absent');
+                })();
+            </script>
         }
         else
         {

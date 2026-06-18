@@ -532,6 +532,14 @@ namespace LinkshellManagerDiscordApp.Data
                     case AppUserEvent aue when aue.EventId > 0:
                         work.ParticipationEventIds.Add(aue.EventId);
                         break;
+                    // Party-board slot signups (sign up / withdraw / move / seat /
+                    // job-displacement) only touch this child row pre-start, so without
+                    // this the live board changes weren't pushed — clients only caught
+                    // them on the slow fallback poll. Resolve the linkshell via the Event
+                    // (same bucket as participation) so every signup change is instant.
+                    case EventPartySlotSignup eps when eps.EventId > 0:
+                        work.ParticipationEventIds.Add(eps.EventId);
+                        break;
                     case TodLootDetail tl when tl.TodId is int todId && todId > 0:
                         work.LootTodIds.Add(todId);
                         break;
@@ -883,6 +891,19 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventAttendanceWindowId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.AppUserEventId, item.OccurredAt });
+            });
+
+            builder.Entity<AppUserEventHistory>(entity =>
+            {
+                // One attendance row per member per closed event — the app's invariant
+                // (every signup path adopts the existing participation rather than making a
+                // second). Enforced in the DB too so two officers adding the same member to
+                // a past event at the same instant can't create a duplicate: the second
+                // insert violates this and AddParticipantAsync catches it. Filtered to
+                // non-null AppUserId (outside/legacy rows aren't account-keyed).
+                entity.HasIndex(item => new { item.EventHistoryId, item.AppUserId })
+                    .IsUnique()
+                    .HasFilter("\"AppUserId\" IS NOT NULL");
             });
 
             builder.Entity<DkpLedgerEntry>(entity =>

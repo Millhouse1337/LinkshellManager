@@ -59,7 +59,9 @@ export class EventService {
     try {
       await this.http.postActivityAction(`/api/activity/events/${eventId}/unsign`);
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Event signup removed.');
+      // Live events park the member in the Break Room (resume where they left off);
+      // pre-start events cancel the signup. Neutral wording covers both.
+      this.auth.setActionMessage('You\'ve withdrawn from the event.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Removing the event signup failed.'));
     } finally {
@@ -457,6 +459,24 @@ export class EventService {
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Updating attendee DKP failed.'));
+      return false;
+    }
+  }
+
+  // Add a member to a closed event after the fact + grant DKP (wired into the ledger/balance).
+  async addEventHistoryParticipant(
+    id: number,
+    input: { appUserId: string; dkp: number; jobType?: string | null; jobName?: string | null; subJobName?: string | null }
+  ): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/event-history/${id}/participants/add`, input);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Member added to the event and DKP granted.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Adding the member failed.'));
       return false;
     }
   }

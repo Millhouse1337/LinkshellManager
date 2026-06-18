@@ -7,6 +7,7 @@ import type {
   ActivityEditEventHistoryInput,
   ActivityEventComment,
   ActivityEventHistory,
+  ActivityEventHistoryAbsentee,
   ActivityEventHistoryParticipant
 } from '../../discord/discord-activity.types';
 
@@ -71,6 +72,7 @@ import type {
                   <div class="evt-att evt-att--head">
                     <span>Attendee</span>
                     <span class="evt-att__c" title="Counts toward this member's Active status">Active credit</span>
+                    <span class="evt-att__c" title="Absent = no active credit; counts toward the inactive threshold">Absent</span>
                     <span class="evt-att__c">DKP</span>
                     <span></span>
                   </div>
@@ -86,6 +88,11 @@ import type {
                         <input type="checkbox" [checked]="p.activeCredit !== false"
                                (change)="toggleCredit(h, p, $any($event.target).checked)"
                                title="Active-status credit for this event" />
+                      </span>
+                      <span class="evt-att__c">
+                        <input type="checkbox" [checked]="p.activeCredit === false"
+                               (change)="toggleCredit(h, p, !$any($event.target).checked)"
+                               title="Absent = no active credit (counts toward the inactive threshold)" />
                       </span>
                       <span class="evt-att__c">
                         <input type="number" [step]="dkpStep()" min="0" [(ngModel)]="dkpDraft[p.id]" [name]="'pDkp' + p.id" />
@@ -109,6 +116,21 @@ import type {
                   }
                 }
               </div>
+
+              @if (canManage() && (h.absentees?.length ?? 0) > 0) {
+                <div class="evt-history__attendees evt-history__absentees">
+                  <div class="evt-abs-head">Not at this event · absent ({{ h.absentees!.length }}) — add one to credit them &amp; grant DKP</div>
+                  @for (a of h.absentees!; track a.appUserId) {
+                    <div class="evt-abs">
+                      <span class="evt-history__who">{{ a.characterName || 'Member' }}</span>
+                      <span class="evt-att__c"><input type="checkbox" checked disabled title="Absent until you add them to the event" /></span>
+                      <input type="number" class="evt-abs__dkp" [step]="dkpStep()" min="0"
+                             [(ngModel)]="absDkpDraft[h.id + ':' + a.appUserId]" [name]="'absDkp' + h.id + a.appUserId" placeholder="DKP" />
+                      <button type="button" class="btn primary sm" (click)="addAbsentee(h, a)">Add + DKP</button>
+                    </div>
+                  }
+                </div>
+              }
 
               @if (canManage() && h.participants.length > 0) {
                 <div class="evt-history__bulk">
@@ -211,12 +233,17 @@ import type {
        The actions column is a FIXED width (not auto) so the header row and every
        attendee row share identical tracks — otherwise each row's auto column
        sizes independently and the shared 1fr shifts the headers out of line. */
-    .evt-att { display: grid; grid-template-columns: 1fr 96px 92px 150px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
+    .evt-att { display: grid; grid-template-columns: 1fr 96px 70px 92px 150px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
     .evt-att--head { border-top: 0; padding-bottom: 2px; color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
     .evt-att__c { text-align: center; }
     .evt-att__c input[type=number] { width: 84px; text-align: right; }
     .evt-att__c input[type=checkbox] { cursor: pointer; }
     .evt-att__actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
+    /* Absentees (not at the event): name | Absent | DKP | Add. */
+    .evt-history__absentees { margin-top: 8px; }
+    .evt-abs-head { padding: 4px 0 2px; color: var(--fg-3); font-size: 11px; }
+    .evt-abs { display: grid; grid-template-columns: 1fr 70px 92px auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
+    .evt-abs__dkp { width: 84px; text-align: right; }
     .evt-history__bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .evt-history__bulk-q { font-size: 12px; color: var(--fg-2); }
     .evt-history__danger { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
@@ -245,6 +272,8 @@ export class EventHistoryPanelComponent {
   // Per-event edit drafts + per-attendee DKP drafts (keyed by id).
   protected readonly edit: Record<number, ActivityEditEventHistoryInput> = {};
   protected readonly dkpDraft: Record<number, number> = {};
+  // DKP to grant when adding an absentee, keyed by `${historyId}:${appUserId}`.
+  protected readonly absDkpDraft: Record<string, number> = {};
 
   // Post-event discussion: comments per event + compose drafts.
   protected readonly comments = signal<Record<number, ActivityEventComment[]>>({});
@@ -351,6 +380,14 @@ export class EventHistoryPanelComponent {
 
   async toggleCredit(h: ActivityEventHistory, p: ActivityEventHistoryParticipant, credited: boolean): Promise<void> {
     if (await this.activity.setEventHistoryParticipantActiveCredit(h.id, p.id, credited)) { await this.load(); }
+  }
+
+  // Add an absentee to the closed event and grant the entered DKP (wired into the ledger).
+  async addAbsentee(h: ActivityEventHistory, a: ActivityEventHistoryAbsentee): Promise<void> {
+    const dkp = Number(this.absDkpDraft[`${h.id}:${a.appUserId}`] ?? 0);
+    if (await this.activity.addEventHistoryParticipant(h.id, { appUserId: a.appUserId, dkp })) {
+      await this.load();
+    }
   }
 
   // Two-step inline confirm (native confirm() is unreliable in the Activity iframe)

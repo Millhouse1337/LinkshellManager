@@ -519,7 +519,15 @@ public sealed class DiscordInteractionsController : ControllerBase
                     link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
             if (membership is null)
             {
-                return SignupContext.Stop(Ephemeral("You're not a member of this linkshell, so you can't sign up for its events."));
+                // A synced user signing up on a linkshell they don't belong to. If that
+                // linkshell allows outside signups, add their REAL account to the roster
+                // as a normal member so DKP/history land on their real identity (no
+                // placeholder duplicate); otherwise they can't sign up here.
+                membership = await TryJoinAsOutsideMemberAsync(ev, appUserId, cancellationToken);
+                if (membership is null)
+                {
+                    return SignupContext.Stop(Ephemeral("You're not a member of this linkshell, so you can't sign up for its events."));
+                }
             }
             if (NeedsCharacterPick(membership, ev.Id, appUserId))
             {
@@ -565,6 +573,58 @@ public sealed class DiscordInteractionsController : ControllerBase
         // Not registered yet → onboard via the "you're not synced" modal, which creates
         // + links their member on submit (then this resolves to the branch above).
         return SignupContext.Stop(OutsideOnboardModal(promptTail, ev.EventName));
+    }
+
+    // A synced user clicked Sign Up on a linkshell they aren't a member of. When that
+    // linkshell has Outside Party Signup enabled, the leader has opted in to letting
+    // non-members participate, so we add their REAL account to the roster as a normal
+    // member (Rank Member, Active) — DKP/history accrue to their real identity, no
+    // placeholder duplicate. Returns the new membership (AppUser loaded for the alt
+    // picker), or null when outside signup is off (caller then rejects). Mirrors the
+    // unique-index race handling used elsewhere: a concurrent click that created the
+    // membership first surfaces as a DbUpdateException → re-load and use that row.
+    private async Task<AppUserLinkshell?> TryJoinAsOutsideMemberAsync(
+        Event ev, string appUserId, CancellationToken cancellationToken)
+    {
+        var enabled = await _db.Linkshells
+            .Where(l => l.Id == ev.LinkshellId)
+            .Select(l => l.OutsidePartySignupEnabled)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!enabled)
+        {
+            return null;
+        }
+        var appUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == appUserId, cancellationToken);
+        if (appUser is null)
+        {
+            return null;
+        }
+
+        var membership = new AppUserLinkshell
+        {
+            AppUserId = appUserId,
+            LinkshellId = ev.LinkshellId,
+            LinkshellDkp = 0,
+            DateJoined = DateTime.UtcNow,
+            CharacterName = appUser.CharacterName,
+            Rank = LinkshellRanks.Member,
+            Status = "Active",
+        };
+        _db.AppUserLinkshells.Add(membership);
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            _db.Entry(membership).State = EntityState.Detached;
+            return await _db.AppUserLinkshells
+                .Include(link => link.AppUser)
+                .FirstOrDefaultAsync(
+                    link => link.LinkshellId == ev.LinkshellId && link.AppUserId == appUserId, cancellationToken);
+        }
+        membership.AppUser = appUser;
+        return membership;
     }
 
     // Lighter identity resolution for withdraw/leave (no character name, no name

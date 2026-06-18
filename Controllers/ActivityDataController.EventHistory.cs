@@ -36,29 +36,50 @@ public sealed partial class ActivityDataController
             .Take(100)
             .ToListAsync(cancellationToken);
 
-        var result = histories.Select(h => new
+        // Whole-roster support: per event, surface members who did NOT attend so the
+        // client can mark them Absent (default) or add them with DKP. Roster loaded once.
+        var roster = await _dbContext.AppUserLinkshells
+            .AsNoTracking()
+            .Include(m => m.AppUser)
+            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
+            .Select(m => new { AppUserId = m.AppUserId!, Name = m.CharacterName ?? m.AppUser!.CharacterName ?? m.AppUser!.UserName })
+            .ToListAsync(cancellationToken);
+
+        var result = histories.Select(h =>
         {
-            id = h.Id,
-            eventName = h.EventName,
-            eventType = h.EventType,
-            eventLocation = h.EventLocation,
-            startTime = h.StartTime,
-            endTime = h.EndTime,
-            duration = h.Duration,
-            dkpPerHour = h.DkpPerHour,
-            eventDkp = h.EventDkp,
-            participants = h.AppUserEventHistories
-                .OrderBy(p => p.CharacterName)
-                .Select(p => new
-                {
-                    id = p.Id,
-                    characterName = p.CharacterName,
-                    jobName = p.JobName,
-                    subJobName = p.SubJobName,
-                    duration = p.Duration,
-                    eventDkp = p.EventDkp,
-                    activeCredit = p.ActiveCredit
-                })
+            var attendeeIds = h.AppUserEventHistories
+                .Where(p => p.AppUserId != null)
+                .Select(p => p.AppUserId!)
+                .ToHashSet(StringComparer.Ordinal);
+            return new
+            {
+                id = h.Id,
+                eventName = h.EventName,
+                eventType = h.EventType,
+                eventLocation = h.EventLocation,
+                startTime = h.StartTime,
+                endTime = h.EndTime,
+                duration = h.Duration,
+                dkpPerHour = h.DkpPerHour,
+                eventDkp = h.EventDkp,
+                participants = h.AppUserEventHistories
+                    .OrderBy(p => p.CharacterName)
+                    .Select(p => new
+                    {
+                        id = p.Id,
+                        appUserId = p.AppUserId,
+                        characterName = p.CharacterName,
+                        jobName = p.JobName,
+                        subJobName = p.SubJobName,
+                        duration = p.Duration,
+                        eventDkp = p.EventDkp,
+                        activeCredit = p.ActiveCredit
+                    }),
+                absentees = roster
+                    .Where(m => !attendeeIds.Contains(m.AppUserId))
+                    .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(m => new { appUserId = m.AppUserId, characterName = m.Name })
+            };
         });
 
         return Ok(new { canManage, histories = result });
@@ -111,6 +132,27 @@ public sealed partial class ActivityDataController
         var ok = await new EventHistoryEditService(_dbContext)
             .SetParticipantActiveCreditAsync(history!.Id, participantId, request.Credited, cancellationToken);
         return ok ? Ok(new { success = true }) : NotFound(new { error = "Attendee not found." });
+    }
+
+    // Add a member to a closed event after the fact and grant DKP (creates the attendance
+    // row + canonical EventEarned ledger entry + adds to balance). Leader/officer only.
+    [HttpPost("event-history/{id:int}/participants/add")]
+    public async Task<IActionResult> AddEventHistoryParticipantAsync(
+        int id, [FromBody] ActivityAddEventHistoryParticipantRequest request, CancellationToken cancellationToken)
+    {
+        var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
+        if (forbid is not null) return forbid;
+        if (string.IsNullOrWhiteSpace(request.AppUserId))
+        {
+            return BadRequest(new { error = "Select a member to add." });
+        }
+
+        var ok = await new EventHistoryEditService(_dbContext).AddParticipantAsync(
+            history!.Id, request.AppUserId, request.Dkp, request.JobType, request.JobName, request.SubJobName,
+            activeCredit: true, cancellationToken);
+        return ok
+            ? Ok(new { success = true })
+            : BadRequest(new { error = "Couldn't add that member (already on the event, or not a member of the linkshell)." });
     }
 
     // Undo active-status credit for the ENTIRE event (every attendee) — for events

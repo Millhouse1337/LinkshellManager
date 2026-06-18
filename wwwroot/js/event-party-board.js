@@ -176,6 +176,19 @@
         if (await postEdit('EditSlotRequirement', body)) { await refresh(); }
         return;
       }
+      if (e.target.closest('[data-job-cancel]') && slotEl) {
+        // Back out without saving: revert each select to its server-rendered value
+        // (defaultSelected reflects the markup regardless of user changes), then hide.
+        const je = slotEl.querySelector('[data-job-edit]');
+        if (je) {
+          je.querySelectorAll('select').forEach(sel => {
+            const def = Array.prototype.find.call(sel.options, o => o.defaultSelected);
+            sel.value = def ? def.value : '';
+          });
+          je.hidden = true;
+        }
+        return;
+      }
       if (e.target.closest('[data-delete-slot]') && slotEl) {
         if (await postEdit('DeleteBoardSlot', { eventId, slotId: Number(slotEl.getAttribute('data-slot-id')) })) { await refresh(); }
         return;
@@ -199,8 +212,21 @@
 
     // ----- change actions (rename, move member, seat attendee) -----
     root.addEventListener('change', async e => {
-      if (!editing) { return; }
       const t = e.target;
+
+      // Seat an Also-Attending member into an open slot. Available to officers
+      // WITHOUT edit mode (the assign dropdown isn't ps-edit-only), so it's handled
+      // BEFORE the edit-mode guard below. init() already gated on data-can-manage.
+      if (t.matches('[data-seat-member]')) {
+        const chip = t.closest('[data-also-app-user]');
+        const val = t.value;
+        if (!val) { return; }
+        const body = { eventId, fromSlotId: null, toSlotId: Number(val), appUserId: (chip && chip.getAttribute('data-also-app-user')) || null, discordUserId: null };
+        if (await postEdit('MoveMember', body)) { await refresh(); }
+        return;
+      }
+
+      if (!editing) { return; }
 
       if (t.matches('[data-rename-alliance]')) {
         const al = t.closest('[data-alliance-id]');
@@ -220,21 +246,102 @@
         if (await postEdit('MoveMember', body)) { await refresh(); }
         return;
       }
-      if (t.matches('[data-seat-member]')) {
-        const chip = t.closest('[data-also-app-user]');
-        const val = t.value;
-        if (!val) { return; }
-        const body = { eventId, fromSlotId: null, toSlotId: Number(val), appUserId: (chip && chip.getAttribute('data-also-app-user')) || null, discordUserId: null };
-        if (await postEdit('MoveMember', body)) { await refresh(); }
-        return;
-      }
     });
+
+    // Fill the Also-Attending "Assign to slot" dropdowns up front so officers can
+    // seat members WITHOUT entering edit mode (those selects aren't ps-edit-only).
+    populateMoveTargets();
 
     if (startEditing) { setEditing(true); }
   }
 
+  // ----- live updates for ALL viewers (not just officers) -----
+  // Long-poll the shared change feed (cookie-authed — the SAME endpoint the Discord
+  // Activity uses) and swap in a fresh board whenever someone else signs up, withdraws,
+  // or an officer edits the layout, so passive web viewers stay live without reloading.
+  // This runs independently of init()'s officer-only edit wiring.
+  let liveStarted = false;
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  async function refreshCurrentBoard() {
+    const board = document.querySelector('[data-event-party-board]');
+    if (!board) { return; }
+    // Don't clobber an officer who's mid-edit (drag / job form open). Their own edits
+    // refresh the board directly; they'll pick up others' changes when they exit.
+    if (board.classList.contains('ps-editing')) { return; }
+    const eventId = Number(board.getAttribute('data-event-id'));
+    let res;
+    try { res = await fetch('/Event/PartyBoardPartial?eventId=' + eventId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }); }
+    catch { return; }
+    if (!res.ok) { return; }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = (await res.text()).trim();
+    const fresh = tmp.querySelector('[data-event-party-board]');
+    if (!fresh) { return; }
+    board.replaceWith(fresh);
+    init(fresh, false);
+  }
+
+  async function startLiveUpdates() {
+    if (liveStarted) { return; }
+    const board = document.querySelector('[data-event-party-board]');
+    if (!board) { return; }
+    const linkshellId = Number(board.getAttribute('data-linkshell-id'));
+    if (!linkshellId) { return; }
+    liveStarted = true;
+    let since = -1;
+    for (;;) {
+      let data;
+      try {
+        const res = await fetch('/api/activity/changes?linkshellId=' + linkshellId + '&since=' + since, { credentials: 'same-origin' });
+        if (!res.ok) { await sleep(5000); continue; }
+        data = await res.json();
+      } catch { await sleep(5000); continue; }
+      const version = typeof data.version === 'number' ? data.version : 0;
+      if (since < 0) { since = version; continue; } // first response just primes the baseline
+      const advanced = version !== since;
+      since = version;
+      const areas = Array.isArray(data.areas) ? data.areas : [];
+      if (advanced && areas.some(function (a) { return a === 'events' || a === 'parties'; })) {
+        await refreshCurrentBoard();
+      }
+    }
+  }
+
+  // Submit the board's member sign-up / no-slot / withdraw forms (class ps-view-only) via
+  // fetch so the page DOESN'T reload — then swap in the fresh board. Delegated at the
+  // document level so it works for EVERY viewer (init()'s edit wiring is officer-only).
+  let signupAjaxWired = false;
+  function wireBoardSignupAjax() {
+    if (signupAjaxWired) { return; }
+    signupAjaxWired = true;
+    document.addEventListener('submit', async function (e) {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement) || !form.classList.contains('ps-view-only')) { return; }
+      if (!form.closest('[data-event-party-board]')) { return; }
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; }
+      const fd = new FormData(form);
+      // FormData omits the clicked submit button — re-add it so e.g. asLeader=true/false posts.
+      if (e.submitter && e.submitter.name) { fd.append(e.submitter.name, e.submitter.value); }
+      try {
+        await fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+      } catch {
+        // Network error — fall back to a normal submit so the user isn't stuck.
+        if (btn) { btn.disabled = false; }
+        form.submit();
+        return;
+      }
+      await refreshCurrentBoard();
+    });
+  }
+
   function boot() {
     document.querySelectorAll('[data-event-party-board]').forEach(el => init(el, false));
+    startLiveUpdates();
+    wireBoardSignupAjax();
   }
 
   if (document.readyState === 'loading') {

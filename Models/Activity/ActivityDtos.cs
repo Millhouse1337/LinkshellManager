@@ -234,7 +234,10 @@ public sealed record ActivityMemberDto(
     bool? Active = null,
     // True for a "linkshell-only" member (a placeholder account with no real login),
     // so the roster can badge it. See Services/ManualMemberService.
-    bool IsPlaceholder = false);
+    bool IsPlaceholder = false,
+    // Spendable DKP right now = LinkshellDkp − bid locks − pending live-event loot spend.
+    // Shown next to the committed balance so officers see real bidding power.
+    double BiddableDkp = 0);
 
 // "Jobs Roster" — every member's leveled jobs (the levels they entered on their
 // Profile), for the linkshell's main + alt characters. JobCatalog is the job
@@ -341,9 +344,13 @@ public sealed record ActivityEventParticipantDto(
     DateTime? ResumeTime,
     DateTime? PauseTime,
     bool? IsOnBreak,
+    bool WithdrewFromEvent,
     double? Duration,
     double? EventDkp,
-    IReadOnlyList<ActivityStatusLedgerDto> StatusLedger);
+    IReadOnlyList<ActivityStatusLedgerDto> StatusLedger,
+    // Spendable DKP right now = LinkshellDkp − bid locks − pending live-event loot spend.
+    // Shown next to each live participant so bidding power is clear during the event.
+    double BiddableDkp = 0);
 
 public sealed record ActivityEventAddMemberCandidateDto(
     string AppUserId,
@@ -449,12 +456,18 @@ public sealed record ActivityDkpHistoryDto(
     string? SelectedMemberName,
     double CurrentBalance,
     IReadOnlyList<ActivityDkpHistoryMemberDto> Members,
-    IReadOnlyList<ActivityDkpLedgerEntryDto> Entries);
+    IReadOnlyList<ActivityDkpLedgerEntryDto> Entries,
+    // Selected member's DKP spent on loot in still-live events, not yet committed. Shown as
+    // a pending deduction; already removed from biddable power.
+    double SelectedPendingLootSpend = 0);
 
 public sealed record ActivityDkpHistoryMemberDto(
     string AppUserId,
     string CharacterName,
-    double CurrentBalance);
+    double CurrentBalance,
+    // DKP spent on loot in still-live events, not yet committed to the ledger. Shown as a
+    // pending deduction; already removed from biddable power so it can't be double-spent.
+    double PendingLootSpend = 0);
 
 public sealed record ActivityDkpAuditRequest(
     int LinkshellId,
@@ -780,6 +793,10 @@ public sealed record ActivityEditEventHistoryRequest(
     int? DkpPerHour);
 
 public sealed record ActivitySetParticipantDkpRequest(double Amount);
+
+// Add a member to a closed event after the fact + grant DKP (wired into the ledger/balance).
+public sealed record ActivityAddEventHistoryParticipantRequest(
+    string? AppUserId, double Dkp, string? JobType, string? JobName, string? SubJobName);
 
 public sealed record ActivitySetActiveCreditRequest(bool Credited);
 

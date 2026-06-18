@@ -298,9 +298,40 @@ public sealed partial class ActivityDataController
             });
         }
 
-        // Full withdrawal: drop the member's party slot (if any) AND their
-        // attendance row, so "Withdraw From Event" removes them everywhere — not
-        // just the live roster. Mirrors the Discord board's Withdraw button.
+        var eventEntity = await _dbContext.Events.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        // LIVE event: "Withdraw From Event" parks the member in the Break Room rather
+        // than removing them — their timer pauses and their DKP / attendance / event
+        // history are preserved, so a return (Resume from break) picks up exactly where
+        // they left off. Their party slot is kept too. Idempotent if already on break.
+        if (eventEntity.CommencementStartTime.HasValue)
+        {
+            var live = await _dbContext.AppUserEvents
+                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
+            if (live is null)
+            {
+                return NotFound(new { error = "No participation was found for the current app user." });
+            }
+            if (live.IsOnBreak != true)
+            {
+                PutParticipationOnBreak(live, eventId, DateTime.UtcNow, eventEntity.CommencementStartTime);
+            }
+            // Mark intent-to-leave so the Break Room shows a "not returning" label. They're
+            // kept in the Break Room (not removed), so if they change their mind a Resume
+            // picks up exactly where they left off.
+            live.WithdrewFromEvent = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            EnqueueEventBoardRefresh(eventId);
+            return Ok(new { success = true, onBreak = true });
+        }
+
+        // PRE-START: there's no accrued time/DKP yet, so withdrawing just cancels the
+        // signup — drop the member's party slot (if any) AND their attendance row.
         var affectedPartyId = await EventPartySignupService.LeaveAsync(
             _dbContext, eventId, appUser.Id, cancellationToken);
 

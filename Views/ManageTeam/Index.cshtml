@@ -7,6 +7,8 @@
     // appUserId -> current credit / absent streaks (consecutive recent counting events).
     var memberStreaks = ViewBag.MemberStreaks as Dictionary<string, LinkshellManagerDiscordApp.Services.MemberStreaks>
         ?? new Dictionary<string, LinkshellManagerDiscordApp.Services.MemberStreaks>();
+    var biddableDkp = ViewBag.BiddableDkp as Dictionary<string, double>
+        ?? new Dictionary<string, double>();
 }
 
 @functions {
@@ -112,6 +114,19 @@ else
         }
         else
         {
+            <style>
+                /* Scrollable roster: bound the height and keep the column headers
+                   pinned while scrolling. The themed header is normally transparent,
+                   so give the sticky cells the panel background to avoid bleed-through. */
+                .roster-scroll { max-height: 60vh; overflow-y: auto; overflow-x: auto; }
+                .roster-scroll table.themed thead th {
+                    position: sticky;
+                    top: 0;
+                    z-index: 2;
+                    background: var(--surface, #121216);
+                }
+            </style>
+            <div class="roster-scroll">
             <table class="table themed">
                 <thead>
                     <tr>
@@ -156,7 +171,13 @@ else
                             <td style="text-align:right">
                                 <span class="tag @(streaks.Absent > 0 ? "danger" : "")" title="Consecutive recent events missed (no active credit)">@streaks.Absent</span>
                             </td>
-                            <td class="num" style="text-align:right">@((member.LinkshellDkp ?? 0).ToString("N0"))</td>
+                            <td class="num" style="text-align:right">
+                                @((member.LinkshellDkp ?? 0).ToString("N0"))
+                                @if (biddableDkp.TryGetValue(member.AppUserId ?? string.Empty, out var bd) && System.Math.Abs(bd - (member.LinkshellDkp ?? 0)) > 0.0001)
+                                {
+                                    <div style="font-size:11px;color:var(--fg-3)" title="Biddable now = balance − bids you're winning − DKP spent on loot in a live event">@bd.ToString("0.##") biddable</div>
+                                }
+                            </td>
                             <td style="font-size:12px;color:var(--fg-3)">
                                 @(member.DateJoined.HasValue ? member.DateJoined.Value.ToString("MMM d, yyyy") : "—")
                             </td>
@@ -181,6 +202,7 @@ else
                     }
                 </tbody>
             </table>
+            </div>
 
             @if (Model.TotalPages > 1)
             {

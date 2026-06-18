@@ -301,6 +301,21 @@ public sealed partial class ActivityDataController
         var alt1MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt1MeritJobs);
         var alt2MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt2MeritJobs);
 
+        // Biddable DKP per (linkshell, member): committed balance − bid locks − pending
+        // live-event loot spend. Surfaced on the roster and next to each live-event
+        // participant so spendable power is clear at a glance (DKP is per-linkshell, and
+        // events can span linkshells, so it's keyed by linkshell).
+        var biddableByLinkshell = new Dictionary<int, Dictionary<string, double>>();
+        foreach (var lsId in linkshellIds)
+        {
+            biddableByLinkshell[lsId] = await AuctionDkpService.ComputeBiddableDkpByUserAsync(
+                _dbContext, lsId, cancellationToken);
+        }
+        double BiddableDkp(int lsId, string? userId) =>
+            userId != null && biddableByLinkshell.TryGetValue(lsId, out var byUser)
+                ? byUser.GetValueOrDefault(userId)
+                : 0d;
+
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
                 appUser.Id,
@@ -355,7 +370,8 @@ public sealed partial class ActivityDataController
                         member.DateJoined,
                         member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Credit : 0,
                         member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Absent : 0,
-                        IsPlaceholder: member.AppUser?.IsPlaceholder ?? false)).ToList(),
+                        IsPlaceholder: member.AppUser?.IsPlaceholder ?? false,
+                        BiddableDkp: BiddableDkp(primaryLinkshellId!.Value, member.AppUserId))).ToList(),
                     primaryRules.Select(rule => new ActivityRuleDto(
                         rule.Id,
                         rule.LinkshellId,
@@ -468,6 +484,7 @@ public sealed partial class ActivityDataController
                         participation.ResumeTime,
                         participation.PauseTime,
                         participation.IsOnBreak,
+                        participation.WithdrewFromEvent,
                         participation.Duration,
                         participation.EventDkp,
                         participation.StatusLedgerEntries
@@ -482,7 +499,8 @@ public sealed partial class ActivityDataController
                                 item.DeniedAt,
                                 item.DeniedBy,
                                 item.Source))
-                            .ToList()))
+                            .ToList(),
+                        BiddableDkp(evt.LinkshellId, participation.AppUserId)))
                     .ToList(),
                 evt.EventLootDetails
                     .OrderByDescending(loot => loot.Id)

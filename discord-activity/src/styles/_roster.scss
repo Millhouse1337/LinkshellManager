@@ -79,7 +79,20 @@
    Character (avatar + name + alts) | Rank | Status | Active credit | Absent
    streak | DKP | Joined | Actions. Horizontal scroll on narrow screens so the
    columns never collapse. */
-.panel-tab .ac-roster--with-actions { overflow-x: auto; }
+/* Scrollable roster: cap the height so a large roster doesn't run the whole page,
+   and pin the column headers while the rows scroll (header already has a solid
+   --surface-2 background, so nothing bleeds through). Keeps the horizontal scroll
+   the wide actions layout needs. */
+.panel-tab .ac-roster--with-actions {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+.panel-tab .ac-roster--with-actions .ac-roster-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 .panel-tab .ac-roster--with-actions .ac-roster-head,
 .panel-tab .ac-roster--with-actions .ac-roster-row {
   grid-template-columns: minmax(170px, 1.6fr) 120px 100px 100px 112px 60px 100px minmax(180px, 1fr);

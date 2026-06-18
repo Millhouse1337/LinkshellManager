@@ -3,6 +3,7 @@ using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -114,6 +115,7 @@ public partial class EventController
         var vm = new PartyBoardPanelViewModel
         {
             EventId = eventId,
+            LinkshellId = ev.LinkshellId,
             Board = board,
             CanManageParties = CanManageLinkshell(membership),
             CurrentUserId = user.Id,
@@ -146,6 +148,12 @@ public partial class EventController
         var result = await op();
         if (!result.Success) return Json(new { success = false, error = result.Error });
         EnqueueEventBoardRefresh(eventId);
+        // Push to the live change feed so other viewers (web long-poll + Activity)
+        // refresh instantly. Member moves/seats already notify via the
+        // EventPartySlotSignup save hook; this covers structural edits (empty-slot job
+        // change, add/delete slot, add/remove party, rename) that only touch PartySetup* rows.
+        HttpContext.RequestServices.GetRequiredService<LinkshellChangeNotifier>()
+            .Notify(ev.LinkshellId, LinkshellChangeNotifier.Areas.Parties);
         return Json(new { success = true });
     }
 }

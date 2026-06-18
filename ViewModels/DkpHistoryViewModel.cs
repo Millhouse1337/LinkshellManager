@@ -9,6 +9,9 @@ public class DkpHistoryViewModel
     public string? SelectedAppUserId { get; set; }
     public string? SelectedMemberName { get; set; }
     public double CurrentBalance { get; set; }
+    // Selected member's DKP spent on loot in still-live events, not yet committed. Shown as
+    // a pending deduction; already removed from biddable power.
+    public double SelectedPendingLootSpend { get; set; }
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = DefaultPageSize;
     public int TotalEntryCount { get; set; }
@@ -31,6 +34,7 @@ public class DkpHistoryMemberOptionViewModel
     public string AppUserId { get; set; } = string.Empty;
     public string CharacterName { get; set; } = string.Empty;
     public double CurrentBalance { get; set; }
+    public double PendingLootSpend { get; set; }
 }
 
 public class DkpHistoryEntryViewModel

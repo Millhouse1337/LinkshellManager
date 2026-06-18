@@ -470,6 +470,8 @@ public sealed partial class ActivityDataController
                 }
 
                 winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
+                // Stamp the actual deducted amount so Loot History edits can refund precisely.
+                lootDetail.ActualDeductedDkp = Math.Abs(amount);
 
                 var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
                 ledgerEntries.Add(new DkpLedgerEntry
@@ -495,7 +497,17 @@ public sealed partial class ActivityDataController
         }
 
         _dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
-        _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
+        // Preserve the loot rows post-close: re-parent each to the new EventHistory (and
+        // detach the EventId before the Event is deleted) so they show in Loot History
+        // instead of vanishing. EventLootDetail.EventId is SetNull, so the Event delete
+        // below won't cascade-remove them. Mirrors the web EndEventCoreAsync — the Activity
+        // path was deleting them, which is why live-event loot disappeared after ending.
+        foreach (var lootDetail in eventEntity.EventLootDetails)
+        {
+            lootDetail.EventHistory = history;
+            lootDetail.Event = null;
+            lootDetail.EventId = null;
+        }
         _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
         _dbContext.Events.Remove(eventEntity);
 

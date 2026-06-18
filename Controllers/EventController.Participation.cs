@@ -85,6 +85,7 @@ public partial class EventController
                       IsVerified = item.IsVerified,
                       Proctor = item.Proctor,
                       IsOnBreak = item.IsOnBreak,
+                      WithdrewFromEvent = item.WithdrewFromEvent,
                       PauseTime = ConvertUtcToUserTimeZone(item.PauseTime, user.TimeZone),
                       ResumeTime = ConvertUtcToUserTimeZone(item.ResumeTime, user.TimeZone),
                       StatusLedgerEntries = item.StatusLedgerEntries
@@ -151,6 +152,10 @@ public partial class EventController
         ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
         ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
         ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
+        // Biddable DKP per member (committed − bid locks − pending live-event loot spend),
+        // shown next to each live participant (matches the Activity live event view).
+        ViewBag.BiddableDkp = await AuctionDkpService.ComputeBiddableDkpByUserAsync(
+            _context, eventToStart.LinkshellId, HttpContext.RequestAborted);
 
         return View(model);
     }
@@ -473,6 +478,8 @@ public partial class EventController
         participation.IsOnBreak = false;
         participation.PauseTime = null;
         participation.ResumeTime = DateTime.UtcNow;
+        // They came back — drop any "not returning" mark a Withdraw From Event set.
+        participation.WithdrewFromEvent = false;
         _context.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
@@ -709,6 +716,8 @@ public partial class EventController
         participation.IsOnBreak = false;
         participation.PauseTime = null;
         participation.ResumeTime = nowUtc;
+        // Officer resumed them — clear any "not returning" mark from a Withdraw.
+        participation.WithdrewFromEvent = false;
 
         var pendingReturns = await _context.AppUserEventStatusLedgers
             .Where(entry => entry.AppUserEventId == participation.Id

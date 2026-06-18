@@ -201,6 +201,15 @@ public sealed partial class ActivityDataController
             return false;
         }
 
+        // The Leader (linkshell owner) always has every permission — a stale role row
+        // (e.g. one seeded before a permission existed) or a mis-edited role must never
+        // lock the leader out of their own linkshell. This is why a Leader could hit a
+        // 403 on Browse players / Discord roster despite owning the linkshell.
+        if (LinkshellRanks.IsLeader(membership.Rank))
+        {
+            return true;
+        }
+
         var role = await GetEffectiveRoleAsync(membership.Rank, membership.LinkshellId, cancellationToken);
         return role is not null && selector(role);
     }
