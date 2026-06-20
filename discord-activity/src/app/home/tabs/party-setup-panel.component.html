@@ -2,12 +2,12 @@
   <div class="ps-panel" cdkDropListGroup>
     @if (canEdit()) {
       <div class="ps-edit-bar">
-        <button type="button" class="btn sm" [class.primary]="editing()" (click)="toggleEditing()">
-          {{ editing() ? 'Done editing' : 'Edit layout' }}
-        </button>
         @if (editing()) {
           <span class="ps-edit-hint">Drag slots to rearrange. Changes save live to the channel board.</span>
         }
+        <button type="button" class="btn sm" [class.primary]="editing()" (click)="toggleEditing()">
+          {{ editing() ? 'Done editing' : 'Edit layout' }}
+        </button>
       </div>
     }
 

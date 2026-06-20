@@ -1,0 +1,170 @@
+<dialog #logTodDialog class="event-edit-modal-dialog" (click)="onLogTodDialogClick($event)">
+  <div class="card-head">
+    <div class="card-title">{{ editingTodId !== null ? 'Edit ToD' : 'Log ToD' }}</div>
+    <div class="card-head-right">
+      @if (linkshellName(); as name) {
+        <span class="tag accent">{{ name }}</span>
+      }
+      <button type="button" class="btn ghost sm" (click)="cancelLogTodForm()">Close</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <form class="form-grid tod-form" (ngSubmit)="submitTod()">
+      @if (boardMode) {
+        <div class="tod-form__row tod-form__row--monster">
+          <label class="field">
+            <span class="form-label">Monster</span>
+            <input class="form-input" [value]="boardMonsterDisplay" readonly />
+          </label>
+        </div>
+      } @else {
+        <div class="tod-form__row tod-form__row--monster" [class.tod-form__row--split]="isTodMonsterOther()">
+          <label class="field">
+            <span class="form-label">Monster</span>
+            <select class="form-select" [(ngModel)]="todDraft.monsterName" (ngModelChange)="onTodMonsterChange($event)" name="todMonsterName">
+              @for (monster of todMonsterOptions; track monster) { <option [value]="monster">{{ monster }}</option> }
+            </select>
+          </label>
+          @if (isTodMonsterOther()) {
+            <label class="field">
+              <span class="form-label">Monster name</span>
+              <input class="form-input" [(ngModel)]="todCustomMonsterName" name="todCustomMonsterName"
+                placeholder="Enter monster name" maxlength="128" required />
+            </label>
+          }
+        </div>
+      }
+      <div class="form-row">
+        <label class="field">
+          <span class="form-label">Day number</span>
+          <div class="tod-day-number-row">
+            @if (!todDayNumberNotSpecified) {
+              <input class="form-input" [(ngModel)]="todDraft.dayNumber" name="todDayNumber" type="number" min="0" placeholder="0" />
+            } @else {
+              <input class="form-input" value="Not specified" disabled />
+            }
+            <label class="tod-toggle">
+              <input type="checkbox" [ngModel]="todDayNumberNotSpecified"
+                (ngModelChange)="onTodDayNumberNotSpecifiedChange($event)" name="todDayNumberNotSpecified" />
+              <span>Not specified</span>
+            </label>
+          </div>
+        </label>
+        <label class="field">
+          <span class="form-label">Claim</span>
+          <select class="form-select" [ngModel]="todClaimChoice"
+            (ngModelChange)="onTodClaimChoiceChange($event)" name="todClaim">
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="NotSpecified">Not specified</option>
+          </select>
+        </label>
+      </div>
+      <div class="tod-form__row tod-form__row--cooldown" [class.tod-form__row--split]="isTodCooldownOther()">
+        <label class="field">
+          <span class="form-label">Cooldown</span>
+          <select class="form-select" [(ngModel)]="todDraft.cooldown" (ngModelChange)="updateTodRepopTime()" name="todCooldown">
+            @for (cooldown of todCooldownOptions; track cooldown) { <option [value]="cooldown">{{ cooldown }}</option> }
+          </select>
+        </label>
+        @if (isTodCooldownOther()) {
+          <label class="field">
+            <span class="form-label">Cooldown hours</span>
+            <input class="form-input" [ngModel]="todCustomCooldownHours"
+              (ngModelChange)="onTodCustomCooldownChange($event)" name="todCustomCooldownHours"
+              type="number" min="1" placeholder="Cooldown hours" required />
+          </label>
+        }
+        <label class="field">
+          <span class="form-label">Interval</span>
+          <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
+            @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="field">
+          <span class="form-label">Time of death</span>
+          <input class="form-input" [ngModel]="todTimeLocalValue"
+            (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
+            type="datetime-local" step="1" required />
+        </label>
+        <label class="field">
+          <span class="form-label">Repop time</span>
+          <input class="form-input" [ngModel]="todRepopLocalValue" name="todRepopLocal"
+            type="datetime-local" step="1" readonly />
+        </label>
+      </div>
+      <div class="tod-repop-card">
+        <div class="tod-repop-card__label">Calculated repop</div>
+        <strong>{{ todRepopSummary() }}</strong>
+      </div>
+      @if (!boardMode) {
+      <div class="tod-form-bottom">
+        <div class="tod-form-bottom__main">
+          <div class="field">
+            <span class="form-label">Screenshot (optional)</span>
+            @if (todImagePath) {
+              <div class="tod-image-preview">
+                <img [src]="displayImagePath(todImagePath)" alt="ToD screenshot" />
+                <button type="button" class="btn sm danger-outline" (click)="removeTodImage()">Remove image</button>
+              </div>
+            } @else {
+              <label class="tod-file-upload" [class.is-disabled]="isUploadingTodImage">
+                <input type="file" accept="image/png,image/jpeg,image/webp"
+                  (change)="onTodImageFileChange($event)"
+                  [disabled]="isUploadingTodImage" />
+                <span class="tod-file-upload__btn">Choose file</span>
+                <span class="tod-file-upload__hint">
+                  {{ isUploadingTodImage ? 'Uploading…' : 'PNG, JPG, or WEBP' }}
+                </span>
+              </label>
+            }
+          </div>
+        </div>
+        @if (todDraft.claim && lootStructureFor(todDraft.linkshellId) !== 'LootCouncil') {
+          <div class="tod-form-bottom__aside">
+            <label class="tod-toggle">
+              <input type="checkbox" [ngModel]="!todDraft.noLoot"
+                (ngModelChange)="onTodNoLootChange(!$event)" name="todAddLoot" />
+              <span>Add loot</span>
+            </label>
+          </div>
+        }
+      </div>
+      @if (todDraft.claim && lootStructureFor(todDraft.linkshellId) !== 'LootCouncil' && !todDraft.noLoot) {
+        <div class="loot-rows">
+          <div class="panel__header">
+            <h4>Loot</h4>
+            <button type="button" class="btn sm" (click)="addTodLootRow()">Add row</button>
+          </div>
+          @for (loot of todDraft.lootDetails; track $index) {
+            <div class="loot-row-editor">
+              <input class="form-input" [(ngModel)]="loot.itemName" [name]="'todLootItem' + $index" placeholder="Item name" />
+              <select class="form-select" [(ngModel)]="loot.itemWinner" [name]="'todLootWinner' + $index">
+                <option value="">Winner</option>
+                @for (characterName of todCharacterNames(); track characterName) {
+                  <option [value]="characterName">{{ characterName }}</option>
+                }
+              </select>
+              <input class="form-input" [(ngModel)]="loot.winningDkpSpent" [name]="'todLootDkp' + $index"
+                type="number" min="0"
+                [attr.max]="lootInputMax(todDraft.linkshellId)"
+                [placeholder]="lootInputPlaceholder(todDraft.linkshellId)" />
+              <button type="button" class="btn sm danger-outline" (click)="removeTodLootRow($index)">Remove</button>
+            </div>
+          }
+        </div>
+      }
+      }
+      <div class="form-actions">
+        <button type="submit" class="btn primary" [disabled]="activity.busyTodSave() || isUploadingTodImage">
+          {{ activity.busyTodSave() ? 'Saving...' : (editingTodId !== null ? 'Save changes' : 'Log ToD') }}
+        </button>
+        <button type="button" class="btn ghost" (click)="cancelLogTodForm()" [disabled]="activity.busyTodSave()">
+          Cancel
+        </button>
+      </div>
+    </form>
+  </div>
+</dialog>

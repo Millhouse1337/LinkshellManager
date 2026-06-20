@@ -134,42 +134,55 @@ public sealed class DiscordInteractionsController : ControllerBase
 
         using (doc)
         {
-            var root = doc.RootElement;
-            var type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetInt32() : 0;
-
-            if (type == InteractionPing)
+            try
             {
-                return Ok(new { type = ResponsePong });
-            }
+                var root = doc.RootElement;
+                var type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetInt32() : 0;
 
-            if (type == InteractionMessageComponent)
-            {
-                return await HandleComponentAsync(root, cancellationToken);
-            }
-
-            if (type == InteractionModalSubmit)
-            {
-                return await HandleModalSubmitAsync(root, cancellationToken);
-            }
-
-            if (type == InteractionApplicationCommand)
-            {
-                var commandName = root.TryGetProperty("data", out var cmdData)
-                    && cmdData.TryGetProperty("name", out var cmdName) ? cmdName.GetString() : null;
-                // "/lsm" → post an officer-only launch card into the channel.
-                if (string.Equals(commandName, LaunchCommandName, StringComparison.OrdinalIgnoreCase))
+                if (type == InteractionPing)
                 {
-                    return await HandleLaunchCardCommandAsync(root, cancellationToken);
+                    return Ok(new { type = ResponsePong });
                 }
-                // The Activity's entry-point "Launch" command (now app-handled, so the
-                // public "Game Invitation" card is suppressed): just launch the Activity
-                // for the clicker with a quiet LAUNCH_ACTIVITY callback — no channel post.
-                return Ok(new { type = ResponseLaunchActivity, data = new { } });
-            }
 
-            // Unhandled interaction type — acknowledge with a no-op deferred
-            // update so Discord doesn't surface an error to the user.
-            return Ok(new { type = ResponseDeferredUpdate });
+                if (type == InteractionMessageComponent)
+                {
+                    return await HandleComponentAsync(root, cancellationToken);
+                }
+
+                if (type == InteractionModalSubmit)
+                {
+                    return await HandleModalSubmitAsync(root, cancellationToken);
+                }
+
+                if (type == InteractionApplicationCommand)
+                {
+                    var commandName = root.TryGetProperty("data", out var cmdData)
+                        && cmdData.TryGetProperty("name", out var cmdName) ? cmdName.GetString() : null;
+                    // "/lsm" → post an officer-only launch card into the channel.
+                    if (string.Equals(commandName, LaunchCommandName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return await HandleLaunchCardCommandAsync(root, cancellationToken);
+                    }
+                    // The Activity's entry-point "Launch" command (now app-handled, so the
+                    // public "Game Invitation" card is suppressed): just launch the Activity
+                    // for the clicker with a quiet LAUNCH_ACTIVITY callback — no channel post.
+                    return Ok(new { type = ResponseLaunchActivity, data = new { } });
+                }
+
+                // Unhandled interaction type — acknowledge with a no-op deferred
+                // update so Discord doesn't surface an error to the user.
+                return Ok(new { type = ResponseDeferredUpdate });
+            }
+            catch (Exception ex)
+            {
+                // A handler threw (e.g. a DB/schema fault such as a missing column from an
+                // unapplied migration). Without this catch the exception becomes a raw 500 /
+                // HTML response that Discord can only surface as the opaque "This interaction
+                // failed", hiding the real cause. Return a valid ephemeral instead and log the
+                // full stack so the actual error is visible in the server logs.
+                _logger.LogError(ex, "Discord interaction handler threw; returning an ephemeral error to the user.");
+                return Ephemeral("Something went wrong handling that — please try again. If it keeps happening, let an officer know.");
+            }
         }
     }
 
@@ -391,6 +404,13 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandlePartySlotLeaveAsync(eventId, appUserId, cancellationToken);
         }
 
+        // "Next Window" (window-cycle HNM boards) → officers only: wipe signups + advance.
+        if (customId.StartsWith(DiscordEventMessageBuilder.NextWindowPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.NextWindowPrefix);
+            return await HandleNextWindowAsync(eventId, appUserId, cancellationToken);
+        }
+
         // "Sign Up (No Slot)" → open an ephemeral job-pick wizard (role optional, job
         // required) so the attendee still says what they're coming as.
         if (customId.StartsWith(DiscordEventMessageBuilder.PartyJoinEventPrefix, StringComparison.Ordinal))
@@ -508,6 +528,75 @@ public sealed class DiscordInteractionsController : ControllerBase
     // identified by Discord id and named via a one-time modal (cached per event).
     // `promptTail` ("slot:42", "join:42", "job:42:War", …) lets the picker/modal
     // resume the right flow afterwards.
+    // "Next Window" button on a window-cycle HNM board (Tiamat/Jormungand/Vrtra). Officers
+    // only: wipe the board's signups and advance Event.HnmWindowNumber up to MaxWindow, then
+    // re-post the board (new "Window N" title + empty roster) off the 3s window via the queue.
+    private async Task<IActionResult> HandleNextWindowAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That board is no longer available.");
+        }
+
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+        if (ev is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        if (!HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        {
+            return Ephemeral("This board doesn't use windows.");
+        }
+
+        // Officers only (Leader/Officer rank in the event's linkshell). A button is visible
+        // to everyone on the board, so the gate is enforced here on click.
+        var membership = string.IsNullOrEmpty(appUserId)
+            ? null
+            : await _db.AppUserLinkshells.FirstOrDefaultAsync(
+                m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
+        if (!LinkshellRanks.IsLeaderOrOfficer(membership?.Rank))
+        {
+            return Ephemeral("Only officers can advance the window.");
+        }
+
+        if (ev.HnmWindowNumber >= HnmConfig.MaxWindow)
+        {
+            return Ephemeral($"Already on the final window ({HnmConfig.MaxWindow}).");
+        }
+
+        // Each window is a fresh sign-up → wipe slot signups + no-slot attendees.
+        var slotSignups = await _db.EventPartySlotSignups.Where(s => s.EventId == eventId).ToListAsync(cancellationToken);
+        _db.EventPartySlotSignups.RemoveRange(slotSignups);
+        var attendees = await _db.AppUserEvents.Where(p => p.EventId == eventId).ToListAsync(cancellationToken);
+        _db.AppUserEvents.RemoveRange(attendees);
+
+        ev.HnmWindowNumber += 1;
+        // Each window is ~an hour later, so push the predicted start/pop forward an hour.
+        if (ev.StartTime.HasValue)
+        {
+            ev.StartTime = ev.StartTime.Value.AddHours(1);
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
+        // Silent ack — no ephemeral confirmation to stack up; the board updates in place.
+        return Ok(new { type = ResponseDeferredUpdate });
+    }
+
+    // Picks the outside-signup gate for an event: HNM boards are gated by
+    // HnmOutsideSignupEnabled, every other event by OutsidePartySignupEnabled. The two
+    // toggles are independent per linkshell, so HNM can be open while general outside
+    // signups are closed (and vice-versa).
+    private async Task<bool> OutsideSignupAllowedAsync(Event ev, CancellationToken cancellationToken)
+    {
+        var isHnm = string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var flags = await _db.Linkshells
+            .Where(l => l.Id == ev.LinkshellId)
+            .Select(l => new { l.OutsidePartySignupEnabled, l.HnmOutsideSignupEnabled })
+            .FirstOrDefaultAsync(cancellationToken);
+        return isHnm ? (flags?.HnmOutsideSignupEnabled ?? false) : (flags?.OutsidePartySignupEnabled ?? false);
+    }
+
     private async Task<SignupContext> ResolveSignupContextAsync(
         Event ev, string? appUserId, string promptTail, CancellationToken cancellationToken)
     {
@@ -536,14 +625,19 @@ public sealed class DiscordInteractionsController : ControllerBase
             return SignupContext.Account(appUserId, ResolveSignupCharacter(membership, ev.Id, appUserId));
         }
 
-        // No linked account → outside path, gated by the linkshell setting.
-        var enabled = await _db.Linkshells
-            .Where(l => l.Id == ev.LinkshellId)
-            .Select(l => l.OutsidePartySignupEnabled)
-            .FirstOrDefaultAsync(cancellationToken);
+        // No linked account → outside path, gated by the linkshell setting (HNM boards
+        // use HnmOutsideSignupEnabled; other events use OutsidePartySignupEnabled).
+        var isHnm = string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var enabled = await OutsideSignupAllowedAsync(ev, cancellationToken);
         if (!enabled || string.IsNullOrEmpty(_discordUserId))
         {
-            return SignupContext.Stop(Ephemeral("Open LSM and sign in with Discord once to link your account, then try again."));
+            // The Discord id is already guaranteed (the click handler rejects an unreadable
+            // account earlier), so reaching here means the relevant outside-signup toggle is
+            // OFF for this linkshell. Name the one they need, instead of telling the player
+            // to "sign in" — which doesn't address the real cause.
+            return SignupContext.Stop(Ephemeral(isHnm
+                ? "This linkshell doesn't allow HNM outside sign-ups. Ask a leader to enable HNM Outside Sign Up in the linkshell settings."
+                : "This linkshell doesn't allow account-less signups. Ask a leader to enable Outside Party Signup in the linkshell settings — or open LSM and sign in with Discord to sign up with a linked account."));
         }
         // Already registered? An "unsynced" member (placeholder) linked to this Discord
         // user is recognized automatically — attribute the signup to it (earns DKP), and
@@ -586,10 +680,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<AppUserLinkshell?> TryJoinAsOutsideMemberAsync(
         Event ev, string appUserId, CancellationToken cancellationToken)
     {
-        var enabled = await _db.Linkshells
-            .Where(l => l.Id == ev.LinkshellId)
-            .Select(l => l.OutsidePartySignupEnabled)
-            .FirstOrDefaultAsync(cancellationToken);
+        var enabled = await OutsideSignupAllowedAsync(ev, cancellationToken);
         if (!enabled)
         {
             return null;
@@ -637,10 +728,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return (appUserId, null);
         }
-        var enabled = await _db.Linkshells
-            .Where(l => l.Id == ev.LinkshellId)
-            .Select(l => l.OutsidePartySignupEnabled)
-            .FirstOrDefaultAsync(cancellationToken);
+        // Outside withdraw uses the same per-event-type gate as signup, so an HNM-only
+        // linkshell (Outside Party Signup off, HNM Outside Sign Up on) can still withdraw.
+        var enabled = await OutsideSignupAllowedAsync(ev, cancellationToken);
         if (!enabled || string.IsNullOrEmpty(_discordUserId))
         {
             return null;
@@ -659,25 +749,34 @@ public sealed class DiscordInteractionsController : ControllerBase
         var prefill = string.IsNullOrWhiteSpace(_discordDisplayName) ? string.Empty : _discordDisplayName!.Trim();
         if (prefill.Length > 64) prefill = prefill[..64];
 
-        static object NameRow(string fieldId, string label, bool required, string value, string placeholder) => new
+        static object NameRow(string fieldId, string label, bool required, string value, string placeholder)
         {
-            type = 1, // action row
-            components = new object[]
+            // Build the text input as a dictionary so we can OMIT "value" entirely when
+            // there's no prefill. Discord can reject a modal whose text input ships an
+            // empty default value ("") together with min_length >= 1 (the default would
+            // be shorter than the minimum). An absent value is the normal "starts empty"
+            // state and is unambiguously valid — keys mirror the Discord field names 1:1.
+            var input = new Dictionary<string, object?>
             {
-                new
-                {
-                    type = 4, // text input
-                    custom_id = fieldId,
-                    label,
-                    style = 1, // short
-                    min_length = required ? 1 : 0,
-                    max_length = 64,
-                    required,
-                    value,
-                    placeholder
-                }
+                ["type"] = 4, // text input
+                ["custom_id"] = fieldId,
+                ["label"] = label,
+                ["style"] = 1, // short
+                ["min_length"] = required ? 1 : 0,
+                ["max_length"] = 64,
+                ["required"] = required,
+                ["placeholder"] = placeholder,
+            };
+            if (!string.IsNullOrEmpty(value))
+            {
+                input["value"] = value;
             }
-        };
+            return new
+            {
+                type = 1, // action row
+                components = new object[] { input }
+            };
+        }
 
         return Ok(new
         {
@@ -689,8 +788,8 @@ public sealed class DiscordInteractionsController : ControllerBase
                 components = new object[]
                 {
                     NameRow(OutsideNameFieldId, "Your MAIN FFXI character name", true, prefill, "e.g. Millhouse"),
-                    NameRow(OutsideAlt1FieldId, "Alt 1 character name", true, string.Empty, "e.g. Millhouse2401"),
-                    NameRow(OutsideAlt2FieldId, "Alt 2 character name", true, string.Empty, "e.g. Millhouse2402"),
+                    NameRow(OutsideAlt1FieldId, "Alt 1 character name (optional)", false, string.Empty, "e.g. Millhouse2401"),
+                    NameRow(OutsideAlt2FieldId, "Alt 2 character name (optional)", false, string.Empty, "e.g. Millhouse2402"),
                 }
             }
         });
@@ -811,13 +910,13 @@ public sealed class DiscordInteractionsController : ControllerBase
             {
                 return Ephemeral("That event is no longer open.");
             }
-            var outsideEnabled = await _db.Linkshells
-                .Where(l => l.Id == ev.LinkshellId)
-                .Select(l => l.OutsidePartySignupEnabled)
-                .FirstOrDefaultAsync(cancellationToken);
+            var isHnm = string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+            var outsideEnabled = await OutsideSignupAllowedAsync(ev, cancellationToken);
             if (!outsideEnabled)
             {
-                return Ephemeral("Outside signups aren't enabled for this event.");
+                return Ephemeral(isHnm
+                    ? "HNM outside sign-ups aren't enabled for this event."
+                    : "Outside signups aren't enabled for this event.");
             }
 
             var main = ExtractModalValue(data, OutsideNameFieldId)?.Trim();
@@ -1026,8 +1125,8 @@ public sealed class DiscordInteractionsController : ControllerBase
             var available = combos.Where(c => FindBestOpenSlotForCombo(ev.PartySetup, slotSignups, c) is not null).ToList();
             if (available.Count > 0)
             {
-                var full = combos.Where(c => !available.Contains(c)).ToList();
-                return QuickComboPicker(eventId, available, full, ev.EventName);
+                var unavailable = combos.Where(c => !available.Contains(c)).ToList();
+                return QuickComboPicker(eventId, available, unavailable, ev.PartySetup, slotSignups, ev.EventName);
             }
         }
 
@@ -1088,15 +1187,19 @@ public sealed class DiscordInteractionsController : ControllerBase
     // The best OPEN slot a combo can fill, or null if none: a Job slot whose main
     // (and pinned sub, if any) match; else a Role slot whose role matches; else any
     // open "Any" slot. Most-specific wins so the member lands in the right slot.
+    // With ignoreOccupied=true the taken check is skipped, so it answers "does a slot
+    // of this shape exist on the board AT ALL" — used to tell "full" (slot exists but
+    // taken) apart from "not on the board" (no such slot) in the quick-signup message.
     private static PartySetupSlot? FindBestOpenSlotForCombo(
-        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups, JobCombo combo)
+        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups, JobCombo combo,
+        bool ignoreOccupied = false)
     {
         PartySetupSlot? jobMatch = null, roleMatch = null, anyMatch = null;
         foreach (var party in setup.Alliances.SelectMany(a => a.Parties))
         {
             foreach (var slot in party.Slots.OrderBy(s => s.SortOrder))
             {
-                if (signups.ContainsKey(slot.Id)) continue; // taken
+                if (!ignoreOccupied && signups.ContainsKey(slot.Id)) continue; // taken
                 var type = slot.RequirementType ?? "Any";
                 if (string.Equals(type, "Job", StringComparison.OrdinalIgnoreCase))
                 {
@@ -1126,9 +1229,14 @@ public sealed class DiscordInteractionsController : ControllerBase
            + (string.IsNullOrWhiteSpace(combo.Role) ? string.Empty : $" · {combo.Role}");
 
     // Ephemeral "quick sign up" select: one option per available recent combo (auto-
-    // claims its matching slot) plus a manual fallback. Full recent combos are only
-    // listed in the text, so an unavailable combo can't be selected.
-    private IActionResult QuickComboPicker(int eventId, List<JobCombo> available, List<JobCombo> full, string? eventName)
+    // claims its matching slot) plus a manual fallback. Unavailable recent combos are
+    // only described in the text (never selectable), and worded accurately: a combo
+    // whose matching slot exists but is taken is "Full right now", while a combo with
+    // no slot of that shape on the board at all is "Not on the board" — the old code
+    // called both "full", which read as wrong when the slot simply didn't exist.
+    private IActionResult QuickComboPicker(
+        int eventId, List<JobCombo> available, List<JobCombo> unavailable,
+        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups, string? eventName)
     {
         var options = available
             .Select(c => (object)new { label = $"{ComboLabel(c)} · open", value = $"c|{c.Main}|{c.Sub}|{c.Role}" })
@@ -1136,9 +1244,20 @@ public sealed class DiscordInteractionsController : ControllerBase
             .ToArray();
 
         var content = "⚡ Quick sign up — pick a recent job, or choose a slot manually:";
+
+        // A matching slot exists (ignoring occupancy) ⇒ it's genuinely full; otherwise
+        // there's no slot of that shape on the board.
+        var full = unavailable
+            .Where(c => FindBestOpenSlotForCombo(setup, signups, c, ignoreOccupied: true) is not null)
+            .ToList();
+        var notOnBoard = unavailable.Where(c => !full.Contains(c)).ToList();
         if (full.Count > 0)
         {
             content += $"\nFull right now: {string.Join(", ", full.Select(ComboLabel))}.";
+        }
+        if (notOnBoard.Count > 0)
+        {
+            content += $"\nNot on the board: {string.Join(", ", notOnBoard.Select(ComboLabel))}.";
         }
 
         return PickerResponse(EventHeading(eventName, content), SelectRow(QuickComboPrefix, eventId.ToString(), "Pick a recent job", options));

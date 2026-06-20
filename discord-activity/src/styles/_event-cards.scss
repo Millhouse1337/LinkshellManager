@@ -436,21 +436,21 @@
 .evt-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 38px;
-  padding: 0 16px;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
   border-radius: var(--r-md);
   border: 1px solid var(--border-2);
   background: var(--surface);
   color: var(--fg-1);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease, color 0.12s ease;
 }
-.evt-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.evt-btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .evt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .evt-btn--primary {
@@ -460,6 +460,20 @@
   box-shadow: 0 6px 18px rgba(99, 102, 241, 0.28);
 }
 .evt-btn--primary:hover:not(:disabled) { filter: brightness(1.07); }
+
+/* Gold CTA — matches the live event's "View / Join Party Setup" button so the
+   queued "View & Sign Up" reads as the same primary action across states. */
+.evt-btn--gold {
+  border-color: #f5d471;
+  color: #1f1605;
+  font-weight: 700;
+  background: linear-gradient(135deg, #d7a93d 0%, #f1c75c 100%);
+  box-shadow: 0 0 0 1px rgba(32, 24, 8, 0.28), 0 8px 20px rgba(215, 169, 61, 0.24);
+}
+.evt-btn--gold:hover:not(:disabled) {
+  border-color: #fae08d;
+  background: linear-gradient(135deg, #e0b54b 0%, #f7d77a 100%);
+}
 
 .evt-btn--secondary {
   background: var(--surface-3);
@@ -471,7 +485,7 @@
   background: var(--surface-2);
 }
 
-.evt-btn--small { padding: 0 14px; }
+.evt-btn--small { height: 30px; padding: 0 10px; }
 
 .evt-btn--danger { color: var(--danger); }
 .evt-btn--danger:hover:not(:disabled) {

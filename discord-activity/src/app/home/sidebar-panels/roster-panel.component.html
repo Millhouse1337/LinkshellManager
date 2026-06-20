@@ -205,9 +205,9 @@
             <div>
               <span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span>
               @if ((member.absentStreak ?? 0) > 0) {
-                <span class="ac-roster-credit absent" title="Absent streak: recent events missed in a row">{{ member.absentStreak }}</span>
+                <span class="ac-roster-credit absent" title="Events missed in a row">{{ member.absentStreak }}</span>
               } @else {
-                <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Active-credit streak: recent events credited in a row">{{ member.activeCreditStreak ?? 0 }}</span>
+                <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Events attended in a row">{{ member.activeCreditStreak ?? 0 }}</span>
               }
             </div>
             @if (canManageMembers() && member.appUserId) {

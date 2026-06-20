@@ -176,14 +176,25 @@ public sealed partial class ActivityDataController
             {
                 return Forbid();
             }
-            _dbContext.EventPartySlotSignups.Remove(signup);
-            // An officer clearing a slot mid-run also drops the live participation so
-            // the board and the DKP roster stay consistent.
-            if (ev.CommencementStartTime is not null && signup.AppUserId is not null)
+
+            int? affectedPartyId;
+            if (ev.CommencementStartTime is not null)
             {
-                await EventPartySignupService.RemoveParticipationAsync(_dbContext, eventId, signup.AppUserId, cancellationToken);
+                var startTime = ev.CommencementStartTime ?? ev.StartTime;
+                affectedPartyId = await EventPartySignupService.MoveSlotSignupToNoSlotAsync(
+                    _dbContext, eventId, signup, startTime, cancellationToken);
             }
+            else
+            {
+                affectedPartyId = await _dbContext.PartySetupSlots
+                    .Where(s => s.Id == signup.PartySetupSlotId)
+                    .Select(s => (int?)s.PartySetupPartyId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                _dbContext.EventPartySlotSignups.Remove(signup);
+            }
+
             await _dbContext.SaveChangesAsync(cancellationToken);
+            await EventPartySignupService.ResolvePartyLeadershipAsync(_dbContext, eventId, affectedPartyId, cancellationToken);
             EnqueueEventBoardRefresh(eventId);
         }
 

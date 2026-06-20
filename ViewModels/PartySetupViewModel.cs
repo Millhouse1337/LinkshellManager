@@ -209,9 +209,10 @@ public class PartySetupSlotView
                 PartySetupSlotRequirementTypes.Role => string.IsNullOrWhiteSpace(Role)
                     ? "Any Role"
                     : $"Any {Role}",
+                // "PC" (Player's Choice) keeps the label on one line — e.g. "MNK/PC".
                 PartySetupSlotRequirementTypes.Job => string.IsNullOrWhiteSpace(MainJob)
                     ? "Any job"
-                    : $"{MainJob}/{(string.IsNullOrWhiteSpace(SubJob) ? "Player's Choice" : SubJob)}",
+                    : $"{MainJob}/{(string.IsNullOrWhiteSpace(SubJob) ? "PC" : SubJob)}",
                 _ => "Any Role"
             };
             return string.IsNullOrWhiteSpace(Label) ? core : $"{core} ({Label})";

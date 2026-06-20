@@ -13,8 +13,9 @@ import type {
 
 // Past (closed) event browser + editor for the Activity. Mirrors the web
 // EventHistory page: anyone can view; leaders/officers can edit metadata/DKP,
-// correct an attendee's DKP, or remove an attendee (refunds DKP). Embedded in
-// the Event System tab; loads for the given linkshell.
+// correct an attendee's DKP/active-credit, remove an attendee (refunds DKP), or
+// add a roster member who missed it (grants DKP). Embedded in the Event System
+// tab; loads for the given linkshell.
 @Component({
   selector: 'app-event-history-panel',
   standalone: true,
@@ -23,7 +24,7 @@ import type {
     <div class="evt-history">
       <div class="evt-history__head">
         <h3>Past events</h3>
-        <button type="button" class="btn ghost sm" (click)="load()" [disabled]="loading()">
+        <button type="button" class="ghost sm" (click)="load()" [disabled]="loading()">
           {{ loading() ? 'Loading…' : 'Refresh' }}
         </button>
       </div>
@@ -33,164 +34,239 @@ import type {
       }
 
       @for (h of histories(); track h.id) {
-        <div class="evt-history__row">
-          <button type="button" class="evt-history__summary" (click)="toggle(h)">
-            <span class="evt-history__name">{{ h.eventName || 'Event' }}</span>
-            <span class="evt-history__meta">
-              {{ h.eventType || '—' }} · {{ h.endTime ? (h.endTime | date:'MMM d, y') : 'completed' }}
-              · {{ h.dkpPerHour ?? 0 }} dkp/h · {{ h.participants.length }} attendees
+        <div class="event-card" [class.event-card--open]="expandedId() === h.id">
+          <button type="button" class="event-head" (click)="toggle(h)">
+            <span class="event-title">
+              <span class="ico">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              </span>
+              <strong>{{ h.eventName || 'Event' }}</strong>
             </span>
-            <span class="evt-history__chev">{{ expandedId() === h.id ? '▾' : '▸' }}</span>
+
+            <span class="event-meta">
+              <span class="chip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                {{ h.endTime ? (h.endTime | date:'MMM d, y') : 'Completed' }}
+              </span>
+              <span class="chip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/></svg>
+                {{ h.participants.length }} {{ h.participants.length === 1 ? 'attendee' : 'attendees' }}
+              </span>
+              <span class="chip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                {{ h.dkpPerHour ?? 0 }} DKP/h
+              </span>
+            </span>
+
+            <span class="badge">Past Event</span>
+            <span class="chevron" [class.is-open]="expandedId() === h.id" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
           </button>
 
           @if (expandedId() === h.id) {
-            <div class="evt-history__body">
+            <div class="event-body">
               @if (canManage() && edit[h.id]; as draft) {
-                <div class="evt-history__edit">
-                  <div class="evt-history__edit-row">
-                    <label><span>Name</span><input [(ngModel)]="draft.eventName" [name]="'eName' + h.id" /></label>
-                    <label><span>Type</span><input [(ngModel)]="draft.eventType" [name]="'eType' + h.id" /></label>
-                    <label><span>Location</span><input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
-                  </div>
-                  <div class="evt-history__edit-row2">
-                    <label class="evt-dur"><span>Duration</span>
-                      <span class="evt-dur__inputs">
-                        <input type="number" min="0" [value]="durationPart(draft, 'h')" (change)="setDurationPart(draft, 'h', $any($event.target).value)" [name]="'eDurH' + h.id" /><small>h</small>
-                        <input type="number" min="0" max="59" [value]="durationPart(draft, 'm')" (change)="setDurationPart(draft, 'm', $any($event.target).value)" [name]="'eDurM' + h.id" /><small>m</small>
-                        <input type="number" min="0" max="59" [value]="durationPart(draft, 's')" (change)="setDurationPart(draft, 's', $any($event.target).value)" [name]="'eDurS' + h.id" /><small>s</small>
-                      </span>
+                <section class="panel">
+                  <h3>
+                    <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                    Event Details
+                  </h3>
+                  <div class="form-grid">
+                    <label>Name<input [(ngModel)]="draft.eventName" [name]="'eName' + h.id" /></label>
+                    <label>Type<input [(ngModel)]="draft.eventType" [name]="'eType' + h.id" /></label>
+                    <label>Location<input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
+                    <label>Duration
+                      <div class="duration">
+                        <input type="number" min="0" [value]="durationPart(draft, 'h')" (change)="setDurationPart(draft, 'h', $any($event.target).value)" [name]="'eDurH' + h.id" /><span>h</span>
+                        <input type="number" min="0" max="59" [value]="durationPart(draft, 'm')" (change)="setDurationPart(draft, 'm', $any($event.target).value)" [name]="'eDurM' + h.id" /><span>m</span>
+                        <input type="number" min="0" max="59" [value]="durationPart(draft, 's')" (change)="setDurationPart(draft, 's', $any($event.target).value)" [name]="'eDurS' + h.id" /><span>s</span>
+                      </div>
                     </label>
-                    <label><span>DKP / hour</span><input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
-                    <button type="button" class="btn primary sm" (click)="saveEvent(h)">Save event</button>
-                  </div>
-                  <p class="evt-history__hint">Changing DKP / hour rescales every attendee's earned DKP and balance.</p>
-                </div>
-              }
-
-              <div class="evt-history__attendees">
-                @if (canManage()) {
-                  <div class="evt-att evt-att--head">
-                    <span>Attendee</span>
-                    <span class="evt-att__c" title="Counts toward this member's Active status">Active credit</span>
-                    <span class="evt-att__c" title="Absent = no active credit; counts toward the inactive threshold">Absent</span>
-                    <span class="evt-att__c">DKP</span>
-                    <span></span>
-                  </div>
-                }
-                @for (p of h.participants; track p.id) {
-                  @if (canManage()) {
-                    <div class="evt-att">
-                      <span class="evt-history__who">
-                        {{ p.characterName }}
-                        <small>{{ p.jobName }}@if (p.subJobName) {/{{ p.subJobName }}}</small>
-                      </span>
-                      <span class="evt-att__c">
-                        <input type="checkbox" [checked]="p.activeCredit !== false"
-                               (change)="toggleCredit(h, p, $any($event.target).checked)"
-                               title="Active-status credit for this event" />
-                      </span>
-                      <span class="evt-att__c">
-                        <input type="checkbox" [checked]="p.activeCredit === false"
-                               (change)="toggleCredit(h, p, !$any($event.target).checked)"
-                               title="Absent = no active credit (counts toward the inactive threshold)" />
-                      </span>
-                      <span class="evt-att__c">
-                        <input type="number" [step]="dkpStep()" min="0" [(ngModel)]="dkpDraft[p.id]" [name]="'pDkp' + p.id" />
-                      </span>
-                      <span class="evt-att__actions">
-                        <button type="button" class="btn ghost sm" (click)="saveDkp(h, p)">Save</button>
-                        <button type="button" class="btn sm danger-outline" (click)="removeParticipant(h, p)">Remove</button>
-                      </span>
-                    </div>
-                  } @else {
-                    <div class="evt-history__attendee">
-                      <span class="evt-history__who">
-                        {{ p.characterName }}
-                        <small>{{ p.jobName }}@if (p.subJobName) {/{{ p.subJobName }}}</small>
-                      </span>
-                      <span class="evt-history__dkp">
-                        <span class="tag" [class.success]="p.activeCredit !== false">{{ p.activeCredit !== false ? 'Credited' : 'No credit' }}</span>
-                        {{ p.eventDkp ?? 0 }}
-                      </span>
-                    </div>
-                  }
-                }
-              </div>
-
-              @if (canManage() && (h.absentees?.length ?? 0) > 0) {
-                <div class="evt-history__attendees evt-history__absentees">
-                  <div class="evt-abs-head">Not at this event · absent ({{ h.absentees!.length }}) — add one to credit them &amp; grant DKP</div>
-                  @for (a of h.absentees!; track a.appUserId) {
-                    <div class="evt-abs">
-                      <span class="evt-history__who">{{ a.characterName || 'Member' }}</span>
-                      <span class="evt-att__c"><input type="checkbox" checked disabled title="Absent until you add them to the event" /></span>
-                      <input type="number" class="evt-abs__dkp" [step]="dkpStep()" min="0"
-                             [(ngModel)]="absDkpDraft[h.id + ':' + a.appUserId]" [name]="'absDkp' + h.id + a.appUserId" placeholder="DKP" />
-                      <button type="button" class="btn primary sm" (click)="addAbsentee(h, a)">Add + DKP</button>
-                    </div>
-                  }
-                </div>
-              }
-
-              @if (canManage() && h.participants.length > 0) {
-                <div class="evt-history__bulk">
-                  @if (confirmingClearCreditId() === h.id) {
-                    <span class="evt-history__bulk-q">Remove active credit from all {{ h.participants.length }} attendees?</span>
-                    <button type="button" class="btn sm danger-outline" (click)="clearActiveCredit(h)">Confirm undo</button>
-                    <button type="button" class="btn ghost sm" (click)="cancelClearActiveCredit()">Cancel</button>
-                  } @else if (confirmingClearAbsencesId() === h.id) {
-                    <span class="evt-history__bulk-q">Stop this event counting toward active tracking (undo absences for members who missed it)?</span>
-                    <button type="button" class="btn sm danger-outline" (click)="clearAbsences(h)">Confirm undo</button>
-                    <button type="button" class="btn ghost sm" (click)="cancelClearAbsences()">Cancel</button>
-                  } @else {
-                    <button type="button" class="btn ghost sm" (click)="requestClearActiveCredit(h)"
-                            title="Uncheck active credit for every attendee — for an event credited by accident.">
-                      Undo active credit (whole event)
+                    <label>DKP per hour<input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
+                    <button type="button" class="primary" (click)="saveEvent(h)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+                      Save Event
                     </button>
-                    <button type="button" class="btn ghost sm" (click)="requestClearAbsences(h)"
-                            title="Stop this event counting toward active tracking so members who missed it aren't marked absent for it.">
-                      Undo absences (whole event)
-                    </button>
-                  }
-                </div>
+                  </div>
+                  <p class="hint">Changing DKP per hour rescales every attendee's earned DKP and balance.</p>
+                </section>
               }
 
-              <div class="evt-disc">
-                <div class="evt-disc__head">💬 Discussion</div>
+              @if (canManage()) {
+                <div class="split">
+                  <section class="panel">
+                    <div class="section-head">
+                      <h3>
+                        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                        Attendees <em class="count">{{ h.participants.length }}</em>
+                      </h3>
+                      <div class="section-head__actions">
+                        @if (confirmingClearCreditId() === h.id) {
+                          <span class="confirm-q">Remove active credit from all {{ h.participants.length }} attendees?</span>
+                          <button type="button" class="danger sm" (click)="clearActiveCredit(h)">Confirm</button>
+                          <button type="button" class="ghost sm" (click)="cancelClearActiveCredit()">Cancel</button>
+                        } @else if (confirmingClearAbsencesId() === h.id) {
+                          <span class="confirm-q">Stop this event counting toward active tracking?</span>
+                          <button type="button" class="danger sm" (click)="clearAbsences(h)">Confirm</button>
+                          <button type="button" class="ghost sm" (click)="cancelClearAbsences()">Cancel</button>
+                        } @else {
+                          <button type="button" class="ghost sm" (click)="requestClearActiveCredit(h)"
+                                  title="Uncheck active credit for every attendee — for an event credited by accident.">↶ Undo Active Credit</button>
+                          <button type="button" class="ghost sm" (click)="requestClearAbsences(h)"
+                                  title="Stop this event counting toward active tracking so members who missed it aren't marked absent for it.">⊘ Undo Absences</button>
+                        }
+                      </div>
+                    </div>
+
+                    <div class="table-wrap">
+                      <table class="evt-table">
+                        <thead>
+                          <tr>
+                            <th>Attendee</th>
+                            <th>Job</th>
+                            <th class="ctr">Active Credit</th>
+                            <th class="ctr">Absent</th>
+                            <th>DKP Awarded</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (p of h.participants; track p.id) {
+                            <tr>
+                              <td class="evt-who">
+                                <span class="avatar" [style.background]="avatarBg(p.characterName)">{{ initial(p.characterName) }}</span>
+                                {{ p.characterName }}
+                                @if (p.altNames?.length) { <small class="alts">{{ p.altNames!.join(', ') }}</small> }
+                              </td>
+                              <td>
+                                @if (p.jobName) { <span class="job">{{ p.jobName }}@if (p.subJobName) {/{{ p.subJobName }}}</span> }
+                                @else { <span class="muted">—</span> }
+                              </td>
+                              <td class="ctr">
+                                <input type="checkbox" [checked]="p.activeCredit !== false"
+                                       (change)="toggleCredit(h, p, $any($event.target).checked)"
+                                       title="Active-status credit for this event" />
+                              </td>
+                              <td class="ctr">
+                                <button type="button" class="toggle" [class.is-on]="p.activeCredit === false"
+                                        (click)="toggleCredit(h, p, p.activeCredit === false)"
+                                        title="Absent = no active credit (counts toward the inactive threshold)"></button>
+                              </td>
+                              <td>
+                                <input class="dkp" type="number" [step]="dkpStep()" min="0"
+                                       [(ngModel)]="dkpDraft[p.id]" [name]="'pDkp' + p.id" />
+                              </td>
+                              <td class="evt-actions">
+                                <button type="button" class="mini" (click)="saveDkp(h, p)">Save</button>
+                                <button type="button" class="danger" (click)="removeParticipant(h, p)">Remove</button>
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section class="panel">
+                    <h3>
+                      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                      Absent Members <em class="count">{{ h.absentees?.length ?? 0 }}</em>
+                    </h3>
+                    @if ((h.absentees?.length ?? 0) === 0) {
+                      <div class="empty">
+                        <span class="empty__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                        <strong>No absent members</strong>
+                        <span>All attendees were present.</span>
+                      </div>
+                    } @else {
+                      <p class="hint" style="margin-top:0;margin-bottom:12px">Roster members who missed this event. Add one to credit them &amp; grant DKP.</p>
+                      <div class="absent-list">
+                        @for (a of h.absentees!; track a.appUserId) {
+                          <div class="absent-row">
+                            <span class="avatar sm" [style.background]="avatarBg(a.characterName)">{{ initial(a.characterName) }}</span>
+                            <span class="absent-row__who">
+                              <span class="absent-name">{{ a.characterName || 'Member' }}</span>
+                              @if (a.altNames?.length) { <small class="alts">{{ a.altNames!.join(', ') }}</small> }
+                            </span>
+                            <button type="button" class="primary mini" (click)="addAbsentee(h, a)">Add to Event</button>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </section>
+                </div>
+              } @else {
+                <section class="panel">
+                  <h3>
+                    <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                    Attendees <em class="count">{{ h.participants.length }}</em>
+                  </h3>
+                  @if (h.participants.length === 0) {
+                    <p class="hint">No attendees recorded.</p>
+                  } @else {
+                    <div class="ro-list">
+                      @for (p of h.participants; track p.id) {
+                        <div class="ro-row">
+                          <span class="evt-who">
+                            <span class="avatar sm" [style.background]="avatarBg(p.characterName)">{{ initial(p.characterName) }}</span>
+                            {{ p.characterName }}
+                            @if (p.altNames?.length) { <small class="alts">{{ p.altNames!.join(', ') }}</small> }
+                            <small>{{ p.jobName }}@if (p.subJobName) {/{{ p.subJobName }}}</small>
+                          </span>
+                          <span class="ro-dkp">
+                            <span class="tag" [class.success]="p.activeCredit !== false">{{ p.activeCredit !== false ? 'Credited' : 'No credit' }}</span>
+                            {{ p.eventDkp ?? 0 }}
+                          </span>
+                        </div>
+                      }
+                    </div>
+                  }
+                </section>
+              }
+
+              <section class="panel discussion">
+                <h3>
+                  <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>
+                  Discussion <em class="count">{{ commentsFor(h.id).length }}</em>
+                </h3>
                 @for (c of commentsFor(h.id); track c.id) {
-                  <div class="evt-disc__row">
-                    <span class="evt-disc__who">
-                      <strong [class.evt-disc__anon-name]="c.isAnonymous">{{ c.author }}</strong>
+                  <div class="disc-row">
+                    <span class="disc-who">
+                      <strong [class.disc-anon]="c.isAnonymous">{{ c.author }}</strong>
                       <small>{{ c.createdAt | date:'MMM d, h:mm a' }}</small>
                     </span>
-                    <span class="evt-disc__body">{{ c.body }}</span>
+                    <span class="disc-body">{{ c.body }}</span>
                     @if (c.canDelete) {
-                      <button type="button" class="btn ghost sm" (click)="removeComment(h, c.id)" title="Delete">✕</button>
+                      <button type="button" class="ghost sm disc-del" (click)="removeComment(h, c.id)" title="Delete">✕</button>
                     }
                   </div>
                 }
                 @if (commentsFor(h.id).length === 0) {
-                  <p class="evt-disc__empty">No comments yet — start the discussion.</p>
+                  <p class="hint">No comments yet — start the discussion.</p>
                 }
-                <div class="evt-disc__compose">
-                  <textarea rows="2" [(ngModel)]="commentDraft[h.id]" [name]="'cd' + h.id"
-                            placeholder="Add to the discussion…" maxlength="2000"></textarea>
-                  <div class="evt-disc__actions">
-                    <label class="evt-disc__anon"><input type="checkbox" [(ngModel)]="anonDraft[h.id]" [name]="'ca' + h.id" /> Post anonymously</label>
-                    <button type="button" class="btn primary sm" (click)="postComment(h)">Post</button>
-                  </div>
+                <textarea rows="2" [(ngModel)]="commentDraft[h.id]" [name]="'cd' + h.id"
+                          placeholder="Add to the discussion…" maxlength="2000"></textarea>
+                <div class="discussion-foot">
+                  <label class="anon"><input type="checkbox" [(ngModel)]="anonDraft[h.id]" [name]="'ca' + h.id" /> Post anonymously</label>
+                  <button type="button" class="primary" (click)="postComment(h)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                    Post
+                  </button>
                 </div>
-              </div>
+              </section>
 
               @if (canManage()) {
-                <div class="evt-history__danger">
+                <div class="delete-bar">
                   @if (confirmingDeleteId() === h.id) {
-                    <span class="evt-history__bulk-q">Delete this event permanently? Reverses all DKP it awarded/spent and removes its attendance, loot &amp; comments — can't be undone.</span>
-                    <button type="button" class="btn sm danger-outline" (click)="deleteEvent(h)">Confirm delete</button>
-                    <button type="button" class="btn ghost sm" (click)="cancelDelete()">Cancel</button>
+                    <span class="confirm-q">Delete this event permanently? Reverses all DKP it awarded/spent and removes its attendance, loot &amp; comments — can't be undone.</span>
+                    <button type="button" class="danger" (click)="deleteEvent(h)">Confirm delete</button>
+                    <button type="button" class="ghost sm" (click)="cancelDelete()">Cancel</button>
                   } @else {
-                    <button type="button" class="btn sm danger-outline" (click)="requestDelete(h)"
-                            title="Permanently delete this event and reverse its DKP.">Delete event</button>
+                    <button type="button" class="delete" (click)="requestDelete(h)" title="Permanently delete this event and reverse its DKP.">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                      Delete Event
+                    </button>
                   }
                 </div>
               }
@@ -202,63 +278,197 @@ import type {
   `,
   styles: [`
     .evt-history { margin-top: 12px; }
-    .evt-history__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .evt-history__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
     .evt-history__head h3 { margin: 0; font-size: 14px; }
-    .evt-history__row { border: 1px solid var(--border); border-radius: var(--r-md); margin-bottom: 8px; overflow: hidden; }
-    .evt-history__summary {
-      display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-      padding: 10px 12px; background: var(--surface); border: 0; color: inherit; cursor: pointer;
+
+    /* Reset / shared buttons */
+    button { font: inherit; }
+    .ghost, .mini {
+      border: 1px solid rgba(139, 92, 246, .35); background: rgba(139, 92, 246, .10);
+      color: #c6a8ff; border-radius: 8px; padding: 7px 12px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+      transition: background .12s ease, border-color .12s ease;
     }
-    .evt-history__summary:hover { background: var(--surface-2); }
-    .evt-history__name { font-weight: 600; }
-    .evt-history__meta { color: var(--fg-3); font-size: 12px; margin-left: auto; }
-    .evt-history__chev { color: var(--fg-3); }
-    .evt-history__body { padding: 12px; border-top: 1px solid var(--border); background: var(--bg-elev); }
-    .evt-history__edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
-    .evt-history__edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg-2); }
-    .evt-history__edit-row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
-    .evt-history__edit-row2 { grid-column: 1 / -1; display: flex; gap: 12px; align-items: flex-end; }
-    .evt-history__edit-row2 label { flex: 1; }
-    .evt-history__edit-row2 button { flex: 0 0 auto; white-space: nowrap; }
-    .evt-dur__inputs { display: flex; align-items: center; gap: 4px; }
-    .evt-dur__inputs input { width: 52px; text-align: right; }
-    .evt-dur__inputs small { color: var(--fg-3); margin-right: 4px; }
-    .evt-history__hint { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--fg-3); }
-    .evt-history__attendee { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
-    .evt-history__who small { color: var(--fg-3); margin-left: 6px; }
-    .evt-history__dkp { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-    .evt-history__dkp input { width: 84px; text-align: right; }
-    .evt-history__credit { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fg-2); white-space: nowrap; }
-    /* Manager attendee editor: aligned grid with Active credit / DKP headers.
-       The actions column is a FIXED width (not auto) so the header row and every
-       attendee row share identical tracks — otherwise each row's auto column
-       sizes independently and the shared 1fr shifts the headers out of line. */
-    .evt-att { display: grid; grid-template-columns: 1fr 96px 70px 92px 150px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
-    .evt-att--head { border-top: 0; padding-bottom: 2px; color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-    .evt-att__c { text-align: center; }
-    .evt-att__c input[type=number] { width: 84px; text-align: right; }
-    .evt-att__c input[type=checkbox] { cursor: pointer; }
-    .evt-att__actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
-    /* Absentees (not at the event): name | Absent | DKP | Add. */
-    .evt-history__absentees { margin-top: 8px; }
-    .evt-abs-head { padding: 4px 0 2px; color: var(--fg-3); font-size: 11px; }
-    .evt-abs { display: grid; grid-template-columns: 1fr 70px 92px auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); }
-    .evt-abs__dkp { width: 84px; text-align: right; }
-    .evt-history__bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .evt-history__bulk-q { font-size: 12px; color: var(--fg-2); }
-    .evt-history__danger { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-    .evt-disc { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
-    .evt-disc__head { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-    .evt-disc__row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 13px; }
-    .evt-disc__who { display: inline-flex; flex-direction: column; min-width: 96px; }
-    .evt-disc__who small { color: var(--fg-3); font-size: 11px; }
-    .evt-disc__anon-name { color: var(--fg-3); font-style: italic; }
-    .evt-disc__body { flex: 1; white-space: pre-wrap; word-break: break-word; }
-    .evt-disc__empty { font-size: 12px; color: var(--fg-3); margin: 4px 0; }
-    .evt-disc__compose { margin-top: 8px; }
-    .evt-disc__compose textarea { width: 100%; resize: vertical; }
-    .evt-disc__actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
-    .evt-disc__anon { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--fg-2); }
+    .ghost:hover, .mini:hover { background: rgba(139, 92, 246, .18); }
+    .ghost.sm, .mini.sm { padding: 5px 10px; font-size: 12px; }
+    .mini { padding: 6px 12px; font-size: 12.5px; }
+    .danger {
+      color: var(--danger, #ff5d5d); background: rgba(255, 93, 93, .08);
+      border: 1px solid rgba(255, 93, 93, .35); border-radius: 8px; padding: 7px 12px;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .danger:hover { background: rgba(255, 93, 93, .15); }
+    .danger.sm { padding: 5px 10px; font-size: 12px; }
+    .primary {
+      background: linear-gradient(180deg, #9b6cff, #7047e8); border: 0; color: #fff;
+      border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+      box-shadow: 0 6px 16px rgba(112, 71, 232, .28);
+    }
+    .primary:hover { filter: brightness(1.06); }
+    .primary.mini { padding: 7px 13px; font-size: 12.5px; box-shadow: none; }
+    .primary svg, .danger svg, .ghost svg, .mini svg { width: 15px; height: 15px; flex: 0 0 auto; }
+
+    /* Card */
+    .event-card {
+      margin-bottom: 16px; padding: 18px;
+      background: linear-gradient(180deg, #171923, #11131b);
+      border: 1px solid rgba(139, 92, 246, .42); border-radius: 12px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, .3);
+    }
+    .event-head {
+      display: flex; align-items: center; gap: 14px; width: 100%;
+      background: transparent; border: 0; padding: 0; color: var(--fg); cursor: pointer; text-align: left;
+    }
+    .event-title { display: inline-flex; align-items: center; gap: 10px; min-width: 150px; font-size: 17px; }
+    .event-title strong { font-weight: 700; }
+    .ico { color: var(--accent, #8b5cf6); display: inline-flex; }
+    .ico svg { width: 18px; height: 18px; }
+    .event-meta { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-3);
+      border: 1px solid var(--border); background: rgba(255, 255, 255, .03); border-radius: 8px; padding: 6px 10px;
+    }
+    .chip svg { width: 13px; height: 13px; opacity: .85; }
+    .badge {
+      color: #c6a8ff; background: rgba(139, 92, 246, .16); border: 1px solid rgba(139, 92, 246, .35);
+      border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .chevron {
+      width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; color: var(--fg);
+      background: #171923; border: 1px solid var(--border);
+      display: inline-flex; align-items: center; justify-content: center; transition: transform .18s ease;
+    }
+    .chevron svg { width: 18px; height: 18px; }
+    .chevron.is-open { transform: rotate(180deg); }
+
+    .event-body { margin-top: 16px; }
+
+    /* Panels */
+    .panel {
+      padding: 16px; border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255, 255, 255, .015); margin-bottom: 14px;
+    }
+    .panel:last-child { margin-bottom: 0; }
+    .panel h3 { margin: 0 0 14px; font-size: 16px; display: inline-flex; align-items: center; gap: 9px; }
+    .count {
+      font-style: normal; color: var(--accent, #8b5cf6); background: rgba(139, 92, 246, .16);
+      border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600;
+    }
+    .hint { color: var(--fg-3); margin: 10px 0 0; font-size: 12px; }
+    .muted { color: var(--fg-3); }
+
+    /* Inputs */
+    label { display: grid; gap: 6px; color: var(--fg-3); font-size: 12px; }
+    input, select, textarea {
+      width: 100%; color: var(--fg); background: #12141d; border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 11px; font: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent, #8b5cf6); }
+    input[type=checkbox] { width: auto; accent-color: var(--accent, #8b5cf6); cursor: pointer; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 20px; align-items: end; }
+    .form-grid .primary { justify-self: end; }
+    .duration { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto; gap: 6px; align-items: center; }
+    .duration input { text-align: right; }
+    .duration span { color: var(--fg-3); font-size: 12px; }
+
+    /* Split */
+    .split { display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px; }
+    .split .panel { margin-bottom: 0; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .section-head h3 { margin: 0; }
+    .section-head__actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .confirm-q { font-size: 12px; color: var(--fg-2); }
+
+    /* Table */
+    .table-wrap { margin-top: 12px; overflow-x: auto; }
+    .evt-table { width: 100%; border-collapse: collapse; }
+    .evt-table th, .evt-table td {
+      padding: 10px 8px; border-top: 1px solid rgba(255, 255, 255, .06); color: var(--fg-3);
+      text-align: left; vertical-align: middle;
+    }
+    .evt-table thead th { border-top: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .evt-table th.ctr, .evt-table td.ctr { text-align: center; }
+    .evt-who { color: var(--fg); font-weight: 600; white-space: nowrap; }
+    .avatar {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; margin-right: 10px; border-radius: 50%; vertical-align: middle;
+      font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+    .avatar.sm { width: 24px; height: 24px; margin-right: 8px; font-size: 11px; }
+    .job {
+      display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+      color: #c6a8ff; background: rgba(139, 92, 246, .12); border: 1px solid rgba(139, 92, 246, .28);
+    }
+    .dkp { max-width: 96px; text-align: right; }
+    .evt-actions { white-space: nowrap; text-align: right; }
+    .evt-actions .danger { margin-left: 6px; }
+
+    /* Toggle switch (Absent) */
+    .toggle {
+      display: inline-block; width: 42px; height: 22px; border-radius: 999px; background: #343846;
+      border: 0; position: relative; cursor: pointer; vertical-align: middle; padding: 0; transition: background .15s ease;
+    }
+    .toggle::after {
+      content: ""; position: absolute; width: 18px; height: 18px; top: 2px; left: 3px;
+      border-radius: 50%; background: #d8dbe4; transition: left .15s ease;
+    }
+    .toggle.is-on { background: var(--accent, #8b5cf6); }
+    .toggle.is-on::after { left: 21px; }
+    span.toggle { cursor: default; opacity: .85; }
+
+    /* Absent Members panel */
+    .empty {
+      min-height: 180px; border: 1px dashed var(--border); border-radius: 10px;
+      display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center; color: var(--fg-3);
+    }
+    .empty__ico { color: var(--fg-4, var(--fg-3)); }
+    .empty__ico svg { width: 30px; height: 30px; }
+    .empty strong { color: var(--fg-2); font-weight: 600; }
+    .absent-list { display: flex; flex-direction: column; gap: 8px; }
+    .absent-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.015); }
+    .absent-row__who { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; flex-wrap: wrap; }
+    .absent-name { color: var(--fg); font-weight: 600; }
+    .absent-row .primary { flex: 0 0 auto; }
+    .alts { color: var(--fg-3); font-size: 11px; font-weight: 400; }
+
+    /* Read-only attendees (non-managers) */
+    .ro-list { display: flex; flex-direction: column; }
+    .ro-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06); }
+    .ro-row:first-child { border-top: 0; }
+    .ro-row .evt-who small { color: var(--fg-3); margin-left: 6px; font-weight: 400; }
+    .ro-dkp { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-2); }
+    .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-3); }
+    .tag.success { color: #6ee7b7; border-color: rgba(110,231,183,.4); background: rgba(110,231,183,.10); }
+
+    /* Discussion */
+    .discussion p { color: var(--fg-3); }
+    .disc-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+    .disc-who { display: inline-flex; flex-direction: column; min-width: 110px; }
+    .disc-who small { color: var(--fg-3); font-size: 11px; }
+    .disc-anon { color: var(--fg-3); font-style: italic; }
+    .disc-body { flex: 1; white-space: pre-wrap; word-break: break-word; color: var(--fg); }
+    .disc-del { flex: 0 0 auto; }
+    .discussion textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
+    .discussion-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+    .anon { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-3); font-size: 12px; }
+    .anon input { margin: 0; }
+
+    /* Delete */
+    .delete-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .delete {
+      color: var(--danger, #ff5d5d); background: rgba(255, 93, 93, .08); border: 1px solid rgba(255, 93, 93, .35);
+      border-radius: 8px; padding: 9px 14px; font-weight: 700; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    .delete:hover { background: rgba(255, 93, 93, .15); }
+    .delete svg { width: 15px; height: 15px; }
+
+    @media (max-width: 860px) {
+      .form-grid, .split { grid-template-columns: 1fr; }
+      .event-head { flex-wrap: wrap; }
+    }
   `]
 })
 export class EventHistoryPanelComponent {
@@ -272,8 +482,6 @@ export class EventHistoryPanelComponent {
   // Per-event edit drafts + per-attendee DKP drafts (keyed by id).
   protected readonly edit: Record<number, ActivityEditEventHistoryInput> = {};
   protected readonly dkpDraft: Record<number, number> = {};
-  // DKP to grant when adding an absentee, keyed by `${historyId}:${appUserId}`.
-  protected readonly absDkpDraft: Record<string, number> = {};
 
   // Post-event discussion: comments per event + compose drafts.
   protected readonly comments = signal<Record<number, ActivityEventComment[]>>({});
@@ -313,6 +521,19 @@ export class EventHistoryPanelComponent {
     };
     for (const p of h.participants) { this.dkpDraft[p.id] = p.eventDkp ?? 0; }
     void this.loadComments(h.id);
+  }
+
+  protected initial(name?: string | null): string {
+    const n = (name ?? '').trim();
+    return n ? n.charAt(0).toUpperCase() : '?';
+  }
+
+  // Deterministic per-name avatar gradient so each member keeps a stable colour.
+  protected avatarBg(name?: string | null): string {
+    const n = (name ?? '').trim();
+    let hash = 0;
+    for (let i = 0; i < n.length; i++) { hash = (hash * 31 + n.charCodeAt(i)) % 360; }
+    return `linear-gradient(135deg, hsl(${hash} 62% 55%), hsl(${(hash + 38) % 360} 58% 38%))`;
   }
 
   protected commentsFor(historyId: number): ActivityEventComment[] {
@@ -382,9 +603,12 @@ export class EventHistoryPanelComponent {
     if (await this.activity.setEventHistoryParticipantActiveCredit(h.id, p.id, credited)) { await this.load(); }
   }
 
-  // Add an absentee to the closed event and grant the entered DKP (wired into the ledger).
+  // Add an absentee to the closed event, granting the event's standard earned DKP
+  // (duration × rate; the server rounds it) so one click credits them like an
+  // attendee. The amount can be fine-tuned afterward in the Attendees table, where
+  // they now appear with an editable DKP field. Wired into the ledger server-side.
   async addAbsentee(h: ActivityEventHistory, a: ActivityEventHistoryAbsentee): Promise<void> {
-    const dkp = Number(this.absDkpDraft[`${h.id}:${a.appUserId}`] ?? 0);
+    const dkp = Math.max(0, (h.duration ?? 0) * (h.dkpPerHour ?? 0));
     if (await this.activity.addEventHistoryParticipant(h.id, { appUserId: a.appUserId, dkp })) {
       await this.load();
     }

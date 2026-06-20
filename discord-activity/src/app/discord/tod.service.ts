@@ -83,6 +83,38 @@ export class TodService {
     }
   }
 
+  // Log (or edit) the ToD from an HNM signup board's Post/Edit ToD button. The server
+  // also moves the event's StartTime to the repop, wipes the board's signups, marks it
+  // defeated, and replaces the Discord message with a defeated note.
+  async postBoardTod(eventId: number, fields: {
+    timeLocal: string;
+    cooldown: string | null;
+    interval: string | null;
+    dayNumber: number | null;
+    claim: boolean | null;
+  }): Promise<void> {
+    this.busyTodSave.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/events/${eventId}/post-tod`, {
+        timeLocal: fields.timeLocal,
+        cooldown: fields.cooldown || null,
+        interval: fields.interval || null,
+        dayNumber: fields.dayNumber ?? null,
+        claim: fields.claim
+      });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Time of Death posted — the board re-posts automatically before the next pop.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Posting the Time of Death failed.'));
+      throw error;
+    } finally {
+      this.busyTodSave.set(false);
+    }
+  }
+
   async deleteTod(todId: number): Promise<void> {
     this.busyTodId.set(todId);
     this.auth.setActionError(null);

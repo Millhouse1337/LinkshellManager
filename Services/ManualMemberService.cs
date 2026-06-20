@@ -41,14 +41,10 @@ public sealed class ManualMemberService
             return new CreateResult(false, "Enter your main character name to register.", null);
         }
         if (main.Length > MaxCharacterNameLength) { main = main[..MaxCharacterNameLength]; }
+        // Alts are OPTIONAL — the main name is the only required field. a1/a2 may be
+        // null here, and the find/create logic below only writes them when present.
         var a1 = Truncate(alt1);
         var a2 = Truncate(alt2);
-        // Both alts are required (the onboarding modal enforces this client-side; this
-        // guards a malformed payload). Backstop for the registration flow only.
-        if (string.IsNullOrEmpty(a1) || string.IsNullOrEmpty(a2))
-        {
-            return new CreateResult(false, "Enter both alt character names to register.", null);
-        }
 
         var members = await _context.AppUserLinkshells
             .Include(m => m.AppUser)

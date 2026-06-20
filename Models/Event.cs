@@ -19,6 +19,13 @@ public class Event
 
     public string? EventLocation { get; set; }
 
+    // Canonical HNM monster name (e.g. "Nidhogg"), matching Tod.MonsterName and
+    // PartySetup.AssignedMonsterName, for manually-created HNM signup boards. It's
+    // the authoritative monster source for the ToD-driven recurrence (don't parse
+    // EventName). Null for non-HNM events.
+    [MaxLength(256)]
+    public string? AssignedMonsterName { get; set; }
+
     public string? CreatorUserId { get; set; }
 
     // Set when the event transitions from queued to live (CommencementStartTime
@@ -78,6 +85,24 @@ public class Event
 
     [ForeignKey(nameof(SourceTodId))]
     public Tod? SourceTod { get; set; }
+
+    // HNM signup-board "defeated / awaiting re-post" state. Set when an officer logs the
+    // monster's Time of Death from the board's "Post ToD" button: the board's signups are
+    // wiped, StartTime is moved to the predicted repop, and the Discord message is replaced
+    // with a "defeated" note. The recurring-board poller clears this and re-posts the SAME
+    // board LeadHours before the pop (HnmRepostAt). Null = the board is live/accepting signups.
+    public DateTime? HnmDefeatedAt { get; set; }
+
+    // When the defeated board will automatically re-post (= repop − LeadHours), or null if
+    // the event has no recurring board (Repeat-on-ToD off) so it won't auto-re-post. Display
+    // only; the poller computes the actual window from the ToD + the board's LeadHours.
+    public DateTime? HnmRepostAt { get; set; }
+
+    // Multi-window pop counter (1..25) for the window-cycle HNMs (Tiamat / Jormungand /
+    // Vrtra), which pop across successive windows after a ToD. The Discord board for those
+    // monsters shows "Window N" + a "Next Window" button (officers only) that wipes the
+    // signups and advances this. 1 for every other event; reset to 1 on board re-post.
+    public int HnmWindowNumber { get; set; } = 1;
 
     // Optional link to a pre-built PartySetup (alliances → parties → slots,
     // monster-tagged, per-linkshell). Replaces the old inline "Minimal Party

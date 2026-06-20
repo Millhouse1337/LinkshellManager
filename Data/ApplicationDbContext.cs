@@ -754,6 +754,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
         public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
         public DbSet<LinkshellChannelRoute> LinkshellChannelRoutes => Set<LinkshellChannelRoute>();
+        public DbSet<HnmRecurringBoard> HnmRecurringBoards => Set<HnmRecurringBoard>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -787,6 +788,21 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.PartySetupId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.PartySetupId);
+            });
+
+            builder.Entity<HnmRecurringBoard>(entity =>
+            {
+                // One recurring-board template per monster per linkshell.
+                entity.HasIndex(board => new { board.LinkshellId, board.MonsterName }).IsUnique();
+                entity.HasOne(board => board.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(board => board.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Keep the template if its referenced party setup is deleted.
+                entity.HasOne(board => board.PartySetup)
+                    .WithMany()
+                    .HasForeignKey(board => board.PartySetupId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<AppSetting>(entity =>

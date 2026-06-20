@@ -49,7 +49,9 @@ public sealed class DiscordEventEndedPublisher
                 return;
             }
 
-            var channelId = await _routes.ResolveEventChannelIdAsync(history.LinkshellId, history.EventType, cancellationToken);
+            // EventHistory carries no monster, so HNM end-summaries (rare — HNM is 0-DKP and
+            // usually canceled, not ended) route via the catch-all HNM/Other route.
+            var channelId = await _routes.ResolveEventChannelIdAsync(history.LinkshellId, history.EventType, null, cancellationToken);
             if (string.IsNullOrEmpty(channelId))
             {
                 _logger.LogInformation(

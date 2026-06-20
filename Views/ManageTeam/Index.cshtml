@@ -133,8 +133,8 @@ else
                         <th>Character</th>
                         <th>Rank</th>
                         <th>Status</th>
-                        <th style="text-align:right" title="Consecutive recent events credited toward active status">Active credit</th>
-                        <th style="text-align:right" title="Consecutive recent events missed (no active credit)">Absent streak</th>
+                        <th style="text-align:right" title="Events attended in a row — reaching the linkshell's threshold flips a member back to Active">Active streak</th>
+                        <th style="text-align:right" title="Events missed in a row — reaching the linkshell's threshold flips a member to Inactive">Absent streak</th>
                         <th style="text-align:right">DKP</th>
                         <th>Joined</th>
                         <th style="text-align:right">Actions</th>
@@ -166,10 +166,10 @@ else
                             <td><span class="tag @StatusClass(member.Status)">@(member.Status ?? "Active")</span></td>
                             @{ var streaks = memberStreaks.GetValueOrDefault(member.AppUserId ?? string.Empty); }
                             <td style="text-align:right">
-                                <span class="tag @(streaks.Credit > 0 ? "success" : "")" title="Consecutive recent events credited toward active status">@streaks.Credit</span>
+                                <span class="tag @(streaks.Credit > 0 ? "success" : "")" title="Events attended in a row">@streaks.Credit</span>
                             </td>
                             <td style="text-align:right">
-                                <span class="tag @(streaks.Absent > 0 ? "danger" : "")" title="Consecutive recent events missed (no active credit)">@streaks.Absent</span>
+                                <span class="tag @(streaks.Absent > 0 ? "danger" : "")" title="Events missed in a row">@streaks.Absent</span>
                             </td>
                             <td class="num" style="text-align:right">
                                 @((member.LinkshellDkp ?? 0).ToString("N0"))

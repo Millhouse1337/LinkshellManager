@@ -23,6 +23,8 @@ interface RouteDraft {
   postAttendance: boolean;
   postTodBoard: boolean;
   eventTypeFilter: string[];
+  // Per-monster narrowing for an HNM route (only used when eventTypeFilter has HNM).
+  hnmMonsterFilter: string[];
   // false once persisted + unchanged (drives the green "saved" state); true for a
   // new row or any edited field until the next successful save.
   dirty: boolean;
@@ -458,8 +460,10 @@ export class ConfigurationsTabComponent {
     linkshellType: string;
     // Palette key for the rendered event-board image (one of EVENT_BOARD_THEMES).
     eventBoardTheme: string;
-    // Allow account-less Discord members to sign up from the party board.
+    // Allow account-less Discord members to sign up from the party board (non-HNM).
     outsidePartySignupEnabled: boolean;
+    // Gate HNM: event type in the create dropdown + account-less HNM-board signups.
+    hnmOutsideSignupEnabled: boolean;
     // Lower-cased names of monsters the linkshell wants hidden from the
     // ToD Tracker. Lower-case for comparison stability — re-cased to the
     // canonical built-in label on save.
@@ -482,6 +486,7 @@ export class ConfigurationsTabComponent {
     linkshellType: 'Both',
     eventBoardTheme: 'Crystal',
     outsidePartySignupEnabled: false,
+    hnmOutsideSignupEnabled: false,
     hiddenTodMonsters: new Set<string>()
   };
 
@@ -624,6 +629,7 @@ export class ConfigurationsTabComponent {
   protected readonly discordGuildConfigured = signal(false);
   protected readonly channelPostTypes = signal<{ key: string; label: string }[]>([]);
   protected readonly channelEventTypes = signal<string[]>([]);
+  protected readonly channelMonsterOptions = signal<string[]>([]);
   // Plain mutable drafts so the template can two-way bind checkboxes; mutated
   // in place + structural add/remove happen in zone-run click handlers.
   protected channelRoutes: RouteDraft[] = [];
@@ -655,6 +661,7 @@ export class ConfigurationsTabComponent {
       this.discordGuildConfigured.set(false);
       this.channelPostTypes.set([]);
       this.channelEventTypes.set([]);
+      this.channelMonsterOptions.set([]);
       return;
     }
     if (!refresh) { this.discussionChannelDraft = this.discussionChannelId(); }
@@ -665,6 +672,7 @@ export class ConfigurationsTabComponent {
     this.discordGuildConfigured.set(data.guildConfigured);
     this.channelPostTypes.set(data.postTypes);
     this.channelEventTypes.set(data.eventTypes);
+    this.channelMonsterOptions.set(data.monsterOptions ?? []);
     this.channelRoutes = data.routes.map(route => ({
       id: route.id,
       name: route.name ?? '',
@@ -675,6 +683,7 @@ export class ConfigurationsTabComponent {
       postAttendance: route.postAttendance,
       postTodBoard: route.postTodBoard,
       eventTypeFilter: [...route.eventTypeFilter],
+      hnmMonsterFilter: [...(route.hnmMonsterFilter ?? [])],
       dirty: false
     }));
   }
@@ -686,6 +695,7 @@ export class ConfigurationsTabComponent {
         id: null, name: '', channelId: '',
         postEvents: false, postLoot: false, postAuctions: false,
         postAttendance: false, postTodBoard: false, eventTypeFilter: [],
+        hnmMonsterFilter: [],
         dirty: true
       }
     ];
@@ -713,6 +723,22 @@ export class ConfigurationsTabComponent {
     route.eventTypeFilter = on
       ? [...route.eventTypeFilter, type]
       : route.eventTypeFilter.filter(t => t !== type);
+    route.dirty = true;
+  }
+
+  // The per-monster HNM narrowing UI only shows when a route catches HNM events.
+  protected routeCatchesHnm(route: RouteDraft): boolean {
+    return route.postEvents && route.eventTypeFilter.includes('HNM');
+  }
+
+  protected isMonsterOn(route: RouteDraft, monster: string): boolean {
+    return route.hnmMonsterFilter.includes(monster);
+  }
+
+  protected toggleMonster(route: RouteDraft, monster: string, on: boolean): void {
+    route.hnmMonsterFilter = on
+      ? [...route.hnmMonsterFilter, monster]
+      : route.hnmMonsterFilter.filter(m => m !== monster);
     route.dirty = true;
   }
 
@@ -744,7 +770,8 @@ export class ConfigurationsTabComponent {
         postAuctions: r.postAuctions,
         postAttendance: r.postAttendance,
         postTodBoard: r.postTodBoard,
-        eventTypeFilter: r.eventTypeFilter
+        eventTypeFilter: r.eventTypeFilter,
+        hnmMonsterFilter: r.hnmMonsterFilter
       }));
     const ok = await this.activity.saveDiscordChannels(id, routes);
     if (ok) {
@@ -774,6 +801,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.linkshellType = settings.linkshellType || 'Both';
     this.customizeDraft.eventBoardTheme = settings.eventBoardTheme || 'Crystal';
     this.customizeDraft.outsidePartySignupEnabled = settings.outsidePartySignupEnabled ?? false;
+    this.customizeDraft.hnmOutsideSignupEnabled = settings.hnmOutsideSignupEnabled ?? false;
     // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
     // for compare stability — restored to canonical case on save.
     this.customizeDraft.hiddenTodMonsters = new Set(
@@ -845,7 +873,8 @@ export class ConfigurationsTabComponent {
         hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
         linkshellType: this.customizeDraft.linkshellType,
         eventBoardTheme: this.customizeDraft.eventBoardTheme,
-        outsidePartySignupEnabled: this.customizeDraft.outsidePartySignupEnabled
+        outsidePartySignupEnabled: this.customizeDraft.outsidePartySignupEnabled,
+        hnmOutsideSignupEnabled: this.customizeDraft.hnmOutsideSignupEnabled
         // The Discord server is set via the dedicated "Discord server" card
         // (setLinkshellGuild / clearLinkshellGuild), not the main save.
       });

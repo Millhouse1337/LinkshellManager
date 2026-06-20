@@ -103,8 +103,10 @@ export class LinkshellService {
       discordGuildId?: string | null;
       // null/blank = leave unchanged. One of the EVENT_BOARD_THEMES keys.
       eventBoardTheme?: string | null;
-      // null = leave unchanged. Allow account-less Discord party-board signups.
+      // null = leave unchanged. Allow account-less Discord party-board signups (non-HNM).
       outsidePartySignupEnabled?: boolean | null;
+      // null = leave unchanged. Gate HNM (event type + account-less HNM-board signups).
+      hnmOutsideSignupEnabled?: boolean | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -133,7 +135,8 @@ export class LinkshellService {
         linkshellType: input.linkshellType ?? null,
         discordGuildId: input.discordGuildId ?? null,
         eventBoardTheme: input.eventBoardTheme ?? null,
-        outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null
+        outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
+        hnmOutsideSignupEnabled: input.hnmOutsideSignupEnabled ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');

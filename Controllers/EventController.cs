@@ -65,13 +65,20 @@ public partial class EventController : Controller
                 .ToListAsync()
             : new List<PartySetupOption>();
 
+        var selectedLinkshell = linkshells.FirstOrDefault(linkshell => linkshell.Id == selectedLinkshellId);
+
         return new EventViewModel
         {
             Event = eventDraft,
             PartySetupId = source?.PartySetupId ?? eventDraft.PartySetupId,
             AvailablePartySetups = availablePartySetups,
             Linkshells = linkshells,
-            LinkshellId = selectedLinkshellId
+            LinkshellId = selectedLinkshellId,
+            // HNM signup-board controls: monster picker + the outside-signup gate.
+            MonsterOptions = TodManagerViewModel.SupportedMonsters.ToList(),
+            OutsidePartySignupEnabled = selectedLinkshell?.OutsidePartySignupEnabled ?? false,
+            RepeatOnTod = source?.RepeatOnTod ?? false,
+            RepeatLeadHours = source?.RepeatLeadHours
         };
     }
 

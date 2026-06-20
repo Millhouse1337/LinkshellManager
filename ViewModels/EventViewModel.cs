@@ -22,6 +22,16 @@ public class EventViewModel
     public string? LinkedPartySetupName { get; set; }
     public string? LinkedPartySetupMonsterName { get; set; }
 
+    // HNM signup boards: the monster picker options + whether this linkshell allows
+    // outside (account-less) Discord signups, which gates the "HNM" type in the
+    // create form. RepeatOnTod / RepeatLeadHours are bound from the repeat controls
+    // (HNM only) so the board re-posts before the next predicted pop.
+    public List<string> MonsterOptions { get; set; } = new();
+    public bool OutsidePartySignupEnabled { get; set; }
+    public bool RepeatOnTod { get; set; }
+    // Fractional hours (Activity enters it as H/M/S); the web form keeps a single number.
+    public double? RepeatLeadHours { get; set; }
+
     // Loaded for events on the Index page that have a linked Party Setup —
     // powers the inline "View & Sign Up" panel (alliance/parties/slots tree
     // with self-service signup and "Sign Up Manually" fallback). Null on

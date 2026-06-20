@@ -59,7 +59,7 @@
                 <div>Character</div>
                 <div>Rank</div>
                 <div>Status</div>
-                <div class="ac-roster-num-head">Active credit</div>
+                <div class="ac-roster-num-head">Active streak</div>
                 <div class="ac-roster-num-head">Absent streak</div>
                 <div class="ac-roster-dkp-head">DKP</div>
                 <div>Joined</div>
@@ -113,7 +113,7 @@
                         [disabled]="activity.busyMemberId() === member.id"
                         title="Active-credit override (green) — sets Active by your threshold until the next event recomputes it." />
                     } @else {
-                      <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Active-credit streak: consecutive credited events">{{ member.activeCreditStreak ?? 0 }}</span>
+                      <span class="ac-roster-credit" [class.has]="(member.activeCreditStreak ?? 0) > 0" title="Events attended in a row">{{ member.activeCreditStreak ?? 0 }}</span>
                     }
                   </div>
                   <div class="ac-roster-num">
@@ -123,7 +123,7 @@
                         [disabled]="activity.busyMemberId() === member.id"
                         title="Absence-streak override (red) — sets Inactive by your threshold until the next event recomputes it." />
                     } @else {
-                      <span class="ac-roster-credit" [class.absent]="(member.absentStreak ?? 0) > 0" title="Absence streak: consecutive uncredited events">{{ member.absentStreak ?? 0 }}</span>
+                      <span class="ac-roster-credit" [class.absent]="(member.absentStreak ?? 0) > 0" title="Events missed in a row">{{ member.absentStreak ?? 0 }}</span>
                     }
                   </div>
                   <div class="ac-roster-dkp">

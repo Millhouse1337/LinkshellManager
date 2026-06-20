@@ -22,10 +22,11 @@ import {
 import { PartySetupService } from '../discord/party-setup.service';
 import type { ActivityPartySetupListRow } from '../discord/discord-activity.types';
 import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
+import { TodFormComponent } from './tabs/tod-form.component';
 
 @Component({
   selector: 'app-activity-queue-panel',
-  imports: [CommonModule, FormsModule, PartySetupPanelComponent],
+  imports: [CommonModule, FormsModule, PartySetupPanelComponent, TodFormComponent],
   templateUrl: './activity-queue-panel.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -37,6 +38,9 @@ export class ActivityQueuePanelComponent {
   // showModal() so it escapes the .panel-tab.fade ancestor's stacking context
   // and lands in the browser's top layer, above the sticky tab bar.
   private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
+  // Shared Log ToD form (the same component the ToDs tab uses). The "Post ToD" button
+  // on an HNM board opens it pre-filled with the event's monster.
+  private readonly todForm = viewChild<TodFormComponent>('todForm');
   protected editingEventId: number | null = null;
   protected isEditingLiveEvent = false;
   // The event's party setup as it was when the edit form opened. Used to detect
@@ -63,12 +67,38 @@ export class ActivityQueuePanelComponent {
     details: '',
     partySetupId: null,
     autoStart: false,
-    countsTowardActive: true
+    countsTowardActive: true,
+    monsterName: null,
+    repeatOnTod: false,
+    repeatLeadHours: 1
   };
 
-  // "HNM" is intentionally omitted: HNM events are created automatically by the
-  // in-game addon (from member ToD captures), never by hand. The server rejects
-  // manual creation of the "HNM" type as well.
+  // Free-text monster name when "Other" is picked in the HNM monster dropdown.
+  protected customMonsterName = '';
+
+  // Repeat-on-ToD lead time entered as hours/minutes/seconds; combined into the wire's
+  // fractional-hours repeatLeadHours on submit, and split back from it on edit.
+  protected repeatLeadH = 1;
+  protected repeatLeadM = 0;
+  protected repeatLeadS = 0;
+
+  private repeatLeadAsHours(): number {
+    const h = Math.max(0, Math.floor(Number(this.repeatLeadH) || 0));
+    const m = Math.max(0, Math.floor(Number(this.repeatLeadM) || 0));
+    const s = Math.max(0, Math.floor(Number(this.repeatLeadS) || 0));
+    return h + m / 60 + s / 3600;
+  }
+
+  private setRepeatLeadFromHours(hours: number | null | undefined): void {
+    const totalSec = Math.max(0, Math.round((hours ?? 1) * 3600));
+    this.repeatLeadH = Math.floor(totalSec / 3600);
+    this.repeatLeadM = Math.floor((totalSec % 3600) / 60);
+    this.repeatLeadS = totalSec % 60;
+  }
+
+  // Base manual event types. "HNM" is appended only when the active linkshell has
+  // Outside Party Signup enabled (see eventTypeOptionsForForm) — a manual HNM event
+  // is a no-DKP outside-signup board. The addon still auto-creates real HNM events.
   protected readonly eventTypeOptions = ['Sky', 'Sea', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
   protected eventTypeSelection = '';
   protected eventTypeError = false;
@@ -117,6 +147,69 @@ export class ActivityQueuePanelComponent {
       this.createModel.eventType = value;
     }
     this.eventTypeError = false;
+
+    // HNM signup boards have no end/duration/DKP — blank those so a stale value
+    // doesn't post. Leaving HNM clears the monster + repeat state.
+    if (this.isHnmSelected()) {
+      this.endTimeNotSpecified = true;
+      this.createModel.endTimeLocal = '';
+      this.createModel.duration = null;
+      // Default the monster so the <select>'s displayed value is actually bound.
+      // A native <select> whose only "selected" option is the null placeholder
+      // renders the first real option (e.g. Adamantoise) without firing a change
+      // event, so ngModel stays null and the "Select a monster" check trips even
+      // though one looks chosen. Seeding the first real monster keeps model and
+      // display in sync; the officer can still change it.
+      if (!this.createModel.monsterName) {
+        this.createModel.monsterName = this.monsterOptions().find(m => m !== 'Other') ?? null;
+      }
+    } else {
+      this.createModel.monsterName = null;
+      this.customMonsterName = '';
+      this.createModel.repeatOnTod = false;
+    }
+  }
+
+  // HNM Outside Sign Up gates manual HNM creation: the HNM option (and the form's HNM
+  // branch) only appear when the active linkshell has HNM Outside Sign Up enabled.
+  // Independent of Outside Party Signup.
+  protected isHnmSignupEnabledForSelected(): boolean {
+    const link = this.linkshellMemberships().find(l => l.id === this.createModel.linkshellId);
+    return !!link?.settings?.hnmOutsideSignupEnabled;
+  }
+
+  protected eventTypeOptionsForForm(): string[] {
+    const base = [...this.eventTypeOptions];
+    return this.isHnmSignupEnabledForSelected() ? [...base, 'HNM'] : base;
+  }
+
+  protected isHnmSelected(): boolean {
+    return (this.createModel.eventType ?? '').trim().toUpperCase() === 'HNM';
+  }
+
+  // The 16 canonical monsters (from the party-setup list payload) + the "Other"
+  // sentinel, which reveals a free-text field.
+  protected monsterOptions(): string[] {
+    const list = this.partySetups.list()?.monsterOptions ?? [];
+    return [...list, 'Other'];
+  }
+
+  // Native-select change handler for the monster dropdown. Driven by the option's
+  // string value (and an empty-string placeholder) rather than ngModel/ngValue, so
+  // the displayed value can never desync from createModel.monsterName — the cause of
+  // the old "you picked one but it says Select a monster" bug.
+  protected onMonsterSelect(value: string): void {
+    this.createModel.monsterName = value ? value : null;
+  }
+
+  protected isOtherMonsterSelected(): boolean {
+    return (this.createModel.monsterName ?? '') === 'Other';
+  }
+
+  // Repeat-on-ToD needs an exact Tod.MonsterName match, so it's disabled for the
+  // free-text "Other" monster.
+  protected canRepeatOnTod(): boolean {
+    return this.isHnmSelected() && !this.isOtherMonsterSelected();
   }
 
   protected onPartySetupNotSpecifiedChange(checked: boolean): void {
@@ -265,6 +358,57 @@ export class ActivityQueuePanelComponent {
     return (event.type ?? '').trim().toUpperCase() === 'HNM';
   }
 
+  // HNM boards are never "started". Instead the officer logs a ToD here, and the
+  // recurring-board background service re-posts the signup board the configured hours
+  // before the next pop. Pre-fill the monster from the event (its own assigned monster,
+  // falling back to the linked party setup's monster for legacy/addon boards).
+  // Human "1h 30m" gap between the board's auto-re-post time and the predicted pop
+  // ("N before the first window"). Null when either time is missing/unparseable.
+  protected repostLeadLabel(event: { startTime?: string | null; hnmRepostAt?: string | null }): string | null {
+    if (!event.startTime || !event.hnmRepostAt) {
+      return null;
+    }
+    const start = new Date(event.startTime).getTime();
+    const repost = new Date(event.hnmRepostAt).getTime();
+    if (Number.isNaN(start) || Number.isNaN(repost)) {
+      return null;
+    }
+    let sec = Math.max(0, Math.round((start - repost) / 1000));
+    const h = Math.floor(sec / 3600);
+    sec %= 3600;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    const parts: string[] = [];
+    if (h) { parts.push(`${h}h`); }
+    if (m) { parts.push(`${m}m`); }
+    if (s) { parts.push(`${s}s`); }
+    return parts.length ? parts.join(' ') : '0s';
+  }
+
+  protected openPostTodForm(event: {
+    id: number;
+    linkshellId: number;
+    assignedMonsterName?: string | null;
+    partySetupAssignedMonsterName?: string | null;
+    hnmAwaitingRepost?: boolean;
+    sourceTodId?: number | null;
+  }): void {
+    const monster = event.assignedMonsterName ?? event.partySetupAssignedMonsterName ?? null;
+    // Already defeated/awaiting re-post → "Edit ToD": pre-fill the board's logged ToD.
+    if (event.hnmAwaitingRepost && event.sourceTodId != null) {
+      const tod = (this.activity.overview()?.recentTods ?? []).find(t => t.id === event.sourceTodId);
+      if (tod) {
+        this.todForm()?.openEditForBoard(tod, event.id, monster ?? '');
+        return;
+      }
+    }
+    if (monster) {
+      this.todForm()?.openForBoard(event.linkshellId, monster, event.id);
+    } else {
+      this.todForm()?.openCreate(event.linkshellId, null);
+    }
+  }
+
   protected isMemberMode(): boolean {
     return !this.canManageAnyLinkshell();
   }
@@ -312,6 +456,9 @@ export class ActivityQueuePanelComponent {
   }
 
   protected async submitCreateForm(): Promise<void> {
+    // Clear any banner from a prior attempt before re-validating, so a corrected
+    // submit never shows a stale error (e.g. an old "Select a monster" message).
+    this.activity.clearActionState();
     const eventType = this.createModel.eventType?.trim() ?? '';
     if (!this.eventTypeSelection || !eventType) {
       this.eventTypeError = true;
@@ -319,6 +466,18 @@ export class ActivityQueuePanelComponent {
     }
     this.eventTypeError = false;
     this.createModel.eventType = eventType;
+
+    // HNM signup board: resolve the monster (free text when "Other") and require it.
+    let monsterName: string | null = null;
+    if (this.isHnmSelected()) {
+      monsterName = this.isOtherMonsterSelected()
+        ? (this.customMonsterName.trim() || null)
+        : (this.createModel.monsterName ?? null);
+      if (!monsterName) {
+        this.activity.actionError.set('Select a monster for the HNM event.');
+        return;
+      }
+    }
 
     const nextPartySetupId = this.partySetupNotSpecified ? null : (this.createModel.partySetupId ?? null);
 
@@ -341,7 +500,10 @@ export class ActivityQueuePanelComponent {
     try {
       const payload: ActivityCreateEventInput = {
         ...this.createModel,
-        partySetupId: nextPartySetupId
+        partySetupId: nextPartySetupId,
+        monsterName,
+        repeatOnTod: this.canRepeatOnTod() && !!this.createModel.repeatOnTod,
+        repeatLeadHours: this.repeatLeadAsHours()
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -372,6 +534,9 @@ export class ActivityQueuePanelComponent {
     partySetupId?: number | null;
     autoStart?: boolean;
     countsTowardActive?: boolean;
+    assignedMonsterName?: string | null;
+    repeatOnTod?: boolean;
+    repeatLeadHours?: number | null;
   }): void {
     this.activity.clearActionState();
     this.isCreateOpen = true;
@@ -383,6 +548,8 @@ export class ActivityQueuePanelComponent {
     this.createModel.eventType = incomingType;
     if (!incomingType) {
       this.eventTypeSelection = '';
+    } else if (incomingType.trim().toUpperCase() === 'HNM') {
+      this.eventTypeSelection = 'HNM';
     } else {
       this.eventTypeSelection = (this.eventTypeOptions as readonly string[]).includes(incomingType) ? incomingType : 'Other';
     }
@@ -398,6 +565,11 @@ export class ActivityQueuePanelComponent {
     this.partySetupNotSpecified = event.partySetupId == null;
     this.createModel.autoStart = event.autoStart ?? false;
     this.createModel.countsTowardActive = event.countsTowardActive ?? true;
+    // HNM repeat-board fields so editing preserves the monster + repeat-on-ToD + lead time.
+    this.createModel.monsterName = event.assignedMonsterName ?? null;
+    this.customMonsterName = '';
+    this.createModel.repeatOnTod = !!event.repeatOnTod;
+    this.setRepeatLeadFromHours(event.repeatLeadHours);
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
@@ -464,6 +636,13 @@ export class ActivityQueuePanelComponent {
     this.createModel.partySetupId = null;
     this.createModel.autoStart = false;
     this.createModel.countsTowardActive = true;
+    this.createModel.monsterName = null;
+    this.createModel.repeatOnTod = false;
+    this.createModel.repeatLeadHours = 1;
+    this.repeatLeadH = 1;
+    this.repeatLeadM = 0;
+    this.repeatLeadS = 0;
+    this.customMonsterName = '';
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;
   }

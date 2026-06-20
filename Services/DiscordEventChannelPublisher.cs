@@ -18,6 +18,7 @@ public sealed class DiscordEventChannelPublisher
     private readonly DiscordBotClient _bot;
     private readonly EventBoardPoster _poster;
     private readonly ChannelRouteResolver _routes;
+    private readonly HnmBoardNoticeService _hnmBoardNotice;
     private readonly ILogger<DiscordEventChannelPublisher> _logger;
 
     public DiscordEventChannelPublisher(
@@ -25,12 +26,14 @@ public sealed class DiscordEventChannelPublisher
         DiscordBotClient bot,
         EventBoardPoster poster,
         ChannelRouteResolver routes,
+        HnmBoardNoticeService hnmBoardNotice,
         ILogger<DiscordEventChannelPublisher> logger)
     {
         _db = db;
         _bot = bot;
         _poster = poster;
         _routes = routes;
+        _hnmBoardNotice = hnmBoardNotice;
         _logger = logger;
     }
 
@@ -63,6 +66,19 @@ public sealed class DiscordEventChannelPublisher
                 return;
             }
 
+            // HNM board marked "defeated / awaiting re-post" (its ToD was just logged):
+            // replace the board with the "monster down" note instead of rendering signups.
+            // Making the publisher the single renderer means the save-hook re-render that
+            // fires for this same edit can't race a separate defeated-note edit. No-op if
+            // the board was never posted (nothing to edit in Discord).
+            if (ev.HnmDefeatedAt != null)
+            {
+                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, cancellationToken);
+                _logger.LogInformation("Event {EventId} board set to defeated note (message {MessageId}).",
+                    eventId, ev.DiscordMessageId);
+                return;
+            }
+
             var signups = await LoadSignupsAsync(ev.Id, cancellationToken);
             var slotSignups = ev.PartySetup is null
                 ? null
@@ -84,7 +100,7 @@ public sealed class DiscordEventChannelPublisher
                 return;
             }
 
-            var channelId = await _routes.ResolveEventChannelIdAsync(ev.LinkshellId, ev.EventType, cancellationToken);
+            var channelId = await _routes.ResolveEventChannelIdAsync(ev.LinkshellId, ev.EventType, ev.AssignedMonsterName, cancellationToken);
             if (string.IsNullOrEmpty(channelId))
             {
                 _logger.LogInformation(

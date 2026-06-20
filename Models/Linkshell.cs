@@ -107,11 +107,21 @@ public class Linkshell
     public int ActiveAfterAttendances { get; set; } = 2;
 
     // Outside Party Signup: when ON, Discord-server members who have NEVER linked an
-    // LSM account can still sign up for events from the party board, tracked by their
-    // Discord user id (no account). Their signups render/function on the board and are
-    // fully cleared when the event ends — they accrue NO DKP and NO permanent history.
-    // Off by default; account users' behavior is unaffected either way.
+    // LSM account can still sign up for NON-HNM events from the party board. Their first
+    // signup creates/adopts a placeholder member (AppUser.IsPlaceholder) keyed to their
+    // Discord id, so they aren't re-prompted for their name. That placeholder has a real
+    // AppUserId, so — like any member — it DOES earn DKP and IS activity-tracked (there is
+    // no IsPlaceholder filter in the DKP/activity paths). Off by default; account users'
+    // behavior is unaffected either way. (For HNM use HnmOutsideSignupEnabled instead.)
     public bool OutsidePartySignupEnabled { get; set; } = false;
+
+    // HNM Outside Sign Up: independent of OutsidePartySignupEnabled (HNM works with that
+    // OFF). When ON it gates everything HNM — the HNM event type in the Activity create
+    // dropdown, HNM manual-create validation, and account-less Discord signups onto HNM
+    // boards. HNM signups are ROSTER MEMORY ONLY: a placeholder is still created/adopted
+    // so the player isn't re-prompted, but they earn NO DKP and NO active/absent credit
+    // because HNM events null End/Duration, zero DkpPerHour, and set CountsTowardActive=false.
+    public bool HnmOutsideSignupEnabled { get; set; } = false;
 
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing

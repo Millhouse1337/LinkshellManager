@@ -121,7 +121,10 @@ export class EventService {
         details: input.details || null,
         partySetupId: input.partySetupId ?? null,
         autoStart: input.autoStart ?? false,
-        countsTowardActive: input.countsTowardActive ?? true
+        countsTowardActive: input.countsTowardActive ?? true,
+        monsterName: input.monsterName ?? null,
+        repeatOnTod: input.repeatOnTod ?? false,
+        repeatLeadHours: input.repeatLeadHours ?? null
       });
 
       await this.auth.refreshOverview();
@@ -149,7 +152,10 @@ export class EventService {
         details: input.details || null,
         partySetupId: input.partySetupId ?? null,
         autoStart: input.autoStart ?? false,
-        countsTowardActive: input.countsTowardActive ?? true
+        countsTowardActive: input.countsTowardActive ?? true,
+        monsterName: input.monsterName ?? null,
+        repeatOnTod: input.repeatOnTod ?? false,
+        repeatLeadHours: input.repeatLeadHours ?? null
       });
 
       await this.auth.refreshOverview();

@@ -13,6 +13,14 @@ public static class HnmConfig
         "Vrtra"
     };
 
+    // The window-cycle HNMs above pop across successive windows. Their signup board shows
+    // "Window N" + an officer-only "Next Window" button that wipes the signups and advances
+    // N (Event.HnmWindowNumber) up to MaxWindow, then stops.
+    public const int MaxWindow = 25;
+
+    public static bool SupportsWindowAdvance(string? monsterName) =>
+        !string.IsNullOrWhiteSpace(monsterName) && LongWindowHnms.Contains(monsterName.Trim());
+
     public static readonly HashSet<string> ShortWindowHnms = new(StringComparer.OrdinalIgnoreCase)
     {
         "Fafnir",

@@ -265,6 +265,8 @@ builder.Services.AddSingleton<DiscordEventChannelQueue>();
 // is launched once and reused. EventBoardPoster picks image-or-text-fallback.
 builder.Services.AddSingleton<EventBoardImageRenderer>();
 builder.Services.AddScoped<EventBoardPoster>();
+// Edits an HNM board's Discord message to a "defeated" note when its ToD is logged.
+builder.Services.AddScoped<HnmBoardNoticeService>();
 // Resolves which channel each kind of post goes to, from a linkshell's
 // user-defined LinkshellChannelRoutes. Injected into every Discord publisher.
 builder.Services.AddScoped<ChannelRouteResolver>();
@@ -298,6 +300,9 @@ builder.Services.AddSingleton<LinkshellChangeNotifier>();
 
 // Starts events flagged "Auto start at start time" once their StartTime passes.
 builder.Services.AddHostedService<EventAutoStartBackgroundService>();
+
+// Re-posts standing HNM signup boards before the next predicted pop (from new ToDs).
+builder.Services.AddHostedService<HnmRecurringBoardBackgroundService>();
 
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {

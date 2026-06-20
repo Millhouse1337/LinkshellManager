@@ -106,9 +106,13 @@ public sealed record ActivityLinkshellSettingsDto(
     // Palette key for this linkshell's rendered event-board image (one of the
     // EventBoardThemes keys: Crystal, Abyss, Ember, Verdant, Royal, Tome).
     string EventBoardTheme,
-    // Allow Discord members with no LSM account to sign up for events from the
-    // party board (tracked by Discord id; cleared when the event ends).
+    // Allow Discord members with no LSM account to sign up for NON-HNM events from
+    // the party board. Backed by a placeholder member, so they DO earn DKP + are tracked.
     bool OutsidePartySignupEnabled,
+    // HNM Outside Sign Up: gates the HNM event type in the create dropdown + account-less
+    // Discord signups onto HNM boards. Independent of OutsidePartySignupEnabled.
+    // Roster memory only — HNM signups earn no DKP and no active/absent credit.
+    bool HnmOutsideSignupEnabled,
     // Discord channel id new post-event discussion comments are mirrored to, or
     // null to keep discussion in-app only.
     string? DiscussionChannelId = null);
@@ -298,6 +302,20 @@ public sealed record ActivityEventDto(
     int? PartySetupId,
     string? PartySetupName,
     string? PartySetupAssignedMonsterName,
+    // The event's own HNM monster (Event.AssignedMonsterName), for manually-created
+    // HNM boards. Used to pre-fill the "Post ToD" form. Null for non-HNM events.
+    string? AssignedMonsterName,
+    // HNM "defeated / awaiting re-post" state: true once the ToD is logged from the board.
+    // StartTime is the predicted repop; HnmRepostAt is when the board auto-re-posts (null if
+    // Repeat-on-ToD is off). SourceTodId is the logged ToD, so "Edit ToD" can pre-fill it.
+    bool HnmAwaitingRepost,
+    DateTime? HnmRepostAt,
+    int? SourceTodId,
+    // The HNM recurring-board settings (from the matching enabled HnmRecurringBoard), so
+    // the edit form can repopulate them. RepeatOnTod = an enabled board exists;
+    // RepeatLeadHours = its lead time in fractional hours. Null when no board.
+    bool RepeatOnTod,
+    double? RepeatLeadHours,
     int WindowCount,
     IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows,
     string? CreatorCharacterName,
@@ -668,7 +686,15 @@ public sealed record ActivityCreateEventRequest(
     bool AutoStart = false,
     // When true, attendees earn active-member credit (reconciled at close).
     // Default true, matching the web event form.
-    bool CountsTowardActive = true);
+    bool CountsTowardActive = true,
+    // HNM signup board only: the canonical monster the board is for, and whether
+    // to re-post the board N hours before the next predicted pop when a new ToD
+    // for that monster is recorded. Ignored for non-HNM events.
+    string? MonsterName = null,
+    bool RepeatOnTod = false,
+    // Lead time before the pop to re-post, in fractional hours (the form enters it as
+    // hours/minutes/seconds and combines them, e.g. 1.5 = 1h30m).
+    double? RepeatLeadHours = null);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 
@@ -700,8 +726,10 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null/blank = leave unchanged. One of the EventBoardThemes keys; an unknown
     // value is normalised to the default server-side.
     string? EventBoardTheme = null,
-    // null = leave unchanged. Allow account-less Discord party-board signups.
-    bool? OutsidePartySignupEnabled = null);
+    // null = leave unchanged. Allow account-less Discord party-board signups (non-HNM).
+    bool? OutsidePartySignupEnabled = null,
+    // null = leave unchanged. Gate HNM (event type + account-less HNM-board signups).
+    bool? HnmOutsideSignupEnabled = null);
 
 // Set/clear the post-event discussion mirror channel. ChannelId blank = clear
 // (discussion stays in-app); a non-empty value must be a numeric Discord channel id.
@@ -772,6 +800,17 @@ public sealed record ActivityCreateTodLootRequest(
     string? ItemWinner,
     int? WinningDkpSpent);
 
+// Logs (or edits) a ToD from an HNM signup board's "Post ToD" / "Edit ToD" button. The
+// monster + linkshell come from the event (path id), so the board form only sends the
+// time + cooldown/interval/day/claim. No loot/screenshot — those are for the ToDs tab.
+public sealed record ActivityPostBoardTodRequest(
+    string? TimeLocal,
+    string? Cooldown,
+    string? Interval,
+    int? DayNumber,
+    // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified.
+    bool? Claim);
+
 public sealed record ActivityUpdateMemberRoleRequest(string Role);
 
 // Manual Active/Pending/Inactive status set from the Activity roster. Auto
@@ -840,7 +879,9 @@ public sealed record ActivityChannelRouteInput(
     bool PostAuctions,
     bool PostAttendance,
     bool PostTodBoard,
-    IReadOnlyList<string>? EventTypeFilter);
+    IReadOnlyList<string>? EventTypeFilter,
+    // Per-monster narrowing for an HNM route (only used when EventTypeFilter includes HNM).
+    IReadOnlyList<string>? HnmMonsterFilter = null);
 
 public sealed record ActivitySaveChannelRoutesRequest(IReadOnlyList<ActivityChannelRouteInput>? Routes);
 

@@ -20,7 +20,7 @@ public sealed partial class ActivityDataController
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
                 Array.Empty<string>(), LinkshellTypes.Both, null, null, false,
-                false, 3, 2, EventBoardThemes.Default, false);
+                false, 3, 2, EventBoardThemes.Default, false, false);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -45,6 +45,7 @@ public sealed partial class ActivityDataController
             linkshell.ActiveAfterAttendances,
             EventBoardThemes.Resolve(linkshell.EventBoardTheme),
             linkshell.OutsidePartySignupEnabled,
+            linkshell.HnmOutsideSignupEnabled,
             linkshell.DiscussionChannelId);
     }
 

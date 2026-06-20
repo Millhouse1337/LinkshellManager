@@ -470,6 +470,7 @@ public class LinkshellController : Controller
         linkshell.EnableRevenue  = model.EnableRevenue;
         linkshell.EnableActivityTracking = model.EnableActivityTracking;
         linkshell.OutsidePartySignupEnabled = model.OutsidePartySignupEnabled;
+        linkshell.HnmOutsideSignupEnabled = model.HnmOutsideSignupEnabled;
         // Clamp to >= 1 so the streak rule can't be configured into a no-op.
         linkshell.InactiveAfterAbsences   = Math.Max(1, model.InactiveAfterAbsences);
         linkshell.ActiveAfterAttendances  = Math.Max(1, model.ActiveAfterAttendances);
@@ -737,6 +738,9 @@ public class LinkshellController : Controller
                 EventTypeFilter = (route.EventTypeFilter ?? string.Empty)
                     .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList(),
+                HnmMonsterFilter = (route.HnmMonsterFilter ?? string.Empty)
+                    .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList(),
             })
             .ToListAsync(cancellationToken);
     }
@@ -769,11 +773,22 @@ public class LinkshellController : Controller
             ? null
             : await _discordBot.ListTextChannelsAsync(guildForChannels, HttpContext.RequestAborted);
 
+        // The web route form has no per-monster HNM picker (that narrowing is managed in
+        // the Discord Activity), so preserve any existing monster filter on edited routes
+        // rather than clearing it on a web save.
+        var existingMonsterFilters = await _context.LinkshellChannelRoutes
+            .Where(route => route.LinkshellId == linkshellId)
+            .Select(route => new { route.Id, route.HnmMonsterFilter })
+            .ToDictionaryAsync(x => x.Id, x => x.HnmMonsterFilter, HttpContext.RequestAborted);
+
         var edits = (channelRoutes ?? new List<ChannelRouteInput>())
             .Select(r => new Services.ChannelRouteEdit(
                 r.Id == 0 ? null : r.Id, r.Name, r.ChannelId,
                 r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard,
-                r.EventTypeFilter))
+                r.EventTypeFilter,
+                r.Id != 0 && existingMonsterFilters.TryGetValue(r.Id, out var mf) && !string.IsNullOrWhiteSpace(mf)
+                    ? mf.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+                    : r.HnmMonsterFilter))
             .ToList();
 
         var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, HttpContext.RequestAborted);
@@ -803,6 +818,7 @@ public class LinkshellController : Controller
             EnableRevenue         = target.EnableRevenue,
             EnableActivityTracking = target.EnableActivityTracking,
             OutsidePartySignupEnabled = target.OutsidePartySignupEnabled,
+            HnmOutsideSignupEnabled = target.HnmOutsideSignupEnabled,
             InactiveAfterAbsences  = target.InactiveAfterAbsences,
             ActiveAfterAttendances = target.ActiveAfterAttendances,
             HiddenTodMonsters     = (target.HiddenTodMonsters ?? string.Empty)

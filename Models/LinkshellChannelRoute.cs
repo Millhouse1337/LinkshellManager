@@ -51,6 +51,14 @@ public class LinkshellChannelRoute
     [MaxLength(256)]
     public string? EventTypeFilter { get; set; }
 
+    // Optional per-monster narrowing for HNM event routing (only meaningful when the
+    // EventTypeFilter includes "HNM"). Pipe-delimited monster names (TodManagerViewModel
+    // .SupportedMonsters): when set, this route only receives HNM events for THOSE monsters,
+    // so a specific HNM can post to its own channel. Null/empty = catch every HNM (the
+    // existing behavior). A monster-specific route is preferred over a catch-all HNM route.
+    [MaxLength(512)]
+    public string? HnmMonsterFilter { get; set; }
+
     // The Discord message id of THIS route's live, edit-in-place ToD board. Null
     // until the first post; set from the create response, used for subsequent
     // edits. Cleared if the message is gone (404) so it reposts. Only the route
@@ -101,6 +109,6 @@ public static class EventTypeVocabulary
 {
     public static readonly IReadOnlyList<string> All = new[]
     {
-        "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM", "Other"
+        "Sky", "Sea", "HNM", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM", "Other"
     };
 }

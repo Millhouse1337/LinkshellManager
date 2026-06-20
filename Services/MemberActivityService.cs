@@ -57,12 +57,13 @@ public sealed class MemberActivityService
     // streak columns, so they always agree. Per the linkshell's config thresholds
     // (InactiveAfterAbsences / ActiveAfterAttendances), processing counting events
     // oldest → newest with each member starting ACTIVE:
-    //   * While ACTIVE: count consecutive ABSENCES in `Absent` (an attendance resets
-    //     it to 0; `Credit` stays 0). On reaching InactiveAfterAbsences → flip to
-    //     Inactive and reset BOTH counters to 0 ("until the next event").
-    //   * While INACTIVE: count consecutive CREDITS in `Credit` (an absence resets it
-    //     to 0; `Absent` stays 0). On reaching ActiveAfterAttendances → flip to Active
-    //     and reset BOTH counters to 0.
+    //   * Each counting event updates two always-live trailing streaks: an ATTENDANCE
+    //     grows `Credit` (the "Active streak") and zeroes `Absent`; a MISS grows `Absent`
+    //     and zeroes `Credit`. Exactly one is non-zero — it reads as the current reason.
+    //   * Status follows by hysteresis: `Absent` reaching InactiveAfterAbsences flips an
+    //     Active member to Inactive; `Credit` reaching ActiveAfterAttendances flips an
+    //     Inactive member back to Active. Counters are NEVER reset on a flip — they keep
+    //     climbing so the roster always shows the real streak.
     // Computed regardless of EnableActivityTracking so the roster can always show the
     // numbers; thresholds fall back to 3 / 2 if the linkshell row is missing.
     private async Task<Dictionary<string, (bool Active, int Credit, int Absent)>> ComputeActivityMachineAsync(
@@ -118,6 +119,27 @@ public sealed class MemberActivityService
                 g => g.Key,
                 g => new HashSet<string>(g.Select(x => x.AppUserId), StringComparer.OrdinalIgnoreCase));
 
+        // The earliest counting event each member was credited for. Used as a fallback
+        // "joined" cutoff when DateJoined is missing (e.g. members imported from a DKP
+        // sheet never get one set): without a lower bound the machine would count the
+        // linkshell's ENTIRE event history as absences and mark the member Inactive off
+        // events from before they ever participated — the "randomly Inactive" bug.
+        var firstCreditedEndByUser = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ev in countingEvents) // oldest -> newest, so the first hit is earliest
+        {
+            if (!ev.EndTime.HasValue || !creditedByEvent.TryGetValue(ev.Id, out var credited))
+            {
+                continue;
+            }
+            foreach (var uid in credited)
+            {
+                if (!firstCreditedEndByUser.ContainsKey(uid))
+                {
+                    firstCreditedEndByUser[uid] = ev.EndTime.Value;
+                }
+            }
+        }
+
         foreach (var member in members)
         {
             // Seed the machine: a manual override is a baseline set at
@@ -134,16 +156,27 @@ public sealed class MemberActivityService
             if (member.ManualActiveCreditStreak.HasValue)
             {
                 var v = Math.Max(0, member.ManualActiveCreditStreak.Value);
-                if (v >= activeAfter) { active = true; credit = 0; }   // already reactivated
-                else { active = false; credit = v; }                   // inactive, building credit
+                active = v >= activeAfter; // at/above the attendance bar => Active
+                credit = v;                // show the streak; absent stays 0 (mutually exclusive)
                 cutoff = member.ManualStreakSetAt ?? member.DateJoined;
             }
             else if (member.ManualAbsentStreak.HasValue)
             {
                 var v = Math.Max(0, member.ManualAbsentStreak.Value);
-                if (v >= inactiveAfter) { active = false; absent = 0; } // already went inactive
-                else { active = true; absent = v; }                    // active, building absences
+                active = v < inactiveAfter; // at/above the absence bar => Inactive
+                absent = v;                 // show the streak; credit stays 0
                 cutoff = member.ManualStreakSetAt ?? member.DateJoined;
+            }
+
+            // Still no lower bound — missing join date, or a legacy manual override saved
+            // before seed timestamps existed. Start at the member's first credited
+            // attendance so pre-participation events never count; if they were never
+            // credited, exclude everything so they stay Active rather than mass-absent.
+            if (cutoff is null)
+            {
+                cutoff = firstCreditedEndByUser.TryGetValue(member.AppUserId, out var firstSeen)
+                    ? firstSeen
+                    : DateTime.MaxValue;
             }
 
             foreach (var ev in countingEvents) // oldest -> newest
@@ -157,41 +190,25 @@ public sealed class MemberActivityService
                 var attended = creditedByEvent.TryGetValue(ev.Id, out var credited)
                     && credited.Contains(member.AppUserId);
 
-                if (active)
+                // Both streaks are always live, pure trailing counts: an attendance grows
+                // the active streak and zeroes the absent streak; a miss does the reverse —
+                // so exactly one is non-zero and it always reads as the reason for the
+                // status. Counters are NEVER reset on a flip; they just keep climbing.
+                if (attended)
                 {
-                    credit = 0; // active-credit column is dormant while active
-                    if (attended)
-                    {
-                        absent = 0; // one attendance resets the absence streak
-                    }
-                    else
-                    {
-                        absent++;
-                        if (absent >= inactiveAfter)
-                        {
-                            active = false;
-                            absent = 0; // both columns reset until the next event
-                            credit = 0;
-                        }
-                    }
+                    credit++;
+                    absent = 0;
+                    // Two attendances in a row (ActiveAfterAttendances) reactivate an
+                    // Inactive member.
+                    if (!active && credit >= activeAfter) { active = true; }
                 }
                 else
                 {
-                    absent = 0; // absent-streak column is dormant while inactive
-                    if (attended)
-                    {
-                        credit++;
-                        if (credit >= activeAfter)
-                        {
-                            active = true;
-                            credit = 0; // both columns reset until the next event
-                            absent = 0;
-                        }
-                    }
-                    else
-                    {
-                        credit = 0; // one absence resets the active-credit streak
-                    }
+                    absent++;
+                    credit = 0;
+                    // Misses in a row reaching InactiveAfterAbsences drop an Active
+                    // member to Inactive.
+                    if (active && absent >= inactiveAfter) { active = false; }
                 }
             }
 
@@ -213,9 +230,10 @@ public sealed class MemberActivityService
 
         // The same state machine drives Active/Inactive AND the two columns, and it
         // already seeds from any manual override (the roster "Count" set via Modify),
-        // so a manual value accumulates with later attendance. The column the member
-        // is NOT currently accumulating always shows 0 (an inactive member shows a
-        // climbing active-credit count + a 0 absent streak, and vice-versa).
+        // so a manual value accumulates with later attendance. Exactly one column is
+        // non-zero (the trailing run of the most recent identical outcomes): an Inactive
+        // member who keeps missing shows a climbing Absent streak — the reason they're
+        // Inactive — while one attending back shows a climbing Active credit.
         var machine = await ComputeActivityMachineAsync(linkshellId, cancellationToken);
         foreach (var kv in machine)
         {

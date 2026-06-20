@@ -101,7 +101,10 @@ public sealed partial class ActivityDataController
             .Include(evt => evt.AttendanceWindows)
                 .ThenInclude(window => window.Attendees)
                     .ThenInclude(attendee => attendee.AppUserEvent)
-            .Where(evt => linkshellIds.Contains(evt.LinkshellId))
+            // Scope to the SELECTED linkshell only (the rest of this overview is
+            // primary-scoped too) — otherwise the Event System queue shows pending/live
+            // events from every linkshell the user belongs to, not just the active one.
+            .Where(evt => evt.LinkshellId == primaryLinkshellId)
             .OrderBy(evt => evt.StartTime)
             .Take(50)
             .AsSplitQuery()
@@ -110,7 +113,8 @@ public sealed partial class ActivityDataController
 
         var recentHistory = await _dbContext.EventHistories
             .Include(history => history.AppUserEventHistories)
-            .Where(history => linkshellIds.Contains(history.LinkshellId))
+            // Past events on the Event page are scoped to the selected linkshell too.
+            .Where(history => history.LinkshellId == primaryLinkshellId)
             .OrderByDescending(history => history.EndTime ?? history.TimeStamp)
             .Take(8)
             .AsNoTracking()
@@ -316,6 +320,20 @@ public sealed partial class ActivityDataController
                 ? byUser.GetValueOrDefault(userId)
                 : 0d;
 
+        // Enabled repeat-on-ToD board lead times for this linkshell, keyed by lower-cased
+        // monster, so the HNM edit form can repopulate the "Repeat post" toggle + lead.
+        var hnmBoardLeadByMonster = (await _dbContext.HnmRecurringBoards
+                .Where(b => b.LinkshellId == primaryLinkshellId && b.Enabled)
+                .Select(b => new { b.MonsterName, b.LeadHours })
+                .ToListAsync(cancellationToken))
+            .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
+            .ToDictionary(g => g.Key, g => g.First().LeadHours);
+        double? HnmLead(Event e) =>
+            !string.IsNullOrWhiteSpace(e.AssignedMonsterName)
+            && hnmBoardLeadByMonster.TryGetValue(e.AssignedMonsterName.Trim().ToLowerInvariant(), out var lh)
+                ? lh
+                : (double?)null;
+
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
                 appUser.Id,
@@ -513,6 +531,12 @@ public sealed partial class ActivityDataController
                 evt.PartySetupId,
                 evt.PartySetup != null ? evt.PartySetup.Name : null,
                 evt.PartySetup != null ? evt.PartySetup.AssignedMonsterName : null,
+                evt.AssignedMonsterName,
+                evt.HnmDefeatedAt != null,
+                evt.HnmRepostAt,
+                evt.SourceTodId,
+                HnmLead(evt) != null,
+                HnmLead(evt),
                 evt.WindowCountOverride ?? HnmConfig.GetWindowCount(evt.EventName),
                 evt.AttendanceWindows
                     .OrderBy(window => window.SequenceNumber)

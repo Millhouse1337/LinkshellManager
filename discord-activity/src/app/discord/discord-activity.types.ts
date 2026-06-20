@@ -151,9 +151,13 @@ export interface ActivityLinkshellSettings {
   // Palette key for this linkshell's rendered event-board image. One of the
   // EVENT_BOARD_THEMES keys (Crystal, Abyss, Ember, Verdant, Royal, Tome).
   eventBoardTheme: string;
-  // Allow Discord members with no LSM account to sign up for events from the party
-  // board (tracked by Discord id; cleared when the event ends).
+  // Allow Discord members with no LSM account to sign up for NON-HNM events from the
+  // party board. Backed by a placeholder member, so they DO earn DKP + are tracked.
   outsidePartySignupEnabled?: boolean;
+  // HNM Outside Sign Up: gates the HNM event type in the create dropdown and account-less
+  // Discord signups onto HNM boards. Independent of outsidePartySignupEnabled.
+  // Roster memory only — HNM signups earn no DKP and no active/absent credit.
+  hnmOutsideSignupEnabled?: boolean;
   // Discord channel id new post-event discussion comments mirror to, or null to
   // keep discussion in-app only.
   discussionChannelId?: string | null;
@@ -349,6 +353,8 @@ export interface ActivityChannelRoute {
   postAttendance: boolean;
   postTodBoard: boolean;
   eventTypeFilter: string[];
+  // Per-monster narrowing for an HNM route (only meaningful when eventTypeFilter has HNM).
+  hnmMonsterFilter: string[];
 }
 
 export interface ActivityChannelRoutesResponse {
@@ -356,6 +362,8 @@ export interface ActivityChannelRoutesResponse {
   availableChannels: ActivityDiscordChannelOption[];
   postTypes: ActivityChannelPostType[];
   eventTypes: string[];
+  // HNM monster picklist for the per-monster route narrowing.
+  monsterOptions: string[];
   routes: ActivityChannelRoute[];
 }
 
@@ -369,6 +377,7 @@ export interface ActivityChannelRouteInput {
   postAttendance: boolean;
   postTodBoard: boolean;
   eventTypeFilter: string[];
+  hnmMonsterFilter: string[];
 }
 
 export interface ActivityLinkshellDetail {
@@ -529,6 +538,18 @@ export interface ActivityEvent {
   partySetupId?: number | null;
   partySetupName?: string | null;
   partySetupAssignedMonsterName?: string | null;
+  // The event's own HNM monster (for manual HNM boards); used to pre-fill "Post ToD".
+  assignedMonsterName?: string | null;
+  // HNM "defeated / awaiting re-post" state: true once a ToD is logged from the board.
+  // startTime = predicted repop; hnmRepostAt = when the board auto-re-posts (null if
+  // Repeat-on-ToD off); sourceTodId = the logged ToD so "Edit ToD" can pre-fill it.
+  hnmAwaitingRepost?: boolean;
+  hnmRepostAt?: string | null;
+  sourceTodId?: number | null;
+  // HNM recurring-board settings (from the matching enabled board), so the edit form can
+  // repopulate the "Repeat post" toggle + lead time. repeatLeadHours is fractional hours.
+  repeatOnTod?: boolean;
+  repeatLeadHours?: number | null;
   windowCount: number;
   attendanceWindows: ActivityAttendanceWindow[];
   creatorCharacterName?: string | null;
@@ -937,6 +958,11 @@ export interface ActivityCreateEventInput {
   autoStart?: boolean;
   // When true, attendees earn active-member credit (reconciled at close). Default true.
   countsTowardActive?: boolean;
+  // HNM signup board only: the monster the board is for, plus whether to re-post the
+  // board N hours before the next predicted pop when a new ToD is recorded.
+  monsterName?: string | null;
+  repeatOnTod?: boolean;
+  repeatLeadHours?: number | null;
 }
 
 export interface ActivityAddEventMemberInput {
@@ -1002,6 +1028,8 @@ export interface ActivityEventHistoryParticipant {
   id: number;
   appUserId?: string | null;
   characterName?: string | null;
+  // The member's other character names (alts), shown in small text next to the name.
+  altNames?: string[];
   jobName?: string | null;
   subJobName?: string | null;
   duration?: number | null;
@@ -1014,6 +1042,8 @@ export interface ActivityEventHistoryParticipant {
 export interface ActivityEventHistoryAbsentee {
   appUserId: string;
   characterName?: string | null;
+  // The member's other character names (alts), shown in small text next to the name.
+  altNames?: string[];
 }
 
 export interface ActivityEventHistory {

@@ -7,10 +7,15 @@
     // it's not offered as a manual create option. Keep it selectable only when editing
     // an existing HNM event so its type still displays and round-trips on save.
     var eventTypeOptions = new List<string> { "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
-    if (string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase))
+    // HNM signup boards are managed in the Discord Activity (gated by HNM Outside Sign
+    // Up), so HNM is NOT offered as a manual create option on the web. Keep it selectable
+    // only when editing an existing HNM event so its type still displays and round-trips.
+    if (string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase)
+        && !eventTypeOptions.Contains("HNM"))
     {
         eventTypeOptions.Insert(2, "HNM");
     }
+    var isHnmEvent = string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase);
     var isKnownEventType = eventTypeOptions.Any(option =>
         string.Equals(option, currentEventType, StringComparison.OrdinalIgnoreCase));
     var initialPickerValue = string.IsNullOrEmpty(currentEventType) ? string.Empty
@@ -96,17 +101,42 @@
         </div>
         <input type="hidden" id="event-type-hidden" name="Event.EventType" value="@currentEventType" />
     </div>
+    @{
+        var monsterValue = Model.Event.AssignedMonsterName ?? string.Empty;
+        var monsterIsKnown = Model.MonsterOptions.Any(m => string.Equals(m, monsterValue, StringComparison.OrdinalIgnoreCase));
+        var monsterPickerValue = string.IsNullOrEmpty(monsterValue) ? string.Empty : (monsterIsKnown ? monsterValue : "Other");
+        var monsterOtherValue = monsterIsKnown ? string.Empty : monsterValue;
+    }
+    @* HNM signup board: monster picker (revealed by the event-type JS when HNM is
+       chosen). Posts Event.AssignedMonsterName; "Other" reveals a free-text input. *@
+    <div class="field" id="hnm-monster-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column">
+        <label for="hnm-monster-picker">Monster</label>
+        <div style="display:flex;gap:8px">
+            <select class="form-select" id="hnm-monster-picker" style="flex:1;min-width:0">
+                <option value="" disabled selected="@(string.IsNullOrEmpty(monsterPickerValue))">Select a monster</option>
+                @foreach (var m in Model.MonsterOptions)
+                {
+                    <option value="@m" selected="@(string.Equals(m, monsterPickerValue, StringComparison.OrdinalIgnoreCase))">@m</option>
+                }
+                <option value="Other" selected="@(monsterPickerValue == "Other")">Other</option>
+            </select>
+            <input class="form-control" type="text" id="hnm-monster-other"
+                   placeholder="Monster name" value="@monsterOtherValue"
+                   style="flex:1;min-width:0;@(monsterPickerValue == "Other" ? string.Empty : "display:none")" />
+        </div>
+        <input type="hidden" id="hnm-monster-hidden" name="Event.AssignedMonsterName" value="@monsterValue" />
+    </div>
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EventLocation">Location</label>
         <input class="form-control" id="Event_EventLocation" name="Event.EventLocation" value="@Model.Event.EventLocation" />
     </div>
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_StartTime">Start</label>
-        <input class="form-control" id="Event_StartTime" name="Event.StartTime" type="datetime-local" value="@(Model.Event.StartTime?.ToString("yyyy-MM-ddTHH:mm"))" />
+        <input class="form-control" id="Event_StartTime" name="Event.StartTime" type="datetime-local" step="1" value="@(Model.Event.StartTime?.ToString("yyyy-MM-ddTHH:mm:ss"))" />
         @* Auto-start: a background service stamps the event live at its Start time
            so nobody has to click Start. HNM events ignore this (addon-driven).
            Hidden "false" makes an unchecked box post false (MVC checkbox pattern). *@
-        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:6px 0 0">
+        <label id="hnm-hide-autostart" style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:6px 0 0">
             <input type="checkbox" name="Event.AutoStart" value="true" @(Model.Event.AutoStart ? "checked" : null) />
             <input type="hidden" name="Event.AutoStart" value="false" />
             Auto start at start time
@@ -115,7 +145,7 @@
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EndTime">End</label>
         <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" id="Event_EndTime" name="Event.EndTime" type="datetime-local" value="@(Model.Event.EndTime?.ToString("yyyy-MM-ddTHH:mm"))" style="flex:1;min-width:0" />
+            <input class="form-control" id="Event_EndTime" name="Event.EndTime" type="datetime-local" step="1" value="@(Model.Event.EndTime?.ToString("yyyy-MM-ddTHH:mm:ss"))" style="flex:1;min-width:0" />
             <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
                 <input type="checkbox" id="Event_EndTime_NotSpecified" @(endTimeNotSpecified ? "checked" : null) />
                 Not specified
@@ -150,7 +180,7 @@
             </label>
         </div>
     </div>
-    <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
+    <div class="field" id="hnm-hide-countsactive" style="display:flex;flex-direction:column;grid-column:1/-1">
         @* Activity tracking: when checked, attendees of this event earn active-member
            credit (reconciled at close). Hidden "false" makes an unchecked box post
            false (MVC checkbox pattern), same as Auto start above. *@
@@ -161,6 +191,29 @@
         </label>
         <span style="font-size:11px;color:var(--fg-4);margin-top:2px">Attendees get active credit (checked by default; reconcile per member when the event closes).</span>
     </div>
+
+    @{
+        var repeatLeadValue = Model.RepeatLeadHours ?? 1;
+        var monsterIsOther = monsterPickerValue == "Other";
+    }
+    @* HNM signup board: optionally re-post the board before the next predicted pop
+       when a new ToD for the monster is recorded. Disabled for a free-text "Other"
+       monster (recurrence needs an exact ToD match). Revealed by the JS for HNM. *@
+    <div class="field" id="hnm-repeat-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column;grid-column:1/-1">
+        <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg-2);margin:0">
+            <input type="checkbox" name="RepeatOnTod" value="true" id="hnm-repeat-toggle" @(Model.RepeatOnTod ? "checked" : null) />
+            <input type="hidden" name="RepeatOnTod" value="false" />
+            Repeat post when ToD is updated
+        </label>
+        <span style="font-size:11px;color:var(--fg-4);margin-top:2px">When a new ToD for this monster is recorded, re-post the signup board ahead of the next pop.</span>
+        <div id="hnm-lead-field" style="@(Model.RepeatOnTod ? "display:flex" : "display:none");flex-direction:column;gap:6px;margin-top:8px;max-width:320px">
+            <label for="RepeatLeadHours" style="font-size:12px;color:var(--fg-3);margin:0">Recreate this many hours before pop</label>
+            <input class="form-control" type="number" min="0" max="168" step="1" name="RepeatLeadHours" id="RepeatLeadHours" value="@repeatLeadValue" />
+        </div>
+        <small id="hnm-repeat-other-note" style="font-size:11px;color:var(--fg-4);margin-top:6px;@(monsterIsOther ? string.Empty : "display:none")">
+            Repeat-on-ToD isn't available for a custom "Other" monster.
+        </small>
+    </div>
     <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
         <label for="Event_Details">Details</label>
         <textarea class="form-control" id="Event_Details" name="Event.Details" rows="4">@Model.Event.Details</textarea>
@@ -169,13 +222,30 @@
 
 <script nonce="@Html.CspNonce()">
     (function () {
-        var known = ['Sky','Sea','HENM','Limbus','Dynamis','BCNM','KSNM'];
         var picker = document.getElementById('event-type-picker');
         var other  = document.getElementById('event-type-other');
         var hidden = document.getElementById('event-type-hidden');
         if (!picker || !other || !hidden) return;
 
         var partySelect = document.getElementById('PartySetupId');
+
+        // HNM signup-board controls: the monster picker + repeat-on-ToD toggle, plus
+        // the fields hidden when HNM is chosen (the server forces their values).
+        var monsterField    = document.getElementById('hnm-monster-field');
+        var monsterPicker   = document.getElementById('hnm-monster-picker');
+        var monsterOther    = document.getElementById('hnm-monster-other');
+        var monsterHidden   = document.getElementById('hnm-monster-hidden');
+        var repeatField     = document.getElementById('hnm-repeat-field');
+        var repeatToggle    = document.getElementById('hnm-repeat-toggle');
+        var leadField       = document.getElementById('hnm-lead-field');
+        var repeatOtherNote = document.getElementById('hnm-repeat-other-note');
+        function fieldOf(id) { var e = document.getElementById(id); return e ? e.closest('.field') : null; }
+        var endField    = fieldOf('Event_EndTime');
+        var durField    = fieldOf('Event_Duration');
+        var dkpField    = fieldOf('Event_DkpPerHour');
+        var autostart   = document.getElementById('hnm-hide-autostart');
+        var countsField = document.getElementById('hnm-hide-countsactive');
+        function setShown(el, shown) { if (el) el.style.display = shown ? '' : 'none'; }
 
         // Show only party setups whose type matches the chosen event type, plus
         // universal ("Any") and untyped/legacy setups (so nothing existing
@@ -195,6 +265,41 @@
             }
         }
 
+        function isOtherMonster() { return !!monsterPicker && monsterPicker.value === 'Other'; }
+
+        function syncRepeatLead() {
+            setShown(leadField, !!repeatToggle && repeatToggle.checked && !repeatToggle.disabled);
+        }
+
+        function syncMonster() {
+            if (!monsterPicker || !monsterHidden) return;
+            if (isOtherMonster()) {
+                if (monsterOther) { monsterOther.style.display = ''; monsterHidden.value = monsterOther.value; }
+            } else {
+                if (monsterOther) monsterOther.style.display = 'none';
+                monsterHidden.value = monsterPicker.value || '';
+            }
+            // Repeat-on-ToD needs an exact ToD match → disabled for the "Other" monster.
+            var other = isOtherMonster();
+            if (repeatToggle) { repeatToggle.disabled = other; if (other) repeatToggle.checked = false; }
+            setShown(repeatOtherNote, other);
+            syncRepeatLead();
+        }
+
+        function applyHnm(isHnm) {
+            setShown(monsterField, isHnm);
+            setShown(repeatField, isHnm);
+            // These are hidden for HNM (the server nulls/zeros them server-side).
+            setShown(endField, !isHnm);
+            setShown(durField, !isHnm);
+            setShown(dkpField, !isHnm);
+            setShown(autostart, !isHnm);
+            setShown(countsField, !isHnm);
+            if (isHnm) syncMonster();
+        }
+
+        function isHnm() { return (hidden.value || '').trim().toUpperCase() === 'HNM'; }
+
         function sync() {
             if (picker.value === 'Other') {
                 other.style.display = '';
@@ -203,12 +308,17 @@
                 other.style.display = 'none';
                 hidden.value = picker.value;
             }
+            applyHnm(isHnm());
             filterPartySetups();
         }
 
         picker.addEventListener('change', sync);
-        other.addEventListener('input', function () { hidden.value = other.value; filterPartySetups(); });
-        filterPartySetups();
+        other.addEventListener('input', function () { hidden.value = other.value; applyHnm(isHnm()); filterPartySetups(); });
+        if (monsterPicker) monsterPicker.addEventListener('change', syncMonster);
+        if (monsterOther) monsterOther.addEventListener('input', function () { if (monsterHidden && isOtherMonster()) monsterHidden.value = monsterOther.value; });
+        if (repeatToggle) repeatToggle.addEventListener('change', syncRepeatLead);
+
+        sync();
     })();
 </script>
 

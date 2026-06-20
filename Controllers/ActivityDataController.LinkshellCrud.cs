@@ -272,6 +272,10 @@ public sealed partial class ActivityDataController
         {
             linkshell.OutsidePartySignupEnabled = request.OutsidePartySignupEnabled.Value;
         }
+        if (request.HnmOutsideSignupEnabled.HasValue)
+        {
+            linkshell.HnmOutsideSignupEnabled = request.HnmOutsideSignupEnabled.Value;
+        }
         if (request.InactiveAfterAbsences.HasValue)
         {
             linkshell.InactiveAfterAbsences = Math.Max(1, request.InactiveAfterAbsences.Value);
@@ -636,6 +640,9 @@ public sealed partial class ActivityDataController
                 .ToList(),
             postTypes = ChannelPostTypes.All.Select(key => new { key, label = ChannelPostTypes.Label(key) }).ToList(),
             eventTypes = EventTypeVocabulary.All,
+            // HNM monster picklist for the per-monster route narrowing (shown when a route
+            // includes HNM). Same canonical list the create-event monster dropdown uses.
+            monsterOptions = TodManagerViewModel.SupportedMonsters,
             routes = routes.Select(route => new
             {
                 id = route.Id,
@@ -648,6 +655,7 @@ public sealed partial class ActivityDataController
                 postAttendance = route.PostAttendance,
                 postTodBoard = route.PostTodBoard,
                 eventTypeFilter = SplitEventTypeFilter(route.EventTypeFilter),
+                hnmMonsterFilter = SplitEventTypeFilter(route.HnmMonsterFilter),
             }).ToList(),
         });
     }
@@ -686,7 +694,7 @@ public sealed partial class ActivityDataController
             .Select(r => new ChannelRouteEdit(
                 r.Id, r.Name, r.ChannelId,
                 r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard,
-                r.EventTypeFilter))
+                r.EventTypeFilter, r.HnmMonsterFilter))
             .ToList();
 
         var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, cancellationToken);

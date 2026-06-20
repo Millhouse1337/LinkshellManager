@@ -42,8 +42,31 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .Include(m => m.AppUser)
             .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
-            .Select(m => new { AppUserId = m.AppUserId!, Name = m.CharacterName ?? m.AppUser!.CharacterName ?? m.AppUser!.UserName })
+            .Select(m => new
+            {
+                AppUserId = m.AppUserId!,
+                Name = m.CharacterName ?? m.AppUser!.CharacterName ?? m.AppUser!.UserName,
+                Alt1 = m.AppUser!.AltCharacterName1,
+                Alt2 = m.AppUser!.AltCharacterName2
+            })
             .ToListAsync(cancellationToken);
+
+        // Each member's alt character names, by account, so both attendees and
+        // absentees can show "(alt1, alt2)" next to the displayed name. The
+        // displayed name itself is filtered out so a member who signed up as an
+        // alt doesn't list that same name as one of their alts.
+        var altsByUser = roster.ToDictionary(
+            m => m.AppUserId,
+            m => new[] { m.Alt1, m.Alt2 }
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!.Trim())
+                .ToArray(),
+            StringComparer.Ordinal);
+        string[] AltsFor(string? appUserId, string? displayName)
+        {
+            if (appUserId is null || !altsByUser.TryGetValue(appUserId, out var alts)) return Array.Empty<string>();
+            return alts.Where(n => !string.Equals(n, displayName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
 
         var result = histories.Select(h =>
         {
@@ -69,6 +92,7 @@ public sealed partial class ActivityDataController
                         id = p.Id,
                         appUserId = p.AppUserId,
                         characterName = p.CharacterName,
+                        altNames = AltsFor(p.AppUserId, p.CharacterName),
                         jobName = p.JobName,
                         subJobName = p.SubJobName,
                         duration = p.Duration,
@@ -78,7 +102,7 @@ public sealed partial class ActivityDataController
                 absentees = roster
                     .Where(m => !attendeeIds.Contains(m.AppUserId))
                     .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(m => new { appUserId = m.AppUserId, characterName = m.Name })
+                    .Select(m => new { appUserId = m.AppUserId, characterName = m.Name, altNames = AltsFor(m.AppUserId, m.Name) })
             };
         });
 

@@ -285,14 +285,30 @@
                 <strong>Outside Party Signup</strong>
                 <p class="muted">
                   Let Discord-server members who have <strong>never launched the app</strong> sign up for
-                  events from the party board, identified by their Discord account. Their signups show on the
-                  board and clear when the event ends — they earn no DKP and no attendance history.
+                  events from the party board, identified by their Discord account. Their first signup adds them
+                  to your roster as a placeholder member, so they <strong>earn DKP and count toward attendance</strong>
+                  like anyone else (and aren't re-asked for their name next time).
                 </p>
                 <label class="customize-form__toggle">
                   <input type="checkbox" name="outsidePartySignupEnabledDraft"
                     [ngModel]="customizeDraft.outsidePartySignupEnabled"
                     (ngModelChange)="customizeDraft.outsidePartySignupEnabled = $event; onCustomizeFieldChange()" />
                   <span>Allow outside (non-account) Discord signups</span>
+                </label>
+
+                <strong style="margin-top:18px">HNM Outside Sign Up</strong>
+                <p class="muted">
+                  A separate switch for <strong>HNM signup boards</strong>. Turning this on adds the HNM event type
+                  when creating an event and lets outside Discord members sign up to HNM boards. HNM is
+                  <strong>roster memory only</strong> — players are remembered so they don't retype their name, but
+                  HNM signups earn <strong>no DKP and no attendance credit</strong>. Works independently of Outside
+                  Party Signup above.
+                </p>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="hnmOutsideSignupEnabledDraft"
+                    [ngModel]="customizeDraft.hnmOutsideSignupEnabled"
+                    (ngModelChange)="customizeDraft.hnmOutsideSignupEnabled = $event; onCustomizeFieldChange()" />
+                  <span>Allow HNM outside sign-ups (roster only — no DKP)</span>
                 </label>
               </div>
             </div>
@@ -552,6 +568,24 @@
                       }
                     </div>
                   </div>
+
+                  <!-- Per-monster narrowing: only when this route catches HNM. Empty = all
+                       HNMs go here; pick monsters to route ONLY those to this channel. -->
+                  @if (routeCatchesHnm(route)) {
+                    <div class="event-filter">
+                      <h4>HNM monsters <span class="muted">(leave empty = all HNMs)</span></h4>
+                      <div class="event-grid event-grid--wide">
+                        @for (monster of channelMonsterOptions(); track monster) {
+                          <label class="check">
+                            <input type="checkbox"
+                              [checked]="isMonsterOn(route, monster)"
+                              (change)="toggleMonster(route, monster, $any($event.target).checked)" />
+                            <span>{{ monster }}</span>
+                          </label>
+                        }
+                      </div>
+                    </div>
+                  }
                 }
 
                 <!-- Per-route save: spans the full card width and sits at the far

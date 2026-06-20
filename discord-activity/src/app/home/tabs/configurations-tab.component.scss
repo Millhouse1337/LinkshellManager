@@ -224,6 +224,14 @@
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
   gap: 8px 14px;
 }
+// Wider columns + more gap for long names (the HNM monster picker). Each label can
+// wrap within its own cell so two-word monsters don't collide with their neighbours.
+.event-grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px 22px;
+
+  .check { align-items: flex-start; }
+}
 
 .routes-footer {
   display: flex;

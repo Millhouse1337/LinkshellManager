@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -15,7 +16,10 @@ public sealed record ChannelRouteEdit(
     bool PostAuctions,
     bool PostAttendance,
     bool PostTodBoard,
-    IReadOnlyList<string>? EventTypeFilter);
+    IReadOnlyList<string>? EventTypeFilter,
+    // Optional per-monster narrowing for an HNM event route (only used when EventTypeFilter
+    // includes "HNM"). Empty/null = catch every HNM.
+    IReadOnlyList<string>? HnmMonsterFilter = null);
 
 // Shared save logic for a linkshell's Discord channel routes: full replace with
 // validation (one owner per non-event post type) and a ToD board re-enqueue so
@@ -96,6 +100,7 @@ public sealed class ChannelRouteEditor
             route.PostAttendance = edit.PostAttendance;
             route.PostTodBoard = edit.PostTodBoard;
             route.EventTypeFilter = filter;
+            route.HnmMonsterFilter = BuildHnmMonsterFilter(edit);
         }
 
         // Anything not in the desired set is removed.
@@ -133,6 +138,28 @@ public sealed class ChannelRouteEditor
             .Where(t => !string.IsNullOrEmpty(t) && known.Contains(t!))
             // Normalise to the canonical casing from the vocabulary.
             .Select(t => EventTypeVocabulary.All.First(v => string.Equals(v, t, StringComparison.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return picked.Count == 0 ? null : string.Join('|', picked);
+    }
+
+    // Pipe-delimited monster names, validated against the supported list, de-duped. Null
+    // unless this route posts events AND includes HNM (the filter only narrows HNM routing,
+    // so it's ignored — and cleared — when the route doesn't catch HNM).
+    private static string? BuildHnmMonsterFilter(ChannelRouteEdit edit)
+    {
+        var catchesHnm = edit.PostEvents
+            && edit.EventTypeFilter is not null
+            && edit.EventTypeFilter.Any(t => string.Equals(t?.Trim(), "HNM", StringComparison.OrdinalIgnoreCase));
+        if (!catchesHnm || edit.HnmMonsterFilter is null)
+        {
+            return null;
+        }
+        var known = new HashSet<string>(TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+        var picked = edit.HnmMonsterFilter
+            .Select(m => m?.Trim())
+            .Where(m => !string.IsNullOrEmpty(m) && known.Contains(m!))
+            .Select(m => TodManagerViewModel.SupportedMonsters.First(v => string.Equals(v, m, StringComparison.OrdinalIgnoreCase)))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         return picked.Count == 0 ? null : string.Join('|', picked);

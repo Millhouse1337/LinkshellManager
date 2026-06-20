@@ -72,6 +72,11 @@ public static class DiscordEventMessageBuilder
     public const string PartyWizardLeaderMainPrefix = "evt:psLwm:";
     public const string PartyWizardLeaderSubPrefix = "evt:psLws:";
 
+    // "Next Window" button on the window-cycle HNM boards (Tiamat/Jormungand/Vrtra):
+    // officers-only; wipes the signups and advances Event.HnmWindowNumber up to MaxWindow.
+    //   evt:nextwindow:{eventId}
+    public const string NextWindowPrefix = "evt:nextwindow:";
+
     // Classic-embed payload: the fallback for the party board (when the image
     // renderer is unavailable) and the message for ad-hoc (no party setup) events.
     // `attachments` is cleared so an edit from the image board drops its PNG.
@@ -88,7 +93,7 @@ public static class DiscordEventMessageBuilder
             {
                 content = BuildStartHeading(ev),
                 embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot, signups) },
-                components = BuildBoardComponents(ev.Id),
+                components = BuildBoardComponents(ev),
                 attachments = Array.Empty<object>(),
                 allowed_mentions = new { parse = Array.Empty<string>() },
             };
@@ -118,7 +123,7 @@ public static class DiscordEventMessageBuilder
         {
             content = BuildStartHeading(ev),
             embeds = new[] { BuildBoardEmbed(ev, setup, slotSignups, signups, fileName) },
-            components = BuildBoardComponents(ev.Id),
+            components = BuildBoardComponents(ev),
             attachments = new object[] { new { id = 0, filename = fileName } },
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
@@ -341,14 +346,24 @@ public static class DiscordEventMessageBuilder
     // has no way to center message text, so this sits left-aligned at the top.)
     private static string BuildStartHeading(Event ev)
     {
+        // Window-cycle HNMs (Tiamat/Jormungand/Vrtra) lead with "Window N of 25", advanced
+        // by the officer-only "Next Window" button.
+        var windowLine = HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName)
+            ? $"## 🪟 Window {Math.Clamp(ev.HnmWindowNumber, 1, HnmConfig.MaxWindow)} of {HnmConfig.MaxWindow}"
+            : null;
+
         var when = ev.CommencementStartTime ?? ev.StartTime;
-        if (when is null)
+        string? startLine = null;
+        if (when is not null)
         {
-            return string.Empty;
+            var unix = ((DateTimeOffset)DateTime.SpecifyKind(when.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
+            var label = ev.CommencementStartTime is not null ? "Started" : "Starts";
+            // :D long date + :T long time (which includes seconds) — Discord has no single
+            // date+time-with-seconds token, so combine the two (both still per-viewer local).
+            startLine = $"## 🕒 {label}: <t:{unix}:D> <t:{unix}:T> · <t:{unix}:R>";
         }
-        var unix = ((DateTimeOffset)DateTime.SpecifyKind(when.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
-        var label = ev.CommencementStartTime is not null ? "Started" : "Starts";
-        return $"## 🕒 {label}: <t:{unix}:f> · <t:{unix}:R>";
+
+        return string.Join("\n", new[] { windowLine, startLine }.Where(line => !string.IsNullOrEmpty(line)));
     }
 
     // Board embed (the fallback when the image renderer is unavailable): event
@@ -425,9 +440,8 @@ public static class DiscordEventMessageBuilder
                     if (signup is not null)
                     {
                         var jobs = SignedUpJobs(signup);
-                        // Trim the name with an ellipsis so "name — jobs" stays on ONE line
-                        // in the narrow inline columns (it wraps otherwise, breaking the
-                        // grid). Full names stay legible on the rendered image board.
+                        // Hard-trim the name (no ellipsis) to keep "name — jobs" short in the
+                        // narrow inline columns. Full names stay legible on the rendered image board.
                         var name = FitSlotName(signup.CharacterName ?? "Member", jobs, !string.IsNullOrEmpty(crown), columns);
                         line = $"{icon} {crown}**{Escape(name)}**"
                              + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}");
@@ -510,9 +524,10 @@ public static class DiscordEventMessageBuilder
     // claimed slot as the party's leader (👑) on the rendered board. "Sign Up (No
     // Slot)" is attendance-only, "Withdraw" drops out. Four buttons, shown below the
     // board image (or embed fallback). Discord allows up to five buttons per row.
-    private static object[] BuildBoardComponents(int eventId)
+    private static object[] BuildBoardComponents(Event ev)
     {
-        return new object[]
+        var eventId = ev.Id;
+        var rows = new List<object>
         {
             new
             {
@@ -550,6 +565,32 @@ public static class DiscordEventMessageBuilder
                 },
             },
         };
+
+        // Window-cycle HNMs (Tiamat/Jormungand/Vrtra) get an officer-only "Next Window"
+        // button on its own row — it wipes the signups and advances "Window N". Visible to
+        // everyone (Discord can't per-user gate a button); the handler enforces officers.
+        // Disabled once the final window is reached.
+        if (HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        {
+            var atMax = ev.HnmWindowNumber >= HnmConfig.MaxWindow;
+            rows.Add(new
+            {
+                type = 1,
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 2,
+                        style = 1, // primary
+                        label = atMax ? $"Window {HnmConfig.MaxWindow} (final)" : "▶ Next Window (officers)",
+                        custom_id = $"{NextWindowPrefix}{eventId}",
+                        disabled = atMax,
+                    },
+                },
+            });
+        }
+
+        return rows.ToArray();
     }
 
     // A role-colored dot for a slot: the signed-up role when filled, else the
@@ -637,7 +678,9 @@ public static class DiscordEventMessageBuilder
         var lineBudget = columns >= 2 ? 64 / columns : 64;
         var reserved = 3 + (hasCrown ? 3 : 0) + (jobs.Length > 0 ? 3 + jobs.Length : 0);
         var budget = Math.Clamp(lineBudget - reserved, 4, 15);
-        return Truncate(trimmed, budget);
+        // Hard cut with NO ellipsis: the "…" didn't reliably stop "name — jobs" wrapping in
+        // the narrow inline columns, and a clean cut shows one more name char without it.
+        return trimmed.Length <= budget ? trimmed : trimmed[..budget].TrimEnd();
     }
 
     // "Role - MAIN/SUB" for a no-slot attendee (mirrors SignedUpJobs for slots).

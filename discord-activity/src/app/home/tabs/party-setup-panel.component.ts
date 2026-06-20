@@ -158,8 +158,9 @@ export class PartySetupPanelComponent {
         core = slot.role ? `Any ${slot.role}` : 'Any Role';
         break;
       case 'Job':
+        // "PC" (Player's Choice) keeps the slot label on one line — e.g. "MNK/PC".
         core = slot.mainJob
-          ? `${slot.mainJob}/${slot.subJob ? slot.subJob : "Player's Choice"}`
+          ? `${slot.mainJob}/${slot.subJob ? slot.subJob : 'PC'}`
           : 'Any job';
         break;
       default:

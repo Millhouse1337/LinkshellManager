@@ -41,14 +41,26 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // HNM events are created automatically by the in-game addon (from member
-        // ToD captures), never by hand -- reject manual creation of the "HNM" type.
-        if (string.Equals((request.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        // HNM is a manual outside-signup board: a no-DKP board posted to Discord so
+        // unsynced server members can sign up, repeated off ToD captures. It has its
+        // own gate (HNM Outside Sign Up), independent of Outside Party Signup, and
+        // requires a monster.
+        var isHnm = string.Equals((request.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        string? monsterName = null;
+        if (isHnm)
         {
-            return BadRequest(new
+            if (membership?.Linkshell?.HnmOutsideSignupEnabled != true)
             {
-                error = "HNM events are created automatically by the in-game addon and can't be added manually."
-            });
+                return BadRequest(new
+                {
+                    error = "HNM signup boards require HNM Outside Sign Up to be enabled for this linkshell."
+                });
+            }
+            monsterName = request.MonsterName?.Trim();
+            if (string.IsNullOrWhiteSpace(monsterName))
+            {
+                return BadRequest(new { error = "Select a monster for the HNM event." });
+            }
         }
 
         if (!TryConvertUserTimeZoneToUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
@@ -84,8 +96,39 @@ public sealed partial class ActivityDataController
             TimeStamp = DateTime.UtcNow
         };
 
+        if (isHnm)
+        {
+            // No-DKP signup board: stamp the monster (authoritative for recurrence),
+            // default the camp zone, engage post-by-window UI, and strip the fields
+            // the form hides (End/Duration/DKP/AutoStart/active tracking).
+            eventEntity.AssignedMonsterName = monsterName;
+            if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
+            {
+                eventEntity.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName!);
+            }
+            eventEntity.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+            eventEntity.EndTime = null;
+            eventEntity.Duration = null;
+            eventEntity.DkpPerHour = 0;
+            eventEntity.AutoStart = false;
+            eventEntity.CountsTowardActive = false;
+        }
+
         _dbContext.Events.Add(eventEntity);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Repeat-on-ToD: persist/refresh the recurring-board template so the board
+        // re-posts before the next predicted pop. Disabled for free-text "Other"
+        // monsters (recurrence needs an exact Tod.MonsterName match).
+        if (isHnm && request.RepeatOnTod
+            && !string.Equals(monsterName, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        {
+            await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, request.RepeatLeadHours, appUser.Id, cancellationToken);
+        }
+        else if (isHnm && !request.RepeatOnTod)
+        {
+            await HnmRecurringBoardService.DisableAsync(_dbContext, request.LinkshellId, monsterName, cancellationToken);
+        }
 
         return Ok(new { success = true, eventId = eventEntity.Id });
     }
@@ -199,7 +242,49 @@ public sealed partial class ActivityDataController
         eventEntity.AutoStart = request.AutoStart;
         eventEntity.CountsTowardActive = request.CountsTowardActive;
 
+        // HNM signup boards never award DKP or feed activity tracking, and they carry no
+        // end/duration. Re-assert that on edit so the form's hidden defaults (countsTowardActive
+        // defaults true, dkpPerHour > 0) can't flip an HNM board into a DKP-earning, tracked
+        // event. Also keep the monster/window in sync if the picker changed it.
+        var isHnm = string.Equals((request.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        if (isHnm)
+        {
+            var monsterName = request.MonsterName?.Trim();
+            if (!string.IsNullOrWhiteSpace(monsterName))
+            {
+                eventEntity.AssignedMonsterName = monsterName;
+                eventEntity.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+                if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
+                {
+                    eventEntity.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName);
+                }
+            }
+            eventEntity.EndTime = null;
+            eventEntity.Duration = null;
+            eventEntity.DkpPerHour = 0;
+            eventEntity.AutoStart = false;
+            eventEntity.CountsTowardActive = false;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Keep the recurring-board template in sync with the edited "repeat on ToD" choice
+        // (mirrors create). Disabled for free-text "Other" monsters, which can't be matched
+        // to a ToD by name.
+        var recurrenceMonster = eventEntity.AssignedMonsterName?.Trim();
+        if (isHnm && !string.IsNullOrWhiteSpace(recurrenceMonster)
+            && !string.Equals(recurrenceMonster, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        {
+            if (request.RepeatOnTod)
+            {
+                await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, request.RepeatLeadHours, appUser.Id, cancellationToken);
+            }
+            else
+            {
+                await HnmRecurringBoardService.DisableAsync(_dbContext, eventEntity.LinkshellId, recurrenceMonster, cancellationToken);
+            }
+        }
+
         return Ok(new { success = true });
     }
 

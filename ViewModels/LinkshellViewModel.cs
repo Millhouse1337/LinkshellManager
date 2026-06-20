@@ -52,9 +52,13 @@ public class LinkshellCustomizeViewModel
     public int InactiveAfterAbsences   { get; set; } = 3;
     public int ActiveAfterAttendances  { get; set; } = 2;
 
-    // Allow Discord-server members with no LSM account to sign up for events from
-    // the party board (tracked by Discord id; cleared when the event ends).
+    // Allow Discord-server members with no LSM account to sign up for NON-HNM events
+    // from the party board. Backed by a placeholder member, so they DO earn DKP + tracked.
     public bool OutsidePartySignupEnabled { get; set; } = false;
+
+    // HNM Outside Sign Up: independent gate for HNM boards (event type + account-less
+    // HNM-board signups). Roster memory only — HNM signups earn no DKP and no tracking.
+    public bool HnmOutsideSignupEnabled { get; set; } = false;
 
     public bool CanManageRoles { get; set; }
 
@@ -132,6 +136,8 @@ public sealed class ChannelRouteInput
     public bool PostTodBoard { get; set; }
 
     public List<string> EventTypeFilter { get; set; } = new();
+    // Per-monster narrowing for an HNM route (only used when EventTypeFilter includes HNM).
+    public List<string> HnmMonsterFilter { get; set; } = new();
 }
 
 public class TodMonsterGroup

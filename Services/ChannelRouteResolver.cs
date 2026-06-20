@@ -51,7 +51,7 @@ public sealed class ChannelRouteResolver
     // isn't one of the named ones maps to "Other" (so a route can catch those by
     // checking "Other"). Null when no matching event route is configured.
     public async Task<string?> ResolveEventChannelIdAsync(
-        int linkshellId, string? eventType, CancellationToken cancellationToken)
+        int linkshellId, string? eventType, string? monsterName, CancellationToken cancellationToken)
     {
         var rows = await _db.LinkshellChannelRoutes
             .AsNoTracking()
@@ -68,6 +68,22 @@ public sealed class ChannelRouteResolver
             !string.Equals(t, "Other", StringComparison.OrdinalIgnoreCase)
             && string.Equals(t, type, StringComparison.OrdinalIgnoreCase));
         var matchType = isNamed ? type : "Other";
+
+        // HNM can be routed per-monster: an HNM route whose HnmMonsterFilter lists THIS
+        // monster wins; else an HNM route with no monster filter (catch-all HNM); else the
+        // legacy "Other" route (HNM used to ride the "Other" bucket).
+        if (string.Equals(matchType, "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            var monster = (monsterName ?? string.Empty).Trim();
+            var hnmRoutes = rows.Where(route => FilterContains(route.EventTypeFilter, "HNM")).ToList();
+            var hnmMatch = monster.Length > 0
+                ? hnmRoutes.FirstOrDefault(route => FilterContains(route.HnmMonsterFilter, monster))
+                : null;
+            hnmMatch ??= hnmRoutes.FirstOrDefault(route => string.IsNullOrWhiteSpace(route.HnmMonsterFilter));
+            hnmMatch ??= rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, "Other"));
+            return string.IsNullOrEmpty(hnmMatch?.ChannelId) ? null : hnmMatch!.ChannelId;
+        }
+
         var match = rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, matchType));
         return string.IsNullOrEmpty(match?.ChannelId) ? null : match!.ChannelId;
     }

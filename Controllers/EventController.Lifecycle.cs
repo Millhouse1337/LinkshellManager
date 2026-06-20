@@ -186,12 +186,23 @@ public partial class EventController
             ModelState.AddModelError(string.Empty, "Leader or officer access is required to create events for this linkshell.");
         }
 
-        // HNM events are created automatically by the in-game addon (from member
-        // ToD captures), never by hand -- so reject manual creation of the "HNM"
-        // type. This also closes the "Other" free-text loophole in the picker.
-        if (string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        // HNM signup boards are created/managed in the Discord Activity now (gated by HNM
+        // Outside Sign Up), so HNM isn't offered in the web create dropdown. This branch is
+        // only reachable by a crafted POST; keep it correct by gating on the HNM toggle.
+        var isHnm = string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        string? monsterName = null;
+        if (isHnm)
         {
-            ModelState.AddModelError("Event.EventType", "HNM events are created automatically by the in-game addon and can't be added manually.");
+            var outsideEnabled = createMembership?.Linkshell?.HnmOutsideSignupEnabled == true;
+            if (!outsideEnabled)
+            {
+                ModelState.AddModelError("Event.EventType", "HNM signup boards require HNM Outside Sign Up to be enabled for this linkshell.");
+            }
+            monsterName = eventViewModel.Event.AssignedMonsterName?.Trim();
+            if (string.IsNullOrWhiteSpace(monsterName))
+            {
+                ModelState.AddModelError("Event.AssignedMonsterName", "Select a monster for the HNM event.");
+            }
         }
 
         if (!ModelState.IsValid)
@@ -227,8 +238,35 @@ public partial class EventController
             TimeStamp = DateTime.UtcNow
         };
 
+        if (isHnm)
+        {
+            // No-DKP signup board (mirrors the Activity HNM create path).
+            newEvent.AssignedMonsterName = monsterName;
+            if (string.IsNullOrWhiteSpace(newEvent.EventLocation))
+            {
+                newEvent.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName!);
+            }
+            newEvent.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+            newEvent.EndTime = null;
+            newEvent.Duration = null;
+            newEvent.DkpPerHour = 0;
+            newEvent.AutoStart = false;
+            newEvent.CountsTowardActive = false;
+        }
+
         _context.Events.Add(newEvent);
         await _context.SaveChangesAsync();
+
+        // Repeat-on-ToD: persist/refresh (or disable) the recurring-board template.
+        if (isHnm && eventViewModel.RepeatOnTod
+            && !string.Equals(monsterName, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        {
+            await HnmRecurringBoardService.UpsertAsync(_context, newEvent, eventViewModel.RepeatLeadHours, user.Id, HttpContext.RequestAborted);
+        }
+        else if (isHnm && !eventViewModel.RepeatOnTod)
+        {
+            await HnmRecurringBoardService.DisableAsync(_context, newEvent.LinkshellId, monsterName, HttpContext.RequestAborted);
+        }
 
         return RedirectToAction(nameof(Index));
     }
@@ -392,10 +430,15 @@ public partial class EventController
         }
 
         var affectedPartyId = signup.PartySetupSlot?.PartySetupPartyId;
-        _context.EventPartySlotSignups.Remove(signup);
-        if (eventEntity.CommencementStartTime is not null && signup.AppUserId is not null)
+        if (eventEntity.CommencementStartTime is not null)
         {
-            await EventPartySignupService.RemoveParticipationAsync(_context, eventId, signup.AppUserId, HttpContext.RequestAborted);
+            var startTime = eventEntity.CommencementStartTime ?? eventEntity.StartTime;
+            affectedPartyId = await EventPartySignupService.MoveSlotSignupToNoSlotAsync(
+                _context, eventId, signup, startTime, HttpContext.RequestAborted);
+        }
+        else
+        {
+            _context.EventPartySlotSignups.Remove(signup);
         }
         await _context.SaveChangesAsync();
         await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, affectedPartyId, HttpContext.RequestAborted);
@@ -501,6 +544,30 @@ public partial class EventController
         eventToUpdate.Details = eventViewModel.Event.Details;
         eventToUpdate.AutoStart = eventViewModel.Event.AutoStart;
         eventToUpdate.CountsTowardActive = eventViewModel.Event.CountsTowardActive;
+
+        // HNM signup boards never award DKP or feed activity tracking and carry no
+        // end/duration. HNM is created/managed in the Discord Activity now, but an existing
+        // HNM event can still be edited here, so re-assert those fields to keep the board a
+        // no-DKP, untracked board regardless of what the form posted.
+        var isHnm = string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        if (isHnm)
+        {
+            var monsterName = eventViewModel.Event.AssignedMonsterName?.Trim();
+            if (!string.IsNullOrWhiteSpace(monsterName))
+            {
+                eventToUpdate.AssignedMonsterName = monsterName;
+                eventToUpdate.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+                if (string.IsNullOrWhiteSpace(eventToUpdate.EventLocation))
+                {
+                    eventToUpdate.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName);
+                }
+            }
+            eventToUpdate.EndTime = null;
+            eventToUpdate.Duration = null;
+            eventToUpdate.DkpPerHour = 0;
+            eventToUpdate.AutoStart = false;
+            eventToUpdate.CountsTowardActive = false;
+        }
 
         if (!currentIsSnapshot)
         {

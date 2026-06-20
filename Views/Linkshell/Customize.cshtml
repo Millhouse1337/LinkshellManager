@@ -194,10 +194,21 @@
                     <div class="card-title" style="font-size:14px;margin-top:14px">Outside Party Signup</div>
                     <div style="font-size:12px;color:var(--fg-3)">
                         Let Discord-server members who have <strong>never launched the app</strong> sign up for
-                        events straight from the party board, identified by their Discord account. Their signups
-                        show on the board and clear when the event ends — they earn no DKP and no attendance history.
+                        events straight from the party board, identified by their Discord account. Their first signup
+                        adds them to your roster as a placeholder member, so they <strong>earn DKP and count toward
+                        attendance</strong> like anyone else (and aren't re-asked for their name next time).
                     </div>
                     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="OutsidePartySignupEnabled" /> Allow outside (non-account) Discord signups</label>
+
+                    <div class="card-title" style="font-size:14px;margin-top:14px">HNM Outside Sign Up</div>
+                    <div style="font-size:12px;color:var(--fg-3)">
+                        A separate switch for <strong>HNM signup boards</strong> (managed in the Discord Activity).
+                        When on, the HNM event type becomes available and outside Discord members can sign up to HNM
+                        boards. HNM is <strong>roster memory only</strong> — players are remembered so they don't retype
+                        their name, but HNM signups earn <strong>no DKP and no attendance credit</strong>. Works
+                        independently of Outside Party Signup above.
+                    </div>
+                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="HnmOutsideSignupEnabled" /> Allow HNM outside sign-ups (roster only — no DKP)</label>
                 </div>
             </div>
 

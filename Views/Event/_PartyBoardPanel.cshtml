@@ -143,7 +143,7 @@
                                                 <form class="ps-view-only" asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@Model.EventId" asp-route-slotId="@slot.SlotId" method="post" style="display:inline">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-                                                    <button type="submit" class="btn ghost sm" style="color:var(--danger)" title="Free this slot (also removes them from the live roster)">Withdraw from Slot</button>
+                                                    <button type="submit" class="btn ghost sm" style="color:var(--danger)" title="Free this slot and move them to Also Attending while the event is live">Withdraw from Slot</button>
                                                 </form>
                                             }
                                         </div>
