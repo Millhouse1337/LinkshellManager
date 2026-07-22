@@ -219,14 +219,13 @@ public sealed partial class ActivityDataController
         var officerName = appUser.CharacterName ?? appUser.UserName ?? "Officer";
         var reason = request.Reason.Trim();
 
-        var nextSequence = await _dbContext.DkpLedgerEntries
-            .Where(entry => entry.LinkshellId == request.LinkshellId && entry.AppUserId == request.TargetAppUserId)
-            .Select(entry => (int?)entry.Sequence)
-            .MaxAsync(cancellationToken);
-        var sequence = (nextSequence ?? 0) + 1;
+        var poolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);
 
-        DkpLedgerEntry newEntry;
+        string entryType;
         double deltaAmount;
+        DateTime occurredAtUtc;
+        DkpPoolRef poolRef;
+        DkpEntryContext entryContext;
 
         if (string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase))
         {
@@ -253,26 +252,27 @@ public sealed partial class ActivityDataController
                 .SumAsync(entry => (double?)entry.Amount, cancellationToken) ?? 0d;
             var currentAuditedAmount = original.Amount + priorAuditDelta;
             deltaAmount = request.Amount - currentAuditedAmount;
-            newEntry = new DkpLedgerEntry
-            {
-                AppUserId = request.TargetAppUserId,
-                LinkshellId = request.LinkshellId,
-                AuditRelatedLedgerEntryId = original.Id,
-                EntryType = "AuditAdjustment",
-                Amount = deltaAmount,
-                Sequence = sequence,
-                OccurredAt = nowUtc,
-                CharacterName = targetMembership.CharacterName,
-                EventName = original.EventName,
-                EventType = original.EventType,
-                EventLocation = original.EventLocation,
-                EventStartTime = original.EventStartTime,
-                EventEndTime = original.EventEndTime,
-                ItemName = original.ItemName,
-                Details = $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {currentAuditedAmount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0}).",
-                SourceWindowEventId = original.SourceWindowEventId,
-                AttInputRowNumber = original.AttInputRowNumber
-            };
+            entryType = "AuditAdjustment";
+            occurredAtUtc = nowUtc;
+            // A correction belongs in the same wallet as the thing it corrects, and it has to STAY
+            // there under the same rules. So inherit the original's pinned-ness rather than choosing
+            // afresh: correcting a derived row (an event earn) follows that event type through any
+            // future remap, while correcting a pinned row (an auction spend) stays put with it.
+            poolRef = original.DkpPoolPinned
+                ? DkpPoolRef.Pinned(original.DkpPoolId ?? poolMap.DefaultPoolId)
+                : DkpPoolRef.Derived(original.EventType);
+            entryContext = new DkpEntryContext(
+                CharacterName: targetMembership.CharacterName,
+                EventName: original.EventName,
+                EventType: original.EventType,
+                EventLocation: original.EventLocation,
+                EventStartTime: original.EventStartTime,
+                EventEndTime: original.EventEndTime,
+                ItemName: original.ItemName,
+                Details: $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {currentAuditedAmount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0}).",
+                SourceWindowEventId: original.SourceWindowEventId,
+                AuditRelatedLedgerEntryId: original.Id,
+                AttInputRowNumber: original.AttInputRowNumber);
         }
         else if (string.Equals(mode, "Add", StringComparison.OrdinalIgnoreCase))
         {
@@ -325,42 +325,39 @@ public sealed partial class ActivityDataController
                 .FirstOrDefault();
 
             deltaAmount = windowEvent.DkpAmount.Value;
-            newEntry = new DkpLedgerEntry
-            {
-                AppUserId = request.TargetAppUserId,
-                LinkshellId = request.LinkshellId,
-                EntryType = "SnapshotEarned",
-                Amount = deltaAmount,
-                Sequence = sequence,
-                OccurredAt = occurredAt,
-                CharacterName = targetMembership.CharacterName,
-                EventName = string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
-                EventType = windowEvent.EntryType,
-                EventLocation = primaryZone,
-                EventStartTime = windowEvent.FirstCapturedAtUtc,
-                EventEndTime = windowEvent.LastCapturedAtUtc,
-                Details = $"Added to snapshot entry by {officerName}: {reason}",
-                SourceWindowEventId = windowEvent.Id
-            };
+            entryType = "SnapshotEarned";
+            occurredAtUtc = occurredAt;
+            // A window event's entry type ("Kings Camp", "Kill", …) is written into the ledger's
+            // EventType column so it resolves to a pool, but those camp tags aren't assignable on
+            // the DKP grouping card — they fall through to the default pool like any unmapped type.
+            poolRef = DkpPoolRef.Derived(windowEvent.EntryType);
+            entryContext = new DkpEntryContext(
+                CharacterName: targetMembership.CharacterName,
+                EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
+                EventType: windowEvent.EntryType,
+                EventLocation: primaryZone,
+                EventStartTime: windowEvent.FirstCapturedAtUtc,
+                EventEndTime: windowEvent.LastCapturedAtUtc,
+                Details: $"Added to snapshot entry by {officerName}: {reason}",
+                SourceWindowEventId: windowEvent.Id);
         }
         else
         {
             deltaAmount = request.Amount;
-            newEntry = new DkpLedgerEntry
-            {
-                AppUserId = request.TargetAppUserId,
-                LinkshellId = request.LinkshellId,
-                EntryType = "AuditMisc",
-                Amount = deltaAmount,
-                Sequence = sequence,
-                OccurredAt = nowUtc,
-                CharacterName = targetMembership.CharacterName,
-                Details = $"Audit by {officerName}: {reason}"
-            };
+            entryType = "AuditMisc";
+            occurredAtUtc = nowUtc;
+            // A free-standing correction has no event type to follow, so the officer picks the pool.
+            poolRef = DkpPoolRef.Pinned(
+                request.DkpPoolId is int chosen && poolMap.Pools.Any(pool => pool.Id == chosen)
+                    ? chosen
+                    : poolMap.DefaultPoolId);
+            entryContext = new DkpEntryContext(
+                CharacterName: targetMembership.CharacterName,
+                Details: $"Audit by {officerName}: {reason}");
         }
 
-        targetMembership.LinkshellDkp = (targetMembership.LinkshellDkp ?? 0) + deltaAmount;
-        _dbContext.DkpLedgerEntries.Add(newEntry);
+        await _dkpLedger.AppendAsync(
+            targetMembership, entryType, deltaAmount, occurredAtUtc, poolRef, entryContext, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

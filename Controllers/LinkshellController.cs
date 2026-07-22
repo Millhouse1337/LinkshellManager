@@ -20,6 +20,10 @@ public class LinkshellController : Controller
     private readonly DiscordBotClient _discordBot;
     private readonly Services.ChannelRouteEditor _channelRoutes;
 
+    private readonly Services.DkpPoolResolver _dkpPools;
+    private readonly Services.DkpPoolEditor _dkpPoolEditor;
+    private readonly Services.DkpPoolEventTypeCatalog _dkpPoolEventTypes;
+
     public LinkshellController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
@@ -27,7 +31,10 @@ public class LinkshellController : Controller
         GlobalSettingsService globalSettings,
         DiscordIdentityService discordIdentity,
         DiscordBotClient discordBot,
-        Services.ChannelRouteEditor channelRoutes)
+        Services.ChannelRouteEditor channelRoutes,
+        Services.DkpPoolResolver dkpPools,
+        Services.DkpPoolEditor dkpPoolEditor,
+        Services.DkpPoolEventTypeCatalog dkpPoolEventTypes)
     {
         _context = context;
         _userManager = userManager;
@@ -36,6 +43,59 @@ public class LinkshellController : Controller
         _discordIdentity = discordIdentity;
         _discordBot = discordBot;
         _channelRoutes = channelRoutes;
+        _dkpPools = dkpPools;
+        _dkpPoolEditor = dkpPoolEditor;
+        _dkpPoolEventTypes = dkpPoolEventTypes;
+    }
+
+    // Fills the DKP-pools card: the linkshell's pools, plus one assignment row per assignable event
+    // type. Assignments bind by pool INDEX, so an officer can add a pool and move event types into
+    // it in a single save — a new pool has no id to bind to yet.
+    private async Task LoadDkpPoolInputsAsync(LinkshellCustomizeViewModel model, int linkshellId)
+    {
+        var map = await _dkpPools.GetMapAsync(linkshellId, HttpContext.RequestAborted);
+        var catalog = await _dkpPoolEventTypes.LoadAsync(linkshellId, HttpContext.RequestAborted);
+
+        model.DkpPools = map.Pools
+            .Select(pool => new DkpPoolInput
+            {
+                Id = pool.Id,
+                Name = pool.Name,
+                IsDefault = pool.IsDefault,
+                Accent = Models.DkpPoolAccents.Resolve(pool.Accent),
+            })
+            .ToList();
+
+        var indexByPoolId = model.DkpPools
+            .Select((pool, index) => (pool.Id, index))
+            .ToDictionary(item => item.Id, item => item.index);
+        var defaultPoolIndex = model.DkpPools.FindIndex(pool => pool.IsDefault);
+
+        model.DkpPoolAssignments = catalog
+            .Select(option =>
+            {
+                var poolId = map.Resolve(option.Key);
+                // An event type with no explicit mapping shows as Default (-1) rather than
+                // pre-selected onto the default pool — otherwise saving the form would silently
+                // materialize a mapping row for every event type in the catalog. A type explicitly
+                // mapped to the default pool collapses to -1 too: the default group is the "Default"
+                // option in the picker, never a numbered one.
+                var isMapped = map.PoolIdByNormalizedEventType.ContainsKey(
+                    Models.DkpPoolEventType.Normalize(option.Key));
+                var poolIndex = indexByPoolId.GetValueOrDefault(poolId, -1);
+                if (!isMapped || poolIndex == defaultPoolIndex)
+                {
+                    poolIndex = -1;
+                }
+                return new DkpPoolAssignmentInput
+                {
+                    EventType = option.Key,
+                    PoolIndex = poolIndex,
+                    EarnedTotal = option.EarnedTotal,
+                    IsCustom = option.IsCustom,
+                };
+            })
+            .ToList();
     }
     public async Task<IActionResult> Index()
     {
@@ -374,9 +434,13 @@ public class LinkshellController : Controller
             });
         }
 
+        // With no explicit ?id, configure the user's ACTIVE (primary) linkshell — the
+        // sidebar switcher is the single way to change which one you're editing (the
+        // in-page "which linkshell" picker was removed in favor of a confirm-on-save).
         var target = id.HasValue
             ? manageableLinkshells.FirstOrDefault(link => link.Id == id.Value)
-            : manageableLinkshells.First();
+            : (manageableLinkshells.FirstOrDefault(link => link.Id == user.PrimaryLinkshellId)
+               ?? manageableLinkshells.First());
         if (target is null)
         {
             return Forbid();
@@ -392,10 +456,96 @@ public class LinkshellController : Controller
         vm.DiscordGuildName = target.DiscordGuildName;
         vm.DiscussionChannelId = target.DiscussionChannelId;
         vm.GuildLocked = target.LockToDiscordGuild;
+        var bannerUpdatedAt = await _context.LinkshellBanners
+            .Where(b => b.LinkshellId == target.Id)
+            .Select(b => (DateTime?)b.UpdatedAt)
+            .FirstOrDefaultAsync();
+        vm.BannerUrl = bannerUpdatedAt.HasValue
+            ? $"/api/activity/linkshells/{target.Id}/banner?v={bannerUpdatedAt.Value.Ticks}"
+            : null;
         vm.EligibleGuilds = await BuildEligibleGuildsAsync(user.Id, HttpContext.RequestAborted);
         await PopulateDiscordChannelsAsync(vm, target, HttpContext.RequestAborted);
+        await LoadDkpPoolInputsAsync(vm, target.Id);
         // Hide the Game Addon pairing card while a super admin has globally
         // disabled the addon (the pairing-code endpoints reject requests anyway).
+        vm.AddonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
+        return View(vm);
+    }
+
+    // Standalone Permissions page (roles + permission matrix). Same card that used to live
+    // on Customize; the JS drives everything via the shared ActivityData roles API.
+    [HttpGet]
+    public async Task<IActionResult> Permissions(int? id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var manageableLinkshells = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id
+                        && (link.Rank == LinkshellRanks.Leader || link.Rank == LinkshellRanks.Officer))
+            .Include(link => link.Linkshell)
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .Select(link => link.Linkshell!)
+            .ToListAsync();
+        if (manageableLinkshells.Count == 0)
+        {
+            return View(new LinkshellCustomizeViewModel { ManageableLinkshells = new List<Linkshell>() });
+        }
+
+        var target = id.HasValue
+            ? manageableLinkshells.FirstOrDefault(link => link.Id == id.Value)
+            : (manageableLinkshells.FirstOrDefault(link => link.Id == user.PrimaryLinkshellId)
+               ?? manageableLinkshells.First());
+        if (target is null)
+        {
+            return Forbid();
+        }
+
+        var roles = await EnsureDefaultRolesAsync(target.Id, HttpContext.RequestAborted);
+        var membership = await GetMembershipAsync(user.Id, target.Id);
+        var vm = BuildCustomizeViewModel(
+            target, manageableLinkshells, CanRole(roles, membership?.Rank, role => role.CanManageRoles));
+        return View(vm);
+    }
+
+    // Standalone Game Addon page (pairing tokens + the stylized "about the addon" section).
+    [HttpGet]
+    public async Task<IActionResult> GameAddon(int? id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var manageableLinkshells = await _context.AppUserLinkshells
+            .Where(link => link.AppUserId == user.Id
+                        && (link.Rank == LinkshellRanks.Leader || link.Rank == LinkshellRanks.Officer))
+            .Include(link => link.Linkshell)
+            .OrderBy(link => link.Linkshell!.LinkshellName)
+            .Select(link => link.Linkshell!)
+            .ToListAsync();
+        if (manageableLinkshells.Count == 0)
+        {
+            return View(new LinkshellCustomizeViewModel { ManageableLinkshells = new List<Linkshell>() });
+        }
+
+        var target = id.HasValue
+            ? manageableLinkshells.FirstOrDefault(link => link.Id == id.Value)
+            : (manageableLinkshells.FirstOrDefault(link => link.Id == user.PrimaryLinkshellId)
+               ?? manageableLinkshells.First());
+        if (target is null)
+        {
+            return Forbid();
+        }
+
+        var roles = await EnsureDefaultRolesAsync(target.Id, HttpContext.RequestAborted);
+        var membership = await GetMembershipAsync(user.Id, target.Id);
+        var vm = BuildCustomizeViewModel(
+            target, manageableLinkshells, CanRole(roles, membership?.Rank, role => role.CanManageRoles));
         vm.AddonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
         return View(vm);
     }
@@ -470,7 +620,9 @@ public class LinkshellController : Controller
         linkshell.EnableRevenue  = model.EnableRevenue;
         linkshell.EnableActivityTracking = model.EnableActivityTracking;
         linkshell.OutsidePartySignupEnabled = model.OutsidePartySignupEnabled;
+        linkshell.FillAlliancesInOrder = model.FillAlliancesInOrder;
         linkshell.HnmOutsideSignupEnabled = model.HnmOutsideSignupEnabled;
+        linkshell.UseComponentsV2Boards = model.UseComponentsV2Boards;
         // Clamp to >= 1 so the streak rule can't be configured into a no-op.
         linkshell.InactiveAfterAbsences   = Math.Max(1, model.InactiveAfterAbsences);
         linkshell.ActiveAfterAttendances  = Math.Max(1, model.ActiveAfterAttendances);
@@ -493,6 +645,247 @@ public class LinkshellController : Controller
         _todBoardQueue.Enqueue(linkshell.Id);
         TempData["CustomizeSaved"] = "Customization saved.";
         return RedirectToAction(nameof(Customize), new { id = linkshell.Id });
+    }
+
+    // --- DKP import (Excel/CSV): a migrating linkshell brings its existing DKP in.
+    // Two steps. PreviewDkpImport parses the upload and shows a classified review
+    // (update / create / ambiguous) without changing anything; CommitDkpImport
+    // applies it. Mirrors the ToD image-upload attributes for multipart limits. ---
+
+    // A blank/sample .xlsx showing the exact columns the importer expects, so a
+    // migrating linkshell (with no members to export yet) has something to fill in.
+    [HttpGet]
+    public IActionResult DownloadDkpTemplate()
+    {
+        return File(SampleDkpTemplateWorkbook.Build(), SampleDkpTemplateWorkbook.ContentType, SampleDkpTemplateWorkbook.FileName);
+    }
+
+    // --- Dashboard banner: officer-uploaded image shown atop the dashboard
+    // (web + Activity). Stored in the LinkshellBanner table; served anonymously
+    // by ActivityDataController.GetLinkshellBanner so <img> works in the iframe. ---
+
+    private static readonly Dictionary<string, string> BannerContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".png"] = "image/png",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".webp"] = "image/webp",
+        [".gif"] = "image/gif",
+    };
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(5_000_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 5_000_000)]
+    public async Task<IActionResult> UploadBanner(int linkshellId, IFormFile? bannerFile, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        if (bannerFile is null || bannerFile.Length == 0)
+        {
+            TempData["CustomizeError"] = "Choose an image to upload.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        var ext = System.IO.Path.GetExtension(bannerFile.FileName);
+        if (string.IsNullOrEmpty(ext) || !BannerContentTypes.TryGetValue(ext, out var contentType))
+        {
+            TempData["CustomizeError"] = "Unsupported image type. Use PNG, JPG, WEBP, or GIF.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        byte[] bytes;
+        await using (var stream = bannerFile.OpenReadStream())
+        await using (var buffer = new MemoryStream())
+        {
+            await stream.CopyToAsync(buffer, cancellationToken);
+            bytes = buffer.ToArray();
+        }
+
+        // Magic-byte sanity check so a renamed non-image can't be stored.
+        if (!LooksLikeImage(bytes))
+        {
+            TempData["CustomizeError"] = "That file doesn't look like a valid image.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        var banner = await _context.LinkshellBanners.FirstOrDefaultAsync(b => b.LinkshellId == linkshellId, cancellationToken);
+        if (banner is null)
+        {
+            banner = new LinkshellBanner { LinkshellId = linkshellId };
+            _context.LinkshellBanners.Add(banner);
+        }
+        banner.ImageData = bytes;
+        banner.ContentType = contentType;
+        banner.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        TempData["CustomizeSaved"] = "Banner updated.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveBanner(int linkshellId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var banner = await _context.LinkshellBanners.FirstOrDefaultAsync(b => b.LinkshellId == linkshellId, cancellationToken);
+        if (banner is not null)
+        {
+            _context.LinkshellBanners.Remove(banner);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        TempData["CustomizeSaved"] = "Banner removed.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    // Lightweight magic-byte check for the formats we accept (PNG/JPEG/WEBP/GIF).
+    private static bool LooksLikeImage(byte[] b)
+    {
+        if (b.Length < 12) { return false; }
+        // PNG
+        if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47) { return true; }
+        // JPEG
+        if (b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) { return true; }
+        // GIF
+        if (b[0] == (byte)'G' && b[1] == (byte)'I' && b[2] == (byte)'F') { return true; }
+        // WEBP: "RIFF"...."WEBP"
+        if (b[0] == (byte)'R' && b[1] == (byte)'I' && b[2] == (byte)'F' && b[3] == (byte)'F'
+            && b[8] == (byte)'W' && b[9] == (byte)'E' && b[10] == (byte)'B' && b[11] == (byte)'P') { return true; }
+        return false;
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(8_000_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 8_000_000)]
+    public async Task<IActionResult> PreviewDkpImport(
+        int linkshellId,
+        IFormFile? importFile,
+        [FromServices] DkpImportService import,
+        CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var linkshell = await _context.Linkshells.FindAsync(linkshellId);
+        if (linkshell is null)
+        {
+            return NotFound();
+        }
+
+        if (importFile is null || importFile.Length == 0)
+        {
+            TempData["CustomizeError"] = "Choose an .xlsx or .csv file to import.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        List<DkpImportRow> parsed;
+        try
+        {
+            await using var stream = importFile.OpenReadStream();
+            var grid = XlsxImportReader.Read(stream, importFile.FileName);
+            parsed = import.ParseImport(grid);
+        }
+        catch (Exception ex)
+        {
+            TempData["CustomizeError"] = $"Could not read the file: {ex.Message}";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        if (parsed.Count == 0)
+        {
+            TempData["CustomizeError"] = "No member rows found. Make sure the sheet has a Member Name column and Current DKP values.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        var preview = await import.BuildPreviewAsync(linkshellId, parsed, importFile.FileName, cancellationToken);
+        return View("DkpImportPreview", new DkpImportPreviewViewModel
+        {
+            LinkshellId = linkshellId,
+            LinkshellName = linkshell.LinkshellName ?? "Linkshell",
+            Preview = preview,
+            RowsJson = System.Text.Json.JsonSerializer.Serialize(parsed),
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CommitDkpImport(
+        int linkshellId,
+        string rowsJson,
+        string? sourceLabel,
+        [FromServices] DkpImportService import,
+        CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        List<DkpImportRow>? parsed;
+        try
+        {
+            parsed = System.Text.Json.JsonSerializer.Deserialize<List<DkpImportRow>>(rowsJson ?? string.Empty);
+        }
+        catch
+        {
+            parsed = null;
+        }
+        if (parsed is null || parsed.Count == 0)
+        {
+            TempData["CustomizeError"] = "The import session expired — please re-upload the file.";
+            return RedirectToAction(nameof(Customize), new { id = linkshellId });
+        }
+
+        var result = await import.CommitAsync(linkshellId, parsed, sourceLabel ?? "DKP import", cancellationToken);
+
+        var parts = new List<string>();
+        if (result.Updated > 0) { parts.Add($"{result.Updated} updated"); }
+        if (result.Created > 0) { parts.Add($"{result.Created} new member{(result.Created == 1 ? "" : "s")} created"); }
+        if (result.Ambiguous > 0) { parts.Add($"{result.Ambiguous} skipped (ambiguous)"); }
+        TempData["CustomizeSaved"] = parts.Count > 0
+            ? $"DKP import complete — {string.Join(", ", parts)}."
+            : "DKP import complete — no changes were needed.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 
     // --- Discord server association + optional access lock (two separate steps).
@@ -735,6 +1128,7 @@ public class LinkshellController : Controller
                 PostAuctions = route.PostAuctions,
                 PostAttendance = route.PostAttendance,
                 PostTodBoard = route.PostTodBoard,
+                PostDkpSheet = route.PostDkpSheet,
                 EventTypeFilter = (route.EventTypeFilter ?? string.Empty)
                     .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList(),
@@ -784,7 +1178,7 @@ public class LinkshellController : Controller
         var edits = (channelRoutes ?? new List<ChannelRouteInput>())
             .Select(r => new Services.ChannelRouteEdit(
                 r.Id == 0 ? null : r.Id, r.Name, r.ChannelId,
-                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard,
+                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard, r.PostDkpSheet,
                 r.EventTypeFilter,
                 r.Id != 0 && existingMonsterFilters.TryGetValue(r.Id, out var mf) && !string.IsNullOrWhiteSpace(mf)
                     ? mf.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
@@ -794,6 +1188,71 @@ public class LinkshellController : Controller
         var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, HttpContext.RequestAborted);
         TempData[error is null ? "CustomizeSaved" : "CustomizeError"] =
             error ?? "Discord channels updated.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
+    // Save the DKP pools + the event-type partition. Both this and the Activity's
+    // POST /linkshells/{id}/dkp-pools converge on DkpPoolEditor, so there is one implementation of
+    // the save — and one implementation of the ledger re-stamp that re-derives every unpinned row's
+    // pool from the new mapping.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveDkpPools(
+        int linkshellId,
+        [FromForm] List<DkpPoolInput>? dkpPools,
+        [FromForm] List<DkpPoolAssignmentInput>? dkpPoolAssignments,
+        // The default-pool radios share one name and post the winning row's INDEX, so the browser
+        // guarantees exactly one default. A per-row checkbox could be ticked twice.
+        [FromForm] int dkpPoolDefaultIndex = 0)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!CanManageLinkshell(membership))
+        {
+            return Forbid();
+        }
+
+        var pools = dkpPools ?? new List<DkpPoolInput>();
+        var assignments = dkpPoolAssignments ?? new List<DkpPoolAssignmentInput>();
+
+        // Invert the per-event-type <select> back into "which event types does each pool own".
+        // Because each event type has exactly ONE select, the partition is guaranteed by the form's
+        // shape — there is no way for the officer to double-assign one.
+        var typesByPoolIndex = new Dictionary<int, List<string>>();
+        foreach (var assignment in assignments)
+        {
+            if (assignment.PoolIndex < 0
+                || assignment.PoolIndex >= pools.Count
+                || string.IsNullOrWhiteSpace(assignment.EventType))
+            {
+                continue; // Unassigned → falls through to the default pool.
+            }
+            if (!typesByPoolIndex.TryGetValue(assignment.PoolIndex, out var list))
+            {
+                list = new List<string>();
+                typesByPoolIndex[assignment.PoolIndex] = list;
+            }
+            list.Add(assignment.EventType.Trim());
+        }
+
+        var edits = pools
+            .Select((pool, index) => new Services.DkpPoolEdit(
+                pool.Id == 0 ? null : pool.Id,
+                pool.Name,
+                index == dkpPoolDefaultIndex,
+                index,
+                pool.Accent,
+                typesByPoolIndex.GetValueOrDefault(index) ?? new List<string>()))
+            .ToList();
+
+        var error = await _dkpPoolEditor.SaveAsync(linkshellId, edits, HttpContext.RequestAborted);
+        TempData[error is null ? "CustomizeSaved" : "CustomizeError"] =
+            error ?? "DKP pools updated.";
         return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 
@@ -818,7 +1277,9 @@ public class LinkshellController : Controller
             EnableRevenue         = target.EnableRevenue,
             EnableActivityTracking = target.EnableActivityTracking,
             OutsidePartySignupEnabled = target.OutsidePartySignupEnabled,
+            FillAlliancesInOrder = target.FillAlliancesInOrder,
             HnmOutsideSignupEnabled = target.HnmOutsideSignupEnabled,
+            UseComponentsV2Boards = target.UseComponentsV2Boards,
             InactiveAfterAbsences  = target.InactiveAfterAbsences,
             ActiveAfterAttendances = target.ActiveAfterAttendances,
             HiddenTodMonsters     = (target.HiddenTodMonsters ?? string.Empty)

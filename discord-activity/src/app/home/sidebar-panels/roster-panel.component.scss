@@ -11,8 +11,8 @@
   padding: 16px;
 }
 .addon-modal-dialog {
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   width: 100%;
   max-width: 420px;
@@ -30,6 +30,6 @@
 }
 .addon-modal-footer {
   display: flex; justify-content: flex-end; gap: 8px;
-  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-top: 1px solid var(--border);
   padding-top: 12px;
 }

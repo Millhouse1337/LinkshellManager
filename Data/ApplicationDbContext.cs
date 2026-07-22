@@ -15,7 +15,7 @@ namespace LinkshellManagerDiscordApp.Data
         private readonly DiscordEventEndedQueue? _eventEndedQueue;
         private readonly DiscordEventCleanupQueue? _eventCleanupQueue;
         private readonly DiscordLootChannelQueue? _lootChannelQueue;
-        private readonly SheetTemplateSyncQueue? _templateSyncQueue;
+        private readonly DkpSheetPostQueue? _dkpSheetPostQueue;
         // Live change-feed bus (long-poll). Nullable + defaulted like the queues
         // so design-time / reflection construction never fails when it's absent.
         private readonly LinkshellChangeNotifier? _changeNotifier;
@@ -29,7 +29,7 @@ namespace LinkshellManagerDiscordApp.Data
             LinkshellChangeNotifier? changeNotifier = null,
             DiscordEventEndedQueue? eventEndedQueue = null,
             DiscordEventCleanupQueue? eventCleanupQueue = null,
-            SheetTemplateSyncQueue? templateSyncQueue = null)
+            DkpSheetPostQueue? dkpSheetPostQueue = null)
             : base(options)
         {
             _todBoardQueue = todBoardQueue;
@@ -39,7 +39,7 @@ namespace LinkshellManagerDiscordApp.Data
             _changeNotifier = changeNotifier;
             _eventEndedQueue = eventEndedQueue;
             _eventCleanupQueue = eventCleanupQueue;
-            _templateSyncQueue = templateSyncQueue;
+            _dkpSheetPostQueue = dkpSheetPostQueue;
         }
 
         // Distinct linkshell ids of Tod rows changed in the current
@@ -78,15 +78,15 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // Linkshells whose member DKP changed this save → re-export the "LSM DKP"
-        // template tab (live sync, push-only). Any DkpLedgerEntry add/edit/delete
-        // or an AppUserLinkshell whose LinkshellDkp was modified counts, so every
-        // DKP path triggers a refresh without per-controller wiring. Captured
-        // pre-save; enqueued only on a successful commit. The background service
-        // no-ops for linkshells with live sync off or no connected sheet.
+        // Linkshells whose member DKP changed this save → refresh the live DKP sheet
+        // Discord post (full table + .xlsx, edit-in-place). Any DkpLedgerEntry
+        // add/edit/delete or an AppUserLinkshell whose LinkshellDkp was modified
+        // counts, so every DKP path triggers it without per-controller wiring.
+        // Captured pre-save; enqueued only on a successful commit. The publisher
+        // no-ops for linkshells with no DKP channel configured.
         private List<int> CollectDkpChangedLinkshellIds()
         {
-            if (_templateSyncQueue is null)
+            if (_dkpSheetPostQueue is null)
             {
                 return new List<int>();
             }
@@ -108,18 +108,36 @@ namespace LinkshellManagerDiscordApp.Data
                     ids.Add(entry.Entity.LinkshellId);
                 }
             }
+            // Renaming/adding/removing a pool, or remapping an event type, changes the sheet's
+            // per-pool columns without moving a single DKP amount — so watch the pool config too.
+            foreach (var entry in ChangeTracker.Entries<DkpPool>())
+            {
+                if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
+                    && entry.Entity.LinkshellId > 0)
+                {
+                    ids.Add(entry.Entity.LinkshellId);
+                }
+            }
+            foreach (var entry in ChangeTracker.Entries<DkpPoolEventType>())
+            {
+                if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
+                    && entry.Entity.LinkshellId > 0)
+                {
+                    ids.Add(entry.Entity.LinkshellId);
+                }
+            }
             return ids.ToList();
         }
 
-        private void EnqueueTemplateSyncRefreshes(IReadOnlyList<int> linkshellIds)
+        private void EnqueueDkpSheetPosts(IReadOnlyList<int> linkshellIds)
         {
-            if (_templateSyncQueue is null)
+            if (_dkpSheetPostQueue is null)
             {
                 return;
             }
             foreach (var id in linkshellIds)
             {
-                _templateSyncQueue.Enqueue(id);
+                _dkpSheetPostQueue.Enqueue(id);
             }
         }
 
@@ -650,9 +668,115 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Brand-new memberships start with an EMPTY pool attribution: any DkpLedgerEntry that
+        // already exists for this (linkshell, account) predates the membership and must not be
+        // resurrected as spendable pool DKP. This matters because a kicked member's ledger rows
+        // SURVIVE the AppUserLinkshells delete — the ledger's only cascade is from Linkshell —
+        // so a kick-then-rejoin would otherwise hand back DKP that LinkshellDkp says is gone.
+        //
+        // Doing it here rather than at the ~13 member-creation sites means the 14th one someone
+        // adds next month can't forget it. It runs BEFORE this save assigns Ids to new ledger
+        // rows, so an import that creates a placeholder membership AND its SheetImport row in a
+        // single SaveChanges still attributes that row to the new membership.
+        private List<AppUserLinkshell> CollectNewMembershipsNeedingDkpEpoch() =>
+            ChangeTracker.Entries<AppUserLinkshell>()
+                .Where(entry => entry.State == EntityState.Added
+                    && entry.Entity.DkpPoolLedgerFromId == 0
+                    && entry.Entity.LinkshellId > 0)
+                .Select(entry => entry.Entity)
+                .ToList();
+
+        private async Task StampNewMembershipDkpEpochAsync(
+            List<AppUserLinkshell> memberships, CancellationToken cancellationToken)
+        {
+            if (memberships.Count == 0)
+            {
+                return;
+            }
+            var linkshellIds = memberships.Select(m => m.LinkshellId).Distinct().ToList();
+            var maxByLinkshell = await DkpLedgerEntries
+                .Where(entry => linkshellIds.Contains(entry.LinkshellId))
+                .GroupBy(entry => entry.LinkshellId)
+                .Select(group => new { LinkshellId = group.Key, MaxId = group.Max(entry => entry.Id) })
+                .ToDictionaryAsync(item => item.LinkshellId, item => item.MaxId, cancellationToken);
+            foreach (var membership in memberships)
+            {
+                membership.DkpPoolLedgerFromId = maxByLinkshell.GetValueOrDefault(membership.LinkshellId);
+            }
+        }
+
+        private void StampNewMembershipDkpEpoch(List<AppUserLinkshell> memberships)
+        {
+            if (memberships.Count == 0)
+            {
+                return;
+            }
+            var linkshellIds = memberships.Select(m => m.LinkshellId).Distinct().ToList();
+            var maxByLinkshell = DkpLedgerEntries
+                .Where(entry => linkshellIds.Contains(entry.LinkshellId))
+                .GroupBy(entry => entry.LinkshellId)
+                .Select(group => new { LinkshellId = group.Key, MaxId = group.Max(entry => entry.Id) })
+                .ToDictionary(item => item.LinkshellId, item => item.MaxId);
+            foreach (var membership in memberships)
+            {
+                membership.DkpPoolLedgerFromId = maxByLinkshell.GetValueOrDefault(membership.LinkshellId);
+            }
+        }
+
+        // INV-1: every move of AppUserLinkshell.LinkshellDkp is matched, amount for amount, by
+        // DkpLedgerEntry rows in the SAME save. That invariant is what lets pool balances be
+        // DERIVED from the ledger (DkpPoolBalanceService) instead of cached in a second table.
+        // DkpLedgerWriter upholds it by construction; this assertion catches anyone who bypasses
+        // the writer and hand-rolls a balance mutation. ChangeTracker-only — no DB read.
+        [System.Diagnostics.Conditional("DEBUG")]
+        private void AssertDkpLedgerInvariant()
+        {
+            foreach (var member in ChangeTracker.Entries<AppUserLinkshell>())
+            {
+                if (member.State != EntityState.Modified
+                    || !member.Property(nameof(AppUserLinkshell.LinkshellDkp)).IsModified)
+                {
+                    continue;
+                }
+                // An off-ledger balance overwrite is legal iff it also advances the pool epoch —
+                // the placeholder-claim merge and the DKP import are the only such paths, and
+                // both deliberately restate the balance rather than append to it.
+                if (member.Property(nameof(AppUserLinkshell.DkpPoolLedgerFromId)).IsModified)
+                {
+                    continue;
+                }
+
+                var current = (double?)member.Property(nameof(AppUserLinkshell.LinkshellDkp)).CurrentValue ?? 0d;
+                var original = (double?)member.Property(nameof(AppUserLinkshell.LinkshellDkp)).OriginalValue ?? 0d;
+                var balanceDelta = current - original;
+
+                var ledgerDelta = ChangeTracker.Entries<DkpLedgerEntry>()
+                    .Where(entry => entry.Entity.LinkshellId == member.Entity.LinkshellId
+                        && string.Equals(entry.Entity.AppUserId, member.Entity.AppUserId, StringComparison.Ordinal))
+                    .Sum(entry =>
+                    {
+                        var originalAmount = entry.Property(nameof(DkpLedgerEntry.Amount)).OriginalValue as double? ?? 0d;
+                        return entry.State switch
+                        {
+                            EntityState.Added => entry.Entity.Amount,
+                            EntityState.Modified => entry.Entity.Amount - originalAmount,
+                            EntityState.Deleted => -originalAmount,
+                            _ => 0d,
+                        };
+                    });
+
+                System.Diagnostics.Debug.Assert(
+                    Math.Abs(balanceDelta - ledgerDelta) < 1e-6,
+                    $"INV-1 violated: LinkshellDkp moved by {balanceDelta} for member {member.Entity.Id} "
+                    + $"but the ledger moved by {ledgerDelta}. Every balance mutation must go through DkpLedgerWriter.");
+            }
+        }
+
         public override async Task<int> SaveChangesAsync(
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
+            await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
+            AssertDkpLedgerInvariant();
             var affected = CollectChangedTodLinkshellIds();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
@@ -673,7 +797,7 @@ namespace LinkshellManagerDiscordApp.Data
             EnqueueEventEndedSummaries(endedEvents);
             EnqueueMessageDeletions(deletedEventBoards);
             EnqueueMessageDeletions(deletedAuctionCards);
-            EnqueueTemplateSyncRefreshes(dkpChangedLinkshells);
+            EnqueueDkpSheetPosts(dkpChangedLinkshells);
             await EnqueueAuctionBidUpdatesAsync(bidItemIds);
             await NotifyLiveChangesAsync(liveChanges);
             return result;
@@ -681,6 +805,8 @@ namespace LinkshellManagerDiscordApp.Data
 
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
+            StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
+            AssertDkpLedgerInvariant();
             var affected = CollectChangedTodLinkshellIds();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
@@ -700,13 +826,14 @@ namespace LinkshellManagerDiscordApp.Data
             EnqueueEventEndedSummaries(endedEvents);
             EnqueueMessageDeletions(deletedEventBoards);
             EnqueueMessageDeletions(deletedAuctionCards);
-            EnqueueTemplateSyncRefreshes(dkpChangedLinkshells);
+            EnqueueDkpSheetPosts(dkpChangedLinkshells);
             NotifyLiveChangesDirect(liveChanges);
             return result;
         }
 
         public DbSet<DiscordActivityUser> DiscordActivityUsers => Set<DiscordActivityUser>();
         public DbSet<Linkshell> Linkshells => Set<Linkshell>();
+        public DbSet<LinkshellBanner> LinkshellBanners => Set<LinkshellBanner>();
         public DbSet<AppUserLinkshell> AppUserLinkshells => Set<AppUserLinkshell>();
         public DbSet<Invite> Invites => Set<Invite>();
         public DbSet<Auction> Auctions => Set<Auction>();
@@ -717,6 +844,8 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<AppUserEvent> AppUserEvents => Set<AppUserEvent>();
         public DbSet<AppUserEventStatusLedger> AppUserEventStatusLedgers => Set<AppUserEventStatusLedger>();
         public DbSet<DkpLedgerEntry> DkpLedgerEntries => Set<DkpLedgerEntry>();
+        public DbSet<DkpPool> DkpPools => Set<DkpPool>();
+        public DbSet<DkpPoolEventType> DkpPoolEventTypes => Set<DkpPoolEventType>();
         public DbSet<EventHistory> EventHistories => Set<EventHistory>();
         public DbSet<AppUserEventHistory> AppUserEventHistories => Set<AppUserEventHistory>();
         public DbSet<EventLootDetail> EventLootDetails => Set<EventLootDetail>();
@@ -776,6 +905,18 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(user => user.IdentityUserId)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            builder.Entity<LinkshellBanner>(entity =>
+            {
+                // 1:1 with Linkshell on a shared primary key (LinkshellId is both
+                // PK and FK). Cascade-delete with the linkshell. Kept in its own
+                // table so the image bytes stay off the hot dashboard/overview reads.
+                entity.HasKey(banner => banner.LinkshellId);
+                entity.HasOne(banner => banner.Linkshell)
+                    .WithOne(linkshell => linkshell.Banner)
+                    .HasForeignKey<LinkshellBanner>(banner => banner.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<Event>(entity =>
@@ -838,6 +979,16 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // NoAction, not Restrict: this table and DkpPools BOTH cascade from Linkshell,
+                // and Restrict is checked immediately, so deleting a linkshell that ever ran an
+                // auction would raise an FK violation depending on cascade order. NoAction is
+                // checked at end-of-statement, by which point the sibling cascade has already
+                // removed these rows. It still blocks deleting a pool that an auction points at,
+                // which is what we actually want (pool deletion goes through DkpPoolEditor).
+                entity.HasOne(item => item.DkpPool)
+                    .WithMany()
+                    .HasForeignKey(item => item.DkpPoolId)
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             builder.Entity<AuctionHistory>(entity =>
@@ -849,6 +1000,10 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.DkpPool)
+                    .WithMany()
+                    .HasForeignKey(item => item.DkpPoolId)
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             builder.Entity<AuctionItem>(entity =>
@@ -959,6 +1114,45 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => item.SourceAuctionHistoryId);
                 entity.HasIndex(item => item.AttInputRowNumber);
                 entity.HasIndex(item => item.AuditRelatedLedgerEntryId);
+                // DkpPoolId is deliberately NOT a foreign key — see DkpLedgerEntry.DkpPoolId.
+                // The index carries the pool-balance derivation and the remap re-stamp.
+                entity.HasIndex(item => new { item.LinkshellId, item.DkpPoolId });
+            });
+
+            builder.Entity<DkpPool>(entity =>
+            {
+                entity.ToTable("DkpPools");
+                entity.Property(item => item.Name).HasMaxLength(64).IsRequired();
+                entity.Property(item => item.Accent).HasMaxLength(16);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => item.LinkshellId);
+                entity.HasIndex(item => new { item.LinkshellId, item.Name }).IsUnique();
+                // Exactly one default pool per linkshell.
+                entity.HasIndex(item => item.LinkshellId)
+                    .IsUnique()
+                    .HasDatabaseName("IX_DkpPools_LinkshellId_Default")
+                    .HasFilter("\"IsDefault\" = TRUE");
+            });
+
+            builder.Entity<DkpPoolEventType>(entity =>
+            {
+                entity.ToTable("DkpPoolEventTypes");
+                entity.Property(item => item.EventType).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.NormalizedEventType).HasMaxLength(256).IsRequired();
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(item => item.DkpPool)
+                    .WithMany(pool => pool.EventTypes)
+                    .HasForeignKey(item => item.DkpPoolId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // THE PARTITION GUARANTEE: an event type can only ever live in one pool.
+                entity.HasIndex(item => new { item.LinkshellId, item.NormalizedEventType }).IsUnique();
+                entity.HasIndex(item => item.DkpPoolId);
             });
 
             builder.Entity<Tod>(entity =>
@@ -987,6 +1181,10 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.EditedByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.EditedByCharacterName).HasMaxLength(256);
                 entity.Property(item => item.LastEditReason).HasMaxLength(512);
+                entity.HasOne(item => item.DkpPool)
+                    .WithMany()
+                    .HasForeignKey(item => item.DkpPoolId)
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             builder.Entity<PartySetup>(entity =>

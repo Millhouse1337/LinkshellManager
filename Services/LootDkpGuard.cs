@@ -17,6 +17,8 @@ public static class LootDkpGuard
     // Returns null when the award is allowed, or a human-readable error to surface.
     public static async Task<string?> CheckEventLootAsync(
         ApplicationDbContext db,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances,
         int eventId,
         int linkshellId,
         string? winnerName,
@@ -55,16 +57,29 @@ public static class LootDkpGuard
             return null; // Unknown / free-text winner — can't balance-check.
         }
 
-        // ComputeAvailableDkpAsync already subtracts the DKP this member has committed to
-        // loot in still-live events that hasn't been deducted yet (their pending spend across
-        // ALL live events), so two items in one event can't each pass and together overdraw —
-        // no separate per-event subtraction is needed here (doing so would double-count).
-        var available = await AuctionDkpService.ComputeAvailableDkpAsync(
-            db, member.AppUserId, linkshellId, cancellationToken);
+        // This event's loot is bought with the pool this event's TYPE earns into. That's the whole
+        // point of the feature: on a Sky event, a member with Sky+Sea+Dynamis pooled together can
+        // spend all of it, and a member with DKP only in some unrelated pool can spend none of it.
+        var eventType = await db.Events
+            .Where(e => e.Id == eventId)
+            .Select(e => e.EventType)
+            .FirstOrDefaultAsync(cancellationToken);
+        var map = await dkpPools.GetMapAsync(linkshellId, cancellationToken);
+        var poolId = map.Resolve(eventType);
+
+        // ComputePoolAvailableDkpAsync already subtracts the DKP this member has committed to loot
+        // in still-live events of the same pool that hasn't been deducted yet, so two items in one
+        // event can't each pass and together overdraw — no separate per-event subtraction is needed
+        // here (doing so would double-count).
+        var available = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+            db, dkpPoolBalances, member.AppUserId, linkshellId, poolId, cancellationToken);
 
         if (cost > available + 0.0001)
         {
-            return $"{name} only has {available:0.##} DKP available — not enough for this item ({cost:0.##} DKP).";
+            // Name the pool only when the linkshell actually has more than one — otherwise the
+            // message is exactly the one officers have always seen.
+            var poolLabel = map.HasMultiplePools ? $" {map.NameFor(poolId)}" : string.Empty;
+            return $"{name} only has {available:0.##}{poolLabel} DKP available — not enough for this item ({cost:0.##} DKP).";
         }
 
         return null;

@@ -112,12 +112,6 @@ else
             </label>
 
             <label>
-                <span>Day number</span>
-                <input asp-for="Tod.DayNumber" type="number" min="0" inputmode="numeric" placeholder="0" class="show-spinner" />
-                <span asp-validation-for="Tod.DayNumber" class="create-form__error"></span>
-            </label>
-
-            <label>
                 <span>Claim</span>
                 <select asp-for="Tod.Claim" id="claim-select">
                     <option value="" selected="@(Model.Tod.Claim == null ? "selected" : null)">Not Specified</option>

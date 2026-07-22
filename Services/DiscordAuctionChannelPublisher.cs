@@ -152,9 +152,13 @@ public sealed class DiscordAuctionChannelPublisher
                     return;
                 }
             }
+            // Intentionally collapses the 3-way result to success/not — on any non-success
+            // (transient or gone) we fall through and re-post a fresh card below, since this
+            // path re-points DiscordMessageId rather than protecting a kept-alive id.
             else if (await _bot.EditMessageAsync(
                          channelId, messageId,
-                         BuildEmbedPayload(BuildCreateEmbed(auction, "New bid"), BuildCreateComponents(auction)), ct))
+                         BuildEmbedPayload(BuildCreateEmbed(auction, "New bid"), BuildCreateComponents(auction)), ct)
+                     == DiscordEditResult.Edited)
             {
                 // Renderer unavailable → edited the same message to the text embed
                 // (image↔embed edits are allowed; both are classic messages).

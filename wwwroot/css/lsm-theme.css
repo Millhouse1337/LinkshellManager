@@ -25,6 +25,7 @@
     --cyan-main: #38bdf8;
     --red-main: #ff6b6b;
     --green-main: #43d17a;
+    --orange-main: #ff9a45;
 
     color: var(--text-main);
     min-height: calc(100vh - 48px);
@@ -40,6 +41,18 @@
 .lsm-page .page-sub { color: var(--text-muted); }
 .lsm-page .page-sub .num { color: var(--text-main); font-weight: 600; }
 .lsm-page .card-link { color: #bcd0ff; }
+
+/* ---------- Dashboard banner (per-linkshell, uploaded on Customize) ---------- */
+/* Fixed 200px-tall strip spanning the dashboard width; recommended upload 1200x200. */
+.lsm-page .lsm-dash-banner {
+    display: block;
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 14px;
+    border: 1px solid var(--border-soft);
+    margin: 0 0 16px;
+}
 
 /* ---------- Cards / panels ---------- */
 .lsm-page .card {
@@ -307,3 +320,128 @@
     overflow-y: auto;
 }
 .mt-modal.mt-modal--open > .mt-modal__dialog.mt-modal__dialog--lg { max-width: 780px; }
+
+/* ---------- Rules & Announcements cards ---------- */
+/* Each card carries an accent class that sets --acc; the icon + tag + hover all read
+   it, so a card's whole color theme follows its category. */
+.lsm-page .acc-blue   { --acc: var(--blue-main); }
+.lsm-page .acc-purple { --acc: var(--purple-main); }
+.lsm-page .acc-green  { --acc: var(--green-main); }
+.lsm-page .acc-gold   { --acc: var(--gold-main); }
+.lsm-page .acc-cyan   { --acc: var(--cyan-main); }
+.lsm-page .acc-orange { --acc: var(--orange-main); }
+
+.lsm-page .rule-list { display: grid; gap: 10px; }
+
+.lsm-page .rule-card {
+    display: grid;
+    grid-template-columns: 56px 1fr minmax(150px, auto);
+    align-items: start;
+    gap: 16px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--bg-panel-light), var(--bg-panel));
+    border: 1px solid var(--border-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.lsm-page .rule-card:hover {
+    border-color: color-mix(in srgb, var(--acc) 55%, var(--border-soft));
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.30);
+}
+
+.lsm-page .rule-ico {
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    font-size: 24px;
+    color: var(--acc);
+    background: color-mix(in srgb, var(--acc) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
+}
+
+.lsm-page .rule-content { min-width: 0; }
+.lsm-page .rule-content h3 {
+    margin: 0 0 6px;
+    color: var(--text-main);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+.lsm-page .rule-content p {
+    margin: 4px 0;
+    color: color-mix(in srgb, var(--text-main) 80%, var(--text-muted));
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+.lsm-page .rule-content ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    color: color-mix(in srgb, var(--text-main) 80%, var(--text-muted));
+    font-size: 13.5px;
+    line-height: 1.55;
+}
+.lsm-page .rule-content ul li { margin: 2px 0; }
+.lsm-page .rule-content ul.cols { columns: 2; column-gap: 28px; }
+.lsm-page .rule-content ul.cols li { break-inside: avoid; }
+
+.lsm-page .rule-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    text-align: right;
+    white-space: nowrap;
+}
+.lsm-page .rule-tag {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 11px;
+    border-radius: 8px;
+    color: var(--acc);
+    background: color-mix(in srgb, var(--acc) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--acc) 28%, transparent);
+}
+.lsm-page .rule-by { color: var(--text-muted); font-size: 12px; }
+.lsm-page .rule-by .dot { opacity: .6; }
+
+.lsm-page .rule-tools { display: flex; gap: 6px; }
+.lsm-page .rule-iconbtn {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+    line-height: 1;
+}
+.lsm-page .rule-iconbtn:hover {
+    color: var(--text-main);
+    border-color: var(--border-glow);
+    background: var(--bg-card-hover);
+}
+.lsm-page .rule-iconbtn.danger { color: var(--red-main); border-color: color-mix(in srgb, var(--red-main) 32%, transparent); }
+.lsm-page .rule-iconbtn.danger:hover { background: color-mix(in srgb, var(--red-main) 14%, transparent); border-color: var(--red-main); }
+
+@media (max-width: 900px) {
+    .lsm-page .rule-card { grid-template-columns: 44px 1fr; }
+    .lsm-page .rule-meta {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 10px;
+        text-align: left;
+        white-space: normal;
+    }
+    .lsm-page .rule-content ul.cols { columns: 1; }
+}

@@ -22,12 +22,20 @@ public class EventViewModel
     public string? LinkedPartySetupName { get; set; }
     public string? LinkedPartySetupMonsterName { get; set; }
 
+    // Seed for the inline "Create New Party Setup" modal on the create/edit event
+    // form (parity with the Discord Activity's embedded party-setup editor). Carries
+    // the linkshell + option lists the editor needs; null when no linkshell is active.
+    public PartySetupEditorViewModel? PartySetupEditor { get; set; }
+
     // HNM signup boards: the monster picker options + whether this linkshell allows
     // outside (account-less) Discord signups, which gates the "HNM" type in the
     // create form. RepeatOnTod / RepeatLeadHours are bound from the repeat controls
     // (HNM only) so the board re-posts before the next predicted pop.
     public List<string> MonsterOptions { get; set; } = new();
     public bool OutsidePartySignupEnabled { get; set; }
+    // Gates whether "HNM" is offered in the create event-type dropdown. HNM signup boards
+    // are roster-only / no-DKP and only make sense when the linkshell opts into them.
+    public bool HnmOutsideSignupEnabled { get; set; }
     public bool RepeatOnTod { get; set; }
     // Fractional hours (Activity enters it as H/M/S); the web form keeps a single number.
     public double? RepeatLeadHours { get; set; }
@@ -39,6 +47,11 @@ public class EventViewModel
     public PartySetupBoardViewModel? LinkedPartySetupBoard { get; set; }
     public bool CurrentUserOwnsLinkedPartySetupSlot { get; set; }
 
+    // For a "defeated / awaiting re-post" HNM board, the already-logged ToD's values so the
+    // "Edit ToD" modal opens pre-filled (mirrors the Activity's openEditForBoard). Null for
+    // boards that haven't been posted yet (the "Post ToD" modal opens with defaults).
+    public EventBoardTodPrefill? BoardTod { get; set; }
+
     // HNM-style multi-window attendance. Empty for single-window events.
     public int WindowCount { get; set; } = 1;
     public List<EventAttendanceWindowViewModel> AttendanceWindows { get; set; } = new();
@@ -48,6 +61,17 @@ public class EventViewModel
 
     [DataType(DataType.DateTime)]
     public DateTime? EndTime { get; set; }
+}
+
+public class EventBoardTodPrefill
+{
+    // Local (viewer-zone) time, formatted for a datetime-local input ("yyyy-MM-ddTHH:mm:ss").
+    public string? TimeLocal { get; set; }
+    public string? Cooldown { get; set; }
+    public string? Interval { get; set; }
+    public int? DayNumber { get; set; }
+    public bool? Claim { get; set; }
+    public bool Hq { get; set; }
 }
 
 public class PartySetupOption

@@ -63,10 +63,14 @@
 
     /* ---------- Instructions ---------- */
     .attendance-page .instructions-card { border-left:3px solid var(--blue-main); box-shadow:0 0 0 1px rgba(79,124,255,.08), 0 12px 30px rgba(0,0,0,.4); }
-    /* The instruction lines live inline in the header, to the right of the
-       "Instructions" title. The header wraps them below on narrow screens. */
-    .attendance-page .instructions-card .card-head { flex-wrap:wrap; gap:10px 24px; }
-    .instructions-body { display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--text-muted); }
+    /* Collapsed by default (native <details>); the summary is the card header. */
+    .attendance-page .instructions-summary { cursor:pointer; list-style:none; user-select:none; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .attendance-page .instructions-summary::-webkit-details-marker { display:none; }
+    .attendance-page .instructions-card:not([open]) .card-head { border-bottom:none; }
+    .attendance-page .instructions-caret { display:inline-flex; color:var(--text-muted); transition:transform .15s ease; }
+    .attendance-page .instructions-caret svg { width:18px; height:18px; }
+    .attendance-page .instructions-card[open] .instructions-caret { transform:rotate(90deg); }
+    .instructions-body { display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--text-muted); padding:14px 18px; }
     .instruction-line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .instruction-line strong { color:var(--text-main); }
     .instruction-line .hl-gold { color:var(--gold-main); }
@@ -259,16 +263,19 @@
         <div class="alert alert-success fade d2" style="margin-bottom:14px">@statusMsg</div>
     }
 
-    <div class="card instructions-card fade d2" style="margin-bottom:14px">
-        <div class="card-head">
+    <details class="card instructions-card fade d2" style="margin-bottom:14px">
+        <summary class="card-head instructions-summary">
             <div class="card-title"><span class="attendance-crystal"></span> Instructions</div>
-            <div class="instructions-body">
-                <div class="instruction-line"><code>/lsm now &lt;Monster Name&gt;</code> <span>creates new or updates existing <strong>Attendance Events</strong>.</span></div>
-                <div class="instruction-line"><code>/lsm now</code> <span>will land under <strong>Unlinked Snapshots</strong> until a leader or officer attaches it.</span></div>
-                <div class="instruction-line"><span>Closed events move to <strong class="hl-gold">Attendance History</strong>.</span></div>
-            </div>
+            <span class="instructions-caret" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
+            </span>
+        </summary>
+        <div class="instructions-body">
+            <div class="instruction-line"><code>/lsm now &lt;Monster Name&gt;</code> <span>creates new or updates existing <strong>Attendance Events</strong>.</span></div>
+            <div class="instruction-line"><code>/lsm now</code> <span>will land under <strong>Unlinked Snapshots</strong> until a leader or officer attaches it.</span></div>
+            <div class="instruction-line"><span>Closed events move to <strong class="hl-gold">Attendance History</strong>.</span></div>
         </div>
-    </div>
+    </details>
 
     @if (Model.UnlinkedSnapshots.Count > 0)
     {

@@ -116,3 +116,33 @@ export function rankIcon(rank?: string | null): string {
     default: return '🛡️';
   }
 }
+
+// Two-letter avatar initials from a character name (e.g. "Millhouse" -> "MI").
+export function memberInitials(value?: string | null): string {
+  const name = (value ?? '').trim();
+  if (!name) return '??';
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+// Stable a–e palette bucket for a name, so a member's avatar color is consistent
+// across every roster that renders them.
+export function memberAvatarClass(name?: string | null): string {
+  const trimmed = (name ?? '').trim();
+  if (!trimmed) return 'a';
+  let hash = 0;
+  for (let i = 0; i < trimmed.length; i += 1) {
+    hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
+  }
+  return ['a', 'b', 'c', 'd', 'e'][hash % 5];
+}
+
+// Tag color class for a member's Active/Inactive/Pending status.
+export function memberStatusClass(status?: string | null): string {
+  const normalized = (status ?? 'Active').toLowerCase();
+  if (normalized === 'active') return 'success';
+  if (normalized === 'pending') return 'warning';
+  if (normalized === 'inactive') return 'danger';
+  return 'default';
+}

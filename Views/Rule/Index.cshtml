@@ -1,3 +1,4 @@
+@using LinkshellManagerDiscordApp.Utils
 @model IEnumerable<LinkshellManagerDiscordApp.ViewModels.RuleViewModel>
 @{
     ViewData["Title"] = "Rules";
@@ -46,38 +47,66 @@
 }
 else
 {
-    <div class="fade d2" style="display:grid;gap:12px">
+    <div class="rule-list fade d2">
+        @{ var ruleIndex = 0; }
         @foreach (var rule in Model)
         {
-            <div class="card">
-                <div class="card-head">
-                    <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
-                        <div class="card-title">@rule.RuleTitle</div>
-                        <div style="font-size:12px;color:var(--fg-3)">
-                            @if (!string.IsNullOrWhiteSpace(rule.CreatedByCharacterName))
-                            {
-                                <span>Added by @rule.CreatedByCharacterName</span>
-                                <span class="dot"> · </span>
-                            }
-                            <span>@rule.CreatedAt.ToString("MMM d, yyyy")</span>
-                        </div>
-                    </div>
+            var badge = RuleContent.Badge(rule.Category, ruleIndex);
+            var blocks = RuleContent.Parse(rule.RuleDetails);
+            ruleIndex++;
+            <article class="rule-card @badge.Accent">
+                <div class="rule-ico">@badge.Icon</div>
+
+                <div class="rule-content">
+                    <h3>@rule.RuleTitle</h3>
+                    @if (blocks.Count == 0)
+                    {
+                        <p>@rule.RuleDetails</p>
+                    }
+                    @foreach (var block in blocks)
+                    {
+                        if (block.IsList)
+                        {
+                            <ul class="@(block.Items.Count > 4 ? "cols" : null)">
+                                @foreach (var item in block.Items)
+                                {
+                                    <li>@item</li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p>@block.Text</p>
+                        }
+                    }
+                </div>
+
+                <div class="rule-meta">
+                    @if (!string.IsNullOrWhiteSpace(rule.Category))
+                    {
+                        <span class="rule-tag">@rule.Category</span>
+                    }
+                    <span class="rule-by">
+                        @if (!string.IsNullOrWhiteSpace(rule.CreatedByCharacterName))
+                        {
+                            <span>Added by @rule.CreatedByCharacterName</span>
+                            <span class="dot"> · </span>
+                        }
+                        <span>@rule.CreatedAt.ToString("MMM d, yyyy")</span>
+                    </span>
                     @if (rule.CanManage)
                     {
-                        <div style="display:flex;gap:6px;flex-wrap:wrap">
-                            <a class="btn ghost sm" asp-action="Edit" asp-route-id="@rule.Id">Edit</a>
+                        <div class="rule-tools">
+                            <a class="rule-iconbtn" asp-action="Edit" asp-route-id="@rule.Id" title="Edit" aria-label="Edit rule">✎</a>
                             <form asp-action="Delete" asp-route-id="@rule.Id" method="post" style="display:inline"
                                   onsubmit="return confirm('Delete this rule?');">
                                 @Html.AntiForgeryToken()
-                                <button type="submit" class="btn ghost sm">Delete</button>
+                                <button type="submit" class="rule-iconbtn danger" title="Delete" aria-label="Delete rule">🗑</button>
                             </form>
                         </div>
                     }
                 </div>
-                <div style="padding:0 16px 16px;color:var(--fg-1);white-space:pre-wrap;font-size:13px">
-                    @rule.RuleDetails
-                </div>
-            </div>
+            </article>
         }
     </div>
 }

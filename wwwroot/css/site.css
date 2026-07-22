@@ -360,6 +360,42 @@ a { color: inherit; text-decoration: none; }
 }
 .jr-pill-strong { color: #f5c542; font-weight: 700; line-height: 1; }
 
+/* ----- View Profile page: larger card + 75-only toggle + subjob hover popover ----- */
+/* Subtle gradient frame; overflow:visible so the hover popover can escape the card
+   (the base .card sets overflow:hidden, which would clip it). */
+.lsm-page .card.jr-card--profile {
+  overflow: visible;
+  background:
+    linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
+    linear-gradient(160deg, var(--border-hot, var(--border-soft)), var(--border-soft)) border-box;
+  border: 1px solid transparent;
+}
+.jr-jobs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* 75-only default: non-max jobs are hidden until "Show all jobs" adds .jr-show-all. */
+.jr-pill--sub-hidden { display: none; }
+.jr-show-all .jr-pill--sub-hidden { display: inline-flex; }
+
+/* The hover/focus popover of a character's leveled subjobs (37+), anchored to a 75 pill. */
+.jr-pill { position: relative; }
+.jr-subpop {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  flex-wrap: wrap; gap: 5px; max-width: 260px; padding: 8px 10px;
+  background: var(--surface-2, var(--bg-card)); border: 1px solid var(--border-hot, var(--border-soft));
+  border-radius: 8px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5); cursor: default;
+}
+.jr-pill:hover .jr-subpop,
+.jr-pill:focus-within .jr-subpop { display: flex; }
+.jr-subpop-title {
+  width: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-3);
+}
+.jr-subpop-empty { font-size: 11px; color: var(--fg-3); font-style: italic; }
+.jr-subchip {
+  font-size: 11px; padding: 1px 6px; border-radius: 6px;
+  background: var(--surface-3, var(--bg-card)); border: 1px solid var(--border); color: var(--fg-1, var(--fg));
+}
+.jr-subchip .lvl { color: var(--accent); font-weight: 700; margin-left: 3px; }
+
 /* "Strong" toggle under each job input in the Profile editor. */
 .job-strong {
   display: inline-flex; align-items: center; gap: 5px;

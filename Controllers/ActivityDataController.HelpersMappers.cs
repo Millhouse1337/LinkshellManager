@@ -20,7 +20,7 @@ public sealed partial class ActivityDataController
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
                 Array.Empty<string>(), LinkshellTypes.Both, null, null, false,
-                false, 3, 2, EventBoardThemes.Default, false, false);
+                false, 3, 2, EventBoardThemes.Default, false, true, false, false);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -45,7 +45,9 @@ public sealed partial class ActivityDataController
             linkshell.ActiveAfterAttendances,
             EventBoardThemes.Resolve(linkshell.EventBoardTheme),
             linkshell.OutsidePartySignupEnabled,
+            linkshell.FillAlliancesInOrder,
             linkshell.HnmOutsideSignupEnabled,
+            linkshell.UseComponentsV2Boards,
             linkshell.DiscussionChannelId);
     }
 
@@ -174,11 +176,14 @@ public sealed partial class ActivityDataController
                     detail.ItemWinner,
                     detail.WinningDkpSpent))
                 .ToList(),
-            tod.ImagePath);
+            tod.ImagePath,
+            tod.Hq,
+            tod.AdditionalSeconds);
     }
 
     private static ActivityAuctionDto MapAuctionDto(
-        Auction auction, string currentUserId, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false)
+        Auction auction, string currentUserId, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false,
+        int? dkpPoolId = null, string? dkpPoolName = null)
     {
         var isCreator = IsAuctionCreator(currentUserId, auction);
         var status = HasAuctionEnded(auction, nowUtc)
@@ -224,7 +229,9 @@ public sealed partial class ActivityDataController
                     item.GilAmount))
                 .ToList(),
             availableDkp,
-            auctionsLocked);
+            auctionsLocked,
+            dkpPoolId ?? auction.DkpPoolId,
+            dkpPoolName);
     }
 
     private static ActivityAuctionHistoryDto MapAuctionHistoryDto(AuctionHistory history)

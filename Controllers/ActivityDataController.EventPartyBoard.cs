@@ -53,37 +53,47 @@ public sealed partial class ActivityDataController
         var setup = ev.PartySetup;
         var alliances = setup.Alliances
             .OrderBy(a => a.SortOrder)
-            .Select(a => new ActivityPartySetupAllianceDto(
-                a.Id,
-                string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
-                a.Parties
-                    .OrderBy(p => p.SortOrder)
-                    .Select(p => new ActivityPartySetupPartyDto(
-                        p.Id,
-                        string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
-                        p.Slots
-                            .OrderBy(s => s.SortOrder)
-                            .Select(s =>
-                            {
-                                signups.TryGetValue(s.Id, out var su);
-                                return new ActivityPartySetupSlotDto(
-                                    s.Id,
-                                    s.SortOrder + 1,
-                                    s.RequirementType,
-                                    s.Role,
-                                    s.MainJob,
-                                    s.SubJob,
-                                    s.Label,
-                                    s.IsPartyLeader,
-                                    su?.AppUserId,
-                                    su?.CharacterName,
-                                    su?.Role,
-                                    su?.MainJob,
-                                    su?.SubJob,
-                                    su?.IsPartyLeader ?? false);
-                            })
-                            .ToList()))
-                    .ToList()))
+            .Select(a =>
+            {
+                // The one signup in this alliance carrying the alliance-lead crown (if any).
+                var allianceLead = a.Parties
+                    .SelectMany(p => p.Slots)
+                    .Select(s => signups.TryGetValue(s.Id, out var su) ? su : null)
+                    .FirstOrDefault(su => su is { IsAllianceLeader: true });
+                return new ActivityPartySetupAllianceDto(
+                    a.Id,
+                    string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
+                    a.Parties
+                        .OrderBy(p => p.SortOrder)
+                        .Select(p => new ActivityPartySetupPartyDto(
+                            p.Id,
+                            string.IsNullOrWhiteSpace(p.Name) ? $"Party {p.SortOrder + 1}" : p.Name!,
+                            p.Slots
+                                .OrderBy(s => s.SortOrder)
+                                .Select(s =>
+                                {
+                                    signups.TryGetValue(s.Id, out var su);
+                                    return new ActivityPartySetupSlotDto(
+                                        s.Id,
+                                        s.SortOrder + 1,
+                                        s.RequirementType,
+                                        s.Role,
+                                        s.MainJob,
+                                        s.SubJob,
+                                        s.Label,
+                                        s.IsPartyLeader,
+                                        su?.AppUserId,
+                                        su?.CharacterName,
+                                        su?.Role,
+                                        su?.MainJob,
+                                        su?.SubJob,
+                                        su?.IsPartyLeader ?? false);
+                                })
+                                .ToList()))
+                        .ToList(),
+                    allianceLead?.AppUserId,
+                    allianceLead?.CharacterName);
+            })
             .ToList();
 
         return Ok(new ActivityPartySetupDetailDto(
@@ -113,6 +123,47 @@ public sealed partial class ActivityDataController
 
         var membership = await GetMembershipAsync(appUser.Id, ev.LinkshellId, cancellationToken);
         if (membership is null) return Forbid();
+
+        // "Fill earlier alliances first" nudge: if enabled and an open slot this member's
+        // job can fill is still free in an EARLIER alliance, return the suggestion instead
+        // of committing. The client offers it; "Sign up here anyway" re-posts with force.
+        if (!request.Force)
+        {
+            var fillInOrder = await _dbContext.Linkshells
+                .Where(l => l.Id == ev.LinkshellId)
+                .Select(l => l.FillAlliancesInOrder)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (fillInOrder)
+            {
+                var jobs = PartySetupSignupService.ResolveSignupJobs(slot, request.Role, request.MainJob, request.SubJob);
+                if (jobs.Success)
+                {
+                    var setup = await _dbContext.PartySetups
+                        .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
+                        .FirstOrDefaultAsync(ps => ps.Id == ev.PartySetupId.Value, cancellationToken);
+                    if (setup is not null)
+                    {
+                        var signups = await EventPartySignupService.GetSignupsForEventAsync(_dbContext, eventId, cancellationToken);
+                        var suggestion = PartyFillSuggestion.SuggestEarlierSlot(setup, signups, slot, jobs.Role, jobs.MainJob);
+                        if (suggestion is not null && suggestion.Id != slot.Id)
+                        {
+                            return Ok(new
+                            {
+                                nudge = new
+                                {
+                                    suggestedSlotId = suggestion.Id,
+                                    location = PartyFillSuggestion.DescribeSlot(setup, suggestion),
+                                    requirement = PartyFillSuggestion.RequirementLabel(suggestion),
+                                    role = jobs.Role,
+                                    mainJob = jobs.MainJob,
+                                    subJob = jobs.SubJob,
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
         // Sign up as the member's main OR a chosen alt (validated against their
         // real characters; falls back to main if the requested name isn't theirs).
@@ -198,6 +249,32 @@ public sealed partial class ActivityDataController
             EnqueueEventBoardRefresh(eventId);
         }
 
+        return Ok(new { success = true });
+    }
+
+    // "Make Me Alliance Lead": the calling member — who must already hold a slot in this
+    // event — takes their whole alliance's lead (👑 by the alliance name), moving it off
+    // whoever currently holds it. Mirrors the Discord/web "Make Me Alliance Lead" button.
+    // Purely a board designation (no perms), allowed before AND during a live event.
+    [HttpPost("events/{eventId:int}/make-alliance-lead")]
+    public async Task<IActionResult> MakeEventAllianceLeadAsync(
+        int eventId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Sign in to take the lead." });
+
+        var ev = await _dbContext.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null || ev.PartySetupId is null) return NotFound(new { error = "Event not found." });
+
+        var membership = await GetMembershipAsync(appUser.Id, ev.LinkshellId, cancellationToken);
+        if (membership is null) return Forbid();
+
+        var result = await EventPartySignupService.MakeAllianceLeaderAsync(
+            _dbContext, eventId, appUser.Id, null, cancellationToken);
+        if (!result.Success) return BadRequest(new { error = result.Error });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
 

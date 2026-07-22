@@ -56,6 +56,28 @@
                 <input asp-for="Auction.EndTime" type="datetime-local" required />
                 <span asp-validation-for="Auction.EndTime" class="create-form__error"></span>
             </label>
+            @* An auction has no event type, so the pool bids are paid from can't be derived — the
+               officer picks it. Hidden entirely when the linkshell hasn't split its DKP. *@
+            @if (Model.DkpPools.Count > 1)
+            {
+                <label>
+                    <span>DKP pool</span>
+                    <select asp-for="DkpPoolId" disabled="@Model.DkpPoolLocked"
+                            title="Bids are validated against, and paid from, this pool.">
+                        @foreach (var pool in Model.DkpPools)
+                        {
+                            <option value="@pool.Id" selected="@(Model.DkpPoolId == pool.Id)">@pool.Name</option>
+                        }
+                    </select>
+                    @if (Model.DkpPoolLocked)
+                    {
+                        @* Bidders were validated against this pool's balance; switching now would
+                           debit a wallet they never agreed to spend from. *@
+                        <input type="hidden" asp-for="DkpPoolId" />
+                        <span class="create-form__error">Locked — bids have already been placed.</span>
+                    }
+                </label>
+            }
         </div>
 
         <div class="create-form__section">

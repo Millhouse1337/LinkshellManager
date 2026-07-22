@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityItem,
@@ -11,20 +11,95 @@ import {
   ActivityRevenueInput,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
+import type { ActivityJobRatingOverall, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
-import { formatAlts, rankIcon } from '../activity-home.helpers';
+import { formatAlts, memberAvatarClass, memberInitials, memberStatusClass, rankIcon } from '../activity-home.helpers';
 import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
+
+// HorizonXI is classic-75. A job at 75 is "max level" (shown by default in the
+// profile modal); a job at 37+ is sub-capable (listed in the hover popover). Kept
+// in sync with ProfileJobLevels.MaxLevel / ProfileJobLevels.SubJobMinLevel (C#).
+const MAX_JOB_LEVEL = 75;
+const SUB_JOB_MIN_LEVEL = 37;
 
 @Component({
   selector: 'app-linkshell-tab',
   imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent, StarRatingComponent],
   templateUrl: './linkshell-tab.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    .lsp-dialog {
+      width: 100%; max-width: 880px; border-radius: 14px;
+      background: linear-gradient(var(--surface), var(--surface)) padding-box,
+                  linear-gradient(160deg, var(--border-hot), var(--border)) border-box;
+      border: 1px solid transparent;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+    }
+    .lsp-body { padding: 16px 18px; max-height: 78vh; overflow: auto; }
+    .lsp-av {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      display: grid; place-items: center; font-weight: 800; font-size: 17px;
+      color: var(--bg); background: linear-gradient(135deg, var(--accent), var(--purple));
+    }
+    .lsp-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    @media (min-width: 760px) { .lsp-grid { grid-template-columns: 1.15fr 0.85fr; } }
+    .lsp-sub-popover {
+      position: fixed; z-index: 210; max-width: 248px;
+      padding: 8px 10px; border-radius: var(--r-md);
+      background: var(--surface-2); border: 1px solid var(--border-hot);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .lsp-sub-popover__title {
+      width: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--fg-3); margin-bottom: 1px;
+    }
+    .lsp-sub-popover__empty { font-size: 11px; color: var(--fg-3); font-style: italic; }
+    .lsp-sub-chip {
+      font-size: 11px; padding: 1px 6px; border-radius: var(--r-sm);
+      background: var(--surface-3); border: 1px solid var(--border); color: var(--fg-1);
+    }
+    .lsp-sub-chip .lvl { color: var(--accent); font-weight: 700; margin-left: 3px; }
+
+    /* ----- Revenue ledger: search + date grouping + pagination -----
+       The parent .card is padding:0, so each section insets itself to 14px (matching
+       the sibling .inline-form / .entry-item) to stay off the card edges. */
+    .revenue-toolbar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 12px 14px;
+    }
+    .revenue-search { flex: 1 1 220px; min-width: 180px; }
+    .revenue-filter { display: flex; gap: 6px; flex-shrink: 0; }
+    .revenue-scroll {
+      max-height: 460px; overflow-y: auto;
+      border-top: 1px solid var(--border); background: var(--surface);
+    }
+    .revenue-daygroup { margin-bottom: 4px; }
+    /* Sticks to the top of the scroll area so the day being viewed stays labeled;
+       left inset matches the entry rows below it (14px). */
+    .revenue-day-head {
+      position: sticky; top: 0; z-index: 1;
+      padding: 8px 14px 6px; background: var(--surface);
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--fg-3); border-bottom: 1px solid var(--border);
+    }
+    .revenue-pager {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 12px 14px; flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+    }
+    .revenue-pager__label { font-size: 12px; color: var(--fg-3); }
+  `]
 })
 export class LinkshellTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly formatAlts = formatAlts;
+  // Shared roster helpers (avatar initials/color, status tag) — single source in
+  // activity-home.helpers so every roster renders members identically. `initials`
+  // keeps its template name and delegates to the shared memberInitials.
+  protected readonly initials = memberInitials;
+  protected readonly memberAvatarClass = memberAvatarClass;
+  protected readonly memberStatusClass = memberStatusClass;
 
   // Persists across the dashboard <-> linkshell hop, since both tabs render
   // a roster search that we want to feel like the same control. Parent owns
@@ -35,9 +110,11 @@ export class LinkshellTabComponent {
   protected get rosterSearch(): string { return this.rosterSearchValue; }
   protected set rosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
 
-  // App Sync filter: limits the Linkshell Roster (Manage Team) list to members
-  // who are app-linked (appUserId set). Status stays visible but is never part
-  // of the filter. Mirrors the Dashboard tab's identical toggle.
+  // App Sync filter: limits the Linkshell Roster (Manage Team) list to members who
+  // have actually opened/synced the Discord Activity (member.hasSyncedActivity) — not
+  // merely app-linked, since outside-sign-up-board members get an appUserId without
+  // opening the Activity. Status stays visible but is never part of the filter.
+  // Mirrors the Dashboard tab's identical toggle.
   protected readonly appSyncOnly = signal(false);
   protected toggleAppSync(value: boolean): void {
     this.appSyncOnly.set(value);
@@ -45,31 +122,6 @@ export class LinkshellTabComponent {
   }
 
   // ----- Re-implemented small reads via this.activity -----
-
-  protected initials(value: string | null | undefined): string {
-    const name = (value ?? '').trim();
-    if (!name) return '??';
-    const parts = name.split(/\s+/).filter(Boolean);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-
-  protected memberAvatarClass(name?: string | null): string {
-    const trimmed = (name ?? '').trim();
-    if (!trimmed) return 'a';
-    let hash = 0;
-    for (let i = 0; i < trimmed.length; i += 1) {
-      hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
-    }
-    return ['a', 'b', 'c', 'd', 'e'][hash % 5];
-  }
-
-  protected memberStatusClass(status?: string | null): string {
-    const normalized = (status ?? 'Active').toLowerCase();
-    if (normalized === 'active') return 'success';
-    if (normalized === 'pending') return 'warning';
-    return 'default';
-  }
 
   protected primaryLinkshell() {
     return this.activity.overview()?.primaryLinkshell ?? null;
@@ -112,7 +164,7 @@ export class LinkshellTabComponent {
     const members = this.selectedDashboardMembers();
     return members.filter(member => {
       if (appSyncOnly) {
-        if (!member.appUserId) return false;
+        if (!member.hasSyncedActivity) return false;
       }
       if (term) {
         const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
@@ -302,13 +354,34 @@ export class LinkshellTabComponent {
     name: string;
     isAlt: boolean;
     ratings: ActivityJobRatingsResponse | null;
-    summary: ActivityJobRatingCommentSummary | null;
   }[]>([]);
+
+  // The member's overall ratings rollup (self + linkshell averages + an AI summary
+  // over all their peer comments), shown in the "Overall" section below the
+  // per-character blocks.
+  protected readonly viewingProfileOverall = signal<ActivityJobRatingOverall | null>(null);
+
+  // Jobs grid defaults to max-level (75) jobs only; this toggles to ALL leveled
+  // jobs. One toggle for the whole modal (every character expands together).
+  protected readonly profileShowAllJobs = signal(false);
+
+  // The hover/tap popover listing a character's leveled subjobs (37+) for one
+  // max-level pill. Positioned with `position:fixed` from the pill's screen rect so
+  // it escapes the modal body's `overflow:auto` clipping. Null = hidden.
+  protected readonly subPopover = signal<{
+    label: string;
+    jobs: { name: string; level: number }[];
+    top: number;
+    left: number;
+  } | null>(null);
 
   protected async openMemberProfile(memberId: number): Promise<void> {
     this.viewingProfileBusy.set(true);
     this.viewingProfileMember.set(null);
     this.viewingProfileRatingBlocks.set([]);
+    this.viewingProfileOverall.set(null);
+    this.profileShowAllJobs.set(false);
+    this.subPopover.set(null);
     try {
       await this.ensureJobsRoster();
       const found = this.jobsRosterForCurrent()?.members.find(m => m.id === memberId) ?? null;
@@ -329,17 +402,14 @@ export class LinkshellTabComponent {
         const blocks: {
           slot: number; name: string; isAlt: boolean;
           ratings: ActivityJobRatingsResponse | null;
-          summary: ActivityJobRatingCommentSummary | null;
         }[] = [];
         for (const s of slots) {
           const ratings = await this.activity.loadJobRatings(linkshellId, appUserId, s.slot);
-          let summary: ActivityJobRatingCommentSummary | null = null;
-          if ((ratings?.peerCommentCount ?? 0) > 0) {
-            summary = await this.activity.loadJobRatingCommentSummary(linkshellId, appUserId, s.slot);
-          }
-          blocks.push({ ...s, ratings, summary });
+          blocks.push({ ...s, ratings });
         }
         this.viewingProfileRatingBlocks.set(blocks);
+        // One rollup across all characters (averages + AI comment summary).
+        this.viewingProfileOverall.set(await this.activity.loadJobRatingOverall(linkshellId, appUserId));
       }
     } finally {
       this.viewingProfileBusy.set(false);
@@ -349,6 +419,43 @@ export class LinkshellTabComponent {
   protected closeMemberProfile(): void {
     this.viewingProfileMember.set(null);
     this.viewingProfileRatingBlocks.set([]);
+    this.viewingProfileOverall.set(null);
+    this.profileShowAllJobs.set(false);
+    this.subPopover.set(null);
+  }
+
+  // The jobs to render for a character: max-level (75) only by default, or every
+  // leveled job when "Show all jobs" is on. Reuses leveledJobs() (sorted desc).
+  protected jobsToShow(ch: { levels: number[]; strong: boolean[]; relic: boolean[]; merit: string[]; relicName: string[] }) {
+    const all = this.leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName);
+    return this.profileShowAllJobs() ? all : all.filter(job => job.level >= MAX_JOB_LEVEL);
+  }
+
+  // A character's leveled SUBJOBS (37+), excluding the hovered job, for the popover.
+  protected subJobsFor(levels: number[], excludeName: string): { name: string; level: number }[] {
+    return this.leveledJobs(levels)
+      .filter(job => job.level >= SUB_JOB_MIN_LEVEL && job.name !== excludeName)
+      .map(job => ({ name: job.name, level: job.level }));
+  }
+
+  protected toggleProfileShowAll(): void {
+    this.profileShowAllJobs.set(!this.profileShowAllJobs());
+  }
+
+  // Open the subjob popover for a max-level pill: anchor it below the pill, clamped
+  // to the viewport so it never runs off the right edge.
+  protected openSubPopover(ev: Event, levels: number[], jobName: string): void {
+    const subs = this.subJobsFor(levels, jobName);
+    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    const width = 248;
+    let left = rect.left;
+    if (left + width > window.innerWidth - 8) { left = window.innerWidth - width - 8; }
+    if (left < 8) { left = 8; }
+    this.subPopover.set({ label: jobName, jobs: subs, top: rect.bottom + 6, left });
+  }
+
+  protected closeSubPopover(): void {
+    this.subPopover.set(null);
   }
 
   // Jobs a teammate rated for one character block (peerCount > 0).
@@ -356,10 +463,22 @@ export class LinkshellTabComponent {
     return (ratings?.jobs ?? []).filter(job => job.peerCount > 0);
   }
 
-  // True when ANY character (main or alt) has peer ratings or comments.
-  protected viewingProfileHasFeedback(): boolean {
-    return this.viewingProfileRatingBlocks().some(
-      b => (b.ratings?.peerRaterCount ?? 0) > 0 || (b.ratings?.peerCommentCount ?? 0) > 0);
+  // Jobs the member rated THEMSELVES (their own gear/skill assessment) for one block.
+  protected selfJobsFor(ratings: ActivityJobRatingsResponse | null) {
+    return (ratings?.jobs ?? []).filter(job => job.selfGear > 0 || job.selfSkill > 0);
+  }
+
+  // True when a character block has anything to show: self-ratings, peer ratings,
+  // or peer comments.
+  protected blockHasRatings(block: { ratings: ActivityJobRatingsResponse | null }): boolean {
+    return this.selfJobsFor(block.ratings).length > 0
+      || (block.ratings?.peerRaterCount ?? 0) > 0
+      || (block.ratings?.peerCommentCount ?? 0) > 0;
+  }
+
+  // True when ANY character (main or alt) has self-ratings, peer ratings, or comments.
+  protected viewingProfileHasRatings(): boolean {
+    return this.viewingProfileRatingBlocks().some(b => this.blockHasRatings(b));
   }
 
   // Catalog job name for a rating's jobIndex (uses the loaded jobs-roster catalog).
@@ -606,6 +725,79 @@ export class LinkshellTabComponent {
     return this.configIncomeTotal() - this.configExpenseTotal();
   }
 
+  // ----- Revenue list view state: search + type filter + date grouping + pagination.
+  // The header totals stay treasury-wide (all entries); these only shape the LIST so a
+  // long ledger stays scannable instead of running off the page. -----
+  protected readonly revenuePageSize = 15;
+  protected readonly revenueSearch = signal('');
+  protected readonly revenueTypeFilter = signal<'All' | 'Income' | 'Expense'>('All');
+  protected readonly revenuePage = signal(0);
+
+  // Search- + type-filtered entries, newest first (occurredAt desc).
+  protected readonly filteredRevenue = computed<ActivityRevenueEntry[]>(() => {
+    const term = this.revenueSearch().trim().toLowerCase();
+    const type = this.revenueTypeFilter();
+    return this.configRevenue()
+      .filter(entry => type === 'All' || entry.entryType === type)
+      .filter(entry => {
+        if (!term) {
+          return true;
+        }
+        return [entry.category, entry.details, entry.createdByCharacterName, entry.entryType, String(entry.value)]
+          .some(field => (field ?? '').toString().toLowerCase().includes(term));
+      })
+      .slice()
+      .sort((left, right) => (right.occurredAt ?? '').localeCompare(left.occurredAt ?? ''));
+  });
+
+  protected readonly revenuePageCount = computed(() =>
+    Math.max(1, Math.ceil(this.filteredRevenue().length / this.revenuePageSize)));
+
+  // The current page (clamped into range — filtering can shrink the list under the
+  // stored page index) used everywhere the page number is read.
+  protected revenueCurrentPage(): number {
+    return Math.min(this.revenuePage(), this.revenuePageCount() - 1);
+  }
+
+  protected readonly pagedRevenue = computed<ActivityRevenueEntry[]>(() => {
+    const start = this.revenueCurrentPage() * this.revenuePageSize;
+    return this.filteredRevenue().slice(start, start + this.revenuePageSize);
+  });
+
+  // The current page's entries grouped into consecutive runs by viewer-local calendar
+  // day, so the list shows a date header above each day's entries.
+  protected readonly groupedRevenuePage = computed<{ key: string; label: string; entries: ActivityRevenueEntry[] }[]>(() => {
+    const groups: { key: string; label: string; entries: ActivityRevenueEntry[] }[] = [];
+    let current: { key: string; label: string; entries: ActivityRevenueEntry[] } | null = null;
+    for (const entry of this.pagedRevenue()) {
+      const key = this.activity.localDayKey(entry.occurredAt) ?? 'unknown';
+      if (!current || current.key !== key) {
+        current = { key, label: this.activity.formatDate(entry.occurredAt) ?? 'Unknown date', entries: [] };
+        groups.push(current);
+      }
+      current.entries.push(entry);
+    }
+    return groups;
+  });
+
+  protected onRevenueSearch(value: string): void {
+    this.revenueSearch.set(value);
+    this.revenuePage.set(0);
+  }
+
+  protected setRevenueTypeFilter(type: 'All' | 'Income' | 'Expense'): void {
+    this.revenueTypeFilter.set(type);
+    this.revenuePage.set(0);
+  }
+
+  protected revenuePrevPage(): void {
+    this.revenuePage.set(Math.max(0, this.revenueCurrentPage() - 1));
+  }
+
+  protected revenueNextPage(): void {
+    this.revenuePage.set(Math.min(this.revenuePageCount() - 1, this.revenueCurrentPage() + 1));
+  }
+
   protected configTotalItemQuantity(): number {
     return this.configItems().reduce((sum, item) => sum + (item.quantity ?? 0), 0);
   }
@@ -692,6 +884,34 @@ export class LinkshellTabComponent {
 
   protected async deleteItem(itemId: number): Promise<void> {
     try { await this.activity.deleteItem(itemId); } catch { /* surfaced */ }
+  }
+
+  // --- Sell item → auto-record income in Finances ---
+  // The item whose inline "sale price" entry is open (null = none).
+  protected readonly sellingItemId = signal<number | null>(null);
+  protected sellPrice: number | null = null;
+
+  protected beginSell(itemId: number): void {
+    this.sellPrice = null;
+    this.sellingItemId.set(itemId);
+  }
+
+  protected cancelSell(): void {
+    this.sellingItemId.set(null);
+    this.sellPrice = null;
+  }
+
+  protected async confirmSell(itemId: number): Promise<void> {
+    const price = Math.max(0, Math.floor(Number(this.sellPrice) || 0));
+    try {
+      await this.activity.markItemSold(itemId, price);
+      this.sellingItemId.set(null);
+      this.sellPrice = null;
+    } catch { /* surfaced */ }
+  }
+
+  protected async unsellItem(itemId: number): Promise<void> {
+    try { await this.activity.unsellItem(itemId); } catch { /* surfaced */ }
   }
 
   protected showRevenueForm = signal(false);

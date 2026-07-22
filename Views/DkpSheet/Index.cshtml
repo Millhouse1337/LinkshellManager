@@ -1,0 +1,198 @@
+@model LinkshellManagerDiscordApp.ViewModels.DkpSheetPageViewModel
+@{
+    ViewData["Title"] = "DKP Sheet";
+    var data = Model.Data;
+    string Num(double v) => v.ToString("N2");
+    string AltOrDash(string a) => string.IsNullOrWhiteSpace(a) ? "—" : a;
+}
+
+<style nonce="@Html.CspNonce()">
+    .dkp-dash { width: 100%; }
+    .dkp-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+    .dkp-title-group { display: flex; align-items: center; gap: 12px; }
+    .dkp-app-icon {
+        width: 46px; height: 46px; display: grid; place-items: center; color: #3d7cff; font-size: 24px;
+        border-radius: 12px; background: linear-gradient(145deg, #121c31, #0c1322); border: 1px solid #1d2c47;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+    }
+    .dkp-dash h1 { margin: 0; font-size: 26px; letter-spacing: -0.03em; color: #f4f7fb; }
+    .dkp-count-badge {
+        min-width: 30px; height: 28px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 9px; color: #dbe7ff; background: #172234; border: 1px solid #26354f; font-weight: 700; font-size: 13px;
+    }
+    .dkp-xlsx-btn {
+        height: 46px; padding: 0 18px; display: inline-flex; align-items: center; gap: 10px; border-radius: 10px;
+        border: 1px solid #2d56bd; background: rgba(17,26,43,0.72); color: #f4f7fb; font-weight: 700; font-size: 14px;
+        cursor: pointer; text-decoration: none; box-shadow: inset 0 0 20px rgba(61,124,255,0.08);
+    }
+    .dkp-xlsx-btn:hover { border-color: #3d7cff; }
+    .dkp-xlsx-btn .ico { color: #29d66f; font-size: 16px; }
+
+    .dkp-tab-strip {
+        height: 64px; display: flex; justify-content: center; align-items: center; margin-bottom: 16px;
+        border-radius: 12px; background: rgba(13,20,33,0.72); border: 1px solid #1d2b43;
+    }
+    .dkp-active-tab {
+        display: inline-flex; align-items: center; gap: 12px; padding: 9px 13px 9px 22px; border: 0; border-radius: 14px;
+        background: linear-gradient(135deg, #245cff, #1c3dc7); color: #fff; font-size: 15px; font-weight: 800;
+        box-shadow: 0 12px 28px rgba(36,92,255,0.35);
+    }
+    .dkp-active-tab span {
+        min-width: 30px; height: 28px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 9px; background: rgba(8,15,32,0.55); border: 1px solid rgba(255,255,255,0.12); font-weight: 700; font-size: 13px;
+    }
+
+    .dkp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 16px; }
+    .dkp-stat {
+        display: flex; align-items: center; gap: 16px; min-height: 96px; padding: 20px; border-radius: 14px;
+        background: linear-gradient(145deg, rgba(19,29,48,0.92), rgba(9,15,25,0.92)); border: 1px solid #263650;
+        box-shadow: 0 20px 45px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .dkp-stat-ico {
+        width: 56px; height: 56px; display: grid; place-items: center; border-radius: 13px; font-size: 24px;
+        background: linear-gradient(145deg, #142755, #0d1a38); color: #3979ff; box-shadow: inset 0 0 20px rgba(61,124,255,0.18);
+    }
+    .dkp-stat p { margin: 0 0 6px; color: #9fb0cd; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+    .dkp-stat h2 { margin: 0; font-size: 28px; letter-spacing: -0.03em; color: #f4f7fb; }
+
+    .dkp-table-card { padding: 14px; border-radius: 14px; background: rgba(14,22,36,0.86); border: 1px solid #22324c; box-shadow: 0 24px 60px rgba(0,0,0,0.32); margin-bottom: 16px; }
+    .dkp-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+    .dkp-search { flex: 1 1 320px; max-width: 430px; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-radius: 10px; background: #0c1421; border: 1px solid #22324c; color: #9fb0cd; }
+    .dkp-search span { font-size: 20px; }
+    .dkp-search input { width: 100%; border: 0; outline: 0; background: transparent; color: #fff; font-size: 15px; }
+    .dkp-search input::placeholder { color: #7f8da5; }
+    .dkp-rowcount { color: #c5d0e3; font-weight: 600; font-size: 13px; }
+
+    .dkp-table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid #22324c; }
+    table.dkp-table { width: 100%; border-collapse: collapse; min-width: 880px; background: linear-gradient(180deg, #101827, #0b121f); }
+    table.dkp-table thead { background: rgba(255,255,255,0.025); }
+    table.dkp-table th, table.dkp-table td { padding: 13px 22px; text-align: left; border-bottom: 1px solid rgba(151,172,207,0.12); white-space: nowrap; }
+    table.dkp-table th { color: #aebfdd; font-size: 14px; font-weight: 800; }
+    table.dkp-table td { color: #f3f6fb; font-size: 15px; font-weight: 600; }
+    table.dkp-table td:nth-child(n+4), table.dkp-table th:nth-child(n+4) { text-align: right; }
+    /* A pool can go negative when loot is charged to a pool that earns nothing (the classic
+       "HNM left in a pool with no earning event types" misconfiguration). Surfaced, never
+       clamped — clamping would break SUM(pools) == the member's balance. */
+    table.dkp-table td.dkp-negative { color: var(--danger, #ff6b6b); }
+    table.dkp-table tbody tr { transition: background 0.15s ease; }
+    table.dkp-table tbody tr:hover { background: rgba(61,124,255,0.07); }
+    table.dkp-table tbody tr:last-child td { border-bottom: 0; }
+    table.dkp-table .muted { color: #95a1b5; }
+    .dkp-empty { padding: 28px; text-align: center; color: #95a1b5; }
+
+    @@media (max-width: 1100px) {
+        .dkp-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+
+<div class="dkp-dash">
+    <div class="dkp-top">
+        <div class="dkp-title-group">
+            <div class="dkp-app-icon">▦</div>
+            <h1>DKP Sheet</h1>
+            <span class="dkp-count-badge">@data.TotalMembers</span>
+        </div>
+        <a class="dkp-xlsx-btn" asp-action="ExportExcel" asp-route-linkshellId="@data.LinkshellId">
+            <span class="ico">▣</span> Export to Excel
+        </a>
+    </div>
+
+    <div class="dkp-tab-strip">
+        <span class="dkp-active-tab">@data.LinkshellName — DKP <span>@data.TotalMembers</span></span>
+    </div>
+
+    <div class="dkp-stats">
+        <div class="dkp-stat">
+            <div class="dkp-stat-ico">👥</div>
+            <div><p>Total Members</p><h2>@data.TotalMembers</h2></div>
+        </div>
+        <div class="dkp-stat">
+            <div class="dkp-stat-ico">🪙</div>
+            <div><p>Total DKP</p><h2>@Num(data.TotalDkp)</h2></div>
+        </div>
+        <div class="dkp-stat">
+            <div class="dkp-stat-ico">🔨</div>
+            <div><p>Biddable DKP</p><h2>@Num(data.Biddable)</h2></div>
+        </div>
+        <div class="dkp-stat">
+            <div class="dkp-stat-ico">💼</div>
+            <div><p>Total DKP Spent</p><h2>@Num(data.TotalSpent)</h2></div>
+        </div>
+    </div>
+
+    <div class="dkp-table-card">
+        <div class="dkp-toolbar">
+            <div class="dkp-search">
+                <span>⌕</span>
+                <input type="text" id="dkpFilter" placeholder="Filter members..." autocomplete="off" />
+            </div>
+            <div class="dkp-rowcount"><span id="dkpRowCount">@data.Members.Count</span> rows</div>
+        </div>
+
+        <div class="dkp-table-wrap">
+            <table class="dkp-table">
+                @* Per-pool columns appear only when the linkshell actually has more than one pool.
+                   With a single pool, data.Pools is empty and this table renders exactly as it
+                   always has — same seven columns, same colspan. *@
+                <thead>
+                    <tr>
+                        <th>Member Name</th>
+                        <th>Alt 1</th>
+                        <th>Alt 2</th>
+                        @foreach (var pool in data.Pools)
+                        {
+                            <th title="Spendable @pool.Name DKP — what this member can put toward loot from any event type in the @pool.Name pool.">@pool.Name</th>
+                        }
+                        <th>Current DKP</th>
+                        <th>Biddable DKP</th>
+                        <th>Total DKP</th>
+                        <th>Total DKP Spent</th>
+                    </tr>
+                </thead>
+                <tbody id="dkpBody">
+                    @foreach (var m in data.Members)
+                    {
+                        <tr data-name="@($"{m.Name} {m.Alt1} {m.Alt2}".ToLowerInvariant())">
+                            <td>@m.Name</td>
+                            <td class="@(string.IsNullOrWhiteSpace(m.Alt1) ? "muted" : null)">@AltOrDash(m.Alt1)</td>
+                            <td class="@(string.IsNullOrWhiteSpace(m.Alt2) ? "muted" : null)">@AltOrDash(m.Alt2)</td>
+                            @for (var p = 0; p < data.Pools.Count; p++)
+                            {
+                                var poolValue = p < m.PoolCurrent.Count ? m.PoolCurrent[p] : 0;
+                                <td class="@(poolValue < 0 ? "dkp-negative" : null)">@Num(poolValue)</td>
+                            }
+                            <td>@Num(m.Current)</td>
+                            <td>@Num(m.Biddable)</td>
+                            <td>@Num(m.Total)</td>
+                            <td>@Num(m.Spent)</td>
+                        </tr>
+                    }
+                    @if (data.Members.Count == 0)
+                    {
+                        <tr><td colspan="@(7 + data.Pools.Count)" class="dkp-empty">No members yet.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var input = document.getElementById('dkpFilter');
+        var body = document.getElementById('dkpBody');
+        var count = document.getElementById('dkpRowCount');
+        if (!input || !body) { return; }
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            var shown = 0;
+            body.querySelectorAll('tr[data-name]').forEach(function (tr) {
+                var match = !q || (tr.getAttribute('data-name') || '').indexOf(q) !== -1;
+                tr.style.display = match ? '' : 'none';
+                if (match) { shown++; }
+            });
+            if (count) { count.textContent = shown; }
+        });
+    })();
+</script>

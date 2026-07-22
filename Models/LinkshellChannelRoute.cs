@@ -44,6 +44,10 @@ public class LinkshellChannelRoute
     public bool PostAttendance { get; set; }
     public bool PostTodBoard { get; set; }
 
+    // The live, edit-in-place DKP sheet (full table PNG + the .xlsx) posts to the route
+    // that owns this flag. Like PostTodBoard, exactly one route per linkshell may carry it.
+    public bool PostDkpSheet { get; set; }
+
     // Event-type filter (only meaningful when PostEvents). Pipe-delimited list of
     // EventTypeVocabulary keys this route handles; null/empty = catch-all (any
     // event type not claimed by a more specific route). Pipe separator mirrors
@@ -66,6 +70,12 @@ public class LinkshellChannelRoute
     [MaxLength(32)]
     public string? TodBoardMessageId { get; set; }
 
+    // The Discord message id of THIS route's live, edit-in-place DKP sheet post. Same
+    // lifecycle as TodBoardMessageId, but for the DKP sheet. Only the route with
+    // PostDkpSheet uses this.
+    [MaxLength(32)]
+    public string? DkpSheetMessageId { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
 }
 
@@ -77,25 +87,27 @@ public static class ChannelPostTypes
     public const string Auctions = "Auctions";
     public const string Attendance = "Attendance";
     public const string TodBoard = "TodBoard";
+    public const string DkpSheet = "DkpSheet";
 
     public static readonly IReadOnlyList<string> All = new[]
     {
-        Events, Loot, Auctions, Attendance, TodBoard
+        Events, Loot, Auctions, Attendance, TodBoard, DkpSheet
     };
 
     // Non-event post types: exactly one route per linkshell may own each.
     public static readonly IReadOnlyList<string> NonEvent = new[]
     {
-        Loot, Auctions, Attendance, TodBoard
+        Loot, Auctions, Attendance, TodBoard, DkpSheet
     };
 
     public static string Label(string postType) => postType switch
     {
-        Events => "Event posts",
-        Loot => "Loot posts",
-        Auctions => "Auction posts",
-        Attendance => "Attendance posts",
-        TodBoard => "ToD board",
+        Events => "Events",
+        Loot => "Loot",
+        Auctions => "Auctions",
+        Attendance => "Attendance",
+        TodBoard => "ToD",
+        DkpSheet => "DKP",
         _ => postType
     };
 }

@@ -7,9 +7,13 @@ import type {
   ActivityCreateLinkshellInput,
   ActivityChannelRouteInput,
   ActivityChannelRoutesResponse,
+  ActivityDkpPoolInput,
+  ActivityDkpPoolPreview,
+  ActivityDkpPoolsResponse,
   ActivityDkpRoundingIncrement,
   ActivityGuildOption,
   ActivityJobRatingCommentSummary,
+  ActivityJobRatingOverall,
   ActivityJobRatingsResponse,
   ActivityJobsRoster,
   ActivityLinkshellDetail,
@@ -29,6 +33,7 @@ export class LinkshellService {
   readonly busyMemberId = signal<number | null>(null);
   readonly busyRoles = signal(false);
   readonly busyDiscordChannels = signal(false);
+  readonly busyDkpPools = signal(false);
   readonly busyJobsRoster = signal(false);
 
   async loadLinkshellDetail(linkshellId: number): Promise<void> {
@@ -105,8 +110,12 @@ export class LinkshellService {
       eventBoardTheme?: string | null;
       // null = leave unchanged. Allow account-less Discord party-board signups (non-HNM).
       outsidePartySignupEnabled?: boolean | null;
+      // null = leave unchanged. "Fill earlier alliances first" signup nudge.
+      fillAlliancesInOrder?: boolean | null;
       // null = leave unchanged. Gate HNM (event type + account-less HNM-board signups).
       hnmOutsideSignupEnabled?: boolean | null;
+      // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
+      useComponentsV2Boards?: boolean | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -136,7 +145,9 @@ export class LinkshellService {
         discordGuildId: input.discordGuildId ?? null,
         eventBoardTheme: input.eventBoardTheme ?? null,
         outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
-        hnmOutsideSignupEnabled: input.hnmOutsideSignupEnabled ?? null
+        fillAlliancesInOrder: input.fillAlliancesInOrder ?? null,
+        hnmOutsideSignupEnabled: input.hnmOutsideSignupEnabled ?? null,
+        useComponentsV2Boards: input.useComponentsV2Boards ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');
@@ -306,6 +317,61 @@ export class LinkshellService {
     }
   }
 
+  // ---- DKP pools ----
+  //
+  // Deliberately its own endpoint trio rather than fields on the linkshell-update request: the
+  // Configurations tab re-sends every setting on any save, so a nullable pool list there would let
+  // a rename silently wipe the pool config.
+
+  async loadDkpPools(linkshellId: number): Promise<ActivityDkpPoolsResponse | null> {
+    this.busyDkpPools.set(true);
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityDkpPoolsResponse>(
+        `/api/activity/linkshells/${linkshellId}/dkp-pools`,
+        this.auth.currentAccessToken()
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading DKP pools failed.'));
+      return null;
+    } finally {
+      this.busyDkpPools.set(false);
+    }
+  }
+
+  // Dry run: what would this save move, and what would it break? Writes nothing.
+  async previewDkpPools(linkshellId: number, pools: ActivityDkpPoolInput[]): Promise<ActivityDkpPoolPreview | null> {
+    this.busyDkpPools.set(true);
+    this.auth.setActionError(null);
+    try {
+      return await this.http.postActivityJson<ActivityDkpPoolPreview>(
+        `/api/activity/linkshells/${linkshellId}/dkp-pools/preview`,
+        { pools }
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Previewing the DKP pool changes failed.'));
+      return null;
+    } finally {
+      this.busyDkpPools.set(false);
+    }
+  }
+
+  async saveDkpPools(linkshellId: number, pools: ActivityDkpPoolInput[]): Promise<boolean> {
+    this.busyDkpPools.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/dkp-pools`, { pools });
+      this.auth.setActionMessage('DKP pools updated.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Saving DKP pools failed.'));
+      return false;
+    } finally {
+      this.busyDkpPools.set(false);
+    }
+  }
+
   async setPrimaryLinkshell(linkshellId: number): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
     this.auth.setActionError(null);
@@ -455,6 +521,19 @@ export class LinkshellService {
       );
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Loading the feedback summary failed.'));
+      return null;
+    }
+  }
+
+  // Overall ratings rollup across all the member's characters (averages + AI comment summary).
+  async loadJobRatingOverall(linkshellId: number, targetAppUserId: string): Promise<ActivityJobRatingOverall | null> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityJobRatingOverall>(
+        `/api/activity/job-ratings/${encodeURIComponent(targetAppUserId)}/overall?linkshellId=${linkshellId}`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading the overall ratings failed.'));
       return null;
     }
   }
@@ -611,6 +690,37 @@ export class LinkshellService {
       return false;
     } finally {
       this.busyRoles.set(false);
+    }
+  }
+
+  // Dashboard banner upload via base64 JSON (the Discord iframe can't multipart).
+  // dataUrl is a "data:image/...;base64,..." string from FileReader; the server
+  // strips the prefix and validates the bytes.
+  async uploadBanner(linkshellId: number, dataUrl: string): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/banner`, { dataBase64: dataUrl });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Banner updated.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Updating the banner failed.'));
+      return false;
+    }
+  }
+
+  async removeBanner(linkshellId: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/banner/remove`);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Banner removed.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Removing the banner failed.'));
+      return false;
     }
   }
 }

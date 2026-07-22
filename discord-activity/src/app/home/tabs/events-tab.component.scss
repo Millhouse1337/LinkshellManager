@@ -13,7 +13,7 @@
   flex-wrap: wrap;
   flex-direction: row;
   gap: 4px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid var(--border);
 }
 
 .attendance-window-tabs > li {
@@ -28,7 +28,7 @@
   border-bottom: none;
   border-top-left-radius: 6px;
   border-top-right-radius: 6px;
-  color: var(--fg-3, #a1a1aa);
+  color: var(--fg-3);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -38,19 +38,19 @@
 }
 
 .attendance-window-tab:hover {
-  color: var(--fg, #fafafa);
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--fg);
+  background: var(--surface-2);
 }
 
 .attendance-window-tab.is-active {
-  color: var(--fg, #fafafa);
-  background: var(--surface, rgba(255, 255, 255, 0.06));
-  border-color: var(--border, rgba(255, 255, 255, 0.08));
+  color: var(--fg);
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 .attendance-window-pane__meta {
   font-size: 11px;
-  color: var(--fg-3, #a1a1aa);
+  color: var(--fg-3);
   margin-bottom: 8px;
 }
 
@@ -85,7 +85,7 @@
   list-style: none;
   max-height: 360px;
   overflow-y: auto;
-  background: var(--surface, #1f1f23);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -135,14 +135,11 @@
 .live-party-setup-row__button {
   min-width: 220px;
   justify-content: center;
-  background: linear-gradient(135deg, #d7a93d 0%, #f1c75c 100%);
-  border-color: #f5d471;
-  box-shadow: 0 0 0 1px rgba(32, 24, 8, 0.28), 0 10px 24px rgba(215, 169, 61, 0.24);
-  color: #1f1605;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-2) 100%);
+  border-color: var(--gold-2);
+  box-shadow: 0 0 0 1px rgba(32, 24, 8, 0.28), 0 10px 24px rgba(214, 169, 63, 0.24);
+  color: var(--gold-ink);
   font-weight: 700;
 }
 
-.live-party-setup-row__button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #e0b54b 0%, #f7d77a 100%);
-  border-color: #fae08d;
-}
+.live-party-setup-row__button:hover:not(:disabled) { filter: brightness(1.06); }

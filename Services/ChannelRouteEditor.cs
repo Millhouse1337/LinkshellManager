@@ -16,6 +16,7 @@ public sealed record ChannelRouteEdit(
     bool PostAuctions,
     bool PostAttendance,
     bool PostTodBoard,
+    bool PostDkpSheet,
     IReadOnlyList<string>? EventTypeFilter,
     // Optional per-monster narrowing for an HNM event route (only used when EventTypeFilter
     // includes "HNM"). Empty/null = catch every HNM.
@@ -29,11 +30,13 @@ public sealed class ChannelRouteEditor
 {
     private readonly ApplicationDbContext _db;
     private readonly DiscordTodBoardQueue _todBoardQueue;
+    private readonly DkpSheetPostQueue _dkpSheetQueue;
 
-    public ChannelRouteEditor(ApplicationDbContext db, DiscordTodBoardQueue todBoardQueue)
+    public ChannelRouteEditor(ApplicationDbContext db, DiscordTodBoardQueue todBoardQueue, DkpSheetPostQueue dkpSheetQueue)
     {
         _db = db;
         _todBoardQueue = todBoardQueue;
+        _dkpSheetQueue = dkpSheetQueue;
     }
 
     // Persists the desired routes for a linkshell. Returns null on success, or a
@@ -89,6 +92,11 @@ public sealed class ChannelRouteEditor
                 {
                     route.TodBoardMessageId = null;
                 }
+                // Same rule for the live DKP sheet post.
+                if (!(edit.PostDkpSheet && string.Equals(route.ChannelId, channelId, StringComparison.Ordinal)))
+                {
+                    route.DkpSheetMessageId = null;
+                }
             }
 
             route.Name = name;
@@ -99,6 +107,7 @@ public sealed class ChannelRouteEditor
             route.PostAuctions = edit.PostAuctions;
             route.PostAttendance = edit.PostAttendance;
             route.PostTodBoard = edit.PostTodBoard;
+            route.PostDkpSheet = edit.PostDkpSheet;
             route.EventTypeFilter = filter;
             route.HnmMonsterFilter = BuildHnmMonsterFilter(edit);
         }
@@ -110,8 +119,9 @@ public sealed class ChannelRouteEditor
         }
 
         await _db.SaveChangesAsync(cancellationToken);
-        // Re-render the ToD board so a (de)selected ToD route takes effect now.
+        // Re-render the ToD board + the DKP sheet so a (de)selected route takes effect now.
         _todBoardQueue.Enqueue(linkshellId);
+        _dkpSheetQueue.Enqueue(linkshellId);
         return null;
     }
 
@@ -121,6 +131,7 @@ public sealed class ChannelRouteEditor
         if (routes.Count(r => r.PostAuctions) > 1) return "Only one channel route can post Auctions.";
         if (routes.Count(r => r.PostAttendance) > 1) return "Only one channel route can post Attendance.";
         if (routes.Count(r => r.PostTodBoard) > 1) return "Only one channel route can post the ToD board.";
+        if (routes.Count(r => r.PostDkpSheet) > 1) return "Only one channel route can post the DKP sheet.";
         return null;
     }
 

@@ -48,8 +48,8 @@ $auction-modal-bottom-offset-mobile: 0px;
 }
 
 .auction-form-modal-dialog {
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   width: 100%;
   max-width: 880px;
@@ -117,8 +117,8 @@ $auction-modal-bottom-offset-mobile: 0px;
   z-index: 2;
   margin: -16px -16px 0;
   padding: 16px 16px 12px;
-  background: var(--surface, #1f1f23);
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
 .auction-form-modal-dialog > .create-form > .create-form__actions {
@@ -127,8 +127,8 @@ $auction-modal-bottom-offset-mobile: 0px;
   z-index: 2;
   margin: 0 -16px -16px;
   padding: 12px 16px 16px;
-  background: var(--surface, #1f1f23);
-  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
 }
 
 // The item rows are the only part of the form that grows without bound,
@@ -152,7 +152,7 @@ $auction-modal-bottom-offset-mobile: 0px;
 // Remaining-countdown chip in the auction header row — emphasised so
 // users can see at a glance how long until the auction ends.
 .panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__remaining {
-  color: var(--fg, #fafafa);
+  color: var(--fg);
   font-weight: 600;
 }
 
@@ -185,8 +185,8 @@ $auction-modal-bottom-offset-mobile: 0px;
 
   .auction-form-modal-dialog {
     // Inline section, not a floating dialog.
-    background: var(--surface, #1f1f23);
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: var(--r-md, 10px);
     width: 100%;
     max-width: 100%;
@@ -218,7 +218,7 @@ $auction-modal-bottom-offset-mobile: 0px;
     margin: 0 0 4px;
     padding: 0 0 10px;
     background: transparent;
-    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-bottom: 1px solid var(--border);
   }
 
   .auction-form-modal-dialog > .create-form > .create-form__actions {
@@ -227,7 +227,7 @@ $auction-modal-bottom-offset-mobile: 0px;
     margin: 8px 0 0;
     padding: 10px 0 0;
     background: transparent;
-    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-top: 1px solid var(--border);
   }
 
   // Drop the descriptive subtitle on phone — keeps the header compact.
@@ -241,9 +241,9 @@ $auction-modal-bottom-offset-mobile: 0px;
   .auction-form-modal-dialog .invite-section .create-form--compact {
     margin-top: 8px;
     padding: 8px;
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border);
     border-radius: var(--r-sm, 6px);
-    background: var(--bg-elev, rgba(255, 255, 255, 0.02));
+    background: var(--bg-elev);
   }
 
   .auction-form-modal-dialog .invite-section .create-form--compact > .create-form__grid {

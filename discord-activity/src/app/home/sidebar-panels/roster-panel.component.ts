@@ -6,7 +6,7 @@ import {
   ActivityLinkshellRole,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { formatAlts, rankIcon } from '../activity-home.helpers';
+import { formatAlts, memberAvatarClass, memberInitials, memberStatusClass, rankIcon } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-roster-panel',
@@ -18,6 +18,11 @@ import { formatAlts, rankIcon } from '../activity-home.helpers';
 export class RosterPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly formatAlts = formatAlts;
+  // Shared roster helpers (avatar initials/color, status tag) — single source in
+  // activity-home.helpers so every roster renders members identically.
+  protected readonly memberInitials = memberInitials;
+  protected readonly memberAvatarClass = memberAvatarClass;
+  protected readonly memberStatusClass = memberStatusClass;
 
   readonly selectedLinkshellId = input.required<number>();
   @Input({ required: true }) selectLinkshell!: (linkshellId: number) => Promise<void> | void;
@@ -184,48 +189,6 @@ export class RosterPanelComponent {
     }
 
     return 'Delete this linkshell and its history.';
-  }
-
-  protected memberInitials(name?: string | null): string {
-    const trimmed = (name ?? '').trim();
-    if (!trimmed) {
-      return '?';
-    }
-
-    const parts = trimmed.split(/\s+/).filter(Boolean);
-    if (parts.length === 1) {
-      return parts[0].substring(0, 2).toUpperCase();
-    }
-
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-
-  protected memberAvatarClass(name?: string | null): string {
-    const trimmed = (name ?? '').trim();
-    if (!trimmed) {
-      return 'a';
-    }
-
-    let hash = 0;
-    for (let i = 0; i < trimmed.length; i += 1) {
-      hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
-    }
-
-    return ['a', 'b', 'c', 'd', 'e'][hash % 5];
-  }
-
-  protected memberStatusClass(status?: string | null): string {
-    const normalized = (status ?? 'Active').toLowerCase();
-    if (normalized === 'active') {
-      return 'success';
-    }
-    if (normalized === 'pending') {
-      return 'warning';
-    }
-    if (normalized === 'inactive') {
-      return 'danger';
-    }
-    return 'default';
   }
 
   protected filteredSelectedLinkshellMembers() {

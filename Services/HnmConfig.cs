@@ -19,7 +19,68 @@ public static class HnmConfig
     public const int MaxWindow = 25;
 
     public static bool SupportsWindowAdvance(string? monsterName) =>
-        !string.IsNullOrWhiteSpace(monsterName) && LongWindowHnms.Contains(monsterName.Trim());
+        MonsterSegments(monsterName).Any(LongWindowHnms.Contains);
+
+    // A stored monster name may be a COMBINED "Base/Stronger" label (e.g.
+    // "Adamantoise/Aspidochelone") chosen from the merged create-event dropdown. Split it
+    // into its individual monster names so every name lookup below (zone, window count,
+    // true-HNM, routing, recurrence) matches on either half. Single names split to one.
+    public static string[] MonsterSegments(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+            ? Array.Empty<string>()
+            : name.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    // Base monster -> stronger counterpart. On the create-event monster dropdown the two
+    // are offered as ONE merged entry: it shows the base name on early days and the combined
+    // "Base/Stronger" name from CombinedFromDay onward (the day the stronger version can also
+    // pop). The chosen text is stored verbatim in Event.AssignedMonsterName.
+    public static readonly IReadOnlyList<(string Base, string Stronger)> MonsterMergePairs = new[]
+    {
+        ("Adamantoise", "Aspidochelone"),
+        ("Behemoth", "King Behemoth"),
+        ("Fafnir", "Nidhogg"),
+    };
+
+    // From this day number onward a merged entry shows the combined "Base/Stronger" label;
+    // below it, only the base name.
+    public const int CombinedFromDay = 4;
+
+    // The stronger halves, folded into their base entry on the create dropdown (so they no
+    // longer appear as standalone options there). They remain first-class monsters elsewhere
+    // (ToD tracker, channel routes, party setups).
+    public static readonly HashSet<string> MergedStrongerMonsters =
+        new(MonsterMergePairs.Select(pair => pair.Stronger), StringComparer.OrdinalIgnoreCase);
+
+    // The create-event monster dropdown options: each merge pair shown as ONE combined
+    // "Base/Stronger" entry (always, regardless of day), its stronger half dropped as a
+    // standalone, and every other monster left intact and in order.
+    public static List<string> CombinedMonsterOptions(IEnumerable<string> supported)
+    {
+        var pairByBase = MonsterMergePairs.ToDictionary(pair => pair.Base, StringComparer.OrdinalIgnoreCase);
+        var options = new List<string>();
+        foreach (var monster in supported)
+        {
+            if (MergedStrongerMonsters.Contains(monster)) continue; // folded into the base entry
+            options.Add(pairByBase.TryGetValue(monster, out var pair) ? $"{pair.Base}/{pair.Stronger}" : monster);
+        }
+        return options;
+    }
+
+    // The board-DISPLAY form of a (possibly combined "Base/Stronger") monster name for a
+    // given day. Below CombinedFromDay only the base half is shown — early days, only the
+    // weaker version pops; at/above it, and when no day is set, the full combined name shows
+    // as stored. The STORED Event.AssignedMonsterName is unchanged (always the combined form);
+    // this only affects what the sign-up board prints.
+    public static string? DisplayMonsterName(string? name, int? day)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return name;
+        if (day is { } d && d < CombinedFromDay)
+        {
+            var segments = MonsterSegments(name);
+            if (segments.Length > 1) return segments[0]; // base half only
+        }
+        return name;
+    }
 
     public static readonly HashSet<string> ShortWindowHnms = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -95,14 +156,9 @@ public static class HnmConfig
     // Returns true when the given name refers to a curated HNM that participates
     // in the streamlined HNM workflow (auto-event-from-ToD, dedicated dashboard).
     // Mirrors the union of LongWindow/Short Window/Testing sets.
-    public static bool IsTrueHnm(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        var trimmed = name.Trim();
-        return LongWindowHnms.Contains(trimmed)
-            || ShortWindowHnms.Contains(trimmed)
-            || TestingHnms.Contains(trimmed);
-    }
+    public static bool IsTrueHnm(string? name) =>
+        MonsterSegments(name).Any(seg =>
+            LongWindowHnms.Contains(seg) || ShortWindowHnms.Contains(seg) || TestingHnms.Contains(seg));
 
     // Canonical camp zone per HNM. Used to pre-fill Event.EventLocation when
     // the addon's ToD post auto-creates the next-repop event. Testing monsters
@@ -120,6 +176,17 @@ public static class HnmConfig
         ["Jormungand"]     = "Uleguerand Range",
         ["Vrtra"]          = "King Ranperre's Tomb",
     };
+
+    // Camp zone for a monster name, tolerant of a combined "Base/Stronger" label (both
+    // halves of every merge pair share a zone, so the first matching segment wins).
+    public static string? ZoneFor(string? name)
+    {
+        foreach (var segment in MonsterSegments(name))
+        {
+            if (HnmZones.TryGetValue(segment, out var zone)) return zone;
+        }
+        return null;
+    }
 
     // HNMs that rotate through a day cycle (Nidhogg D1/D2/D3 etc.). The value
     // is the cycle length, used only to render the day indicator on the

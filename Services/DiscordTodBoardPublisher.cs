@@ -152,16 +152,18 @@ public sealed class DiscordTodBoardPublisher
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
 
-        // Edit the existing board in place; if the edit fails (message deleted,
-        // channel changed, etc.) drop the stale id and post a fresh one. The new
-        // id is persisted on the route so the next change edits it.
+        // Edit the existing board in place. Only repost when the message is genuinely
+        // gone (deleted/channel changed); on a transient Discord error keep the stored
+        // id so the next change retries the edit instead of orphaning the board with a
+        // duplicate. The new id is persisted on the route so the next change edits it.
         if (!string.IsNullOrEmpty(route.TodBoardMessageId))
         {
-            if (await _bot.EditMessageAsync(route.ChannelId, route.TodBoardMessageId, payload, cancellationToken))
+            var edit = await _bot.EditMessageAsync(route.ChannelId, route.TodBoardMessageId, payload, cancellationToken);
+            if (edit == DiscordEditResult.Edited || edit == DiscordEditResult.TransientFailure)
             {
-                return;
+                return; // edited, or keep the id and retry on the next change
             }
-            route.TodBoardMessageId = null;
+            route.TodBoardMessageId = null; // MessageGone → post fresh below
         }
 
         var messageId = await _bot.PostMessageAsync(route.ChannelId, payload, cancellationToken);

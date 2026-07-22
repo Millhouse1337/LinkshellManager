@@ -486,6 +486,81 @@ public class PartySetupController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // AJAX sibling of Create used by the "Create New Party Setup" modal on the
+    // create/edit event form: same auth + validation + persistence, but returns
+    // JSON so the caller can drop the new setup into the linked-setup dropdown
+    // and select it without a full page nav. Errors come back as a string list.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateInline(PartySetupEditorViewModel model)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Json(new { ok = false, errors = new[] { "Your session has expired. Refresh and try again." } });
+        }
+
+        var linkshellId = await ResolveActiveLinkshellIdAsync(user);
+        if (linkshellId <= 0 || !await ResolveCanManagePartiesAsync(user.Id, linkshellId))
+        {
+            return Json(new { ok = false, errors = new[] { "You don't have permission to create party setups." } });
+        }
+
+        var allowCustomMonster = ResolveAssignedMonster(model);
+        NormalizeAndValidate(model, allowCustomMonster);
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values
+                .SelectMany(state => state.Errors)
+                .Select(error => error.ErrorMessage)
+                .Where(message => !string.IsNullOrWhiteSpace(message))
+                .Distinct()
+                .ToList();
+            if (errors.Count == 0)
+            {
+                errors.Add("Please fix the highlighted fields and try again.");
+            }
+            return Json(new { ok = false, errors });
+        }
+
+        var characterName = await _context.AppUserLinkshells.AsNoTracking()
+            .Where(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId)
+            .Select(link => link.CharacterName)
+            .FirstOrDefaultAsync();
+
+        var now = DateTime.UtcNow;
+        var partySetup = new PartySetup
+        {
+            LinkshellId = linkshellId,
+            Name = model.Name.Trim(),
+            AssignedMonsterName = NormalizeMonster(model.AssignedMonsterName),
+            Notes = string.IsNullOrWhiteSpace(model.Notes) ? null : model.Notes.Trim(),
+            EventType = string.IsNullOrWhiteSpace(model.EventType) ? null : model.EventType.Trim(),
+            CreatedByAppUserId = user.Id,
+            CreatedByCharacterName = characterName,
+            CreatedAt = now,
+            UpdatedAt = now,
+            Alliances = BuildTreeFromFlat(model.Slots)
+        };
+
+        _context.PartySetups.Add(partySetup);
+        await _context.SaveChangesAsync();
+
+        var label = string.IsNullOrWhiteSpace(partySetup.AssignedMonsterName)
+            ? partySetup.Name
+            : $"{partySetup.Name} — {partySetup.AssignedMonsterName}";
+
+        return Json(new
+        {
+            ok = true,
+            id = partySetup.Id,
+            name = partySetup.Name,
+            eventType = partySetup.EventType ?? string.Empty,
+            assignedMonsterName = partySetup.AssignedMonsterName,
+            label
+        });
+    }
+
     [HttpGet]
     public async Task<IActionResult> Edit(int id)
     {

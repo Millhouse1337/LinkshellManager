@@ -24,5 +24,15 @@ namespace LinkshellManagerDiscordApp.Models
         public string? CreatedByCharacterName { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // --- Sold state: marking an item sold records the sale price and creates a
+        // matching Income RevenueEntry so the treasury updates automatically. The
+        // item stays in the list (flagged Sold) as a record; "unsell" reverses it. ---
+        public bool IsSold { get; set; }
+        public long? SoldPrice { get; set; }
+        public DateTime? SoldAt { get; set; }
+        public string? SoldByCharacterName { get; set; }
+        // The RevenueEntry created for this sale, so unselling can remove exactly it.
+        public int? RevenueEntryId { get; set; }
     }
 }

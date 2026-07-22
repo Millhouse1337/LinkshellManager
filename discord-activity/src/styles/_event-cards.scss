@@ -11,6 +11,7 @@
   border-radius: var(--r-md);
   background: var(--surface-2);
   border: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
 .event-card,
@@ -261,7 +262,7 @@
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 11px 7px;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: var(--r-md);
   cursor: pointer;
   outline: none;
@@ -269,7 +270,7 @@
 }
 
 .manual-signup__row select:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background-color: rgba(255, 255, 255, 0.04);
 }
 
@@ -306,7 +307,7 @@
   overflow: hidden;
   padding: 16px 18px;
   background:
-    radial-gradient(90% 140% at 0% 0%, rgba(129, 140, 248, 0.07), transparent 55%),
+    radial-gradient(90% 140% at 0% 0%, rgba(79, 124, 255, 0.07), transparent 55%),
     var(--surface-2);
 }
 
@@ -336,7 +337,7 @@
      columns sit just to its right (and line up row-to-row); the free space is
      pushed to the actions instead (margin-left:auto below). */
   flex: 0 1 auto;
-  min-width: 160px;
+  min-width: 120px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -392,7 +393,7 @@
   padding: 2px 10px;
   border-radius: 999px;
   background: var(--accent-weak);
-  border: 1px solid rgba(129, 140, 248, 0.30);
+  border: 1px solid rgba(79, 124, 255, 0.30);
   color: var(--accent);
   font-size: 12px;
   font-weight: 600;
@@ -456,24 +457,30 @@
 .evt-btn--primary {
   border-color: transparent;
   color: #fff;
-  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
-  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.28);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  box-shadow: 0 6px 18px rgba(79, 124, 255, 0.28);
 }
 .evt-btn--primary:hover:not(:disabled) { filter: brightness(1.07); }
 
 /* Gold CTA — matches the live event's "View / Join Party Setup" button so the
    queued "View & Sign Up" reads as the same primary action across states. */
 .evt-btn--gold {
-  border-color: #f5d471;
-  color: #1f1605;
+  border-color: var(--gold-2);
+  color: var(--gold-ink);
   font-weight: 700;
-  background: linear-gradient(135deg, #d7a93d 0%, #f1c75c 100%);
-  box-shadow: 0 0 0 1px rgba(32, 24, 8, 0.28), 0 8px 20px rgba(215, 169, 61, 0.24);
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-2) 100%);
+  box-shadow: 0 0 0 1px rgba(32, 24, 8, 0.28), 0 8px 20px rgba(214, 169, 63, 0.24);
 }
-.evt-btn--gold:hover:not(:disabled) {
-  border-color: #fae08d;
-  background: linear-gradient(135deg, #e0b54b 0%, #f7d77a 100%);
+.evt-btn--gold:hover:not(:disabled) { filter: brightness(1.06); }
+
+/* Green CTA — used by the HNM board's "Post new ToD" action. */
+.evt-btn--success {
+  border-color: transparent;
+  color: #fff;
+  background: var(--success);
+  box-shadow: 0 6px 18px rgba(67, 209, 122, 0.24);
 }
+.evt-btn--success:hover:not(:disabled) { filter: brightness(1.07); }
 
 .evt-btn--secondary {
   background: var(--surface-3);

@@ -111,6 +111,8 @@ export interface ActivityLinkshell {
   permissions?: ActivityLinkshellPermissions | null;
   settings?: ActivityLinkshellSettings | null;
   auctionsLocked?: boolean;
+  // Dashboard banner image URL (already cache-busted), or null when none is set.
+  bannerUrl?: string | null;
 }
 
 export type ActivityLootStructure = 'Dkp' | 'LootCouncil' | 'Hybrid';
@@ -154,10 +156,15 @@ export interface ActivityLinkshellSettings {
   // Allow Discord members with no LSM account to sign up for NON-HNM events from the
   // party board. Backed by a placeholder member, so they DO earn DKP + are tracked.
   outsidePartySignupEnabled?: boolean;
+  // "Fill earlier alliances first" signup nudge (default on; no-op on single-alliance boards).
+  fillAlliancesInOrder?: boolean;
   // HNM Outside Sign Up: gates the HNM event type in the create dropdown and account-less
   // Discord signups onto HNM boards. Independent of outsidePartySignupEnabled.
   // Roster memory only — HNM signups earn no DKP and no active/absent credit.
   hnmOutsideSignupEnabled?: boolean;
+  // Experimental: post event boards as Components V2 (wide media-gallery card) instead of
+  // the classic image-in-embed. Only affects boards posted after it's turned on.
+  useComponentsV2Boards?: boolean;
   // Discord channel id new post-event discussion comments mirror to, or null to
   // keep discussion in-app only.
   discussionChannelId?: string | null;
@@ -274,6 +281,7 @@ export interface ActivityRule {
   linkshellId: number;
   title: string;
   details: string;
+  category?: string | null;
   createdByAppUserId?: string | null;
   createdByCharacterName?: string | null;
   createdAt: string;
@@ -284,6 +292,7 @@ export interface ActivityAnnouncement {
   linkshellId: number;
   title: string;
   details: string;
+  category?: string | null;
   createdByAppUserId?: string | null;
   createdByCharacterName?: string | null;
   createdAt: string;
@@ -300,6 +309,9 @@ export interface ActivityItem {
   createdByCharacterName?: string | null;
   createdAt: string;
   updatedAt: string;
+  isSold?: boolean;
+  soldPrice?: number | null;
+  soldByCharacterName?: string | null;
 }
 
 export interface ActivityRevenueEntry {
@@ -352,6 +364,7 @@ export interface ActivityChannelRoute {
   postAuctions: boolean;
   postAttendance: boolean;
   postTodBoard: boolean;
+  postDkpSheet: boolean;
   eventTypeFilter: string[];
   // Per-monster narrowing for an HNM route (only meaningful when eventTypeFilter has HNM).
   hnmMonsterFilter: string[];
@@ -376,8 +389,64 @@ export interface ActivityChannelRouteInput {
   postAuctions: boolean;
   postAttendance: boolean;
   postTodBoard: boolean;
+  postDkpSheet: boolean;
   eventTypeFilter: string[];
   hnmMonsterFilter: string[];
+}
+
+// ---- DKP pools ----
+//
+// A pool is a wallet. Each event type earns into exactly one pool, and loot from that event type is
+// paid out of the same pool. Exactly one pool is the default: the catch-all for every event type
+// nobody assigned (including custom ones), plus adjustments and imports.
+
+export interface ActivityDkpPool {
+  id: number;
+  name: string;
+  isDefault: boolean;
+  sortOrder: number;
+  accent: string;
+  eventTypes: string[];
+}
+
+// An event type an officer can assign. earnedTotal is what it has earned lifetime — it makes a
+// remap legible ("moving Sea moves 980 DKP") and flags types nobody has mapped yet.
+export interface ActivityDkpPoolEventType {
+  key: string;
+  isCustom: boolean;
+  earnedTotal: number;
+  inUse: boolean;
+}
+
+export interface ActivityDkpPoolsResponse {
+  pools: ActivityDkpPool[];
+  assignableEventTypes: ActivityDkpPoolEventType[];
+  accents: string[];
+}
+
+// id is null for a new pool. eventTypes is the COMPLETE set assigned to it — the save is a full
+// replace, so anything left out falls back to the default pool.
+export interface ActivityDkpPoolInput {
+  id: number | null;
+  name: string | null;
+  isDefault: boolean;
+  accent: string | null;
+  eventTypes: string[];
+}
+
+export interface ActivityDkpPoolMove {
+  eventType: string;
+  fromPool: string;
+  toPool: string;
+  earnedTotal: number;
+  ledgerRows: number;
+}
+
+export interface ActivityDkpPoolPreview {
+  moves: ActivityDkpPoolMove[];
+  affectedLedgerRows: number;
+  affectedMembers: number;
+  warnings: string[];
 }
 
 export interface ActivityLinkshellDetail {
@@ -411,6 +480,11 @@ export interface ActivityMember {
   // True for an "unsynced" member (a player who hasn't linked an account) — badged in
   // the roster. (Backed by a placeholder account server-side; see AppUser.IsPlaceholder.)
   isPlaceholder?: boolean;
+  // True when the member has actually opened/synced the Discord Activity at least once
+  // (server checks for a DiscordActivityUser row on their AppUserId). Distinguishes real
+  // app users from members who only ever used the outside sign-up board. Drives the
+  // roster's "App Sync" badge and filter.
+  hasSyncedActivity?: boolean;
   // Spendable DKP right now (committed − bid locks − pending live-event loot spend).
   biddableDkp?: number;
 }
@@ -500,6 +574,10 @@ export interface ActivityTodEntry {
   linkshellId: number;
   monsterName: string;
   dayNumber?: number | null;
+  // Whether the kill was HQ (shown in the ToD list).
+  hq?: boolean;
+  // Extra seconds folded into the repop time (round-trips into the form on edit).
+  additionalSeconds?: number;
   time?: string | null;
   // Tri-state: true = Claimed, false = Unclaimed, null = Not Specified.
   // Null is the auto-posted state from the addon's loot-pool flow.
@@ -540,6 +618,8 @@ export interface ActivityEvent {
   partySetupAssignedMonsterName?: string | null;
   // The event's own HNM monster (for manual HNM boards); used to pre-fill "Post ToD".
   assignedMonsterName?: string | null;
+  // Optional "Day N" label shown on the board (round-trips into the edit form).
+  dayNumber?: number | null;
   // HNM "defeated / awaiting re-post" state: true once a ToD is logged from the board.
   // startTime = predicted repop; hnmRepostAt = when the board auto-re-posts (null if
   // Repeat-on-ToD off); sourceTodId = the logged ToD so "Edit ToD" can pre-fill it.
@@ -554,6 +634,9 @@ export interface ActivityEvent {
   attendanceWindows: ActivityAttendanceWindow[];
   creatorCharacterName?: string | null;
   starterCharacterName?: string | null;
+  // The DKP pool this event earns into and pays its loot out of. Null when the linkshell has a
+  // single pool — the cue to render the loot UI exactly as it did before pools existed.
+  dkpPoolName?: string | null;
 }
 
 export interface ActivityAttendanceWindow {
@@ -850,11 +933,15 @@ export interface ActivityAuction {
   canEnd: boolean;
   canClose: boolean;
   items: ActivityAuctionItem[];
-  // Viewer's available DKP in this auction's linkshell (total minus DKP
-  // locked by bids they're currently winning). Set by the list endpoint.
+  // Viewer's available DKP for THIS auction — the balance in the pool it draws from, minus DKP
+  // locked by bids they're currently winning on it. Set by the list endpoint.
   availableDkp?: number | null;
   // True when leadership has frozen bidding for the linkshell.
   auctionsLocked?: boolean;
+  // The DKP pool bids are drawn from. Name is null when the linkshell has a single pool — the cue
+  // to hide the pool chip entirely.
+  dkpPoolId?: number | null;
+  dkpPoolName?: string | null;
 }
 
 export interface ActivityAuctionBid {
@@ -963,6 +1050,8 @@ export interface ActivityCreateEventInput {
   monsterName?: string | null;
   repeatOnTod?: boolean;
   repeatLeadHours?: number | null;
+  // HNM signup board only: optional "Day N" label shown on the board.
+  dayNumber?: number | null;
 }
 
 export interface ActivityAddEventMemberInput {
@@ -993,6 +1082,8 @@ export interface ActivityCreateTodInput {
   linkshellId: number;
   monsterName: string;
   dayNumber?: number | null;
+  hq: boolean;
+  additionalSeconds: number;
   claim: boolean;
   timeLocal: string;
   cooldown?: string | null;
@@ -1006,6 +1097,8 @@ export interface ActivityUpdateTodInput {
   todId: number;
   monsterName: string;
   dayNumber?: number | null;
+  hq: boolean;
+  additionalSeconds: number;
   claim: boolean;
   timeLocal: string;
   cooldown?: string | null;
@@ -1179,6 +1272,22 @@ export interface ActivityJobRatingCommentSummary {
   configured: boolean;
 }
 
+// A member's OVERALL ratings rollup across ALL their characters: average self
+// gear/skill (their own assessment) + average peer gear/skill (what the linkshell
+// thinks) + distinct teammate count, plus an AI summary over every peer comment.
+export interface ActivityJobRatingOverall {
+  selfCount: number;
+  selfAvgGear: number;
+  selfAvgSkill: number;
+  peerRaterCount: number;
+  peerAvgGear: number;
+  peerAvgSkill: number;
+  commentCount: number;
+  comments: string[];
+  summary: string | null;
+  configured: boolean;
+}
+
 export interface DiscordRpcErrorLike {
   code?: number;
   cmd?: string;
@@ -1248,6 +1357,10 @@ export interface ActivityPartySetupAlliance {
   allianceId: number;
   name: string;
   parties: ActivityPartySetupParty[];
+  // Event boards only: the member designated this alliance's lead (👑 by the
+  // alliance name), or null. Set via "Make Me Alliance Lead".
+  leadAppUserId?: string | null;
+  leadCharacterName?: string | null;
 }
 
 export interface ActivityPartySetupDetail {
@@ -1281,6 +1394,19 @@ export interface ActivityPartySetupSignUpInput {
   // Event boards only: sign up as a specific character (main or an alt). Omitted
   // / null = the member's main character.
   characterName?: string | null;
+  // Bypass the "fill earlier alliances first" nudge ("Sign up here anyway").
+  force?: boolean;
+}
+
+// "Fill earlier alliances first" nudge returned by the event signup endpoint when
+// an open slot the member's job can fill is still free in an earlier alliance.
+export interface PartySignupNudge {
+  suggestedSlotId: number;
+  location: string;
+  requirement: string;
+  role?: string | null;
+  mainJob?: string | null;
+  subJob?: string | null;
 }
 
 // ----- Officer board-edit request bodies (live event party board) -----
@@ -1338,30 +1464,40 @@ export interface ActivityPartySetupEditorInput {
   slots: ActivityPartySetupSlotInput[];
 }
 
-// --- App DKP Sheet (read-only Google Sheet viewer) ---
+// --- DKP Sheet (always-on, computed from the app's own DKP data) ---
 
-export interface ActivityDkpSheetRow {
-  rowNumber: number;
-  cells: string[];
-  // Lowercased join of cells (Tally rows also carry the member name) for the
-  // client-side filter box.
-  searchText: string;
+export interface ActivityDkpSheetMember {
+  id: number;
+  name: string;
+  alt1: string;
+  alt2: string;
+  current: number;
+  biddable: number;
+  total: number;
+  spent: number;
+  // Parallel to ActivityDkpSheetResponse.pools, so columns and cells walk in the same order.
+  // Empty when the linkshell has a single pool.
+  poolCurrent: number[];
 }
 
-export interface ActivityDkpSheetTab {
+export interface ActivityDkpSheetPool {
+  poolId: number;
   name: string;
-  isMainTab: boolean;
-  headers: string[];
-  rows: ActivityDkpSheetRow[];
+  accent: string;
 }
 
 export interface ActivityDkpSheetResponse {
-  connected: boolean;
   linkshellId: number;
-  linkshellName?: string | null;
-  openInSheetsUrl?: string | null;
-  error?: string | null;
-  tabs: ActivityDkpSheetTab[];
+  linkshellName: string;
+  totalMembers: number;
+  totalDkp: number;
+  biddable: number;
+  totalSpent: number;
+  members: ActivityDkpSheetMember[];
+  // Empty unless the linkshell has more than one DKP pool — the cue to render the sheet exactly
+  // as it did before pools existed.
+  pools: ActivityDkpSheetPool[];
+  poolTotals: number[];
 }
 
 // DKP audit "Add to a previous entry" mode: a posted attendance/window event the
@@ -1376,4 +1512,17 @@ export interface ActivityDkpAddCandidate {
   entryType?: string | null;
   primaryZone?: string | null;
   memberCount: number;
+}
+
+// An unclaimed PLACEHOLDER member (created by the DKP import, carrying a seeded
+// balance) whose character name matches the signed-in user — i.e. likely "them",
+// imported before they joined. Surfaced as a "Claim your DKP" prompt.
+export interface ActivityClaimCandidate {
+  placeholderAppUserId: string;
+  linkshellId: number;
+  linkshellName: string;
+  characterName: string;
+  currentDkp: number;
+  totalDkp: number;
+  totalSpent: number;
 }

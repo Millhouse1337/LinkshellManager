@@ -104,6 +104,14 @@
                         } @else {
                           <span class="tag">{{ auctionStatusLabel(auction) }}</span>
                         }
+                        <!-- Only set when the linkshell has more than one DKP pool, so a linkshell
+                             that hasn't split its DKP sees no chip at all. -->
+                        @if (auction.dkpPoolName) {
+                          <span class="tag accent"
+                            [title]="'Bids on this auction are paid from your ' + auction.dkpPoolName + ' DKP.'">
+                            {{ auction.dkpPoolName }} DKP
+                          </span>
+                        }
                       </div>
                       <div class="auction-header__meta muted">
                         <span>{{ auctionTimeWindowLabel(auction) }}</span>
@@ -362,8 +370,8 @@
                   <td class="num">{{ row.item.currentHighestBid ?? row.item.startingBidDkp ?? 0 }} DKP</td>
                   <td>
                     @if (row.item.currentHighestBidder) {
-                      @* Winner-only: only the person who won the item confirms
-                         receipt of their own loot. Other viewers see no action. *@
+                      <!-- Winner-only: only the person who won the item confirms
+                           receipt of their own loot. Other viewers see no action. -->
                       @if (isCurrentUserWinning(row.item)) {
                         @if ((row.item.status || 'Pending') === 'Pending' || (row.item.status || '') === 'Closed') {
                           <button

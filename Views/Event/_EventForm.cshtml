@@ -7,10 +7,11 @@
     // it's not offered as a manual create option. Keep it selectable only when editing
     // an existing HNM event so its type still displays and round-trips on save.
     var eventTypeOptions = new List<string> { "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
-    // HNM signup boards are managed in the Discord Activity (gated by HNM Outside Sign
-    // Up), so HNM is NOT offered as a manual create option on the web. Keep it selectable
-    // only when editing an existing HNM event so its type still displays and round-trips.
-    if (string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase)
+    // HNM signup boards are roster-only / no-DKP. Offer "HNM" as a create option when the
+    // linkshell has opted into HNM Outside Sign Up (parity with the Discord Activity). Always
+    // keep it selectable when editing an existing HNM event so its type round-trips on save.
+    if ((Model.HnmOutsideSignupEnabled
+            || string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase))
         && !eventTypeOptions.Contains("HNM"))
     {
         eventTypeOptions.Insert(2, "HNM");
@@ -103,12 +104,16 @@
     </div>
     @{
         var monsterValue = Model.Event.AssignedMonsterName ?? string.Empty;
+        // Options already carry the combined "Base/Stronger" label, so a stored value matches
+        // an option directly; "Other" only when it isn't one of the known options.
         var monsterIsKnown = Model.MonsterOptions.Any(m => string.Equals(m, monsterValue, StringComparison.OrdinalIgnoreCase));
         var monsterPickerValue = string.IsNullOrEmpty(monsterValue) ? string.Empty : (monsterIsKnown ? monsterValue : "Other");
         var monsterOtherValue = monsterIsKnown ? string.Empty : monsterValue;
     }
-    @* HNM signup board: monster picker (revealed by the event-type JS when HNM is
-       chosen). Posts Event.AssignedMonsterName; "Other" reveals a free-text input. *@
+    @* HNM signup board: monster picker (revealed by the event-type JS when HNM is chosen).
+       Posts Event.AssignedMonsterName; "Other" reveals a free-text input. Merge pairs are
+       shown as one combined "Base/Stronger" entry; the Day input only changes what the
+       sign-up board prints (server-side), not this list. *@
     <div class="field" id="hnm-monster-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column">
         <label for="hnm-monster-picker">Monster</label>
         <div style="display:flex;gap:8px">
@@ -125,6 +130,16 @@
                    style="flex:1;min-width:0;@(monsterPickerValue == "Other" ? string.Empty : "display:none")" />
         </div>
         <input type="hidden" id="hnm-monster-hidden" name="Event.AssignedMonsterName" value="@monsterValue" />
+    </div>
+    @* Day number (HNM only). Controls what the SIGN-UP BOARD prints for a merge pair:
+       days 1–3 show just the base monster; day 4+ (and no day) show the combined pair. *@
+    <div class="field" id="hnm-day-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column">
+        <label for="Event_DayNumber">Day</label>
+        <input class="form-control" type="number" min="1" step="1" id="Event_DayNumber"
+               name="Event.DayNumber" value="@(Model.Event.DayNumber?.ToString())" placeholder="e.g. 3" />
+        <span style="font-size:12px;color:var(--fg-3)">
+            On the sign-up board, days 1–3 show just the base monster (e.g. Adamantoise); day 4+ shows the combined pair (Adamantoise/Aspidochelone).
+        </span>
     </div>
     <div class="field" style="display:flex;flex-direction:column">
         <label for="Event_EventLocation">Location</label>
@@ -211,7 +226,7 @@
             <input class="form-control" type="number" min="0" max="168" step="1" name="RepeatLeadHours" id="RepeatLeadHours" value="@repeatLeadValue" />
         </div>
         <small id="hnm-repeat-other-note" style="font-size:11px;color:var(--fg-4);margin-top:6px;@(monsterIsOther ? string.Empty : "display:none")">
-            Repeat-on-ToD isn't available for a custom "Other" monster.
+            Enter the custom monster name above to enable this. Recurrence re-posts when a new ToD is logged under that exact name.
         </small>
     </div>
     <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
@@ -235,6 +250,7 @@
         var monsterPicker   = document.getElementById('hnm-monster-picker');
         var monsterOther    = document.getElementById('hnm-monster-other');
         var monsterHidden   = document.getElementById('hnm-monster-hidden');
+        var dayField        = document.getElementById('hnm-day-field');
         var repeatField     = document.getElementById('hnm-repeat-field');
         var repeatToggle    = document.getElementById('hnm-repeat-toggle');
         var leadField       = document.getElementById('hnm-lead-field');
@@ -279,15 +295,18 @@
                 if (monsterOther) monsterOther.style.display = 'none';
                 monsterHidden.value = monsterPicker.value || '';
             }
-            // Repeat-on-ToD needs an exact ToD match → disabled for the "Other" monster.
-            var other = isOtherMonster();
-            if (repeatToggle) { repeatToggle.disabled = other; if (other) repeatToggle.checked = false; }
-            setShown(repeatOtherNote, other);
+            // Repeat-on-ToD keys on an exact (case-insensitive) ToD name match. For a
+            // custom "Other" monster that's the typed name, so it's allowed once a
+            // non-empty name is entered; disabled (with a prompt) while it's blank.
+            var needName = isOtherMonster() && (!monsterOther || monsterOther.value.trim() === '');
+            if (repeatToggle) { repeatToggle.disabled = needName; if (needName) repeatToggle.checked = false; }
+            setShown(repeatOtherNote, needName);
             syncRepeatLead();
         }
 
         function applyHnm(isHnm) {
             setShown(monsterField, isHnm);
+            setShown(dayField, isHnm);
             setShown(repeatField, isHnm);
             // These are hidden for HNM (the server nulls/zeros them server-side).
             setShown(endField, !isHnm);
@@ -315,7 +334,7 @@
         picker.addEventListener('change', sync);
         other.addEventListener('input', function () { hidden.value = other.value; applyHnm(isHnm()); filterPartySetups(); });
         if (monsterPicker) monsterPicker.addEventListener('change', syncMonster);
-        if (monsterOther) monsterOther.addEventListener('input', function () { if (monsterHidden && isOtherMonster()) monsterHidden.value = monsterOther.value; });
+        if (monsterOther) monsterOther.addEventListener('input', function () { if (monsterHidden && isOtherMonster()) monsterHidden.value = monsterOther.value; syncMonster(); });
         if (repeatToggle) repeatToggle.addEventListener('change', syncRepeatLead);
 
         sync();
@@ -481,6 +500,12 @@ else
             Do Not Include
         </label>
     </div>
+    @* Opens the inline "New Party Setup" modal (rendered outside this form by the
+       host page); on save it auto-selects the fresh setup in the dropdown below. *@
+    @if (Model.PartySetupEditor is not null)
+    {
+        <button type="button" class="btn sm ps-open-create-modal">+ Create New Party Setup</button>
+    }
 </div>
 
 <div id="party-setup-row" class="field" style="display:flex;flex-direction:column;max-width:520px">

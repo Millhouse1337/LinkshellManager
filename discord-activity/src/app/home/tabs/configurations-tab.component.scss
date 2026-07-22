@@ -9,8 +9,8 @@
   padding: 16px;
 }
 .addon-modal-dialog {
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   width: 100%;
   max-width: 420px;
@@ -55,11 +55,11 @@
 .addon-modal-field select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .addon-modal-field select option {
-  background: var(--surface, #1f1f23);
-  color: var(--fg, #e4e4e7);
+  background: var(--surface);
+  color: var(--fg);
 }
 
 .addon-modal-code { text-align: center; padding: 8px 0; }
@@ -69,10 +69,10 @@
   letter-spacing: 4px;
   font-weight: 700;
 }
-.addon-modal-error { color: #e05a5a; font-size: 12px; }
+.addon-modal-error { color: var(--danger); font-size: 12px; }
 .addon-modal-footer {
   display: flex; justify-content: flex-end; gap: 8px;
-  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-top: 1px solid var(--border);
   padding-top: 12px;
 }
 
@@ -80,7 +80,9 @@
 // Two-column "Server | Lock access" layout for the Discord server card.
 .discord-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(290px, 1fr);
+  // Three panels now (Set up the bot / Server / Lock). Auto-fit so they sit side by side
+  // on a wide card and stack gracefully as it narrows.
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
 .discord-inner {
@@ -121,27 +123,33 @@
 .pill.is-success { background: var(--success-weak); color: var(--success); }
 .pill.is-muted   { background: rgba(255, 255, 255, 0.06); color: var(--fg-2); }
 
-// One channel route: main controls + an optional event-type side panel.
+// One channel route: left column (channel + post types) | right column
+// (event types + HNM monsters), split by a divider. The per-route save status
+// floats in the card's top-right corner.
+// A single centered column: Channel → Choose What to Post → Event types → HNM monsters,
+// each stacked vertically and centered.
 .route-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
-  gap: 18px;
-  align-items: start;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 20px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 10px;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 12px;
 }
-.route-card.is-compact { grid-template-columns: minmax(0, 1fr); }
 // A persisted, unedited route gets a slight green tint so it's obvious what's saved.
 .route-card.is-saved {
   border-color: rgba(74, 222, 128, 0.35);
   background: rgba(74, 222, 128, 0.045);
 }
 
-.route-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.route-top  { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+// Channel + "Choose What to Post" stack, centered.
+.route-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; width: 100%; align-items: center; }
+.route-top  { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; justify-content: center; }
 
 .route-field {
   display: flex;
@@ -151,33 +159,71 @@
   > span { font-size: 12px; color: var(--fg-2); font-weight: 600; }
   select, input { width: 100%; }
 }
-.route-field.grow { flex: 1 1 200px; }
-.route-remove { margin-bottom: 2px; white-space: nowrap; }
+.route-field.grow { flex: 1 1 280px; max-width: 360px; }
+// Remove (and Collapse) sit bottom-right, below all the settings.
+.route-remove-row { width: 100%; display: flex; justify-content: flex-end; gap: 8px; }
 
-.post-types { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; }
-// Per-route save button spans the full card grid and pins to the far right,
-// below both the post-types row and the event-types panel.
-.route-save { grid-column: 1 / -1; justify-self: end; }
-.route-save.is-saved {
-  color: var(--success);
-  border-color: rgba(74, 222, 128, 0.4);
-  background: var(--success-weak);
-  cursor: default;
-}
-.check {
-  display: inline-flex;
+// A saved route collapses to a compact row: just its channel name (read-only) + Expand.
+.route-card.is-collapsed { padding: 12px 16px; }
+.route-collapsed { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; }
+.route-collapsed-name { font-weight: 600; color: var(--fg-1); }
+.route-collapsed .route-expand { margin-left: auto; }
+
+// Event types + monster groups stack below, centered, divided by a rule.
+.route-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  width: 100%;
   align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--fg-1);
-  cursor: pointer;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
 }
 
-// Custom checkbox, scoped to these cards so app toggles/checkboxes elsewhere
-// are untouched.
-.check input[type="checkbox"],
-.event-filter input[type="checkbox"] {
+.route-group { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.route-group h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-1);
+  span { color: var(--fg-3); font-weight: 500; font-style: italic; }
+}
+
+// Chip grids — post types, event types, monsters. Centered rows that wrap.
+.chip-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+// A selectable chip: a bordered box with a custom checkbox that highlights when
+// checked. :has() drives the highlight so it works for both ngModel- and
+// [checked]-bound inputs without per-chip class bindings.
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-1);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+
+  &:hover { border-color: var(--border-hot); }
+  span { line-height: 1.2; }
+
+  &:has(input[type="checkbox"]:checked) {
+    color: var(--fg);
+    background: linear-gradient(180deg, var(--accent-glow), rgba(255, 255, 255, 0.02));
+    border-color: var(--accent);
+  }
+}
+
+// Custom checkbox inside a chip, scoped to these cards so app toggles/checkboxes
+// elsewhere are untouched.
+.chip input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 17px;
@@ -201,36 +247,33 @@
     inset: 0;
     display: grid;
     place-items: center;
-    color: #0a0a0b;
+    color: var(--bg);
     font-size: 12px;
     font-weight: 800;
   }
 }
 
-.event-filter {
-  border-left: 1px solid var(--border);
-  padding-left: 18px;
-
-  h4 {
-    margin: 0 0 10px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--fg-1);
-    span { color: var(--fg-3); font-weight: 500; font-style: italic; }
-  }
+// Per-route save / saved status pinned to the card's top-right corner.
+.route-save {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 1;
+  white-space: nowrap;
 }
-.event-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-  gap: 8px 14px;
+// Collapse pinned to the card's top-right (mirrors route-save on the left).
+.route-collapse-top {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 1;
+  white-space: nowrap;
 }
-// Wider columns + more gap for long names (the HNM monster picker). Each label can
-// wrap within its own cell so two-word monsters don't collide with their neighbours.
-.event-grid--wide {
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px 22px;
-
-  .check { align-items: flex-start; }
+.route-save.is-saved {
+  color: var(--success);
+  border-color: rgba(74, 222, 128, 0.4);
+  background: var(--success-weak);
+  cursor: default;
 }
 
 .routes-footer {
@@ -247,11 +290,262 @@
 
 @media (max-width: 760px) {
   .discord-grid { grid-template-columns: 1fr; }
-  .route-card, .route-card.is-compact { grid-template-columns: 1fr; }
-  .event-filter {
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding-left: 0;
-    padding-top: 14px;
-  }
+}
+
+/* ---- DKP pools card ---------------------------------------------------------
+   A pool is a wallet; each event type earns into exactly one of them. The
+   one-<select>-per-event-type layout is load-bearing: it makes double-assigning
+   an event type unrepresentable, rather than something we validate after. */
+.pool-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-1);
+}
+
+.pool-row,
+.pool-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+// Column headers over the group rows — same flex columns, no box.
+.pool-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.pool-assign-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.pool-preview {
+  padding: 10px 12px;
+  background: var(--accent-weak);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-warning {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+/* "About the addon" section (Game Addon tab) — landing-page layout on app tokens. */
+.addon-about {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.addon-hero {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  padding: 24px 28px;
+  border: 1px solid var(--border-2);
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--surface-2), var(--bg-elev));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.addon-hero__mark {
+  display: grid;
+  place-items: center;
+  width: 100px;
+  aspect-ratio: 1;
+  border: 1px solid var(--border-hot);
+  border-radius: 24px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--fg);
+  background:
+    radial-gradient(circle, var(--accent-glow), transparent 62%),
+    var(--surface-3);
+  box-shadow: inset 0 0 30px var(--accent-glow), 0 0 26px var(--accent-glow);
+}
+.addon-hero__eyebrow {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.addon-hero__title {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 4vw, 42px);
+  line-height: 1.05;
+  font-weight: 700;
+}
+.addon-hero__lede {
+  max-width: 720px;
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.addon-hero__badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  color: var(--fg-2);
+  letter-spacing: 0.14em;
+}
+.addon-hero__badge span { font-size: 11px; }
+.addon-hero__badge strong { font-size: 24px; font-weight: 700; color: var(--fg); }
+
+.addon-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.08fr 1.12fr;
+  gap: 16px;
+}
+.addon-panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--surface-2), var(--bg-elev));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.addon-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.addon-panel__head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+.addon-panel__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-hot);
+  border-radius: 11px;
+  font-size: 15px;
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.addon-featurelist, .addon-cmds { display: grid; gap: 12px; }
+
+.addon-feature {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.addon-feature__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 20px;
+  background: var(--accent-weak);
+}
+.addon-feature h4, .addon-steps h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.addon-feature p, .addon-steps p, .addon-cmd p {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.addon-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.addon-steps li {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.addon-steps__num {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-hot);
+  border-radius: 50%;
+  font-weight: 700;
+  color: var(--fg);
+  background: var(--accent-weak);
+}
+
+.addon-about code, .addon-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--accent-hover);
+  background: var(--bg);
+}
+.addon-chip { color: var(--accent); }
+
+.addon-cmd {
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.addon-cmd code { margin-bottom: 8px; font-size: 12.5px; }
+
+@media (max-width: 1100px) {
+  .addon-grid { grid-template-columns: 1fr 1fr; }
+  .addon-grid .addon-panel:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .addon-hero { grid-template-columns: 80px 1fr; padding: 18px; }
+  .addon-hero__badge { display: none; }
+  .addon-grid { grid-template-columns: 1fr; }
+  .addon-grid .addon-panel:last-child { grid-column: auto; }
 }

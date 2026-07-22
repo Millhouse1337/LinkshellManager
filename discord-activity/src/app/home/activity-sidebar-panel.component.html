@@ -228,7 +228,6 @@
           <!-- Crafts: same number-per-entry design as jobs, centered. -->
           <div style="text-align:center;margin:22px 0 8px">
             <div style="font-weight:600;letter-spacing:.04em">CRAFTS</div>
-            <span style="font-size:12px;opacity:.7">Level of each craft (0–{{ profileCraftMaxLevel }}).</span>
           </div>
           <div style="max-width:540px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:center;gap:8px">
             @for (craft of profileCraftOptions; track craft; let i = $index) {
@@ -462,11 +461,12 @@
   }
 
   @if (showSection('dkp')) {
-  <article class="panel" aria-labelledby="dkp-history-heading">
-    <div class="panel__header">
-      <div>
+  <article class="panel dkph" aria-labelledby="dkp-history-heading">
+    <header class="dkph-head">
+      <div class="dkph-head__titles">
         <p class="eyebrow eyebrow--small">Ledger</p>
         <h2 id="dkp-history-heading">DKP History</h2>
+        <p class="dkph-sub">View DKP transactions and balance history.</p>
       </div>
       <div class="button-cluster">
         <span class="pill">{{ dkpHistory()?.entries?.length ?? 0 }}</span>
@@ -475,7 +475,7 @@
             (click)="openDkpAudit()">Add audit</button>
         }
       </div>
-    </div>
+    </header>
 
     @if (!selectedLinkshell()) {
       <p class="notice">Select or join a linkshell to inspect per-member DKP History.</p>
@@ -510,31 +510,72 @@
           </label>
         </div>
 
-        <div class="summary-card dkp-summary-card">
-          <strong>{{ dkpHistory.selectedMemberName || 'Unknown member' }}</strong>
-          <p>Current DKP: {{ dkpHistory.currentBalance }}</p>
-          @if (dkpHistory.selectedPendingLootSpend && dkpHistory.selectedPendingLootSpend > 0) {
-            <p class="muted" title="Spent on loot in a live event, not yet committed — blocked from biddable DKP until the event ends">
-              − {{ dkpHistory.selectedPendingLootSpend }} pending loot (live) · {{ dkpHistory.currentBalance - dkpHistory.selectedPendingLootSpend }} biddable
-            </p>
-          }
-          @if (dkpHistory.linkshellName) {
-            <p class="muted">{{ dkpHistory.linkshellName }}</p>
-          }
-        </div>
+        <section class="dkph-card dkph-summary">
+          <div class="dkph-sumblock">
+            <div class="dkph-ico dkph-ico--blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <div>
+              <span class="dkph-label">Character</span>
+              <h3>{{ dkpHistory.selectedMemberName || 'Unknown member' }}</h3>
+              <p class="dkph-muted">Character name</p>
+            </div>
+          </div>
+
+          <div class="dkph-divider"></div>
+
+          <div class="dkph-sumblock">
+            <div class="dkph-ico dkph-ico--purple">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div>
+              <span class="dkph-label">Linkshell</span>
+              <h3>{{ dkpHistory.linkshellName || '—' }}</h3>
+              <p class="dkph-muted">DKP pool</p>
+            </div>
+          </div>
+
+          <div class="dkph-divider"></div>
+
+          <div class="dkph-sumblock dkph-sumblock--total">
+            <div class="dkph-ico dkph-ico--blue">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg>
+            </div>
+            <div>
+              <span class="dkph-label">Current DKP</span>
+              <strong class="dkph-big">{{ dkpHistory.currentBalance }}</strong>
+              @if (dkpHistory.selectedPendingLootSpend && dkpHistory.selectedPendingLootSpend > 0) {
+                <p class="dkph-muted" title="Spent on loot in a live event, not yet committed — blocked from biddable DKP until the event ends">
+                  − {{ dkpHistory.selectedPendingLootSpend }} pending loot (live) · {{ dkpHistory.currentBalance - dkpHistory.selectedPendingLootSpend }} biddable
+                </p>
+              } @else {
+                <p class="dkph-muted">Available to spend</p>
+              }
+            </div>
+          </div>
+        </section>
 
         @if (dkpEarnedByEventType().length > 0) {
-          <div class="summary-card dkp-summary-card">
-            <strong>DKP Earned</strong>
-            <ul class="dkp-event-type-breakdown">
-              @for (row of dkpEarnedByEventType(); track row.eventType) {
-                <li>
-                  <span>{{ row.eventType }}</span>
-                  <span class="num">{{ row.amount >= 0 ? '+' : '' }}{{ row.amount }}</span>
-                </li>
-              }
-            </ul>
-          </div>
+          <section class="dkph-card dkph-earned">
+            <div class="dkph-earned__left">
+              <div class="dkph-ico dkph-ico--green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+              </div>
+              <div>
+                <h3>DKP Earned</h3>
+                <p class="dkph-muted">Total DKP earned from events</p>
+                <div class="dkph-earned__chips">
+                  @for (row of dkpEarnedByEventType(); track row.eventType) {
+                    <span class="dkph-chip">{{ row.eventType }} <em>{{ row.amount >= 0 ? '+' : '' }}{{ row.amount }}</em></span>
+                  }
+                </div>
+              </div>
+            </div>
+            <div class="dkph-earned__total">
+              <strong>{{ dkpTotalEarned() >= 0 ? '+' : '' }}{{ dkpTotalEarned() }}</strong>
+              <span>All time</span>
+            </div>
+          </section>
         }
       }
 
@@ -651,78 +692,91 @@
       }
 
       @if (dkpHistory.entries.length > 0) {
-        <div class="invite-section">
-          <label>
-            <span>Search ledger</span>
-            <input type="text" [(ngModel)]="dkpSearchTerm" name="dkpSearchTerm"
-              (ngModelChange)="dkpPage.set(0)"
-              placeholder="Search by event, item, details, or type" />
-          </label>
-        </div>
-
-        @if (filteredDkpEntries().length > 0) {
-          <div class="table-wrap">
-            <table class="data-table dkp-history-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Date</th>
-                  <th>Event / Context</th>
-                  <th>Item</th>
-                  <th>Details</th>
-                  <th class="num">Amount</th>
-                  <th class="num">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (entry of pagedDkpEntries(); track entry.id) {
-                  <tr>
-                    <td><strong>{{ dkpEntryTypeLabel(entry.entryType) }}</strong></td>
-                    <td>{{ activity.formatDateTime(entry.occurredAt) || '—' }}</td>
-                    <td>
-                      @if (entry.eventName) {
-                        {{ entry.eventName }}
-                        @if (entry.eventType || entry.eventLocation) {
-                          <span class="muted"> · {{ entry.eventType || 'Event' }} · {{ entry.eventLocation || 'Unknown location' }}</span>
-                        }
-                      } @else {
-                        <span class="muted">—</span>
-                      }
-                    </td>
-                    <td>{{ entry.itemName || '—' }}</td>
-                    <td class="dkp-history-table__details">
-                      {{ entry.details || '—' }}
-                      @if (entry.editReason) {
-                        <div class="muted" style="font-size:11px;font-style:italic;margin-top:2px">Reason: {{ entry.editReason }}</div>
-                      }
-                    </td>
-                    <td class="num" [class.text-success]="entry.amount > 0" [class.text-danger]="entry.amount < 0">
-                      {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }}
-                    </td>
-                    <td class="num">{{ entry.runningBalance }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+        <section class="dkph-card dkph-tx">
+          <div class="dkph-tx__top">
+            <div class="dkph-tx__title">
+              <div class="dkph-ico dkph-ico--blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
+              </div>
+              <div>
+                <h3>Transaction History</h3>
+                <p class="dkph-muted">Recent DKP transactions for this member</p>
+              </div>
+            </div>
+            <div class="dkph-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" [(ngModel)]="dkpSearchTerm" name="dkpSearchTerm"
+                (ngModelChange)="dkpPage.set(0)"
+                placeholder="Search by event, item, details, or type" />
+            </div>
           </div>
 
-          @if (dkpPageCount() > 1) {
-            <div class="table-paginator">
-              <button type="button" class="btn sm"
-                [disabled]="dkpPage() === 0"
-                (click)="dkpPrevPage()">Prev</button>
-              <span class="muted" style="font-size:12px">
-                Page {{ dkpPage() + 1 }} of {{ dkpPageCount() }}
-                &middot; {{ filteredDkpEntries().length }} entr{{ filteredDkpEntries().length === 1 ? 'y' : 'ies' }}
-              </span>
-              <button type="button" class="btn sm"
-                [disabled]="dkpPage() + 1 >= dkpPageCount()"
-                (click)="dkpNextPage()">Next</button>
+          @if (filteredDkpEntries().length > 0) {
+            <div class="dkph-tablewrap">
+              <table class="dkph-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Event / Context</th>
+                    <th>Type</th>
+                    <th>Details</th>
+                    <th class="num">Amount</th>
+                    <th class="num">Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (entry of pagedDkpEntries(); track entry.id) {
+                    <tr>
+                      <td><strong>{{ activity.formatDateTime(entry.occurredAt) || '—' }}</strong></td>
+                      <td>
+                        @if (entry.eventName) {
+                          <strong>{{ entry.eventName }}</strong>
+                          @if (entry.eventType || entry.eventLocation) {
+                            <span>{{ entry.eventType || 'Event' }} · {{ entry.eventLocation || 'Unknown location' }}</span>
+                          }
+                        } @else {
+                          <span>—</span>
+                        }
+                      </td>
+                      <td>
+                        <span class="dkph-badge"
+                          [class.dkph-badge--earned]="entry.amount > 0"
+                          [class.dkph-badge--spent]="entry.amount < 0"
+                          [class.dkph-badge--neutral]="entry.amount === 0">
+                          {{ dkpEntryTypeLabel(entry.entryType) }}
+                        </span>
+                      </td>
+                      <td class="dkph-details">
+                        {{ entry.details || '—' }}
+                        @if (entry.itemName) { <span class="dkph-pill dkph-pill--item">{{ entry.itemName }}</span> }
+                        @if (entry.editReason) { <span class="dkph-pill" [title]="entry.editReason">Edited</span> }
+                      </td>
+                      <td class="num dkph-amount" [class.dkph-pos]="entry.amount > 0" [class.dkph-neg]="entry.amount < 0">
+                        {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }}
+                      </td>
+                      <td class="num">{{ entry.runningBalance }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
             </div>
+
+            <div class="dkph-tablefoot">
+              <span>Showing {{ dkpShowingRange().start }} to {{ dkpShowingRange().end }} of {{ dkpShowingRange().total }} transaction{{ dkpShowingRange().total === 1 ? '' : 's' }}</span>
+              @if (dkpPageCount() > 1) {
+                <div class="dkph-pagination">
+                  <button type="button" [disabled]="dkpPage() === 0" (click)="dkpPrevPage()" aria-label="Previous page">‹</button>
+                  @for (p of dkpPageNumbers(); track p) {
+                    <button type="button" [class.active]="p === dkpPage()" (click)="goToDkpPage(p)">{{ p + 1 }}</button>
+                  }
+                  <button type="button" [disabled]="dkpPage() + 1 >= dkpPageCount()" (click)="dkpNextPage()" aria-label="Next page">›</button>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="notice">No DKP entries match your search.</p>
           }
-        } @else {
-          <p class="notice">No DKP entries match your search.</p>
-        }
+        </section>
       } @else {
         <p class="notice">No DKP ledger entries exist for this member yet.</p>
       }

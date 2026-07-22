@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AutoRefreshService } from '../discord/auto-refresh.service';
+import { ClaimService } from '../discord/claim.service';
+import type { ActivityClaimCandidate } from '../discord/discord-activity.types';
 import { LiveUpdateService } from '../discord/live-update.service';
 import {
   ActivityLinkshellSettings,
@@ -43,6 +45,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
 })
 export class ActivityHomeComponent {
   protected readonly activity = inject(DiscordActivityService);
+  protected readonly claim = inject(ClaimService);
   private readonly autoRefresh = inject(AutoRefreshService);
   private readonly liveUpdate = inject(LiveUpdateService);
   protected readonly activeTab = signal<TabName>('dashboard');
@@ -125,6 +128,15 @@ export class ActivityHomeComponent {
       const overview = this.activity.overview();
       if (overview?.appUser) {
         void this.activity.detectAndSaveTimeZoneIfUnset();
+      }
+    });
+
+    // Once signed in, look for imported DKP waiting to be claimed (a placeholder
+    // matching this user's character name). The service guards against re-fetch.
+    effect(() => {
+      const overview = this.activity.overview();
+      if (overview?.appUser) {
+        void this.claim.load();
       }
     });
 
@@ -270,6 +282,32 @@ export class ActivityHomeComponent {
     return this.primaryLinkshell()?.memberCount ?? 0;
   }
 
+  // Every linkshell the member belongs to — drives the top-bar switcher.
+  protected switchableLinkshells() {
+    return this.activity.overview()?.linkshells ?? [];
+  }
+
+  // Switch the active (primary) linkshell from the top bar. setPrimaryLinkshell
+  // persists it + refreshes the overview, so every tab follows the new primary.
+  protected onSwitchLinkshell(value: string): void {
+    const id = Number(value);
+    if (!id || id === this.primaryLinkshell()?.id) { return; }
+    void this.activity.setPrimaryLinkshell(id);
+  }
+
+  // "Claim your DKP" prompt: imported placeholders that match this user's name.
+  protected claimCandidates(): ActivityClaimCandidate[] {
+    return this.claim.dismissed() ? [] : this.claim.candidates();
+  }
+
+  protected onClaim(candidate: ActivityClaimCandidate): void {
+    void this.claim.claim(candidate);
+  }
+
+  protected dismissClaim(): void {
+    this.claim.dismiss();
+  }
+
   protected appDisplayName(): string {
     const overviewUser = this.activity.overview()?.appUser;
     const localUser = this.activity.localUser();
@@ -314,6 +352,10 @@ export class ActivityHomeComponent {
   }
 
   protected isFeatureEnabled(key: keyof ActivityLinkshellSettings): boolean {
+    // Charts and Missions aren't built yet — force them off everywhere (nav + panels) until they
+    // ship, regardless of the stored flag. The Feature toggles UI locks them off + "(TBA)" to
+    // match. Remove this guard when the features land.
+    if (key === 'enableEndgame' || key === 'enableMissions') { return false; }
     const settings = this.primaryLinkshellSettings();
     if (!settings) return true;
     const value = settings[key];

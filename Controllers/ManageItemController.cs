@@ -45,6 +45,9 @@ public class ManageItemController : Controller
                     Notes = i.Notes,
                     CreatedByCharacterName = i.CreatedByCharacterName,
                     CreatedAt = i.CreatedAt,
+                    IsSold = i.IsSold,
+                    SoldPrice = i.SoldPrice,
+                    SoldByCharacterName = i.SoldByCharacterName,
                     CanManage = canManage
                 })
                 .ToListAsync();
@@ -192,6 +195,83 @@ public class ManageItemController : Controller
 
         _context.Items.Remove(item);
         await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Mark an item sold for a price → record the income in the treasury. The item
+    // stays in the list flagged Sold (a record); the linked RevenueEntry is what
+    // updates Finances. Reversible via Unsell.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkSold(int id, long salePrice)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var item = await _context.Items.FirstOrDefaultAsync(i => i.Id == id);
+        if (item is null) return NotFound();
+        if (!await CanManageAsync(user.Id, item.LinkshellId)) return Forbid();
+        if (item.IsSold) return RedirectToAction(nameof(Index));
+
+        if (salePrice < 0) salePrice = 0;
+
+        var membership = await _context.AppUserLinkshells
+            .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == item.LinkshellId);
+        var characterName = membership?.CharacterName ?? user.CharacterName;
+        var now = DateTime.UtcNow;
+
+        var entry = new RevenueEntry
+        {
+            LinkshellId = item.LinkshellId,
+            LinkshellName = item.LinkshellName,
+            EntryType = "Income",
+            Category = "Item Sale",
+            Value = salePrice,
+            Details = item.Quantity > 1 ? $"Sold: {item.ItemName} (x{item.Quantity})" : $"Sold: {item.ItemName}",
+            OccurredAt = now,
+            CreatedByAppUserId = user.Id,
+            CreatedByCharacterName = characterName,
+            CreatedAt = now
+        };
+        _context.RevenueEntries.Add(entry);
+        await _context.SaveChangesAsync();
+
+        item.IsSold = true;
+        item.SoldPrice = salePrice;
+        item.SoldAt = now;
+        item.SoldByCharacterName = characterName;
+        item.RevenueEntryId = entry.Id;
+        item.UpdatedAt = now;
+        await _context.SaveChangesAsync();
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Undo a sale: remove the linked income entry and clear the sold flags.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Unsell(int id)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var item = await _context.Items.FirstOrDefaultAsync(i => i.Id == id);
+        if (item is null) return NotFound();
+        if (!await CanManageAsync(user.Id, item.LinkshellId)) return Forbid();
+
+        if (item.RevenueEntryId.HasValue)
+        {
+            var entry = await _context.RevenueEntries.FirstOrDefaultAsync(e => e.Id == item.RevenueEntryId.Value);
+            if (entry is not null) _context.RevenueEntries.Remove(entry);
+        }
+        item.IsSold = false;
+        item.SoldPrice = null;
+        item.SoldAt = null;
+        item.SoldByCharacterName = null;
+        item.RevenueEntryId = null;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
         return RedirectToAction(nameof(Index));
     }
 

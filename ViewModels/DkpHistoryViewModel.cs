@@ -21,6 +21,34 @@ public class DkpHistoryViewModel
     public List<DkpHistoryLinkshellOptionViewModel> Linkshells { get; set; } = new();
     public List<DkpHistoryMemberOptionViewModel> Members { get; set; } = new();
     public List<DkpHistoryEntryViewModel> Entries { get; set; } = new();
+
+    // What the selected member has EARNED, broken down by the event type that earned it — the
+    // "15 Sky, 20 Sea, 5 Dynamis" view.
+    //
+    // These are LIFETIME EARNINGS (positive ledger amounts), NOT spendable balances: a pool balance
+    // is earned minus spent. They coincide only while nothing has been spent, which is exactly why
+    // they're labelled separately in the view — conflating them is the easy mistake here.
+    public List<DkpEarnedByEventTypeViewModel> EarnedByEventType { get; set; } = new();
+
+    // The selected member's SPENDABLE balance per pool. Empty when the linkshell has a single pool.
+    public List<DkpPoolBalanceViewModel> PoolBalances { get; set; } = new();
+    public bool HasMultiplePools => PoolBalances.Count > 1;
+}
+
+public class DkpEarnedByEventTypeViewModel
+{
+    public string EventType { get; set; } = string.Empty;
+    public double Earned { get; set; }
+    // The pool this event type currently earns into. Null when the linkshell has a single pool.
+    public string? PoolName { get; set; }
+}
+
+public class DkpPoolBalanceViewModel
+{
+    public int PoolId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Accent { get; set; } = "Neutral";
+    public double Balance { get; set; }
 }
 
 public class DkpHistoryLinkshellOptionViewModel
@@ -52,4 +80,7 @@ public class DkpHistoryEntryViewModel
     public string? ItemName { get; set; }
     public string? Details { get; set; }
     public string? EditReason { get; set; }
+
+    // The DKP pool this row landed in. Null when the linkshell has a single pool.
+    public string? DkpPoolName { get; set; }
 }

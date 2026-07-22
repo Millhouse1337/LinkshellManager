@@ -76,3 +76,118 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* ===== Rules / Announcements cards (dashboard) =====
+   Each card carries an accent class that sets --acc; the icon + tag + hover read it,
+   so a card's color theme follows its category. Mirrors the web lsm-theme.css rules. */
+.panel-tab .acc-blue   { --acc: var(--accent); }
+.panel-tab .acc-purple { --acc: var(--purple); }
+.panel-tab .acc-green  { --acc: var(--success); }
+.panel-tab .acc-gold   { --acc: var(--gold); }
+.panel-tab .acc-cyan   { --acc: var(--cyan); }
+.panel-tab .acc-orange { --acc: var(--warning); }
+
+/* The dashboard rules/announcements lists can get long — cap the height and scroll
+   the cards inside, so the section header + Create button stay put and the whole
+   dashboard doesn't stretch a mile down. */
+.panel-tab .rule-list {
+  display: grid;
+  gap: 10px;
+  max-height: 56vh;
+  overflow-y: auto;
+  /* The parent .card has padding:0 (so the header divider spans full width), so
+     inset the cards here to match the sibling .inline-form / .empty-state and
+     keep them off the section edges. The 14px right padding also clears the
+     scrollbar. */
+  padding: 12px 14px;
+}
+
+.panel-tab .rule-card {
+  display: grid;
+  grid-template-columns: 52px 1fr minmax(150px, auto);
+  align-items: start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(135deg, var(--surface), var(--bg-elev));
+  border: 1px solid var(--border);
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.panel-tab .rule-card:hover {
+  border-color: color-mix(in srgb, var(--acc) 55%, var(--border));
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.panel-tab .rule-ico {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 22px;
+  color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
+}
+
+.panel-tab .rule-content { min-width: 0; }
+.panel-tab .rule-content h3 { margin: 0 0 6px; color: var(--fg); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.panel-tab .rule-content p { margin: 4px 0; color: var(--fg-1); font-size: 13px; line-height: 1.5; }
+.panel-tab .rule-content ul { margin: 6px 0 0; padding-left: 18px; color: var(--fg-1); font-size: 13px; line-height: 1.55; }
+.panel-tab .rule-content ul li { margin: 2px 0; }
+.panel-tab .rule-content ul.cols { columns: 2; column-gap: 26px; }
+.panel-tab .rule-content ul.cols li { break-inside: avoid; }
+
+.panel-tab .rule-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+.panel-tab .rule-tag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--r-md);
+  color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acc) 28%, transparent);
+}
+.panel-tab .rule-by { color: var(--fg-3); font-size: 12px; }
+
+.panel-tab .rule-tools { display: flex; gap: 6px; }
+.panel-tab .rule-iconbtn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--fg-2);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.panel-tab .rule-iconbtn:hover:not(:disabled) { color: var(--fg); border-color: var(--border-hot); background: var(--surface-2); }
+.panel-tab .rule-iconbtn:disabled { opacity: .5; cursor: default; }
+.panel-tab .rule-iconbtn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 32%, transparent); }
+.panel-tab .rule-iconbtn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: var(--danger); }
+
+@media (max-width: 760px) {
+  .panel-tab .rule-card { grid-template-columns: 40px 1fr; }
+  .panel-tab .rule-meta {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: normal;
+    gap: 10px;
+  }
+  .panel-tab .rule-content ul.cols { columns: 1; }
+}

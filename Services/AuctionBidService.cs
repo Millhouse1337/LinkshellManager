@@ -25,6 +25,8 @@ public static class AuctionBidService
 
     public static async Task<AuctionBidResult> PlaceBidAsync(
         ApplicationDbContext db,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances,
         string appUserId,
         string characterNameFallback,
         int itemId,
@@ -94,11 +96,17 @@ public static class AuctionBidService
             return Fail($"Bid must be greater than the current high bid of {currentHigh}.");
         }
 
-        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
-            db, appUserId, item.Auction.LinkshellId, cancellationToken, excludeAuctionItemId: itemId);
+        // Bids are paid out of the DKP pool the officer picked when they created the auction, so
+        // that's the balance to validate against — not the bidder's grand total.
+        var map = await dkpPools.GetMapAsync(item.Auction.LinkshellId, cancellationToken);
+        var auctionPoolId = item.Auction.DkpPoolId ?? map.DefaultPoolId;
+        var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+            db, dkpPoolBalances, appUserId, item.Auction.LinkshellId, auctionPoolId,
+            cancellationToken, excludeAuctionItemId: itemId);
         if (bidAmount > availableDkp)
         {
-            return Fail($"Insufficient available DKP — you have {availableDkp:0.##} available "
+            var poolLabel = map.HasMultiplePools ? $" {map.NameFor(auctionPoolId)}" : string.Empty;
+            return Fail($"Insufficient available{poolLabel} DKP — you have {availableDkp:0.##} available "
                 + "(the rest is locked by bids you're currently winning).");
         }
 

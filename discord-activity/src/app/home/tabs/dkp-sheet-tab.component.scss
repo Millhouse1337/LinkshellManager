@@ -1,77 +1,131 @@
-.dkp-sheet-toolbar {
+.dkp-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dkp-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.dkp-stat-ico {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 22px;
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.dkp-stat p {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.dkp-stat h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+}
+
+.dkp-table-card { padding: 0; }
+
+.dkp-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.dkp-sheet-tabs {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+.dkp-search {
+  min-height: 34px;
+  min-width: 200px;
+  flex: 1 1 240px;
+  max-width: 360px;
 }
 
-.dkp-sheet-tabbtn {
-  background: var(--surface);
+.dkp-rowcount {
   color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 5px 10px;
-  font: inherit;
   font-size: 13px;
-  cursor: pointer;
-}
-
-.dkp-sheet-tabbtn.active {
-  color: var(--fg);
-  border-color: var(--accent);
-  background: var(--accent-weak);
-}
-
-.dkp-sheet-search {
-  min-height: 32px;
-  min-width: 160px;
+  font-weight: 600;
 }
 
 .table-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 60vh;
   padding: 0 12px 12px;
 }
 
-.dkp-sheet-table {
+.dkp-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  min-width: 720px;
 }
 
-.dkp-sheet-table th,
-.dkp-sheet-table td {
-  padding: 6px 10px;
+.dkp-table th,
+.dkp-table td {
+  padding: 9px 12px;
   border-top: 1px solid var(--border);
   white-space: nowrap;
-  text-align: center;
+  text-align: left;
 }
 
-.dkp-sheet-rownum {
+.dkp-table thead th {
   position: sticky;
-  left: 0;
+  top: 0;
+  z-index: 1;
+  border-top: 0;
+  // Opaque band + a divider line (collapsed borders drop under a sticky header).
   background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
   color: var(--muted);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.dkp-table th.num,
+.dkp-table td.num {
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-.dkp-sheet-table.is-main .dkp-sheet-col0 {
-  width: 42px;
-  max-width: 42px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.dkp-table tbody tr:hover {
+  background: var(--accent-weak);
 }
 
-.dkp-sheet-empty {
+.dkp-table td.muted {
+  color: var(--muted);
+}
+
+.dkp-empty {
   color: var(--muted);
   text-align: center;
   font-style: italic;
 }
+
+@media (max-width: 720px) {
+  .dkp-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* A pool balance can go negative when loot is charged to a pool that earns nothing (the classic
+   "HNM left behind in a pool with no earning event types" misconfiguration). Surfaced, never
+   clamped — clamping would break SUM(pools) == the member's balance. */
+.dkp-table td.dkp-negative { color: var(--danger); }

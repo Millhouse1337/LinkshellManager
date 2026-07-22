@@ -226,7 +226,7 @@ public sealed partial class ActivityDataController
         };
         _dbContext.Tods.Add(tod);
         _dbContext.TodLootDetails.Add(detail);
-        await AdjustTodLootDkpAsync(_dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
+        await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { success = true, lootDetailId = detail.Id });

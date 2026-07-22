@@ -99,6 +99,23 @@ public partial class AuctionController
                 .FirstOrDefaultAsync();
             ViewBag.AvailableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
                 _context, user.Id, selectedLinkshellId, HttpContext.RequestAborted);
+
+            // Each auction can draw from a different pool, so the viewer's available DKP is
+            // per-pool. Keyed by pool id; the view falls back to AvailableDkp above when the
+            // linkshell has a single pool (in which case the two are identical anyway).
+            var poolMap = await _dkpPools.GetMapAsync(selectedLinkshellId, HttpContext.RequestAborted);
+            var availableByPool = new Dictionary<int, double>();
+            var poolNames = new Dictionary<int, string>();
+            foreach (var pool in poolMap.Pools)
+            {
+                poolNames[pool.Id] = pool.Name;
+                availableByPool[pool.Id] = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+                    _context, _dkpPoolBalances, user.Id, selectedLinkshellId, pool.Id, HttpContext.RequestAborted);
+            }
+            ViewBag.AvailableDkpByPool = availableByPool;
+            ViewBag.DkpPoolNames = poolNames;
+            ViewBag.DefaultDkpPoolId = poolMap.DefaultPoolId;
+            ViewBag.HasMultipleDkpPools = poolMap.HasMultiplePools;
             ViewBag.AuctionsLocked = await _context.Linkshells
                 .Where(l => l.Id == selectedLinkshellId)
                 .Select(l => l.AuctionsLocked)
@@ -144,9 +161,16 @@ public partial class AuctionController
             return Forbid();
         }
 
+        // The pool is locked once anyone has bid: those bidders were validated against THIS pool's
+        // balance, so switching it under them would debit a wallet they never agreed to spend from.
+        var poolLocked = await _context.Bids
+            .AnyAsync(bid => bid.AuctionItem!.AuctionId == auction.Id, HttpContext.RequestAborted);
+
         var model = await BuildAuctionViewModelAsync(user, new AuctionViewModel
         {
             LinkshellId = auction.LinkshellId,
+            DkpPoolId = auction.DkpPoolId,
+            DkpPoolLocked = poolLocked,
             Auction = new Auction
             {
                 Id = auction.Id,

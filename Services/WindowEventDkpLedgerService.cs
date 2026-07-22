@@ -12,9 +12,18 @@ public sealed class WindowEventDkpLedgerService
     private readonly ApplicationDbContext _db;
     private readonly ILogger<WindowEventDkpLedgerService> _logger;
 
-    public WindowEventDkpLedgerService(ApplicationDbContext db, ILogger<WindowEventDkpLedgerService> logger)
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+
+    public WindowEventDkpLedgerService(
+        ApplicationDbContext db,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
+        ILogger<WindowEventDkpLedgerService> logger)
     {
         _db = db;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
         _logger = logger;
     }
 
@@ -111,13 +120,6 @@ public sealed class WindowEventDkpLedgerService
             return 0;
         }
 
-        var nextSequenceByAppUserId = await _db.DkpLedgerEntries
-            .Where(entry => entry.LinkshellId == windowEvent.LinkshellId &&
-                            entry.AppUserId != null &&
-                            candidateAppUserIds.Contains(entry.AppUserId))
-            .GroupBy(entry => entry.AppUserId!)
-            .Select(group => new { AppUserId = group.Key, NextSequence = group.Max(entry => entry.Sequence) + 1 })
-            .ToDictionaryAsync(item => item.AppUserId, item => item.NextSequence, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
         var defaultAmount = windowEvent.DkpAmount.Value;
         var overridesByName = windowEvent.MemberDkpOverrides
@@ -131,13 +133,15 @@ public sealed class WindowEventDkpLedgerService
                 ? v
                 : defaultAmount;
 
-        var ledgerEntries = new List<DkpLedgerEntry>();
+        // A window event's entry type ("Kings Camp", "Kill", …) is written straight into the
+        // ledger's EventType column so it resolves to a pool, but those camp tags aren't assignable
+        // on the DKP grouping card — they fall through to the default pool like any unmapped type.
+        var windowEventPool = DkpPoolRef.Derived(windowEvent.EntryType);
+
+        var written = 0;
         foreach (var item in candidates)
         {
             var membership = item.Membership!;
-            var appUserId = membership.AppUserId!;
-            var sequence = nextSequenceByAppUserId.GetValueOrDefault(appUserId, 1);
-            nextSequenceByAppUserId[appUserId] = sequence + 1;
             int? attInputRowNumber = null;
             if (firstAttInputMemberRowNumber.HasValue)
             {
@@ -149,36 +153,33 @@ public sealed class WindowEventDkpLedgerService
                 }
             }
 
-            var amount = AmountForCharacter(item.Entry.CharacterName);
-            membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + amount;
-            ledgerEntries.Add(new DkpLedgerEntry
-            {
-                AppUserId = appUserId,
-                LinkshellId = windowEvent.LinkshellId,
-                EntryType = "SnapshotEarned",
-                Amount = amount,
-                Sequence = sequence,
-                OccurredAt = item.Snapshot.CapturedAtUtc,
-                CharacterName = membership.CharacterName,
-                EventName = string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
-                EventType = windowEvent.EntryType,
-                EventLocation = item.Entry.Zone,
-                EventStartTime = windowEvent.FirstCapturedAtUtc,
-                EventEndTime = windowEvent.LastCapturedAtUtc,
-                Details = $"DKP earned from posted snapshot Window Event #{windowEvent.Id}.",
-                SourceWindowEventId = windowEvent.Id,
-                AttInputRowNumber = attInputRowNumber
-            });
+            await _dkpLedger.AppendAsync(
+                membership,
+                "SnapshotEarned",
+                AmountForCharacter(item.Entry.CharacterName),
+                item.Snapshot.CapturedAtUtc,
+                windowEventPool,
+                new DkpEntryContext(
+                    CharacterName: membership.CharacterName,
+                    EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
+                    EventType: windowEvent.EntryType,
+                    EventLocation: item.Entry.Zone,
+                    EventStartTime: windowEvent.FirstCapturedAtUtc,
+                    EventEndTime: windowEvent.LastCapturedAtUtc,
+                    Details: $"DKP earned from posted snapshot Window Event #{windowEvent.Id}.",
+                    SourceWindowEventId: windowEvent.Id,
+                    AttInputRowNumber: attInputRowNumber),
+                cancellationToken);
+            written++;
         }
 
-        await _db.DkpLedgerEntries.AddRangeAsync(ledgerEntries, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Window Event ledger materialized: event {WindowEventId} -> {Count} DKP rows.",
             windowEvent.Id,
-            ledgerEntries.Count);
-        return ledgerEntries.Count;
+            written);
+        return written;
     }
 
     // Reconciles the DKP of an ALREADY-posted window event after its amount /
@@ -235,19 +236,22 @@ public sealed class WindowEventDkpLedgerService
             .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
+        // The edit may have changed the entry type, which changes which pool these rows belong to.
+        var newPoolId = await _dkpPools.ResolveAsync(windowEvent.LinkshellId, newEntryType, cancellationToken);
+
         foreach (var entry in ledgerEntries)
         {
             var newAmountForEntry = AmountForCharacter(entry.CharacterName);
-            var oldAmount = entry.Amount;
-            if (Math.Abs(oldAmount - newAmountForEntry) > 0.0001 &&
-                !string.IsNullOrWhiteSpace(entry.AppUserId) &&
-                membershipByAppUserId.TryGetValue(entry.AppUserId, out var membership))
+            AppUserLinkshell? membership = null;
+            if (!string.IsNullOrWhiteSpace(entry.AppUserId))
             {
-                var delta = newAmountForEntry - oldAmount;
-                membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + delta;
+                membershipByAppUserId.TryGetValue(entry.AppUserId, out membership);
             }
-            entry.Amount = newAmountForEntry;
+
+            // Amend moves the balance by (new - old), so a no-op amount is genuinely a no-op.
+            _dkpLedger.Amend(entry, newAmountForEntry, newDetails: null, membership);
             entry.EventType = newEntryType;
+            _dkpLedger.Repoint(entry, newPoolId);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

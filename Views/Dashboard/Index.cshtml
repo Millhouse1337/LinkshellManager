@@ -33,6 +33,11 @@
     }
 }
 
+@if (!string.IsNullOrEmpty(Model.BannerUrl))
+{
+    <img class="lsm-dash-banner fade d1" src="@Model.BannerUrl" alt="Linkshell banner" />
+}
+
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Dashboard</h1>

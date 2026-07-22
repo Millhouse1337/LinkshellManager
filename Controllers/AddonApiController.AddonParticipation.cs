@@ -907,11 +907,16 @@ public sealed partial class AddonApiController
         // already returned above.
         if (lootStructure == "Dkp" && winnerMembership.AppUserId is { } winnerUserId)
         {
-            var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
-                _dbContext, winnerUserId, token.LinkshellId, cancellationToken);
+            // ToD loot is paid from whichever pool "HNM" maps to — the same default the ToD loot
+            // form uses — so the affordability check has to look at that wallet, not the total.
+            var todPoolMap = await _dkpPools.GetMapAsync(token.LinkshellId, cancellationToken);
+            var todPoolId = todPoolMap.Resolve("HNM");
+            var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+                _dbContext, _dkpPoolBalances, winnerUserId, token.LinkshellId, todPoolId, cancellationToken);
             if (request.WinningDkpSpent.Value > availableDkp)
             {
-                return BadRequest(new { error = $"{rosterMatch} only has {availableDkp:0.##} available DKP (the rest is locked by active auction bids)." });
+                var poolLabel = todPoolMap.HasMultiplePools ? $" {todPoolMap.NameFor(todPoolId)}" : string.Empty;
+                return BadRequest(new { error = $"{rosterMatch} only has {availableDkp:0.##} available{poolLabel} DKP (the rest is locked by active auction bids)." });
             }
         }
 
@@ -925,7 +930,7 @@ public sealed partial class AddonApiController
 
         _dbContext.TodLootDetails.Add(detail);
         await ActivityDataController.AdjustTodLootDkpAsync(
-            _dbContext, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
+            _dbContext, _dkpLedger, _dkpPools, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

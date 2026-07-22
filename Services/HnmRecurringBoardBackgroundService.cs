@@ -99,13 +99,15 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         ApplicationDbContext db, HnmRecurringBoard board, DateTime nowUtc, CancellationToken cancellationToken)
     {
         var monster = board.MonsterName.Trim();
-        var lower = monster.ToLower();
+        // A board may be keyed on a combined "Base/Stronger" name; match a ToD for EITHER
+        // half (single names yield one segment).
+        var names = HnmConfig.MonsterSegments(monster).Select(seg => seg.ToLower()).ToList();
 
         // Latest ToD for this monster that has a predicted pop time.
-        var tod = await db.Tods
+        var tod = names.Count == 0 ? null : await db.Tods
             .Where(t => t.LinkshellId == board.LinkshellId
                 && t.MonsterName != null
-                && t.MonsterName.ToLower() == lower
+                && names.Contains(t.MonsterName.ToLower())
                 && t.RepopTime != null)
             .OrderByDescending(t => t.Id)
             .FirstOrDefaultAsync(cancellationToken);
@@ -160,7 +162,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                 EventName = eventName,
                 EventType = "HNM",
                 EventLocation = string.IsNullOrWhiteSpace(board.EventLocation)
-                    ? HnmConfig.HnmZones.GetValueOrDefault(monster)
+                    ? HnmConfig.ZoneFor(monster)
                     : board.EventLocation,
                 AssignedMonsterName = monster,
                 CreatorUserId = creatorUserId ?? board.CreatedByAppUserId,

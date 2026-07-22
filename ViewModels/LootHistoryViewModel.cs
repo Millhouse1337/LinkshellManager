@@ -80,6 +80,19 @@ public class LootAddViewModel
     // filter.
     public string? LinkshellType { get; set; }
     public List<string> RosterCharacterNames { get; set; } = new();
+
+    // Which DKP pool this loot is paid from. Manual/ToD loot has a monster, not an event type, so
+    // the pool can't be derived — it defaults to whichever pool "HNM" maps to and the officer can
+    // override it. Null (and the picker hidden) on a linkshell that hasn't split its DKP.
+    public int? DkpPoolId { get; set; }
+    public List<LootDkpPoolOption> DkpPools { get; set; } = new();
+    public bool HasMultiplePools => DkpPools.Count > 1;
+}
+
+public class LootDkpPoolOption
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
 }
 
 public class LootHistoryEditViewModel

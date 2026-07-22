@@ -48,6 +48,12 @@ public class Linkshell
 
     public string? Details { get; set; }
 
+    // Optional dashboard banner image. Stored in a separate LinkshellBanner table
+    // (1:1) so the image bytes never load on the hot dashboard/overview paths —
+    // only fetched when the banner endpoint serves them. Navigation is NOT
+    // eager-loaded anywhere; presence/version is read via a lightweight projection.
+    public LinkshellBanner? Banner { get; set; }
+
     // Drives which content the in-game addon and the web sidebar surface:
     //   SkySeaDynamis = timed-event experience (no HNM presets / no Window
     //                   Events nav)
@@ -115,6 +121,13 @@ public class Linkshell
     // behavior is unaffected either way. (For HNM use HnmOutsideSignupEnabled instead.)
     public bool OutsidePartySignupEnabled { get; set; } = false;
 
+    // "Fill earlier alliances first" nudge: when a member signs up for a slot in a
+    // LATER alliance while an open slot their job can fill is still free in an EARLIER
+    // alliance, warn them and offer to take that earlier slot (or sign up anyway).
+    // Soft (never blocks) and job-aware (no nudge when nothing earlier fits them).
+    // Default ON; automatic no-op on single-alliance boards.
+    public bool FillAlliancesInOrder { get; set; } = true;
+
     // HNM Outside Sign Up: independent of OutsidePartySignupEnabled (HNM works with that
     // OFF). When ON it gates everything HNM — the HNM event type in the Activity create
     // dropdown, HNM manual-create validation, and account-less Discord signups onto HNM
@@ -122,6 +135,16 @@ public class Linkshell
     // so the player isn't re-prompted, but they earn NO DKP and NO active/absent credit
     // because HNM events null End/Duration, zero DkpPerHour, and set CountsTowardActive=false.
     public bool HnmOutsideSignupEnabled { get; set; } = false;
+
+    // Components V2 event boards (experimental): when ON, this linkshell's Discord
+    // event sign-up boards are posted as Discord "Components V2" messages — the
+    // rendered board PNG sits in a full-width media gallery (no embed chrome) and the
+    // card is rendered on a wider internal canvas — instead of the classic image-in-embed.
+    // Same buttons, same signup flow. Off by default so existing boards are untouched.
+    // NOTE: Discord forbids toggling the V2 flag on edit, so a board keeps whichever
+    // mode it was FIRST posted with for its whole lifecycle — flipping this only affects
+    // boards posted afterwards.
+    public bool UseComponentsV2Boards { get; set; } = false;
 
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing
@@ -158,28 +181,19 @@ public class Linkshell
     // verified). Setting a server never implies locking.
     public bool LockToDiscordGuild { get; set; } = false;
 
+    // DEPRECATED — the Google Sheets integration was removed 2026-06-24 (replaced by the
+    // app-native DKP sheet; see DkpSheetService). These columns are retained ONLY to keep
+    // migrations additive (a destructive drop is a separate, riskier change). Nothing reads
+    // or writes them anymore — the only references are EF migration snapshots and the
+    // DbWipe utility's NULL-out SQL.
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 
-    // True when GoogleSpreadsheetId points at a sheet LSManager CREATED itself
-    // (the dedicated "LSM DKP" sheet) rather than an externally-pasted id from
-    // the old broad-scope flow. Under the drive.file scope the app can only
-    // access sheets it created, so this gates the connected-sheet UI and lets us
-    // nudge legacy (pasted-id) linkshells to create a dedicated sheet.
     public bool GoogleSheetAppCreated { get; set; }
 
-    // Tab that the generic DKP template export writes to and the template
-    // import reads from (the canonical 6-column Member/Alts/Current/Total/Spent
-    // layout). Default "LSM DKP". A linkshell can point this at a tab of their
-    // own sheet that they've reformatted to match the template.
     [MaxLength(64)]
     public string? DkpTemplateTabName { get; set; }
 
-    // Live sync (push-only): when true, the "LSM DKP" template tab is
-    // automatically re-exported whenever a member's DKP changes (event close,
-    // auction, loot, audits, window events). Off by default; requires a
-    // connected Google account + spreadsheet id to actually push. Import
-    // (sheet → app) stays manual regardless of this flag.
     public bool SheetTemplateSyncEnabled { get; set; } = false;
 
     public string? GoogleOAuthRefreshTokenEnc { get; set; }
@@ -188,6 +202,23 @@ public class Linkshell
     public string? GoogleOAuthUserEmail { get; set; }
 
     public DateTime? GoogleOAuthConnectedAt { get; set; }
+
+    // Discord channel the live DKP sheet auto-posts to (full member table embed + the
+    // .xlsx attached), refreshed in place whenever DKP changes. Null = don't post to
+    // Discord (the feature is off). The name is cached for the picker. The bot posts
+    // here directly, so it must be a channel the bot can post in (any channel a route
+    // already uses).
+    [MaxLength(20)]
+    public string? DkpExportDiscordChannelId { get; set; }
+
+    [MaxLength(128)]
+    public string? DkpExportDiscordChannelName { get; set; }
+
+    // The Discord message id of the live, edit-in-place DKP sheet post. Null until the
+    // first post; set from the create response and used for subsequent edits. Cleared
+    // when the message is gone (so it reposts) or the channel changes.
+    [MaxLength(32)]
+    public string? DkpSheetDiscordMessageId { get; set; }
 
     // Named Discord channel webhooks. Every `/lsm now` attendance snapshot is
     // posted to each of these as a party-grouped embed. Empty = Discord

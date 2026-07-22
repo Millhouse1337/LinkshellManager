@@ -27,9 +27,30 @@
 
     @foreach (var alliance in Model.Board.Alliances)
     {
+        var multiAlliance = Model.Board.Alliances.Count > 1;
+        // Whether the current viewer holds a slot anywhere in this alliance (gates the
+        // "Make me alliance lead" button, mirroring the Discord button's slot gate).
+        var iHoldSlotHere = !string.IsNullOrEmpty(Model.CurrentUserId)
+            && alliance.Parties.SelectMany(p => p.Slots).Any(s => s.SignedUpAppUserId == Model.CurrentUserId);
+        var iAmAllianceLead = !string.IsNullOrEmpty(Model.CurrentUserId) && alliance.LeadAppUserId == Model.CurrentUserId;
         <div class="event-ps-alliance" data-alliance-id="@alliance.AllianceId">
             <div class="event-ps-alliance-title">
                 <span class="ps-view-only">@alliance.Name</span>
+                @if (multiAlliance && !string.IsNullOrEmpty(alliance.LeadCharacterName))
+                {
+                    <span class="event-ps-alliance-lead ps-view-only" title="Alliance lead">👑 Alliance Lead: @alliance.LeadCharacterName</span>
+                }
+                @* "Make me alliance lead" — shown to a member who holds a slot in this alliance
+                   but isn't already its lead. Posts to MakeAllianceLead and reloads the board. *@
+                @if (multiAlliance && iHoldSlotHere && !iAmAllianceLead)
+                {
+                    <form class="ps-view-only" asp-controller="Event" asp-action="MakeAllianceLead" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="eventId" value="@Model.EventId" />
+                        <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                        <button type="submit" class="btn xs" title="Take this alliance's lead">👑 Make me alliance lead</button>
+                    </form>
+                }
                 @if (Model.CanManageParties)
                 {
                     <input class="ps-rename ps-edit-only" type="text" value="@alliance.Name" placeholder="Alliance name" data-rename-alliance />
@@ -207,3 +228,57 @@
         }
     </div>
 </div>
+
+@{
+    var nudgeJson = TempData["SignupNudge"] as string;
+    LinkshellManagerDiscordApp.ViewModels.SignupNudgePayload? nudge = null;
+    if (!string.IsNullOrEmpty(nudgeJson))
+    {
+        try { nudge = System.Text.Json.JsonSerializer.Deserialize<LinkshellManagerDiscordApp.ViewModels.SignupNudgePayload>(nudgeJson); }
+        catch { nudge = null; }
+    }
+}
+@if (nudge is not null)
+{
+    var spot = string.Equals(nudge.SuggestedRequirement, "open", StringComparison.OrdinalIgnoreCase)
+        ? "an open spot"
+        : $"an open {nudge.SuggestedRequirement} spot";
+    <div class="ps-nudge-overlay" id="ps-nudge-overlay" style="position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px">
+        <div class="card" style="max-width:460px;width:100%">
+            <div class="card-head"><div class="card-title">Fill earlier alliances first</div></div>
+            <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+                <div style="font-size:13px;color:var(--fg-3)">
+                    There's still <strong style="color:var(--fg)">@spot</strong> in
+                    <strong style="color:var(--fg)">@nudge.SuggestedLocation</strong>. Filling earlier alliances
+                    first keeps parties together — take that slot, or sign up where you chose.
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+                    <form asp-controller="Event" asp-action="SignUpPartySlot" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="eventId" value="@nudge.EventId" />
+                        <input type="hidden" name="slotId" value="@nudge.OriginalSlotId" />
+                        <input type="hidden" name="role" value="@nudge.Role" />
+                        <input type="hidden" name="mainJob" value="@nudge.MainJob" />
+                        <input type="hidden" name="subJob" value="@nudge.SubJob" />
+                        <input type="hidden" name="asLeader" value="@nudge.AsLeader.ToString().ToLowerInvariant()" />
+                        <input type="hidden" name="selectedCharacter" value="@nudge.SelectedCharacter" />
+                        <input type="hidden" name="returnUrl" value="@nudge.ReturnUrl" />
+                        <input type="hidden" name="force" value="true" />
+                        <button type="submit" class="btn ghost sm">Sign up here anyway</button>
+                    </form>
+                    <form asp-controller="Event" asp-action="SignUpPartySlot" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="eventId" value="@nudge.EventId" />
+                        <input type="hidden" name="slotId" value="@nudge.SuggestedSlotId" />
+                        <input type="hidden" name="role" value="@nudge.Role" />
+                        <input type="hidden" name="mainJob" value="@nudge.MainJob" />
+                        <input type="hidden" name="subJob" value="@nudge.SubJob" />
+                        <input type="hidden" name="selectedCharacter" value="@nudge.SelectedCharacter" />
+                        <input type="hidden" name="returnUrl" value="@nudge.ReturnUrl" />
+                        <button type="submit" class="btn primary sm">Take @nudge.SuggestedLocation</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}

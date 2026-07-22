@@ -29,11 +29,16 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
     private readonly TimeZoneConversionService _timeZones;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
-    private readonly GoogleSheetsSyncService _sheets;
+    private readonly DkpSheetService _dkpSheet;
     private readonly ILogger<ActivityDataController> _logger;
     private readonly GlobalSettingsService _globalSettings;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+    private readonly DkpPoolBalanceService _dkpPoolBalances;
+    private readonly DkpPoolEditor _dkpPoolEditor;
+    private readonly DkpPoolEventTypeCatalog _dkpPoolEventTypes;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -46,11 +51,16 @@ public sealed partial class ActivityDataController : ControllerBase
         Microsoft.AspNetCore.Hosting.IWebHostEnvironment webHostEnvironment,
         TimeZoneConversionService timeZones,
         WindowEventDkpLedgerService windowEventDkpLedger,
-        GoogleSheetsSyncService sheets,
+        DkpSheetService dkpSheet,
         ILogger<ActivityDataController> logger,
         GlobalSettingsService globalSettings,
         MemberActivityService memberActivity,
-        ChannelRouteEditor channelRoutes)
+        ChannelRouteEditor channelRoutes,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances,
+        DkpPoolEditor dkpPoolEditor,
+        DkpPoolEventTypeCatalog dkpPoolEventTypes)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -62,11 +72,16 @@ public sealed partial class ActivityDataController : ControllerBase
         _webHostEnvironment = webHostEnvironment;
         _timeZones = timeZones;
         _windowEventDkpLedger = windowEventDkpLedger;
-        _sheets = sheets;
+        _dkpSheet = dkpSheet;
         _logger = logger;
         _globalSettings = globalSettings;
         _memberActivity = memberActivity;
         _channelRoutes = channelRoutes;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
+        _dkpPoolBalances = dkpPoolBalances;
+        _dkpPoolEditor = dkpPoolEditor;
+        _dkpPoolEventTypes = dkpPoolEventTypes;
     }
 
     [HttpGet("antiforgery")]

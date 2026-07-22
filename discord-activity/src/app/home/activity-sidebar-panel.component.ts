@@ -20,12 +20,12 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     .jobs-panel {
       width: 100%;
       padding: 22px 36px 34px;
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      border: 1px solid var(--border);
       border-radius: 8px;
       background:
-        radial-gradient(circle at top center, rgba(112, 117, 255, 0.08), transparent 34%),
-        linear-gradient(180deg, #18191e 0%, #121318 100%);
-      color: #f4f4f6;
+        radial-gradient(circle at top center, rgba(79, 124, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
+      color: var(--fg);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
     }
     .jobs-header { text-align: center; margin-bottom: 18px; }
@@ -48,8 +48,8 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     .character-tabs button:last-child { border-right: 0; }
     .character-tabs button.active {
       color: #fff;
-      background: linear-gradient(180deg, #8d91ff 0%, #6268ff 100%);
-      box-shadow: 0 0 16px rgba(104, 110, 255, 0.35);
+      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+      box-shadow: 0 0 16px rgba(79, 124, 255, 0.35);
     }
     .jobs-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px 16px; }
     .job-card {
@@ -73,8 +73,8 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     .strength {
       width: 100%; height: 22px; margin-bottom: 10px; padding: 0;
       display: flex; align-items: center; justify-content: center;
-      border-radius: 999px; border: 1px solid rgba(124, 130, 255, 0.18);
-      background: rgba(255, 255, 255, 0.025); color: #8d92ff;
+      border-radius: 999px; border: 1px solid rgba(79, 124, 255, 0.18);
+      background: rgba(255, 255, 255, 0.025); color: var(--accent);
       font-size: 12px; font-weight: 700; font-family: inherit; cursor: pointer;
     }
     .strength.gold { color: #ffbf2f; border-color: rgba(255, 191, 47, 0.18); }
@@ -132,7 +132,7 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     }
     .merit-modal {
       width: 100%; max-width: 420px; padding: 16px 18px;
-      background: var(--surface, #1f1f23); border: 1px solid var(--border, rgba(255,255,255,.12));
+      background: var(--surface); border: 1px solid var(--border);
       border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.45);
     }
     .merit-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -140,7 +140,7 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     .merit-modal__hint { margin: 0 0 10px; font-size: 12px; color: var(--fg-3); }
     .merit-modal textarea { width: 100%; resize: vertical; font-family: inherit; }
     .merit-modal__actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-    .merit-modal__clear { color: var(--danger, #e06c6c); }
+    .merit-modal__clear { color: var(--danger); }
     @media (max-width: 1200px) { .jobs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     @media (max-width: 760px) {
       .jobs-panel { padding: 20px; }
@@ -930,6 +930,37 @@ export class ActivitySidebarPanelComponent {
         if (ai !== bi) return ai - bi;
         return a.eventType.localeCompare(b.eventType);
       });
+  }
+
+  protected dkpTotalEarned(): number {
+    const sum = this.dkpEarnedByEventType().reduce((acc, row) => acc + row.amount, 0);
+    return Math.round(sum * 100) / 100;
+  }
+
+  // "Showing X to Y of Z" range for the ledger footer (1-based, clamped).
+  protected dkpShowingRange(): { start: number; end: number; total: number } {
+    const total = this.filteredDkpEntries().length;
+    if (total === 0) return { start: 0, end: 0, total: 0 };
+    const start = this.dkpPage() * this.dkpPageSize;
+    return { start: start + 1, end: Math.min(start + this.dkpPageSize, total), total };
+  }
+
+  // Page-number buttons for the ledger paginator, windowed to at most 7 around
+  // the current page so a long ledger doesn't spray dozens of buttons.
+  protected dkpPageNumbers(): number[] {
+    const count = this.dkpPageCount();
+    const max = 7;
+    if (count <= max) return Array.from({ length: count }, (_, i) => i);
+    const current = this.dkpPage();
+    let start = Math.max(0, current - Math.floor(max / 2));
+    const end = Math.min(count, start + max);
+    start = Math.max(0, end - max);
+    return Array.from({ length: end - start }, (_, i) => start + i);
+  }
+
+  protected goToDkpPage(page: number): void {
+    const clamped = Math.max(0, Math.min(page, this.dkpPageCount() - 1));
+    this.dkpPage.set(clamped);
   }
 
   protected canAuditSelectedLinkshell(): boolean {

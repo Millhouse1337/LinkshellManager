@@ -28,7 +28,7 @@ interface TargetCharacter {
     <div class="jr">
       <div class="jr__head">
         <h3>Rate teammates</h3>
-        <p class="jr__hint">Rate another member's gear &amp; skill per job, and leave a short note. They see anonymous averages and an AI summary.</p>
+        <p class="jr__hint">Rate another member's gear &amp; skill per job, and leave a short note.</p>
       </div>
 
       <div class="jr__pick">
@@ -114,20 +114,20 @@ interface TargetCharacter {
       border: 1px solid var(--border); background: rgba(255,255,255,0.025); color: var(--fg-2);
       border-radius: 999px; padding: 3px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
     }
-    .jr__char.on { color: #fff; background: linear-gradient(180deg, #8d91ff 0%, #6268ff 100%); border-color: transparent; }
+    .jr__char.on { color: #fff; background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%); border-color: transparent; }
     .jr__grid { text-align: left; }
     .jr__row { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; padding: 5px 0; border-top: 1px solid var(--border); }
     .jr__row--head { color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
     .jr__row--head span:not(:first-child) { text-align: center; min-width: 92px; }
     .jr__job { font-weight: 600; font-size: 13px; display: inline-flex; align-items: baseline; gap: 7px; }
-    .jr__lvl { font-weight: 600; font-size: 11px; color: var(--accent, #8d91ff); letter-spacing: .02em; }
+    .jr__lvl { font-weight: 600; font-size: 11px; color: var(--accent); letter-spacing: .02em; }
     .jr__lvl--none { color: var(--fg-3); font-weight: 500; }
     .jr__row--unleveled { opacity: .55; }
     .jr__comment { margin-top: 14px; text-align: left; }
     .jr__comment label { display: block; font-size: 12px; color: var(--fg-2); margin-bottom: 4px; }
     .jr__comment textarea { width: 100%; resize: vertical; }
     .jr__commentActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 6px; }
-    .jr__saved { font-size: 12px; color: var(--success, #5fbf7f); }
+    .jr__saved { font-size: 12px; color: var(--success); }
     .jr__empty { font-size: 12px; color: var(--fg-3); }
   `]
 })

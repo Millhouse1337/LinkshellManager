@@ -21,10 +21,14 @@ public sealed class EventHistoryEditService
     private const string EventEarnedEntryType = "EventEarned";
 
     private readonly ApplicationDbContext _db;
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
 
-    public EventHistoryEditService(ApplicationDbContext db)
+    public EventHistoryEditService(ApplicationDbContext db, DkpLedgerWriter dkpLedger, DkpPoolResolver dkpPools)
     {
         _db = db;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
     }
 
     // Update event metadata and, if DkpPerHour changed, rescale every member's
@@ -36,11 +40,29 @@ public sealed class EventHistoryEditService
             .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
         if (history is null) return false;
 
+        var oldEventType = history.EventType;
         if (!string.IsNullOrWhiteSpace(input.EventName)) history.EventName = input.EventName.Trim();
         history.EventType = Clean(input.EventType);
         history.EventLocation = Clean(input.EventLocation);
         history.Details = Clean(input.Details);
         if (input.Duration.HasValue) history.Duration = input.Duration.Value;
+
+        // Retyping a closed event (Sky -> Sea) moves its DKP to the other event type's pool. The
+        // ledger rows carry their own denormalized EventType, so they have to move with it —
+        // otherwise the event says "Sea" while its DKP still sits in Sky's wallet. Pinned rows
+        // (an adjustment someone pinned to this event) are left alone by Repoint.
+        if (!string.Equals(oldEventType, history.EventType, StringComparison.OrdinalIgnoreCase))
+        {
+            var newPoolId = await _dkpPools.ResolveAsync(history.LinkshellId, history.EventType, cancellationToken);
+            var eventRows = await _db.DkpLedgerEntries
+                .Where(entry => entry.EventHistoryId == historyId)
+                .ToListAsync(cancellationToken);
+            foreach (var entry in eventRows)
+            {
+                entry.EventType = history.EventType;
+                _dkpLedger.Repoint(entry, newPoolId);
+            }
+        }
 
         var oldRate = history.DkpPerHour ?? 0;
         var newRate = input.DkpPerHour ?? oldRate;
@@ -56,7 +78,7 @@ public sealed class EventHistoryEditService
                 var newEarned = oldRate > 0
                     ? DkpRounding.Round(oldEarned * newRate / oldRate, step)
                     : DkpRounding.Round((p.Duration ?? 0) * newRate, step);
-                ApplyEarnedChange(p, oldEarned, newEarned, memberships, earnedEntries,
+                ApplyEarnedChange(p, newEarned, memberships, earnedEntries,
                     $"DKP earned from completed event (edited: rate {oldRate} -> {newRate}).");
             }
             history.DkpPerHour = newRate;
@@ -80,7 +102,7 @@ public sealed class EventHistoryEditService
         var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
         var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
 
-        ApplyEarnedChange(participant, participant.EventDkp ?? 0, DkpRounding.Round(amount, step),
+        ApplyEarnedChange(participant, DkpRounding.Round(amount, step),
             memberships, earnedEntries, "DKP earned from completed event (edited).");
 
         history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
@@ -139,26 +161,25 @@ public sealed class EventHistoryEditService
             ActiveCredit = activeCredit,
         });
 
-        // DKP tie-in: add to the spendable balance + record the canonical EventEarned
-        // ledger row (one per member per event — edits/removals rely on it existing).
-        membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) + earned;
-        _db.DkpLedgerEntries.Add(new DkpLedgerEntry
-        {
-            AppUserId = appUserId,
-            EventHistoryId = history.Id,
-            LinkshellId = history.LinkshellId,
-            EntryType = EventEarnedEntryType,
-            Amount = earned,
-            Sequence = 1,
-            OccurredAt = history.EndTime ?? DateTime.UtcNow,
-            CharacterName = characterName,
-            EventName = history.EventName,
-            EventType = history.EventType,
-            EventLocation = history.EventLocation,
-            EventStartTime = history.StartTime,
-            EventEndTime = history.EndTime,
-            Details = "DKP earned from completed event (member added afterward).",
-        });
+        // DKP tie-in: add to the spendable balance + record the canonical EventEarned ledger row
+        // (one per member per event — edits/removals rely on it existing). It earns into the same
+        // pool the event's type maps to, exactly as if they'd been on the original roster.
+        await _dkpLedger.AppendAsync(
+            membership,
+            EventEarnedEntryType,
+            earned,
+            history.EndTime ?? DateTime.UtcNow,
+            DkpPoolRef.Derived(history.EventType),
+            new DkpEntryContext(
+                CharacterName: characterName,
+                EventName: history.EventName,
+                EventType: history.EventType,
+                EventLocation: history.EventLocation,
+                EventStartTime: history.StartTime,
+                EventEndTime: history.EndTime,
+                Details: "DKP earned from completed event (member added afterward).",
+                EventHistoryId: history.Id),
+            cancellationToken);
 
         history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         try
@@ -250,18 +271,18 @@ public sealed class EventHistoryEditService
         var participant = history?.AppUserEventHistories.FirstOrDefault(p => p.Id == participantId);
         if (history is null || participant is null) return false;
 
-        var earned = participant.EventDkp ?? 0;
         if (!string.IsNullOrWhiteSpace(participant.AppUserId))
         {
             var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
-            if (memberships.TryGetValue(participant.AppUserId, out var membership))
-            {
-                membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) - earned;
-            }
             var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
             if (earnedEntries.TryGetValue(participant.AppUserId, out var entry))
             {
-                _db.DkpLedgerEntries.Remove(entry);
+                // Reverse the LEDGER ROW's amount, not the participant's EventDkp. The two can
+                // disagree (the ledger row may have been audited since), and reversing the display
+                // field would leave the balance off by the difference — permanently, with nothing
+                // left pointing at the discrepancy.
+                memberships.TryGetValue(participant.AppUserId, out var membership);
+                _dkpLedger.Remove(entry, membership);
             }
         }
 
@@ -296,13 +317,13 @@ public sealed class EventHistoryEditService
             .ToListAsync(cancellationToken);
         foreach (var entry in ledgerEntries)
         {
-            if (!string.IsNullOrWhiteSpace(entry.AppUserId)
-                && memberships.TryGetValue(entry.AppUserId, out var membership))
+            AppUserLinkshell? membership = null;
+            if (!string.IsNullOrWhiteSpace(entry.AppUserId))
             {
-                membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) - entry.Amount;
+                memberships.TryGetValue(entry.AppUserId, out membership);
             }
+            _dkpLedger.Remove(entry, membership);
         }
-        _db.DkpLedgerEntries.RemoveRange(ledgerEntries);
 
         // The event's loot rows were re-parented to this history at close (FK is
         // SetNull on history delete, so remove them explicitly to avoid orphans).
@@ -322,28 +343,25 @@ public sealed class EventHistoryEditService
 
     // ---- helpers ------------------------------------------------------------
 
-    private static void ApplyEarnedChange(
+    // Set a participant's earned DKP to `newEarned`, moving the balance and the canonical
+    // EventEarned ledger row together.
+    //
+    // The ledger row is the source of truth for the delta, not the participant's EventDkp: those
+    // two can disagree (an officer can audit the ledger row directly), and taking the delta from
+    // the display field would then leave the balance permanently off by the difference.
+    private void ApplyEarnedChange(
         AppUserEventHistory participant,
-        double oldEarned,
         double newEarned,
         IReadOnlyDictionary<string, AppUserLinkshell> memberships,
         IReadOnlyDictionary<string, DkpLedgerEntry> earnedEntries,
         string ledgerDetails)
     {
         participant.EventDkp = newEarned;
-        var delta = newEarned - oldEarned;
-        if (Math.Abs(delta) < 0.0001) return;
         if (string.IsNullOrWhiteSpace(participant.AppUserId)) return;
+        if (!earnedEntries.TryGetValue(participant.AppUserId, out var entry)) return;
 
-        if (memberships.TryGetValue(participant.AppUserId, out var membership))
-        {
-            membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) + delta;
-        }
-        if (earnedEntries.TryGetValue(participant.AppUserId, out var entry))
-        {
-            entry.Amount = newEarned;
-            entry.Details = ledgerDetails;
-        }
+        memberships.TryGetValue(participant.AppUserId, out var membership);
+        _dkpLedger.Amend(entry, newEarned, ledgerDetails, membership);
     }
 
     private async Task<double> StepForAsync(int linkshellId, CancellationToken cancellationToken)

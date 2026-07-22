@@ -73,7 +73,8 @@ public sealed partial class ActivityDataController
         }
 
         var nowUtc = DateTime.UtcNow;
-        var repopUtc = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown));
+        var additionalSeconds = Math.Max(0, request.AdditionalSeconds);
+        var repopUtc = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(additionalSeconds);
 
         // Edit the existing ToD if we're already in the defeated/awaiting state (the card's
         // "Edit ToD" button); otherwise log a fresh ToD for this pop ("Post ToD").
@@ -90,6 +91,8 @@ public sealed partial class ActivityDataController
         tod.MonsterName = monsterName;
         tod.DayNumber = request.DayNumber;
         tod.Claim = request.Claim;
+        tod.Hq = request.Hq;
+        tod.AdditionalSeconds = additionalSeconds;
         tod.Time = todTimeUtc;
         tod.Cooldown = cooldown;
         tod.RepopTime = repopUtc;

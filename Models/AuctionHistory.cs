@@ -33,6 +33,14 @@ public class AuctionHistory
 
     public DateTime ClosedAt { get; set; } = DateTime.UtcNow;
 
+    // Copied from Auction.DkpPoolId at close (the Auction row is deleted there), so the
+    // closed-auction card can still say which DKP pool the winners paid from.
+    // Null = the linkshell's default pool.
+    public int? DkpPoolId { get; set; }
+
+    [ForeignKey(nameof(DkpPoolId))]
+    public DkpPool? DkpPool { get; set; }
+
     // Copied from Auction.DiscordChannelId at close time so the auction's
     // Discord channel can have its results posted and then be deleted. Null
     // when no per-auction channel was created.

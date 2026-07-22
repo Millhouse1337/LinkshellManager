@@ -16,14 +16,18 @@ public class DkpHistoryController : Controller
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
 
+    private readonly DkpPoolResolver _dkpPools;
+
     public DkpHistoryController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        DkpPoolResolver dkpPools)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
+        _dkpPools = dkpPools;
     }
 
     public async Task<IActionResult> Index(
@@ -126,6 +130,8 @@ public class DkpHistoryController : Controller
         // (oldest-first) order so each entry's "after" balance is correct.
         // The user-facing table wants the opposite — newest first — so we
         // reverse the materialized projection before applying pagination.
+        var poolMap = await _dkpPools.GetMapAsync(selectedLinkshellId, HttpContext.RequestAborted);
+
         var runningBalance = 0d;
         viewModel.SelectedAppUserId = selectedAppUserId;
         viewModel.SelectedMemberName = viewModel.Members.First(member => member.AppUserId == selectedAppUserId).CharacterName;
@@ -149,7 +155,12 @@ public class DkpHistoryController : Controller
                     EventEndTime = ConvertUtcToUserTimeZone(entry.EventEndTime, user.TimeZone),
                     ItemName = entry.ItemName,
                     Details = entry.Details,
-                    EditReason = entry.EditReason
+                    EditReason = entry.EditReason,
+                    // A null DkpPoolId means the default pool, so name it rather than leaving the
+                    // tag blank on every pre-pools row.
+                    DkpPoolName = poolMap.HasMultiplePools
+                        ? poolMap.NameFor(entry.DkpPoolId ?? poolMap.DefaultPoolId)
+                        : null,
                 };
             })
             .ToList();
@@ -158,6 +169,52 @@ public class DkpHistoryController : Controller
         // Render the whole ledger; the DKP History view paginates (10 per page)
         // and filters it client-side so search is instant across every entry.
         viewModel.Entries = projected;
+
+        // The earned-by-event-type breakdown and the per-pool balances both fall out of the ledger
+        // rows already in memory — no extra queries, and nothing to N+1 across the roster.
+        var membership = await _context.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(link => link.LinkshellId == selectedLinkshellId && link.AppUserId == selectedAppUserId);
+
+        // Lifetime EARNED per event type. The seed watermark and the reconciliation entry types are
+        // applied exactly as DkpSheetService.ComputeTotals does, so an imported member's per-type
+        // sum reconciles with their Total instead of double-counting their pre-import history.
+        var reconciliationTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TemplateImport", "SheetImport" };
+        var seedWatermark = membership?.DkpSeedLedgerId ?? 0;
+        viewModel.EarnedByEventType = ledgerEntries
+            .Where(entry => entry.Amount > 0
+                && entry.Id > seedWatermark
+                && !reconciliationTypes.Contains(entry.EntryType))
+            .GroupBy(entry => string.IsNullOrWhiteSpace(entry.EventType) ? "Other" : entry.EventType!,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => new DkpEarnedByEventTypeViewModel
+            {
+                EventType = group.Key,
+                Earned = group.Sum(entry => entry.Amount),
+                PoolName = poolMap.HasMultiplePools ? poolMap.NameFor(poolMap.Resolve(group.Key)) : null,
+            })
+            .OrderByDescending(item => item.Earned)
+            .ToList();
+
+        if (poolMap.HasMultiplePools && membership is not null)
+        {
+            var byPool = DkpPoolBalanceService.Project(
+                membership.LinkshellDkp ?? 0,
+                ledgerEntries.Select(entry => new LedgerPoolRow(entry.Id, entry.DkpPoolId, entry.Amount)),
+                membership.DkpPoolLedgerFromId,
+                poolMap.DefaultPoolId,
+                poolMap.Pools.Select(pool => pool.Id).ToList());
+
+            viewModel.PoolBalances = poolMap.Pools
+                .Select(pool => new DkpPoolBalanceViewModel
+                {
+                    PoolId = pool.Id,
+                    Name = pool.Name,
+                    Accent = Models.DkpPoolAccents.Resolve(pool.Accent),
+                    Balance = byPool.GetValueOrDefault(pool.Id),
+                })
+                .ToList();
+        }
 
         return View(viewModel);
     }

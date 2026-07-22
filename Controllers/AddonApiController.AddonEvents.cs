@@ -295,7 +295,7 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        var result = await EventController.EndEventCoreAsync(_dbContext, eventEntity);
+        var result = await EventController.EndEventCoreAsync(_dbContext, _dkpLedger, _dkpPools, eventEntity);
         var windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
 
         // For windowed events DkpPerHour is reused as DkpPerWindow (same column,

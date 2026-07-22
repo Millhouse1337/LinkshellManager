@@ -112,6 +112,24 @@ public sealed partial class ActivityDataController
         var streaks = await new MemberActivityService(_dbContext)
             .ComputeStreaksByAppUserAsync(linkshellId, cancellationToken);
 
+        // Which members have actually opened/synced the Discord Activity (a
+        // DiscordActivityUser row points at their AppUserId) — used for the roster's
+        // "App Sync" badge + filter so officers can tell real app users apart from
+        // members who only ever used the outside sign-up board.
+        var memberAppUserIds = linkshell.AppUserLinkshells
+            .Select(link => link.AppUserId)
+            .Where(id => id != null)
+            .Select(id => id!)
+            .Distinct()
+            .ToList();
+        var syncedAppUserIds = memberAppUserIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await _dbContext.DiscordActivityUsers
+                .Where(d => d.IdentityUserId != null && memberAppUserIds.Contains(d.IdentityUserId))
+                .Select(d => d.IdentityUserId!)
+                .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.Ordinal);
+
         // Member Status is now the single source of truth (the attendance rule
         // auto-drives Active/Inactive at close — see MemberActivityService), so the
         // roster just surfaces Status; no separate computed activity flag.
@@ -135,7 +153,8 @@ public sealed partial class ActivityDataController
                     link.DateJoined,
                     link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Credit : 0,
                     link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Absent : 0,
-                    IsPlaceholder: link.AppUser?.IsPlaceholder ?? false))
+                    IsPlaceholder: link.AppUser?.IsPlaceholder ?? false,
+                    HasSyncedActivity: link.AppUserId != null && syncedAppUserIds.Contains(link.AppUserId)))
                 .ToList()));
     }
 
@@ -272,9 +291,17 @@ public sealed partial class ActivityDataController
         {
             linkshell.OutsidePartySignupEnabled = request.OutsidePartySignupEnabled.Value;
         }
+        if (request.FillAlliancesInOrder.HasValue)
+        {
+            linkshell.FillAlliancesInOrder = request.FillAlliancesInOrder.Value;
+        }
         if (request.HnmOutsideSignupEnabled.HasValue)
         {
             linkshell.HnmOutsideSignupEnabled = request.HnmOutsideSignupEnabled.Value;
+        }
+        if (request.UseComponentsV2Boards.HasValue)
+        {
+            linkshell.UseComponentsV2Boards = request.UseComponentsV2Boards.Value;
         }
         if (request.InactiveAfterAbsences.HasValue)
         {
@@ -654,6 +681,7 @@ public sealed partial class ActivityDataController
                 postAuctions = route.PostAuctions,
                 postAttendance = route.PostAttendance,
                 postTodBoard = route.PostTodBoard,
+                postDkpSheet = route.PostDkpSheet,
                 eventTypeFilter = SplitEventTypeFilter(route.EventTypeFilter),
                 hnmMonsterFilter = SplitEventTypeFilter(route.HnmMonsterFilter),
             }).ToList(),
@@ -693,7 +721,7 @@ public sealed partial class ActivityDataController
         var edits = (request.Routes ?? Array.Empty<ActivityChannelRouteInput>())
             .Select(r => new ChannelRouteEdit(
                 r.Id, r.Name, r.ChannelId,
-                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard,
+                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard, r.PostDkpSheet,
                 r.EventTypeFilter, r.HnmMonsterFilter))
             .ToList();
 

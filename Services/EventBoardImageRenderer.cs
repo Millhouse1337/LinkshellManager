@@ -14,6 +14,13 @@ namespace LinkshellManagerDiscordApp.Services;
 // next call retries (e.g. after the installer finishes downloading Chromium).
 public sealed class EventBoardImageRenderer : IAsyncDisposable
 {
+    // Internal card widths (px) for the rendered board. The renderer screenshots at 2×
+    // density, and Discord refuses to preview images over 4096px on a side, so the wide
+    // canvas is capped at 2048px (2048 × 2 = 4096). Wider columns mean less name wrapping
+    // and more of the board readable at once — used for Components V2 boards.
+    public const int DefaultCardWidth = 1600;
+    public const int WideCardWidth = 2000;
+
     private readonly ILogger<EventBoardImageRenderer> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IPlaywright? _playwright;
@@ -25,8 +32,8 @@ public sealed class EventBoardImageRenderer : IAsyncDisposable
     }
 
     // Returns the PNG bytes, or null if rendering isn't available (caller falls
-    // back to the text board).
-    public async Task<byte[]?> RenderAsync(string html, CancellationToken cancellationToken)
+    // back to the text board). `wide` renders the wider Components V2 canvas.
+    public async Task<byte[]?> RenderAsync(string html, CancellationToken cancellationToken, bool wide = false)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -37,15 +44,15 @@ public sealed class EventBoardImageRenderer : IAsyncDisposable
                 return null;
             }
 
+            var cardWidth = wide ? WideCardWidth : DefaultCardWidth;
             await using var page = await browser.NewPageAsync(new BrowserNewPageOptions
             {
-                // Viewport matches the wide 1600px card so the layout isn't squeezed
-                // before the element screenshot is taken.
-                ViewportSize = new ViewportSize { Width = 1600, Height = 1400 },
-                // 2× density (1600px card → 3200px PNG). Discord refuses to preview
-                // images over 4096px on a side, and a tall multi-alliance board at 3×
-                // (4800px) would exceed that — so 2× is the safe ceiling for retina
-                // crispness at this width.
+                // Viewport matches the card width so the layout isn't squeezed before the
+                // element screenshot is taken.
+                ViewportSize = new ViewportSize { Width = cardWidth, Height = 1400 },
+                // 2× density (e.g. 1600px card → 3200px PNG, 2000px → 4000px). Discord
+                // refuses to preview images over 4096px on a side, so the wide card stays
+                // ≤2048px to keep 2× under that ceiling for retina crispness.
                 DeviceScaleFactor = 2,
             });
             await page.SetContentAsync(html, new PageSetContentOptions

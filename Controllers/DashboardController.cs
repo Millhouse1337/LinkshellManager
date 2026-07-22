@@ -109,6 +109,17 @@ public class DashboardController : Controller
         var selectedLinkshell = linkshells.FirstOrDefault(linkshell => linkshell.Id == selectedLinkshellId);
         var selectedLinkshellName = selectedLinkshell?.LinkshellName;
 
+        // Banner: a cheap version-only lookup (no image bytes) → cache-busted URL.
+        var bannerUpdatedAt = selectedLinkshellId.HasValue
+            ? await _context.LinkshellBanners
+                .Where(b => b.LinkshellId == selectedLinkshellId.Value)
+                .Select(b => (DateTime?)b.UpdatedAt)
+                .FirstOrDefaultAsync()
+            : null;
+        var bannerUrl = bannerUpdatedAt.HasValue
+            ? $"/api/activity/linkshells/{selectedLinkshellId!.Value}/banner?v={bannerUpdatedAt.Value.Ticks}"
+            : null;
+
         var itemCount = selectedLinkshellId.HasValue
             ? await _context.Items.CountAsync(item => item.LinkshellId == selectedLinkshellId.Value)
             : 0;
@@ -181,6 +192,7 @@ public class DashboardController : Controller
             Linkshells = linkshells,
             SelectedLinkshellId = selectedLinkshellId,
             SelectedLinkshellName = selectedLinkshellName,
+            BannerUrl = bannerUrl,
             Members = members,
             Events = events,
             TotalMembers = members.Count,

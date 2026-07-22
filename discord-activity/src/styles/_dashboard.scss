@@ -115,12 +115,12 @@
   background: var(--fg-3);
   justify-self: center;
 }
-.panel-tab .news-icon.donut-seg-a { background: #6366f1; }
-.panel-tab .news-icon.donut-seg-b { background: #10b981; }
-.panel-tab .news-icon.donut-seg-c { background: #f59e0b; }
-.panel-tab .news-icon.donut-seg-d { background: #ef4444; }
-.panel-tab .news-icon.donut-seg-e { background: #06b6d4; }
-.panel-tab .news-icon.donut-seg-f { background: #a855f7; }
+.panel-tab .news-icon.donut-seg-a { background: var(--chart-a); }
+.panel-tab .news-icon.donut-seg-b { background: var(--chart-b); }
+.panel-tab .news-icon.donut-seg-c { background: var(--chart-c); }
+.panel-tab .news-icon.donut-seg-d { background: var(--chart-d); }
+.panel-tab .news-icon.donut-seg-e { background: var(--chart-e); }
+.panel-tab .news-icon.donut-seg-f { background: var(--chart-f); }
 .panel-tab .news-title {
   font-size: 13px;
   color: var(--fg);
@@ -182,12 +182,12 @@
   transform: rotate(90deg);
   transform-origin: center;
 }
-.panel-tab circle.donut-seg-a { stroke: #6366f1; }
-.panel-tab circle.donut-seg-b { stroke: #10b981; }
-.panel-tab circle.donut-seg-c { stroke: #f59e0b; }
-.panel-tab circle.donut-seg-d { stroke: #ef4444; }
-.panel-tab circle.donut-seg-e { stroke: #06b6d4; }
-.panel-tab circle.donut-seg-f { stroke: #a855f7; }
+.panel-tab circle.donut-seg-a { stroke: var(--chart-a); }
+.panel-tab circle.donut-seg-b { stroke: var(--chart-b); }
+.panel-tab circle.donut-seg-c { stroke: var(--chart-c); }
+.panel-tab circle.donut-seg-d { stroke: var(--chart-d); }
+.panel-tab circle.donut-seg-e { stroke: var(--chart-e); }
+.panel-tab circle.donut-seg-f { stroke: var(--chart-f); }
 .panel-tab .donut-legend {
   display: flex;
   flex-direction: column;
@@ -207,12 +207,12 @@
   border-radius: 2px;
   display: inline-block;
 }
-.panel-tab .donut-swatch.donut-seg-a { background: #6366f1; }
-.panel-tab .donut-swatch.donut-seg-b { background: #10b981; }
-.panel-tab .donut-swatch.donut-seg-c { background: #f59e0b; }
-.panel-tab .donut-swatch.donut-seg-d { background: #ef4444; }
-.panel-tab .donut-swatch.donut-seg-e { background: #06b6d4; }
-.panel-tab .donut-swatch.donut-seg-f { background: #a855f7; }
+.panel-tab .donut-swatch.donut-seg-a { background: var(--chart-a); }
+.panel-tab .donut-swatch.donut-seg-b { background: var(--chart-b); }
+.panel-tab .donut-swatch.donut-seg-c { background: var(--chart-c); }
+.panel-tab .donut-swatch.donut-seg-d { background: var(--chart-d); }
+.panel-tab .donut-swatch.donut-seg-e { background: var(--chart-e); }
+.panel-tab .donut-swatch.donut-seg-f { background: var(--chart-f); }
 .panel-tab .donut-legend-name { color: var(--fg); font-weight: 500; }
 .panel-tab .donut-legend-stats { color: var(--fg-3); font-family: var(--font-sans); }
 .panel-tab .btn.active {

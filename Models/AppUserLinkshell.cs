@@ -57,12 +57,22 @@ public class AppUserLinkshell
     // linkshell migrating in from an external sheet carry its lifetime
     // earned/spent without re-bookkeeping every past transaction, while
     // app-native linkshells (never seeded → all 0) compute totals purely from
-    // the ledger. See Services/DkpTemplateSheetService.
+    // the ledger. See Services/DkpSheetService (the seeded-vs-ledger totals logic).
     public double SeededDkpEarned { get; set; }
 
     public double SeededDkpSpent { get; set; }
 
     public int DkpSeedLedgerId { get; set; }
+
+    // The pool-attribution epoch: ledger rows with Id <= this are NOT attributed to a DKP
+    // pool (they collapse into the default pool's residual — see DkpPoolBalanceService).
+    // Same idiom as DkpSeedLedgerId above.
+    //
+    // Why it's needed: a kicked member's DkpLedgerEntry rows SURVIVE the AppUserLinkshells
+    // delete (the ledger's only cascade is from Linkshell). Without an epoch, re-inviting
+    // them would resurrect their pre-kick earns as spendable pool DKP even though their
+    // LinkshellDkp is back to 0. Stamped on every new membership by ApplicationDbContext.
+    public int DkpPoolLedgerFromId { get; set; }
 
     public DateTime? DateJoined { get; set; }
 

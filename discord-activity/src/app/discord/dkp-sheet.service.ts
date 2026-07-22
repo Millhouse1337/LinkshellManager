@@ -5,8 +5,8 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { ActivityDkpSheetResponse } from './discord-activity.types';
 
-// Read-only client for the linkshell's synced Google Sheet (App DKP Sheet).
-// Connecting/authorizing Google stays on the web; this just renders the data.
+// Read-only client for the always-on DKP sheet — the linkshell's live DKP
+// computed from the app's own data (no Google connection).
 @Injectable({ providedIn: 'root' })
 export class DkpSheetService {
   private readonly auth = inject(AuthService);

@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
 using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
@@ -92,6 +94,19 @@ public partial class EventController
             }
         }
 
+        // Pre-fill data for the "Edit ToD" modal on defeated/awaiting-repost HNM boards —
+        // load the source ToD of each so the modal opens with its logged values.
+        var sourceTodIds = events
+            .Where(evt => evt.HnmDefeatedAt.HasValue && evt.SourceTodId.HasValue)
+            .Select(evt => evt.SourceTodId!.Value)
+            .Distinct()
+            .ToList();
+        var sourceTodsById = sourceTodIds.Count > 0
+            ? await _context.Tods.AsNoTracking()
+                .Where(t => sourceTodIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id)
+            : new Dictionary<int, Tod>();
+
         // Drive the manage badge + slot dropdown options on the inline panel.
         ViewBag.CurrentAppUserId = user.Id;
         // Characters this member can sign up as (main + alts) — drives the
@@ -132,12 +147,31 @@ public partial class EventController
                     EventDkp = evt.EventDkp,
                     Details = evt.Details,
                     TimeStamp = evt.TimeStamp,
-                    PartySetupId = evt.PartySetupId
+                    PartySetupId = evt.PartySetupId,
+                    // HNM signup-board state: drives the Post ToD / Edit ToD button, the
+                    // "defeated / awaiting re-post" banner, and the monster shown in the ToD
+                    // modal. HnmRepostAt is displayed, so convert it to the viewer's zone.
+                    AssignedMonsterName = evt.AssignedMonsterName,
+                    HnmDefeatedAt = ConvertUtcToUserTimeZone(evt.HnmDefeatedAt, user.TimeZone),
+                    HnmRepostAt = ConvertUtcToUserTimeZone(evt.HnmRepostAt, user.TimeZone),
+                    SourceTodId = evt.SourceTodId
                 },
                 PartySetupId = evt.PartySetupId,
                 LinkedPartySetupName = evt.PartySetup?.Name,
                 LinkedPartySetupMonsterName = evt.PartySetup?.AssignedMonsterName,
                 LinkedPartySetupBoard = board,
+                BoardTod = evt.HnmDefeatedAt.HasValue && evt.SourceTodId.HasValue
+                    && sourceTodsById.TryGetValue(evt.SourceTodId.Value, out var srcTod)
+                    ? new EventBoardTodPrefill
+                    {
+                        TimeLocal = ConvertUtcToUserTimeZone(srcTod.Time, user.TimeZone)?.ToString("yyyy-MM-ddTHH:mm:ss"),
+                        Cooldown = srcTod.Cooldown,
+                        Interval = srcTod.Interval,
+                        DayNumber = srcTod.DayNumber,
+                        Claim = srcTod.Claim,
+                        Hq = srcTod.Hq
+                    }
+                    : null,
                 CurrentUserOwnsLinkedPartySetupSlot = userOwnsSlot,
                 AppUserEvents = evt.AppUserEvents.ToList(),
                 CreatorCharacterName = evt.CreatorUserId is not null && creators.TryGetValue(evt.CreatorUserId, out var creatorName)
@@ -242,9 +276,10 @@ public partial class EventController
         {
             // No-DKP signup board (mirrors the Activity HNM create path).
             newEvent.AssignedMonsterName = monsterName;
+            newEvent.DayNumber = eventViewModel.Event.DayNumber;
             if (string.IsNullOrWhiteSpace(newEvent.EventLocation))
             {
-                newEvent.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName!);
+                newEvent.EventLocation = HnmConfig.ZoneFor(monsterName);
             }
             newEvent.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
             newEvent.EndTime = null;
@@ -258,8 +293,9 @@ public partial class EventController
         await _context.SaveChangesAsync();
 
         // Repeat-on-ToD: persist/refresh (or disable) the recurring-board template.
-        if (isHnm && eventViewModel.RepeatOnTod
-            && !string.Equals(monsterName, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        // Works for a custom monster too — recurrence keys on the (case-insensitive)
+        // AssignedMonsterName the ToD records; UpsertAsync self-guards null/whitespace.
+        if (isHnm && eventViewModel.RepeatOnTod)
         {
             await HnmRecurringBoardService.UpsertAsync(_context, newEvent, eventViewModel.RepeatLeadHours, user.Id, HttpContext.RequestAborted);
         }
@@ -282,7 +318,7 @@ public partial class EventController
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SignUpPartySlot(
-        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false, string? selectedCharacter = null)
+        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false, string? selectedCharacter = null, bool force = false)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -312,6 +348,42 @@ public partial class EventController
         }
 
         var characterName = SignupCharacters.Resolve(user, membership, selectedCharacter);
+
+        // "Fill earlier alliances first" nudge: if the linkshell wants it and there's still
+        // an open slot this member's job can fill in an EARLIER alliance, stash a prompt and
+        // bounce back to the board (no commit). "Sign up here anyway" re-posts with force.
+        if (!force)
+        {
+            var fillInOrder = await _context.Linkshells
+                .Where(l => l.Id == eventEntity.LinkshellId)
+                .Select(l => l.FillAlliancesInOrder)
+                .FirstOrDefaultAsync();
+            if (fillInOrder)
+            {
+                var jobs = PartySetupSignupService.ResolveSignupJobs(slot, role, mainJob, subJob);
+                if (jobs.Success)
+                {
+                    var setup = await _context.PartySetups
+                        .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
+                        .FirstOrDefaultAsync(ps => ps.Id == eventEntity.PartySetupId.Value);
+                    if (setup is not null)
+                    {
+                        var signups = await EventPartySignupService.GetSignupsForEventAsync(_context, eventId, HttpContext.RequestAborted);
+                        var suggestion = PartyFillSuggestion.SuggestEarlierSlot(setup, signups, slot, jobs.Role, jobs.MainJob);
+                        if (suggestion is not null && suggestion.Id != slot.Id)
+                        {
+                            TempData["SignupNudge"] = System.Text.Json.JsonSerializer.Serialize(new SignupNudgePayload(
+                                eventId, slotId, suggestion.Id,
+                                PartyFillSuggestion.DescribeSlot(setup, suggestion),
+                                PartyFillSuggestion.RequirementLabel(suggestion),
+                                jobs.Role, jobs.MainJob, jobs.SubJob, asLeader, selectedCharacter, returnUrl));
+                            return SafeLocalRedirect(returnUrl);
+                        }
+                    }
+                }
+            }
+        }
+
         var result = await EventPartySignupService.ClaimSlotAsync(
             _context, eventId, slot, user.Id, characterName, role, mainJob, subJob, HttpContext.RequestAborted, asLeader);
         if (!result.Success)
@@ -342,6 +414,39 @@ public partial class EventController
         return SafeLocalRedirect(returnUrl);
     }
 
+    // "Make me alliance lead": the member — who must already hold a slot in this
+    // event — takes their whole alliance's lead (👑 by the alliance name), moving it
+    // off whoever currently holds it. Mirrors the Discord/Activity "Make Me Alliance
+    // Lead" button. Purely a board designation (no perms).
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MakeAllianceLead(int eventId, string? returnUrl)
+    {
+        var user = await RequireCurrentUserAsync();
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var eventEntity = await _context.Events.FirstOrDefaultAsync(evt => evt.Id == eventId);
+        if (eventEntity is null || eventEntity.PartySetupId is null)
+        {
+            return NotFound();
+        }
+
+        var result = await EventPartySignupService.MakeAllianceLeaderAsync(
+            _context, eventId, user.Id, null, HttpContext.RequestAborted);
+        if (!result.Success)
+        {
+            TempData["Error"] = result.Error;
+            return SafeLocalRedirect(returnUrl);
+        }
+        await _context.SaveChangesAsync();
+        EnqueueEventBoardRefresh(eventId);
+
+        return SafeLocalRedirect(returnUrl);
+    }
+
     // Builds a per-event party board (the template tree with this event's slot
     // signups overlaid). Shared by the queued Index view and the live Start view so
     // both render the same alliance → party → slot board. `sign` maps slot id → the
@@ -355,6 +460,13 @@ public partial class EventController
         {
             AllianceId = a.Id,
             Name = string.IsNullOrWhiteSpace(a.Name) ? $"Alliance {a.SortOrder + 1}" : a.Name,
+            // The alliance lead (if any): the one signup in this alliance carrying the crown.
+            LeadAppUserId = a.Parties.SelectMany(p => p.Slots)
+                .Select(s => sign.TryGetValue(s.Id, out var su) ? su : null)
+                .FirstOrDefault(su => su is { IsAllianceLeader: true })?.AppUserId,
+            LeadCharacterName = a.Parties.SelectMany(p => p.Slots)
+                .Select(s => sign.TryGetValue(s.Id, out var su) ? su : null)
+                .FirstOrDefault(su => su is { IsAllianceLeader: true })?.CharacterName,
             Parties = a.Parties.OrderBy(p => p.SortOrder).Select(p => new PartySetupPartyView
             {
                 PartyId = p.Id,
@@ -488,10 +600,25 @@ public partial class EventController
             DkpPerHour = eventToEdit.DkpPerHour,
             Details = eventToEdit.Details,
             AutoStart = eventToEdit.AutoStart,
+            CountsTowardActive = eventToEdit.CountsTowardActive,
+            // Carry the HNM monster so the monster picker pre-selects it on edit.
+            AssignedMonsterName = eventToEdit.AssignedMonsterName,
             PartySetupId = eventToEdit.PartySetupId
         };
         model.PartySetupId = eventToEdit.PartySetupId;
         model.LinkshellId = eventToEdit.LinkshellId;
+
+        // Pre-fill the "Repeat post when ToD is updated" controls from the linkshell's
+        // recurring-board template for this monster (parity with the Activity edit form).
+        var editMonster = eventToEdit.AssignedMonsterName?.Trim();
+        if (!string.IsNullOrWhiteSpace(editMonster))
+        {
+            var board = await _context.HnmRecurringBoards
+                .FirstOrDefaultAsync(b => b.LinkshellId == eventToEdit.LinkshellId
+                    && b.MonsterName.ToLower() == editMonster.ToLower());
+            model.RepeatOnTod = board?.Enabled == true;
+            model.RepeatLeadHours = board?.LeadHours;
+        }
 
         return View(model);
     }
@@ -527,6 +654,19 @@ public partial class EventController
             return Forbid();
         }
 
+        // Converting an event TO an HNM signup board is gated by HNM Outside Sign Up the
+        // same way Create is — the web form only offers HNM for already-HNM events, so a
+        // non-HNM→HNM conversion can only arrive via a crafted POST. Gate on the TARGET
+        // linkshell (where the event ends up). Editing an existing HNM event is unaffected.
+        var becomingHnm = string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var wasHnm = string.Equals((eventToUpdate.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        if (becomingHnm && !wasHnm && targetMembership?.Linkshell?.HnmOutsideSignupEnabled != true)
+        {
+            ModelState.AddModelError("Event.EventType", "HNM signup boards require HNM Outside Sign Up to be enabled for this linkshell.");
+            var retryModel = await BuildEventViewModelAsync(user, eventViewModel);
+            return View(retryModel);
+        }
+
         // If this event's board was customized into a per-event snapshot (which the
         // template picker can't represent), keep it — its slots are managed from the
         // board editor, not this form — so editing event details never wipes the board.
@@ -559,9 +699,10 @@ public partial class EventController
                 eventToUpdate.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
                 if (string.IsNullOrWhiteSpace(eventToUpdate.EventLocation))
                 {
-                    eventToUpdate.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName);
+                    eventToUpdate.EventLocation = HnmConfig.ZoneFor(monsterName);
                 }
             }
+            eventToUpdate.DayNumber = eventViewModel.Event.DayNumber;
             eventToUpdate.EndTime = null;
             eventToUpdate.Duration = null;
             eventToUpdate.DkpPerHour = 0;
@@ -589,6 +730,23 @@ public partial class EventController
         }
 
         await _context.SaveChangesAsync();
+
+        // Repeat-on-ToD: persist/refresh (or disable) the recurring-board template, matching
+        // the Create path (and the Activity's update endpoint).
+        if (isHnm)
+        {
+            var monsterName = eventToUpdate.AssignedMonsterName?.Trim();
+            if (eventViewModel.RepeatOnTod
+                && !string.IsNullOrWhiteSpace(monsterName))
+            {
+                await HnmRecurringBoardService.UpsertAsync(_context, eventToUpdate, eventViewModel.RepeatLeadHours, user.Id, HttpContext.RequestAborted);
+            }
+            else if (!eventViewModel.RepeatOnTod)
+            {
+                await HnmRecurringBoardService.DisableAsync(_context, eventToUpdate.LinkshellId, monsterName, HttpContext.RequestAborted);
+            }
+        }
+
         return RedirectToAction(nameof(Index));
     }
 
@@ -784,7 +942,8 @@ public partial class EventController
         // Block awarding loot the winner can't afford (DKP is deducted at close,
         // so this is the only point we can stop the balance going negative).
         var insufficient = await LootDkpGuard.CheckEventLootAsync(
-            _context, eventId, eventEntity.LinkshellId, rosterMatch, winningDkpSpent, default);
+            _context, _dkpPools, _dkpPoolBalances, eventId, eventEntity.LinkshellId,
+            rosterMatch, winningDkpSpent, default);
         if (insufficient is not null)
         {
             return LootError(insufficient);
@@ -836,7 +995,7 @@ public partial class EventController
             return BadRequest($"Confirm or remove the {pendingCount} member(s) still pending in attendance before ending the event.");
         }
 
-        await EndEventCoreAsync(_context, eventEntity);
+        await EndEventCoreAsync(_context, _dkpLedger, _dkpPools, eventEntity);
 
         return RedirectToAction(nameof(Index), "EventHistory");
     }
@@ -861,10 +1020,18 @@ public partial class EventController
         int EventHistoryId,
         bool HasLootDeductions);
 
-    internal static async Task<EndEventResult> EndEventCoreAsync(ApplicationDbContext dbContext, Event eventEntity)
+    internal static async Task<EndEventResult> EndEventCoreAsync(
+        ApplicationDbContext dbContext, DkpLedgerWriter dkpLedger, DkpPoolResolver dkpPools, Event eventEntity)
     {
         var endTimeUtc = DateTime.UtcNow;
         var participantSummaries = new List<EndEventParticipantSummary>();
+
+        // The event's type decides which DKP pool it pays INTO and which pool its loot is paid
+        // OUT of — resolved once here, not per participant. An event has one type, so a Sky event
+        // credits the Sky pool and its loot is bought with Sky-pool DKP. Unmapped/custom/null
+        // types land in the linkshell's default pool, which is where everything lives until an
+        // officer partitions their event types.
+        var eventPool = DkpPoolRef.Derived(eventEntity.EventType);
 
         // Backfill any party-board signups that never became AppUserEvents so the
         // closed event history matches the live roster and loot UI.
@@ -916,11 +1083,19 @@ public partial class EventController
             .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var ledgerEntries = new List<DkpLedgerEntry>();
-        var nextSequenceByAppUserId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // One history/ledger row per account. There is no DB uniqueness on AppUserEvent, so an
+        // account can hold two participations for an event (e.g. a website join + an addon post
+        // under an alt); a second history row would violate the unique (EventHistoryId,
+        // AppUserId) index and throw at save. Account-less rows (null AppUserId) are outside
+        // that filtered index, so they're exempt from this dedup.
+        var creditedAppUserIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var participation in eventEntity.AppUserEvents)
         {
+            if (!string.IsNullOrWhiteSpace(participation.AppUserId) && !creditedAppUserIds.Add(participation.AppUserId))
+            {
+                continue;
+            }
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
             int? windowsAttended = isWindowed
                 ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
@@ -962,33 +1137,27 @@ public partial class EventController
             if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&
                 membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
             {
-                linkshellMembership.LinkshellDkp = (linkshellMembership.LinkshellDkp ?? 0) + eventDkp;
-                nextSequenceByAppUserId[participation.AppUserId] = 2;
-            }
-
-            if (!string.IsNullOrWhiteSpace(participation.AppUserId))
-            {
-                ledgerEntries.Add(new DkpLedgerEntry
-                {
-                    AppUserId = participation.AppUserId,
-                    EventHistory = history,
-                    LinkshellId = eventEntity.LinkshellId,
-                    EntryType = "EventEarned",
-                    Amount = eventDkp,
-                    Sequence = 1,
-                    OccurredAt = endTimeUtc,
-                    CharacterName = participation.CharacterName,
-                    EventName = eventEntity.EventName,
-                    EventType = eventEntity.EventType,
-                    EventLocation = eventEntity.EventLocation,
-                    EventStartTime = eventEntity.StartTime,
-                    EventEndTime = endTimeUtc,
-                    Details = "DKP earned from completed event."
-                });
+                await dkpLedger.AppendAsync(
+                    linkshellMembership,
+                    "EventEarned",
+                    eventDkp,
+                    endTimeUtc,
+                    eventPool,
+                    new DkpEntryContext(
+                        CharacterName: participation.CharacterName,
+                        EventName: eventEntity.EventName,
+                        EventType: eventEntity.EventType,
+                        EventLocation: eventEntity.EventLocation,
+                        EventStartTime: eventEntity.StartTime,
+                        EventEndTime: endTimeUtc,
+                        Details: "DKP earned from completed event.",
+                        EventHistory: history),
+                    CancellationToken.None);
             }
         }
 
         dbContext.EventHistories.Add(history);
+        var hasLootDeductions = false;
         foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
         {
             if (lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
@@ -1007,38 +1176,33 @@ public partial class EventController
             }
 
             var amount = -lootDetail.WinningDkpSpent.GetValueOrDefault();
-            winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
 
             // Stamp the actual deducted amount onto the loot row so future
             // Loot History edits can refund precisely (matches the ToD
             // ActualDeductedDkp pattern in HelpersTods.AdjustTodLootDkpAsync).
             lootDetail.ActualDeductedDkp = Math.Abs(amount);
 
-            var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
-            ledgerEntries.Add(new DkpLedgerEntry
-            {
-                AppUserId = winnerMembership.AppUserId,
-                EventHistory = history,
-                LinkshellId = eventEntity.LinkshellId,
-                EntryType = "LootSpent",
-                Amount = amount,
-                Sequence = currentSequence,
-                OccurredAt = endTimeUtc,
-                CharacterName = winnerMembership.CharacterName,
-                EventName = eventEntity.EventName,
-                EventType = eventEntity.EventType,
-                EventLocation = eventEntity.EventLocation,
-                EventStartTime = eventEntity.StartTime,
-                EventEndTime = endTimeUtc,
-                ItemName = lootDetail.ItemName,
-                Details = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.",
-                SourceEventLootDetailId = lootDetail.Id
-            });
-            nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
+            // Same pool the event earned into: you buy this event's loot with this event's DKP.
+            await dkpLedger.AppendAsync(
+                winnerMembership,
+                "LootSpent",
+                amount,
+                endTimeUtc,
+                eventPool,
+                new DkpEntryContext(
+                    CharacterName: winnerMembership.CharacterName,
+                    EventName: eventEntity.EventName,
+                    EventType: eventEntity.EventType,
+                    EventLocation: eventEntity.EventLocation,
+                    EventStartTime: eventEntity.StartTime,
+                    EventEndTime: endTimeUtc,
+                    ItemName: lootDetail.ItemName,
+                    Details: $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.",
+                    EventHistory: history,
+                    SourceEventLootDetailId: lootDetail.Id),
+                CancellationToken.None);
+            hasLootDeductions = true;
         }
-
-        var hasLootDeductions = ledgerEntries.Any(entry => entry.EntryType == "LootSpent");
-        dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
 
         // Preserve EventLootDetails post-close so officers can edit them via
         // Loot History. Re-parent each row to the new EventHistory and detach
@@ -1051,13 +1215,47 @@ public partial class EventController
             lootDetail.Event = null;
             lootDetail.EventId = null;
         }
-        dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
+        // Participations materialized earlier in THIS close (late board signups) are still in
+        // the Added state with TEMPORARY keys — EF can't transition those to Deleted. Detach
+        // them (never persisted; history + DKP already recorded) and delete only the rows that
+        // actually exist. Mirrors the Activity EndEventAsync guard.
+        foreach (var participation in eventEntity.AppUserEvents.ToList())
+        {
+            var entry = dbContext.Entry(participation);
+            if (entry.State == EntityState.Added)
+            {
+                // Detach AND drop from the navigation so EF's change detector can't re-track it
+                // (and re-attempt the temp-key delete) when the event is removed below.
+                entry.State = EntityState.Detached;
+                eventEntity.AppUserEvents.Remove(participation);
+            }
+            else
+            {
+                dbContext.AppUserEvents.Remove(participation);
+            }
+        }
         dbContext.Events.Remove(eventEntity);
         await dbContext.SaveChangesAsync();
 
         // A counting event just closed → recompute each member's Active/Inactive
         // status from attendance (no-op when the linkshell hasn't enabled tracking).
-        await new MemberActivityService(dbContext).ApplyComputedStatusAsync(eventEntity.LinkshellId, CancellationToken.None);
+        // Best-effort: the close is already committed above, so a recompute failure must NOT
+        // fail the request (mirrors the Activity EndEventAsync guard). Status re-derives on the
+        // next close / roster load.
+        try
+        {
+            await new MemberActivityService(dbContext).ApplyComputedStatusAsync(eventEntity.LinkshellId, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // Swallow — the event is ended; activity status will recompute next time. But LOG
+            // it (resolving the app logger from the DbContext, since this is a static helper)
+            // so a persistently-failing recompute isn't invisible. Mirrors the Activity twin.
+            dbContext.GetService<ILoggerFactory>()?
+                .CreateLogger(typeof(EventController).FullName!)
+                .LogError(ex, "Active/Inactive recompute failed after ending event for linkshell {LinkshellId}.",
+                    eventEntity.LinkshellId);
+        }
 
         return new EndEventResult(endTimeUtc, participantSummaries, windowCount, history.Id, hasLootDeductions);
     }

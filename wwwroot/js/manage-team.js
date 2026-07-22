@@ -63,6 +63,11 @@
         var entryLabel = document.getElementById('auditEntryLabel');
         var amountField = document.getElementById('auditAmountField');
         var label = document.getElementById('auditAmountLabel');
+        // The DKP-pool picker exists only on linkshells that split their DKP, and only applies to a
+        // Misc adjustment: "Correct" and "Add" inherit the pool of the entry they act on, which is
+        // the only thing that keeps a correction attached to what it corrects under a later remap.
+        var poolField = document.getElementById('auditPoolField');
+        if (poolField) { poolField.style.display = mode === 'Misc' ? '' : 'none'; }
         if (mode === 'Misc') {
             adjust.style.display = 'none';
             amountField.style.display = '';
@@ -231,6 +236,8 @@
         var amountStr = document.getElementById('auditAmount').value;
         var amount = mode === 'Add' ? 0 : parseFloat(amountStr);
         var reason = document.getElementById('auditReason').value.trim();
+        // Null on a single-pool linkshell — the element isn't rendered at all there.
+        var poolSelect = document.getElementById('auditPool');
         var relatedId = null;
         var sourceWindowEventId = null;
 
@@ -266,7 +273,9 @@
                 relatedLedgerEntryId: relatedId,
                 sourceWindowEventId: sourceWindowEventId,
                 amount: amount,
-                reason: reason
+                reason: reason,
+                // Only honoured for Misc; the server ignores it for Correct/Add.
+                dkpPoolId: poolSelect && mode === 'Misc' ? parseInt(poolSelect.value, 10) : null
             })
         }).then(function (res) {
             if (handleAuthFailure(res)) { return null; }

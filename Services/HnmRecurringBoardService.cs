@@ -88,11 +88,18 @@ public static class HnmRecurringBoardService
     public static Task<int?> LatestTodIdAsync(
         ApplicationDbContext db, int linkshellId, string monster, CancellationToken cancellationToken)
     {
-        var lower = monster.ToLower();
+        // A recurring board may be keyed on a combined "Base/Stronger" name
+        // (e.g. "Adamantoise/Aspidochelone"); incoming ToDs record a single monster, so
+        // match a ToD whose name is EITHER half. Single names yield a one-item list.
+        var names = HnmConfig.MonsterSegments(monster).Select(seg => seg.ToLower()).ToList();
+        if (names.Count == 0)
+        {
+            return Task.FromResult<int?>(null);
+        }
         return db.Tods
             .Where(tod => tod.LinkshellId == linkshellId
                 && tod.MonsterName != null
-                && tod.MonsterName.ToLower() == lower
+                && names.Contains(tod.MonsterName.ToLower())
                 && tod.RepopTime != null)
             .OrderByDescending(tod => tod.Id)
             .Select(tod => (int?)tod.Id)

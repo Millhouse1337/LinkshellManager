@@ -3,13 +3,15 @@ import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { AutoRefreshService } from '../../discord/auto-refresh.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { PartySetupService } from '../../discord/party-setup.service';
 import type {
   ActivityAlsoAttending,
   ActivityPartySetupAlliance,
   ActivityPartySetupParty,
-  ActivityPartySetupSlot
+  ActivityPartySetupSlot,
+  PartySignupNudge
 } from '../../discord/discord-activity.types';
 
 interface SlotSignupDraft {
@@ -18,9 +20,6 @@ interface SlotSignupDraft {
   subJob: string;
   // When true, signing up also claims the party-leader spot (event board only).
   asLeader: boolean;
-  // Event board only: which character to sign up as ('' = main). Picker shows
-  // only when the member has alts.
-  characterName: string;
 }
 
 // Shared interactive view of a single party setup's alliance -> party -> slot
@@ -40,6 +39,7 @@ interface SlotSignupDraft {
 export class PartySetupPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetup = inject(PartySetupService);
+  private readonly autoRefresh = inject(AutoRefreshService);
 
   readonly setupId = input.required<number>();
   readonly linkshellId = input.required<number>();
@@ -69,6 +69,9 @@ export class PartySetupPanelComponent {
 
   constructor() {
     effect(() => {
+      // Re-read on every app refresh (timer / Refresh button / live change-feed) so
+      // OTHER members' signups appear here without having to switch tabs.
+      this.autoRefresh.refreshSignal();
       const eventId = this.eventId();
       const setupId = this.setupId();
       if (eventId > 0) {
@@ -129,7 +132,7 @@ export class PartySetupPanelComponent {
   }
 
   protected draftFor(slotId: number): SlotSignupDraft {
-    return this.drafts()[slotId] ?? { role: '', mainJob: '', subJob: '', asLeader: false, characterName: '' };
+    return this.drafts()[slotId] ?? { role: '', mainJob: '', subJob: '', asLeader: false };
   }
 
   protected setDraft(slotId: number, patch: Partial<SlotSignupDraft>): void {
@@ -190,11 +193,50 @@ export class PartySetupPanelComponent {
     return this.activity.signupCharacterOptions();
   }
 
+  // Whether to show the single "Sign up as" character picker in the board toolbar:
+  // event board, the member actually has alts, and we're not editing / read-only.
+  protected showCharacterPicker(): boolean {
+    return !this.templateOnly() && !this.readOnly() && this.isEventBoard()
+      && !this.editEnabled() && this.signupCharacterOptions().length > 1;
+  }
+
   // True once any slot in the party has a per-event leader, so the "Sign up as
   // leader" action is hidden (first-claim-wins).
   protected partyHasLeader(party: { slots: ActivityPartySetupSlot[] }): boolean {
     return party.slots.some(s => s.signedUpIsPartyLeader === true);
   }
+
+  // Alliance lead is only meaningful on a multi-alliance event board (a single
+  // alliance has no header row of its own to mark).
+  protected multiAlliance(): boolean {
+    return (this.detail()?.alliances.length ?? 0) > 1;
+  }
+
+  // Show "Make me alliance lead" for a member who holds a slot in this alliance but
+  // isn't already its lead. Mirrors the Discord button's slot gate + the web board.
+  protected canTakeAllianceLead(alliance: ActivityPartySetupAlliance): boolean {
+    if (!this.isEventBoard() || this.editEnabled() || this.readOnly() || !this.multiAlliance()) {
+      return false;
+    }
+    const me = this.myAppUserId();
+    if (!me || alliance.leadAppUserId === me) {
+      return false;
+    }
+    return alliance.parties.some(p => p.slots.some(s => s.signedUpAppUserId === me));
+  }
+
+  protected async makeAllianceLead(): Promise<void> {
+    await this.partySetup.makeAllianceLead(this.eventId());
+  }
+
+  // "Fill earlier alliances first" prompt: the slot the member chose + the server's
+  // suggested earlier slot. Null when no prompt is showing.
+  protected readonly signupNudge = signal<{
+    nudge: PartySignupNudge;
+    slot: ActivityPartySetupSlot;
+    asLeader: boolean;
+    characterName: string | null;
+  } | null>(null);
 
   protected async signUp(slot: ActivityPartySetupSlot): Promise<void> {
     const draft = this.draftFor(slot.slotId);
@@ -203,12 +245,55 @@ export class PartySetupPanelComponent {
       mainJob: this.needsMainJob(slot) ? (draft.mainJob || null) : null,
       subJob: this.needsSubJob(slot) ? (draft.subJob || null) : null
     };
-    const ok = this.eventId() > 0
-      ? await this.partySetup.signUpEvent(this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader, characterName: draft.characterName || null })
-      : await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
-    if (ok) {
-      this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false, characterName: '' });
+    if (this.eventId() > 0) {
+      const result = await this.partySetup.signUpEvent(
+        this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader, characterName: this.signupCharacter() || null });
+      if (result && typeof result === 'object') {
+        // Server suggests an open earlier-alliance slot — show the prompt; nothing committed.
+        this.signupNudge.set({ nudge: result, slot, asLeader: draft.asLeader, characterName: this.signupCharacter() || null });
+        return;
+      }
+      if (result === true) {
+        this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
+      }
+      return;
     }
+    const ok = await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
+    if (ok) {
+      this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
+    }
+  }
+
+  // Take the suggested earlier slot (uses the member's resolved role/job from the nudge).
+  protected async takeSuggestedSlot(): Promise<void> {
+    const n = this.signupNudge();
+    if (!n) { return; }
+    const ok = await this.partySetup.signUpEvent(this.eventId(), n.nudge.suggestedSlotId, {
+      role: n.nudge.role ?? null, mainJob: n.nudge.mainJob ?? null, subJob: n.nudge.subJob ?? null,
+      asLeader: n.asLeader, characterName: n.characterName, force: true
+    });
+    if (ok === true) {
+      this.setDraft(n.slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
+    }
+    this.signupNudge.set(null);
+  }
+
+  // Sign up for the slot they originally chose, bypassing the nudge.
+  protected async signUpAnyway(): Promise<void> {
+    const n = this.signupNudge();
+    if (!n) { return; }
+    const ok = await this.partySetup.signUpEvent(this.eventId(), n.slot.slotId, {
+      role: n.nudge.role ?? null, mainJob: n.nudge.mainJob ?? null, subJob: n.nudge.subJob ?? null,
+      asLeader: n.asLeader, characterName: n.characterName, force: true
+    });
+    if (ok === true) {
+      this.setDraft(n.slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
+    }
+    this.signupNudge.set(null);
+  }
+
+  protected dismissNudge(): void {
+    this.signupNudge.set(null);
   }
 
   protected async withdraw(slot: ActivityPartySetupSlot): Promise<void> {
@@ -236,6 +321,12 @@ export class PartySetupPanelComponent {
 
   protected readonly editing = signal(false);
   protected readonly editingSlotId = signal<number | null>(null);
+
+  // Single character (main/alt) the member signs up as, chosen once in the board
+  // toolbar instead of per-slot. '' = main; other values are alt names. Mirrors
+  // signupCharacterOptions (first entry is the main). Persists across sign-ups so
+  // claiming several slots as the same alt needs only one selection.
+  protected readonly signupCharacter = signal('');
   private readonly jobEdits = signal<Record<number, { role: string; mainJob: string; subJob: string }>>({});
 
   // Officer + a live event board (never the reusable template or a read-only recap).

@@ -38,12 +38,47 @@ public sealed class LootEditService
     private readonly ApplicationDbContext _db;
     private readonly ILogger<LootEditService> _logger;
 
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+
     public LootEditService(
         ApplicationDbContext db,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
         ILogger<LootEditService> logger)
     {
         _db = db;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
         _logger = logger;
+    }
+
+    // Resolve a loot winner's membership by MAIN OR ALT character name.
+    //
+    // Event close (EventController.ResolveLootWinnerMembership) and the affordability guard
+    // (LootDkpGuard) both resolve alts. This service used to match on CharacterName alone, so an
+    // item won on an alt was debited at close but its edit/delete refund silently found nobody and
+    // logged a warning — the member was permanently short the DKP.
+    private async Task<AppUserLinkshell?> ResolveWinnerAsync(
+        int linkshellId, string? winnerName, CancellationToken cancellationToken)
+    {
+        var name = winnerName?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        // Compared in memory so the match isn't at the mercy of the DB collation.
+        var members = await _db.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
+            .ToListAsync(cancellationToken);
+
+        return members.FirstOrDefault(link =>
+            string.Equals(link.CharacterName, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(link.AppUser?.CharacterName, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(link.AppUser?.AltCharacterName1, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(link.AppUser?.AltCharacterName2, name, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<LootEditResult> EditTodLootAsync(
@@ -99,6 +134,9 @@ public sealed class LootEditService
             newWinnerName: newItemWinner,
             newDkpRaw: request.WinningDkpSpent.Value,
             isHybrid: isHybrid,
+            // ToD loot is PINNED to the pool it was originally paid from, so an edit refunds and
+            // re-debits the same wallet even if HNM has been remapped since.
+            poolRef: DkpPoolRef.Pinned(detail.DkpPoolId ?? await DefaultPoolIdAsync(linkshellId, cancellationToken)),
             sourceTodLootDetailId: detail.Id,
             sourceEventLootDetailId: null,
             eventName: monsterName,
@@ -218,6 +256,9 @@ public sealed class LootEditService
             newWinnerName: newItemWinner,
             newDkpRaw: request.WinningDkpSpent.Value,
             isHybrid: isHybrid,
+            // Event loot FOLLOWS its event type, so a remap moves the original debit and these
+            // compensating rows together — the refund can never be stranded in the old pool.
+            poolRef: DkpPoolRef.Derived(eventType),
             sourceTodLootDetailId: null,
             sourceEventLootDetailId: detail.Id,
             eventName: eventName,
@@ -284,6 +325,7 @@ public sealed class LootEditService
                 dkpRaw: dkpRaw,
                 actualDeducted: detail.ActualDeductedDkp,
                 isHybrid: structure == "Hybrid",
+                poolRef: DkpPoolRef.Pinned(detail.DkpPoolId ?? await DefaultPoolIdAsync(linkshellId, cancellationToken)),
                 sourceTodLootDetailId: detail.Id,
                 sourceEventLootDetailId: null,
                 eventName: monsterName,
@@ -373,6 +415,7 @@ public sealed class LootEditService
                 dkpRaw: dkpRaw,
                 actualDeducted: detail.ActualDeductedDkp,
                 isHybrid: false,
+                poolRef: DkpPoolRef.Derived(eventType),
                 sourceTodLootDetailId: null,
                 sourceEventLootDetailId: detail.Id,
                 eventName: eventName,
@@ -400,6 +443,9 @@ public sealed class LootEditService
     // The grid step (0.25 / 0.5) for the linkshell's DKP rounding setting, so
     // Hybrid loot spends/refunds land on the same increment as every other DKP
     // value. One lightweight lookup per loot edit (an infrequent action).
+    private async Task<int> DefaultPoolIdAsync(int linkshellId, CancellationToken cancellationToken)
+        => (await _dkpPools.GetMapAsync(linkshellId, cancellationToken)).DefaultPoolId;
+
     private async Task<double> GetRoundingStepAsync(int linkshellId, CancellationToken cancellationToken)
     {
         var increment = await _db.Linkshells
@@ -421,6 +467,7 @@ public sealed class LootEditService
         int dkpRaw,
         double? actualDeducted,
         bool isHybrid,
+        DkpPoolRef poolRef,
         int? sourceTodLootDetailId,
         int? sourceEventLootDetailId,
         string? eventName,
@@ -438,10 +485,7 @@ public sealed class LootEditService
             return;
         }
 
-        var membership = await _db.AppUserLinkshells
-            .FirstOrDefaultAsync(link => link.LinkshellId == linkshellId
-                                      && link.AppUserId != null
-                                      && link.CharacterName == winnerName, cancellationToken);
+        var membership = await ResolveWinnerAsync(linkshellId, winnerName, cancellationToken);
         if (membership is null || string.IsNullOrWhiteSpace(membership.AppUserId))
         {
             _logger.LogWarning(
@@ -464,9 +508,11 @@ public sealed class LootEditService
             }
             else
             {
+                // Legacy row with no stored actual: that debit came out of the member's TOTAL
+                // (pools didn't exist), so the inverse works off the total too.
                 var roundingStep = await GetRoundingStepAsync(linkshellId, cancellationToken);
-                var currentBalance = Math.Max(0, membership.LinkshellDkp ?? 0);
-                refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct, roundingStep);
+                var legacyBalance = Math.Max(0, membership.LinkshellDkp ?? 0);
+                refundAmount = LootDkpCalculator.ComputeHybridRefund(legacyBalance, pct, roundingStep);
             }
         }
         else
@@ -479,33 +525,25 @@ public sealed class LootEditService
             return;
         }
 
-        membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + refundAmount;
-
-        var maxSequence = await _db.DkpLedgerEntries
-            .Where(entry => entry.LinkshellId == linkshellId && entry.AppUserId == membership.AppUserId)
-            .Select(entry => (int?)entry.Sequence)
-            .MaxAsync(cancellationToken) ?? 0;
-
-        await _db.DkpLedgerEntries.AddAsync(new DkpLedgerEntry
-        {
-            AppUserId = membership.AppUserId,
-            LinkshellId = linkshellId,
-            EntryType = "LootDeleteRefund",
-            Amount = refundAmount,
-            Sequence = maxSequence + 1,
-            OccurredAt = occurredAtUtc,
-            CharacterName = membership.CharacterName,
-            EventName = eventName,
-            EventType = eventType,
-            EventLocation = eventLocation,
-            EventStartTime = eventStartTime,
-            EventEndTime = eventEndTime,
-            ItemName = itemName,
-            Details = $"Loot deleted: record removed and DKP refunded. Reason: {Truncate(reason, 800)}",
-            EditReason = Truncate(reason, 512),
-            SourceTodLootDetailId = sourceTodLootDetailId,
-            SourceEventLootDetailId = sourceEventLootDetailId
-        }, cancellationToken);
+        await _dkpLedger.AppendAsync(
+            membership,
+            "LootDeleteRefund",
+            refundAmount,
+            occurredAtUtc,
+            poolRef,
+            new DkpEntryContext(
+                CharacterName: membership.CharacterName,
+                EventName: eventName,
+                EventType: eventType,
+                EventLocation: eventLocation,
+                EventStartTime: eventStartTime,
+                EventEndTime: eventEndTime,
+                ItemName: itemName,
+                Details: $"Loot deleted: record removed and DKP refunded. Reason: {Truncate(reason, 800)}",
+                EditReason: Truncate(reason, 512),
+                SourceTodLootDetailId: sourceTodLootDetailId,
+                SourceEventLootDetailId: sourceEventLootDetailId),
+            cancellationToken);
     }
 
     private static string? ValidateRequest(LootEditRequest request)
@@ -576,6 +614,7 @@ public sealed class LootEditService
         string newWinnerName,
         int newDkpRaw,
         bool isHybrid,
+        DkpPoolRef poolRef,
         int? sourceTodLootDetailId,
         int? sourceEventLootDetailId,
         string? eventName,
@@ -590,32 +629,8 @@ public sealed class LootEditService
     {
         double? newActualDeducted = null;
 
-        // Load both winner memberships in one query so a same-winner edit
-        // can mutate the row in place without a second round-trip.
-        var winnerNames = new[] { oldWinnerName, newWinnerName }
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var memberships = winnerNames.Count == 0
-            ? new List<AppUserLinkshell>()
-            : await _db.AppUserLinkshells
-                .Where(link => link.LinkshellId == linkshellId
-                            && link.AppUserId != null
-                            && winnerNames.Contains(link.CharacterName!))
-                .ToListAsync(cancellationToken);
-
-        var membershipsByCharacter = memberships
-            .Where(link => !string.IsNullOrWhiteSpace(link.CharacterName) && !string.IsNullOrWhiteSpace(link.AppUserId))
-            .GroupBy(link => link.CharacterName!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-        var oldMembership = !string.IsNullOrWhiteSpace(oldWinnerName) && membershipsByCharacter.TryGetValue(oldWinnerName, out var resolvedOld)
-            ? resolvedOld
-            : null;
-        var newMembership = membershipsByCharacter.TryGetValue(newWinnerName, out var resolvedNew)
-            ? resolvedNew
-            : null;
+        var oldMembership = await ResolveWinnerAsync(linkshellId, oldWinnerName, cancellationToken);
+        var newMembership = await ResolveWinnerAsync(linkshellId, newWinnerName, cancellationToken);
 
         if (newMembership is null)
         {
@@ -623,26 +638,30 @@ public sealed class LootEditService
                 $"Winner '{newWinnerName}' is not a member of the linkshell. Pick an active linkshell member.");
         }
 
-        // We need a per-AppUser ledger sequence number for any new entries.
-        // Fetch the current max for each affected user in one query.
-        var affectedAppUserIds = new[] { oldMembership?.AppUserId, newMembership.AppUserId }
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList()!;
-
-        var nextSequenceByAppUserId = await _db.DkpLedgerEntries
-            .Where(entry => entry.LinkshellId == linkshellId
-                         && entry.AppUserId != null
-                         && affectedAppUserIds.Contains(entry.AppUserId))
-            .GroupBy(entry => entry.AppUserId!)
-            .Select(group => new { AppUserId = group.Key, NextSequence = group.Max(entry => entry.Sequence) + 1 })
-            .ToDictionaryAsync(item => item.AppUserId, item => item.NextSequence, StringComparer.OrdinalIgnoreCase, cancellationToken);
-
         var roundingStep = isHybrid
             ? await GetRoundingStepAsync(linkshellId, cancellationToken)
             : DkpRounding.QuarterStep;
 
-        var ledgerEntries = new List<DkpLedgerEntry>();
+        // The refund and the re-debit go through the SAME poolRef, so an edit always cancels out
+        // inside one wallet. Crucially the ref is passed through UNCHANGED rather than resolved to
+        // a pinned id: for event loot it's Derived(eventType), so a later remap moves the original
+        // debit AND these compensating rows together and the symmetry survives for free. Pinning
+        // them here would strand the refund in the old pool.
+        //
+        // The resolved id below is only used to READ a balance (the Hybrid percentage base).
+        var poolId = poolRef.PinnedPoolId
+            ?? await _dkpPools.ResolveAsync(linkshellId, poolRef.DerivedFromEventType, cancellationToken);
+
+        var entryContext = new DkpEntryContext(
+            EventName: eventName,
+            EventType: eventType,
+            EventLocation: eventLocation,
+            EventStartTime: eventStartTime,
+            EventEndTime: eventEndTime,
+            ItemName: itemName,
+            EditReason: Truncate(reason, 512),
+            SourceTodLootDetailId: sourceTodLootDetailId,
+            SourceEventLootDetailId: sourceEventLootDetailId);
 
         // ----- Refund the OLD debit -----
         if (oldMembership is not null && oldDkpRaw > 0)
@@ -654,8 +673,9 @@ public sealed class LootEditService
             }
             else if (isHybrid)
             {
-                // No stored actual; approximate from the percent + current
-                // balance the same way AdjustTodLootDkpAsync does on refund.
+                // No stored actual — a legacy row. That debit was taken as a percentage of the
+                // member's TOTAL balance (pools didn't exist), so the inverse has to work off the
+                // total too, or it under-refunds.
                 var pct = Math.Clamp((double)oldDkpRaw, 0, 100);
                 if (pct >= 100d)
                 {
@@ -663,8 +683,8 @@ public sealed class LootEditService
                 }
                 else
                 {
-                    var currentBalance = Math.Max(0, oldMembership.LinkshellDkp ?? 0);
-                    refundAmount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct, roundingStep);
+                    var legacyBalance = Math.Max(0, oldMembership.LinkshellDkp ?? 0);
+                    refundAmount = LootDkpCalculator.ComputeHybridRefund(legacyBalance, pct, roundingStep);
                 }
             }
             else
@@ -674,28 +694,18 @@ public sealed class LootEditService
 
             if (refundAmount > 0)
             {
-                oldMembership.LinkshellDkp = (oldMembership.LinkshellDkp ?? 0d) + refundAmount;
-                var refundSeq = NextSequence(nextSequenceByAppUserId, oldMembership.AppUserId!);
-                ledgerEntries.Add(new DkpLedgerEntry
-                {
-                    AppUserId = oldMembership.AppUserId,
-                    LinkshellId = linkshellId,
-                    EntryType = "LootEditRefund",
-                    Amount = refundAmount,
-                    Sequence = refundSeq,
-                    OccurredAt = occurredAtUtc,
-                    CharacterName = oldMembership.CharacterName,
-                    EventName = eventName,
-                    EventType = eventType,
-                    EventLocation = eventLocation,
-                    EventStartTime = eventStartTime,
-                    EventEndTime = eventEndTime,
-                    ItemName = itemName,
-                    Details = $"Edit refund: previous loot record corrected. Reason: {Truncate(reason, 800)}",
-                    EditReason = Truncate(reason, 512),
-                    SourceTodLootDetailId = sourceTodLootDetailId,
-                    SourceEventLootDetailId = sourceEventLootDetailId
-                });
+                await _dkpLedger.AppendAsync(
+                    oldMembership,
+                    "LootEditRefund",
+                    refundAmount,
+                    occurredAtUtc,
+                    poolRef,
+                    entryContext with
+                    {
+                        CharacterName = oldMembership.CharacterName,
+                        Details = $"Edit refund: previous loot record corrected. Reason: {Truncate(reason, 800)}",
+                    },
+                    cancellationToken);
             }
         }
 
@@ -705,14 +715,13 @@ public sealed class LootEditService
             double debitAmount;
             if (isHybrid)
             {
-                // Hybrid debit = pct of current balance AFTER the refund above
-                // has settled into newMembership.LinkshellDkp (refund only
-                // touched the OLD membership row, so this is unchanged for
-                // winner-change edits and correctly post-refund for same-
-                // winner edits since they share the same membership row).
+                // Hybrid takes a percentage of a wallet, and the wallet is the pool. The writer's
+                // in-request view already includes the refund staged above, so a same-winner edit
+                // correctly charges the post-refund balance (and a winner-change edit charges the
+                // new winner's untouched one) — the same sequencing the old in-memory read had.
                 var pct = Math.Clamp((double)newDkpRaw, 0, 100);
-                var currentBalance = Math.Max(0, newMembership.LinkshellDkp ?? 0);
-                debitAmount = LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
+                var poolBalance = Math.Max(0, await _dkpLedger.GetPoolBalanceAsync(newMembership, poolId, cancellationToken));
+                debitAmount = LootDkpCalculator.ComputeHybridDebit(poolBalance, pct, roundingStep);
             }
             else
             {
@@ -721,35 +730,20 @@ public sealed class LootEditService
 
             if (debitAmount > 0)
             {
-                newMembership.LinkshellDkp = (newMembership.LinkshellDkp ?? 0d) - debitAmount;
                 newActualDeducted = debitAmount;
-                var debitSeq = NextSequence(nextSequenceByAppUserId, newMembership.AppUserId!);
-                ledgerEntries.Add(new DkpLedgerEntry
-                {
-                    AppUserId = newMembership.AppUserId,
-                    LinkshellId = linkshellId,
-                    EntryType = "LootEditSpent",
-                    Amount = -debitAmount,
-                    Sequence = debitSeq,
-                    OccurredAt = occurredAtUtc,
-                    CharacterName = newMembership.CharacterName,
-                    EventName = eventName,
-                    EventType = eventType,
-                    EventLocation = eventLocation,
-                    EventStartTime = eventStartTime,
-                    EventEndTime = eventEndTime,
-                    ItemName = itemName,
-                    Details = $"Edit spend: new loot record applied. Reason: {Truncate(reason, 800)}",
-                    EditReason = Truncate(reason, 512),
-                    SourceTodLootDetailId = sourceTodLootDetailId,
-                    SourceEventLootDetailId = sourceEventLootDetailId
-                });
+                await _dkpLedger.AppendAsync(
+                    newMembership,
+                    "LootEditSpent",
+                    -debitAmount,
+                    occurredAtUtc,
+                    poolRef,
+                    entryContext with
+                    {
+                        CharacterName = newMembership.CharacterName,
+                        Details = $"Edit spend: new loot record applied. Reason: {Truncate(reason, 800)}",
+                    },
+                    cancellationToken);
             }
-        }
-
-        if (ledgerEntries.Count > 0)
-        {
-            await _db.DkpLedgerEntries.AddRangeAsync(ledgerEntries, cancellationToken);
         }
 
         return newActualDeducted;

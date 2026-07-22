@@ -26,16 +26,23 @@ public class TodController : Controller
     private readonly TimeZoneConversionService _timeZones;
     private readonly SubmissionApprovalService _submissionApproval;
 
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+
     public TodController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        SubmissionApprovalService submissionApproval)
+        SubmissionApprovalService submissionApproval,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
         _submissionApproval = submissionApproval;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
     }
 
     [HttpGet]
@@ -208,7 +215,12 @@ public class TodController : Controller
             }
 
             await _context.TodLootDetails.AddRangeAsync(normalizedLootDetails);
-            await ApplyLootDkpAsync(newTod, normalizedLootDetails, occurredAtUtc);
+            // Was a web-only copy of this logic that silently ignored LootStructure — a Hybrid or
+            // LootCouncil linkshell recording a ToD here got flat DKP deductions anyway. Now it's
+            // the same shared path the Activity and the addon use.
+            await ActivityDataController.AdjustTodLootDkpAsync(
+                _context, _dkpLedger, _dkpPools, newTod, normalizedLootDetails, occurredAtUtc,
+                isRefund: false, HttpContext.RequestAborted);
             await _context.SaveChangesAsync();
         }
 
@@ -350,7 +362,7 @@ public class TodController : Controller
         // new set. Mirrors ActivityDataController.UpdateTodAsync.
         if (tod.TodLootDetails.Count > 0)
         {
-            await ActivityDataController.AdjustTodLootDkpAsync(_context, tod, tod.TodLootDetails.ToList(), occurredAtUtc, isRefund: true, cancellationToken);
+            await ActivityDataController.AdjustTodLootDkpAsync(_context, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), occurredAtUtc, isRefund: true, cancellationToken);
             _context.TodLootDetails.RemoveRange(tod.TodLootDetails);
         }
 
@@ -378,7 +390,7 @@ public class TodController : Controller
                 lootDetail.TodId = tod.Id;
             }
             await _context.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await ActivityDataController.AdjustTodLootDkpAsync(_context, tod, normalizedLootDetails, occurredAtUtc, isRefund: false, cancellationToken);
+            await ActivityDataController.AdjustTodLootDkpAsync(_context, _dkpLedger, _dkpPools, tod, normalizedLootDetails, occurredAtUtc, isRefund: false, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
         }
 
@@ -457,7 +469,9 @@ public class TodController : Controller
             return Forbid();
         }
 
-        await ReverseLootDkpAsync(tod, tod.TodLootDetails, DateTime.UtcNow);
+        await ActivityDataController.AdjustTodLootDkpAsync(
+            _context, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), DateTime.UtcNow,
+            isRefund: true, HttpContext.RequestAborted);
         _context.TodLootDetails.RemoveRange(tod.TodLootDetails);
         _context.Tods.Remove(tod);
         await _context.SaveChangesAsync();
@@ -766,92 +780,6 @@ public class TodController : Controller
                 WinningDkpSpent = detail.WinningDkpSpent
             })
             .ToList() ?? new List<TodLootDetail>();
-    }
-
-    private async Task ApplyLootDkpAsync(Tod tod, IEnumerable<TodLootDetail> lootDetails, DateTime occurredAtUtc)
-    {
-        await AdjustLootDkpAsync(tod, lootDetails, occurredAtUtc, isRefund: false);
-    }
-
-    private async Task ReverseLootDkpAsync(Tod tod, IEnumerable<TodLootDetail> lootDetails, DateTime occurredAtUtc)
-    {
-        await AdjustLootDkpAsync(tod, lootDetails, occurredAtUtc, isRefund: true);
-    }
-
-    private async Task AdjustLootDkpAsync(Tod tod, IEnumerable<TodLootDetail> lootDetails, DateTime occurredAtUtc, bool isRefund)
-    {
-        var actionableLoot = lootDetails
-            .Where(detail => !string.IsNullOrWhiteSpace(detail.ItemWinner) && detail.WinningDkpSpent.GetValueOrDefault() > 0)
-            .ToList();
-        if (actionableLoot.Count == 0)
-        {
-            return;
-        }
-
-        var winnerNames = actionableLoot
-            .Select(detail => detail.ItemWinner!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var memberships = await _context.AppUserLinkshells
-            .Where(link => link.LinkshellId == tod.LinkshellId && link.AppUserId != null && winnerNames.Contains(link.CharacterName!))
-            .ToListAsync();
-
-        var membershipsByCharacterName = memberships
-            .Where(link => !string.IsNullOrWhiteSpace(link.CharacterName) && !string.IsNullOrWhiteSpace(link.AppUserId))
-            .GroupBy(link => link.CharacterName!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        if (membershipsByCharacterName.Count == 0)
-        {
-            return;
-        }
-
-        var appUserIds = membershipsByCharacterName.Values
-            .Select(link => link.AppUserId!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var nextSequenceByAppUserId = await _context.DkpLedgerEntries
-            .Where(entry => entry.LinkshellId == tod.LinkshellId && entry.AppUserId != null && appUserIds.Contains(entry.AppUserId))
-            .GroupBy(entry => entry.AppUserId!)
-            .Select(group => new { AppUserId = group.Key, NextSequence = group.Max(entry => entry.Sequence) + 1 })
-            .ToDictionaryAsync(item => item.AppUserId, item => item.NextSequence, StringComparer.OrdinalIgnoreCase);
-
-        var ledgerEntries = new List<DkpLedgerEntry>();
-        foreach (var detail in actionableLoot)
-        {
-            if (!membershipsByCharacterName.TryGetValue(detail.ItemWinner!.Trim(), out var membership) || string.IsNullOrWhiteSpace(membership.AppUserId))
-            {
-                continue;
-            }
-
-            var dkpValue = detail.WinningDkpSpent.GetValueOrDefault();
-            var amount = isRefund ? dkpValue : -dkpValue;
-            membership.LinkshellDkp = (membership.LinkshellDkp ?? 0d) + amount;
-
-            var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(membership.AppUserId, 1);
-            nextSequenceByAppUserId[membership.AppUserId] = currentSequence + 1;
-
-            ledgerEntries.Add(new DkpLedgerEntry
-            {
-                AppUserId = membership.AppUserId,
-                LinkshellId = tod.LinkshellId,
-                EntryType = isRefund ? "LootRefund" : "LootSpent",
-                Amount = amount,
-                Sequence = currentSequence,
-                OccurredAt = occurredAtUtc,
-                CharacterName = membership.CharacterName,
-                ItemName = detail.ItemName,
-                Details = isRefund
-                    ? $"Refunded DKP for deleted ToD loot on {tod.MonsterName ?? "Unknown monster"}."
-                    : $"DKP spent on ToD loot from {tod.MonsterName ?? "Unknown monster"}."
-            });
-        }
-
-        if (ledgerEntries.Count > 0)
-        {
-            await _context.DkpLedgerEntries.AddRangeAsync(ledgerEntries);
-        }
     }
 
     private async Task<AppUser?> RequireCurrentUserAsync()

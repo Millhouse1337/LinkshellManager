@@ -1,0 +1,426 @@
+@model LinkshellCustomizeViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Permissions";
+    ViewData["BodyClass"] = "lsm-page";
+    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
+    var canManageRolesValue = Model.CanManageRoles.ToString().ToLowerInvariant();
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Permissions</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName)) { <span>@Model.LinkshellName</span> } else { <span>Settings</span> }
+        </div>
+    </div>
+</div>
+
+<div class="card fade d2 permissions-config-card" id="permissionsConfigCard" style="margin-top:16px"
+     data-linkshellid="@Model.LinkshellId"
+     data-can-manage-roles="@canManageRolesValue"
+     data-csrf-header="@antiforgeryTokens.HeaderName"
+     data-csrf-token="@antiforgeryTokens.RequestToken">
+    <div class="card-head">
+        <div class="card-title">Permissions</div>
+        <div class="page-actions">
+            <span id="permissionsStatus" class="permissions-status">Loading roles...</span>
+            @if (Model.CanManageRoles)
+            {
+                <button type="button" class="btn primary sm" id="permissionsNewRoleBtn" style="white-space:nowrap">+ New Role</button>
+            }
+        </div>
+    </div>
+    <div id="permissionsError" class="alert alert-danger permissions-error" style="display:none"></div>
+    <div class="permissions-table-wrap" id="permissionsTableWrap">
+        <div class="empty">Loading roles...</div>
+    </div>
+
+    @if (Model.CanManageRoles)
+    {
+        <form id="roleEditForm" class="role-edit-form" style="display:none">
+            <div class="role-edit-form__header">
+                <strong id="roleEditTitle">Edit role</strong>
+                <button type="button" class="btn ghost sm" id="roleEditCancelBtn">Cancel</button>
+            </div>
+            <label class="field">
+                <span>Role name</span>
+                <input type="text" class="form-control" id="roleEditName" maxlength="64" required />
+            </label>
+            <div class="role-edit-form__permissions" id="rolePermissionFields"></div>
+            <div class="role-edit-form__actions">
+                <button type="submit" class="btn primary" id="roleEditSaveBtn">Save changes</button>
+                <button type="button" class="btn ghost" id="roleEditCancelBtnBottom">Cancel</button>
+            </div>
+        </form>
+    }
+</div>
+
+<!-- Confirm modal: reused by every save action on this page. -->
+<div class="mt-modal" id="customizeConfirmModal" role="dialog" aria-modal="true">
+    <div class="mt-modal__backdrop"></div>
+    <div class="mt-modal__dialog">
+        <div class="mt-modal__content">
+            <div class="mt-modal__header">
+                <h5 class="mt-modal__title">Confirm changes</h5>
+            </div>
+            <div class="mt-modal__body">
+                <p style="margin:0;font-size:14px;color:var(--fg-1)">
+                    You are about to make changes to
+                    <strong id="customizeConfirmName">@Model.LinkshellName</strong>. Are you sure?
+                </p>
+            </div>
+            <div class="mt-modal__footer">
+                <button type="button" class="btn ghost" id="customizeConfirmNo">No</button>
+                <button type="button" class="btn primary" id="customizeConfirmYes">Yes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script nonce="@Html.CspNonce()">
+        // Entry "which linkshell" modal + a promise-based confirm gate reused by
+        // every save action on this page (window.lsmConfirmChange). Defined first
+        // so the permissions/addon scripts below can call it.
+        (function () {
+            function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('mt-modal--open'); }
+            function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('mt-modal--open'); }
+
+            var pendingResolve = null;
+            window.lsmConfirmChange = function () {
+                return new Promise(function (resolve) {
+                    pendingResolve = resolve;
+                    openModal('customizeConfirmModal');
+                });
+            };
+            function settle(result) {
+                closeModal('customizeConfirmModal');
+                var r = pendingResolve; pendingResolve = null;
+                if (r) r(result);
+            }
+            var yes = document.getElementById('customizeConfirmYes');
+            var no = document.getElementById('customizeConfirmNo');
+            if (yes) yes.addEventListener('click', function () { settle(true); });
+            if (no) no.addEventListener('click', function () { settle(false); });
+
+            // Drop the one-shot ?switched flag (set by the inline linkshell switcher)
+            // so a later manual reload behaves normally and the URL stays clean.
+            if (window.history && window.history.replaceState) {
+                try {
+                    var cleanUrl = new URL(window.location.href);
+                    if (cleanUrl.searchParams.has('switched')) {
+                        cleanUrl.searchParams.delete('switched');
+                        window.history.replaceState({}, '', cleanUrl.toString());
+                    }
+                } catch (e) { /* no-op */ }
+            }
+
+            // Gate the main customize form (loot structure, linkshell type,
+            // feature toggles, hide ToD mobs, Discord webhooks) behind confirm.
+            var form = document.getElementById('customizeForm');
+            if (form) {
+                var confirmed = false;
+                form.addEventListener('submit', function (e) {
+                    if (confirmed) return;
+                    e.preventDefault();
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (ok) { confirmed = true; form.submit(); }
+                    });
+                });
+            }
+
+            // Gate the standalone server-lock / unlock forms (and any future
+            // .lsm-confirm-form) through the same "Are you sure?" modal.
+            document.querySelectorAll('form.lsm-confirm-form').forEach(function (cf) {
+                var ok = false;
+                cf.addEventListener('submit', function (e) {
+                    if (ok) return;
+                    e.preventDefault();
+                    window.lsmConfirmChange().then(function (yes) {
+                        if (yes) { ok = true; cf.submit(); }
+                    });
+                });
+            });
+        })();
+    </script>
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var card = document.getElementById('permissionsConfigCard');
+            if (!card) return;
+
+            var linkshellId = parseInt(card.dataset.linkshellid, 10);
+            var canManageRoles = card.dataset.canManageRoles === 'true';
+            var antiforgeryHeader = card.dataset.csrfHeader || '';
+            var antiforgeryToken = card.dataset.csrfToken || '';
+            var tableWrap = document.getElementById('permissionsTableWrap');
+            var statusEl = document.getElementById('permissionsStatus');
+            var errorEl = document.getElementById('permissionsError');
+            var newRoleBtn = document.getElementById('permissionsNewRoleBtn');
+            var form = document.getElementById('roleEditForm');
+            var formTitle = document.getElementById('roleEditTitle');
+            var nameInput = document.getElementById('roleEditName');
+            var fieldsWrap = document.getElementById('rolePermissionFields');
+            var saveBtn = document.getElementById('roleEditSaveBtn');
+            var roles = [];
+            var editingRoleId = null;
+
+            var permissions = [
+                { key: 'canManageRoles', label: 'Manage roles & permissions' },
+                { key: 'canManageMembers', label: 'Manage members (invite, rank, status)' },
+                { key: 'canManageEvents', label: 'Manage events (create, edit, start, end, cancel)' },
+                { key: 'canModerateLiveEvent', label: 'Moderate live events (verify attendance, break room)' },
+                { key: 'canAddLoot', label: 'Add event loot entries' },
+                { key: 'canManageInventory', label: 'Manage inventory (items)' },
+                { key: 'canManageTreasury', label: 'Manage treasury (revenue)' },
+                { key: 'canManageRules', label: 'Manage rules' },
+                { key: 'canManageAnnouncements', label: 'Manage announcements' },
+                { key: 'canManageTods', label: 'Manage ToDs' },
+                { key: 'canAuditDkp', label: 'Audit DKP' },
+                { key: 'canManageAuctions', label: 'Manage auctions' },
+                { key: 'canLockAuctions', label: 'Lock auctions (bid freeze)' },
+                { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' }
+            ];
+
+            var escapeHtml = window.escapeHtml || function (value) {
+                return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            };
+
+            function withCsrf(headers) {
+                headers = headers || {};
+                if (antiforgeryHeader && antiforgeryToken) {
+                    headers[antiforgeryHeader] = antiforgeryToken;
+                }
+                return headers;
+            }
+
+            function setBusy(isBusy) {
+                if (newRoleBtn) newRoleBtn.disabled = isBusy;
+                if (saveBtn) saveBtn.disabled = isBusy;
+                card.querySelectorAll('[data-role-action]').forEach(function (button) {
+                    button.disabled = isBusy;
+                });
+                if (statusEl) statusEl.textContent = isBusy ? 'Saving...' : '';
+            }
+
+            function setError(message) {
+                errorEl.textContent = message || '';
+                errorEl.style.display = message ? 'block' : 'none';
+            }
+
+            function readError(response, fallback) {
+                return response.text().then(function (text) {
+                    if (!text) return fallback;
+                    try {
+                        var payload = JSON.parse(text);
+                        return payload && payload.error ? payload.error : fallback;
+                    } catch (e) {
+                        return text;
+                    }
+                });
+            }
+
+            function renderTable() {
+                if (!roles.length) {
+                    tableWrap.innerHTML = '<div class="empty">No roles found.</div>';
+                    return;
+                }
+
+                var head = '<tr><th>Permission</th>' + roles.map(function (role) {
+                    var actions = '';
+                    if (canManageRoles) {
+                        actions =
+                            '<div class="permissions-matrix__role-actions">' +
+                            '<button type="button" class="btn ghost sm" data-role-action="edit" data-role-id="' + role.id + '">Edit</button>' +
+                            (role.isSystem ? '' : '<button type="button" class="btn ghost sm" data-role-action="delete" data-role-id="' + role.id + '">Delete</button>') +
+                            '</div>';
+                    }
+                    return '<th><div class="permissions-matrix__role">' +
+                        '<strong>' + escapeHtml(role.name) + '</strong>' +
+                        (role.isSystem ? '<span class="tag">System</span>' : '') +
+                        actions +
+                        '</div></th>';
+                }).join('') + '</tr>';
+
+                var body = permissions.map(function (permission) {
+                    return '<tr><td>' + escapeHtml(permission.label) + '</td>' +
+                        roles.map(function (role) {
+                            return '<td class="permissions-matrix__cell">' +
+                                (role[permission.key] ? '<span class="perm-yes">✓</span>' : '<span class="perm-no">-</span>') +
+                                '</td>';
+                        }).join('') +
+                        '</tr>';
+                }).join('');
+
+                tableWrap.innerHTML =
+                    '<table class="table themed permissions-matrix">' +
+                    '<thead>' + head + '</thead>' +
+                    '<tbody>' + body + '</tbody>' +
+                    '</table>';
+            }
+
+            function renderPermissionFields() {
+                if (!fieldsWrap) return;
+                fieldsWrap.innerHTML = permissions.map(function (permission) {
+                    return '<label class="role-edit-form__perm">' +
+                        '<input type="checkbox" data-role-permission="' + permission.key + '" />' +
+                        '<span>' + escapeHtml(permission.label) + '</span>' +
+                        '</label>';
+                }).join('');
+            }
+
+            function openForm(role) {
+                if (!form) return;
+                editingRoleId = role ? role.id : null;
+                formTitle.textContent = role ? 'Edit role' : 'New role';
+                nameInput.value = role ? role.name : '';
+                nameInput.disabled = !!(role && role.isSystem);
+                fieldsWrap.querySelectorAll('[data-role-permission]').forEach(function (input) {
+                    var key = input.dataset.rolePermission;
+                    input.checked = role ? role[key] === true : false;
+                });
+                form.style.display = '';
+                if (newRoleBtn) newRoleBtn.style.display = 'none';
+                nameInput.focus();
+            }
+
+            function closeForm() {
+                editingRoleId = null;
+                if (form) form.style.display = 'none';
+                if (newRoleBtn) newRoleBtn.style.display = '';
+            }
+
+            function buildPayload() {
+                var payload = { name: nameInput.value.trim() || null };
+                fieldsWrap.querySelectorAll('[data-role-permission]').forEach(function (input) {
+                    payload[input.dataset.rolePermission] = input.checked;
+                });
+                return payload;
+            }
+
+            function loadRoles() {
+                setError('');
+                if (statusEl) statusEl.textContent = 'Loading roles...';
+                return fetch('/api/activity/linkshells/' + linkshellId + '/roles', {
+                    cache: 'no-store',
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    if (!response.ok) {
+                        return readError(response, 'Loading roles failed.').then(function (message) {
+                            throw new Error(message);
+                        });
+                    }
+                    return response.json();
+                }).then(function (data) {
+                    roles = data.roles || [];
+                    renderTable();
+                    if (statusEl) statusEl.textContent = '';
+                }).catch(function (error) {
+                    setError(error.message || 'Loading roles failed.');
+                    tableWrap.innerHTML = '<div class="empty">Roles could not be loaded.</div>';
+                    if (statusEl) statusEl.textContent = '';
+                });
+            }
+
+            function saveRole() {
+                var payload = buildPayload();
+                if (!payload.name) {
+                    setError('A role name is required.');
+                    nameInput.focus();
+                    return;
+                }
+                if (window.lsmConfirmChange && !saveRole._confirmed) {
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (!ok) return;
+                        saveRole._confirmed = true;
+                        try { saveRole(); } finally { saveRole._confirmed = false; }
+                    });
+                    return;
+                }
+
+                var path = editingRoleId == null
+                    ? '/api/activity/linkshells/' + linkshellId + '/roles'
+                    : '/api/activity/linkshells/' + linkshellId + '/roles/' + editingRoleId + '/update';
+
+                setBusy(true);
+                setError('');
+                fetch(path, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: withCsrf({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload)
+                }).then(function (response) {
+                    if (!response.ok) {
+                        return readError(response, 'Saving the role failed.').then(function (message) {
+                            throw new Error(message);
+                        });
+                    }
+                    closeForm();
+                    return loadRoles();
+                }).catch(function (error) {
+                    setError(error.message || 'Saving the role failed.');
+                }).finally(function () {
+                    setBusy(false);
+                });
+            }
+
+            function deleteRole(role) {
+                if (!role || role.isSystem) return;
+                if (window.lsmConfirmChange && !deleteRole._confirmed) {
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (!ok) return;
+                        deleteRole._confirmed = true;
+                        try { deleteRole(role); } finally { deleteRole._confirmed = false; }
+                    });
+                    return;
+                }
+
+                setBusy(true);
+                setError('');
+                fetch('/api/activity/linkshells/' + linkshellId + '/roles/' + role.id + '/delete', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: withCsrf()
+                }).then(function (response) {
+                    if (!response.ok) {
+                        return readError(response, 'Deleting the role failed.').then(function (message) {
+                            throw new Error(message);
+                        });
+                    }
+                    closeForm();
+                    return loadRoles();
+                }).catch(function (error) {
+                    setError(error.message || 'Deleting the role failed.');
+                }).finally(function () {
+                    setBusy(false);
+                });
+            }
+
+            if (newRoleBtn) {
+                newRoleBtn.addEventListener('click', function () { openForm(null); });
+            }
+            if (form) {
+                renderPermissionFields();
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    saveRole();
+                });
+                document.getElementById('roleEditCancelBtn').addEventListener('click', closeForm);
+                document.getElementById('roleEditCancelBtnBottom').addEventListener('click', closeForm);
+            }
+            card.addEventListener('click', function (event) {
+                var button = event.target.closest('[data-role-action]');
+                if (!button) return;
+                var roleId = parseInt(button.dataset.roleId, 10);
+                var role = roles.find(function (item) { return item.id === roleId; });
+                if (!role) return;
+                if (button.dataset.roleAction === 'edit') openForm(role);
+                if (button.dataset.roleAction === 'delete') deleteRole(role);
+            });
+
+            loadRoles();
+        })();
+    </script>
+}

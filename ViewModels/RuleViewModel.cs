@@ -24,6 +24,10 @@ public class RuleViewModel
     [StringLength(4000)]
     public string RuleDetails { get; set; } = string.Empty;
 
+    [Display(Name = "Category")]
+    [StringLength(32)]
+    public string? Category { get; set; }
+
     public string? CreatedByCharacterName { get; set; }
     public DateTime CreatedAt { get; set; }
 

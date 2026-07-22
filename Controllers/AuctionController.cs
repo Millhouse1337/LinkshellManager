@@ -16,14 +16,24 @@ public partial class AuctionController : Controller
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
 
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+    private readonly DkpPoolBalanceService _dkpPoolBalances;
+
     public AuctionController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
+        _dkpPoolBalances = dkpPoolBalances;
     }
 
     private async Task<AuctionViewModel> BuildAuctionViewModelAsync(AppUser user, AuctionViewModel? source = null)
@@ -59,13 +69,27 @@ public partial class AuctionController : Controller
                 .ToListAsync()
             : new List<AuctionSourceItemOption>();
 
+        var pools = new List<AuctionDkpPoolOption>();
+        var defaultPoolId = 0;
+        if (selectedLinkshellId > 0)
+        {
+            var map = await _dkpPools.GetMapAsync(selectedLinkshellId, HttpContext.RequestAborted);
+            defaultPoolId = map.DefaultPoolId;
+            pools = map.Pools
+                .Select(pool => new AuctionDkpPoolOption { Id = pool.Id, Name = pool.Name })
+                .ToList();
+        }
+
         return new AuctionViewModel
         {
             LinkshellId = selectedLinkshellId,
             Linkshells = linkshells,
             Auction = source?.Auction ?? new Auction(),
             AuctionItems = source?.AuctionItems?.Count > 0 ? source.AuctionItems : new List<AuctionItem> { new() },
-            SourceItems = sourceItems
+            SourceItems = sourceItems,
+            DkpPools = pools,
+            DkpPoolId = source?.DkpPoolId ?? (defaultPoolId > 0 ? defaultPoolId : null),
+            DkpPoolLocked = source?.DkpPoolLocked ?? false
         };
     }
 

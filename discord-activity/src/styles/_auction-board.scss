@@ -207,9 +207,9 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-.auctions-panel .item-type-dot.crafting { background: #60a5fa; box-shadow: 0 0 4px #60a5fa; }
-.auctions-panel .item-type-dot.loot     { background: #c084fc; box-shadow: 0 0 4px #c084fc; }
-.auctions-panel .item-type-dot.drop     { background: #4ade80; box-shadow: 0 0 4px #4ade80; }
+.auctions-panel .item-type-dot.crafting { background: var(--dot-crafting); box-shadow: 0 0 4px var(--dot-crafting); }
+.auctions-panel .item-type-dot.loot     { background: var(--dot-loot); box-shadow: 0 0 4px var(--dot-loot); }
+.auctions-panel .item-type-dot.drop     { background: var(--dot-drop); box-shadow: 0 0 4px var(--dot-drop); }
 .auctions-panel .item-type-dot.other    { background: var(--fg-3); }
 .auctions-panel .item-sub {
   font-size: 12px;
@@ -321,10 +321,10 @@
 .auctions-panel .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0a0a0b;
+  color: var(--bg);
   font-weight: 600;
 }
-.auctions-panel .btn.primary:hover:not(:disabled) { background: var(--accent-hover, #a5acf9); }
+.auctions-panel .btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
 .auctions-panel .btn.danger-outline {
   border-color: var(--danger-weak);
   color: var(--danger);
@@ -333,13 +333,13 @@
 .auctions-panel .btn.warning-fill {
   background: var(--warning);
   border-color: var(--warning);
-  color: #0a0a0b;
+  color: var(--bg);
   font-weight: 600;
 }
 .auctions-panel .btn.success-fill {
   background: var(--success);
   border-color: var(--success);
-  color: #0a0a0b;
+  color: var(--bg);
   font-weight: 600;
 }
 .auctions-panel .bid-form .btn { height: 34px; padding: 0 14px; }
@@ -396,10 +396,10 @@
   color: white;
   flex-shrink: 0;
 }
-.auctions-panel .bidder-av.a { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
-.auctions-panel .bidder-av.b { background: linear-gradient(135deg, #ec4899, #f43f5e); }
-.auctions-panel .bidder-av.c { background: linear-gradient(135deg, #10b981, #06b6d4); }
-.auctions-panel .bidder-av.d { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.auctions-panel .bidder-av.a { background: linear-gradient(135deg, var(--av-a-1), var(--av-a-2)); }
+.auctions-panel .bidder-av.b { background: linear-gradient(135deg, var(--av-b-1), var(--av-b-2)); }
+.auctions-panel .bidder-av.c { background: linear-gradient(135deg, var(--av-c-1), var(--av-c-2)); }
+.auctions-panel .bidder-av.d { background: linear-gradient(135deg, var(--av-d-1), var(--av-d-2)); }
 
 /* No bids state */
 .auctions-panel .no-bids {

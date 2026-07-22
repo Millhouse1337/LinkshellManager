@@ -109,7 +109,7 @@ public sealed class HnmAutoEventService
 
     private static string ComposeEventName(string monster, int? dayNumber)
     {
-        if (HnmConfig.HnmDayCycles.ContainsKey(monster) && dayNumber.HasValue && dayNumber.Value > 0)
+        if (HnmConfig.MonsterSegments(monster).Any(HnmConfig.HnmDayCycles.ContainsKey) && dayNumber.HasValue && dayNumber.Value > 0)
         {
             return $"{monster} D{dayNumber.Value}";
         }

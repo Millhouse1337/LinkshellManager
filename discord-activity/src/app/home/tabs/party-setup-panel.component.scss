@@ -15,7 +15,7 @@
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: var(--r-md);
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(79, 124, 255, 0.05);
   color: var(--fg-2);
   font-size: 13px;
   line-height: 1.45;
@@ -33,7 +33,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-lg, 12px);
   background:
-    radial-gradient(120% 60% at 50% 0%, rgba(99, 102, 241, 0.07), transparent 60%),
+    radial-gradient(120% 60% at 50% 0%, rgba(79, 124, 255, 0.07), transparent 60%),
     var(--surface);
 }
 
@@ -54,13 +54,24 @@
   padding: 4px 10px;
   border: 1px solid var(--accent-weak);
   border-radius: 999px;
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(79, 124, 255, 0.08);
 }
 
 .ps-alliance-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
+}
+
+/* The alliance lead's name, shown to the right of the alliance name. */
+.ps-alliance-lead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.ps-alliance-lead-btn {
+  white-space: nowrap;
 }
 
 /* ===== Party grid ===== */
@@ -132,11 +143,11 @@
 }
 
 .ps-slot.is-open { border-style: dashed; }
-.ps-slot:hover { border-color: rgba(255, 255, 255, 0.18); }
+.ps-slot:hover { border-color: var(--border-hot); }
 
 .ps-slot.is-leader {
-  border-color: rgba(245, 197, 24, 0.45);
-  background: linear-gradient(180deg, rgba(245, 197, 24, 0.05), transparent 60%), var(--surface);
+  border-color: rgba(214, 169, 63, 0.45);
+  background: linear-gradient(180deg, rgba(214, 169, 63, 0.05), transparent 60%), var(--surface);
 }
 
 /* Fully-pinned open slot (no dropdowns) — keep the job label, the Leader
@@ -148,21 +159,45 @@
   gap: 12px;
 }
 .ps-slot--inline .ps-slot-req { flex: 0 0 auto; }
-/* Let the leader toggle + Sign up button become direct flex items of the slot
-   so the toggle can sit centered between the job label (left) and the button
-   (right) via the pair of auto margins below. */
+/* Promote the two signup CLUSTERS (not the individual controls) to direct flex
+   items of the slot, so the slot only ever wraps between them. The actions
+   cluster owns the single right-push, which keeps Leader/Sign-up in the same
+   column row-to-row — a row missing the sub-job select must not shift them —
+   and keeps them right-aligned when they wrap onto their own line. */
 .ps-slot--inline .ps-signup { display: contents; }
-.ps-slot--inline .ps-leader-toggle {
-  margin-left: auto;     /* paired with .ps-signup-btn's margin-left:auto → centered */
-  gap: 6px;
-}
+.ps-slot--inline .ps-leader-toggle { gap: 6px; }
 .ps-slot--inline .ps-slot-open-readonly { margin-left: auto; }
+/* Match the slot's own 12px rhythm so grouping the controls doesn't visibly
+   tighten the spacing between them. */
+.ps-slot--inline .ps-signup__fields,
+.ps-slot--inline .ps-signup__actions { gap: 12px; }
 
 /* "way smaller" Leader [Yes|No] toggle for the single-row slots. */
 .ps-slot--inline .ps-leader-toggle__label { font-size: 11px; }
 .ps-slot--inline .yesno__btn {
   padding: 3px 9px;
   font-size: 11px;
+}
+
+/* Every open slot is inline now: keep each role/main/sub dropdown a fixed,
+   non-growing size so they sit on the same row as the char/leader/sign-up
+   instead of stretching and ballooning the controls below. flex-grow:0 is the
+   load-bearing anti-balloon part; 120px keeps the closed-state placeholders
+   ("Main job…", "Sub job…", "Role…") legible.
+   Shrink IS allowed (flex-shrink:1 + a legibility floor): the fields row is
+   nowrap now, so on a narrow party column the dropdowns must give way rather
+   than overflow the card. */
+.ps-slot--inline .ps-signup select {
+  flex: 0 1 120px;
+  min-width: 76px;
+  max-width: 120px;
+  height: 30px;
+}
+/* Force the inline job-edit popup onto its own full-width wrapped line so it is
+   not cramped beside the label/char header or the right-anchored "Open" chip in
+   edit mode (the popup is a direct flex child of the now row/flex-wrap slot). */
+.ps-slot--inline .ps-job-edit {
+  flex-basis: 100%;
 }
 
 .ps-slot-req {
@@ -176,6 +211,10 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
+  /* Fixed-width job column so the character dropdown starts at the same x on every
+     row (longer custom labels may still grow past it). */
+  min-width: 64px;
+  flex-shrink: 0;
 }
 
 /* Character (main/alt) picker — moved up onto the slot-label row (right-aligned)
@@ -196,12 +235,12 @@
   background-repeat: no-repeat;
   background-position: right 9px center;
   background-size: 10px 6px;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: var(--r-md);
   cursor: pointer;
   outline: none;
 }
-.ps-slot-char:hover { border-color: rgba(255, 255, 255, 0.22); }
+.ps-slot-char:hover { border-color: var(--border-hot); }
 .ps-slot-char:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-weak); }
 .ps-slot-char option { background: var(--surface); color: var(--fg); }
 
@@ -211,8 +250,8 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  color: #f5c518;
-  filter: drop-shadow(0 0 4px rgba(245, 197, 24, 0.5));
+  color: var(--gold);
+  filter: drop-shadow(0 0 4px rgba(214, 169, 63, 0.5));
 }
 .ps-crown svg { width: 14px; height: 14px; fill: currentColor; }
 
@@ -224,6 +263,30 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* Role / main job / sub job — one unbroken row. nowrap is the point: the
+   dropdowns must never split across lines the way they did when each control
+   was its own wrappable flex item. */
+.ps-signup__fields {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+/* Leader toggle + Sign up, kept together and pinned right — on the same row
+   when there's room, otherwise wrapped to the next row still right-aligned. */
+.ps-signup__actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.ps-signup__actions .ps-signup-btn { margin-left: 0; }
 
 /* "Leader [Yes|No]" segmented toggle shown before Sign up on an event board. */
 .ps-leader-toggle {
@@ -278,14 +341,14 @@
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 11px 7px;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: var(--r-md);
   cursor: pointer;
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
 }
 .ps-signup select:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background-color: rgba(255, 255, 255, 0.04);
 }
 .ps-signup select:focus-visible {
@@ -317,7 +380,7 @@
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35));
+  background: linear-gradient(135deg, rgba(79, 124, 255, 0.35), rgba(139, 92, 246, 0.35));
   color: var(--fg);
   font-size: 12px;
   font-weight: 700;
@@ -395,6 +458,13 @@
 .ps-edit-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 2px; }
 .ps-edit-hint { font-size: 12px; color: var(--fg-2); }
 
+/* Single "Sign up as" character picker in the board toolbar (replaces the old
+   per-slot pickers). margin-right:auto pins it to the left while the Edit layout
+   button stays right; the select reuses .ps-slot-char's look minus its auto margin. */
+.ps-signup-as { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; }
+.ps-signup-as__label { font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+.ps-signup-as__select { margin-left: 0; }
+
 .btn.xs { padding: 2px 8px; font-size: 11px; line-height: 1.6; border-radius: var(--r-sm, 6px); }
 
 .ps-rename {
@@ -405,7 +475,7 @@
 }
 .ps-rename--party { max-width: none; }
 .ps-add-party, .ps-add-slot { white-space: nowrap; }
-.ps-remove-party { color: var(--danger, #ef4444); }
+.ps-remove-party { color: var(--danger); }
 
 .ps-drag-handle { cursor: grab; user-select: none; color: var(--fg-2); font-size: 14px; line-height: 1; padding: 0 2px; }
 .ps-drag-handle:active { cursor: grabbing; }
@@ -415,8 +485,8 @@
   margin-left: auto; border: none; background: transparent; cursor: pointer;
   color: var(--fg-2); font-size: 12px; padding: 2px 4px; border-radius: 4px;
 }
-.ps-slot-del-btn { color: var(--danger, #ef4444); margin-left: 0; }
-.ps-slot-edit-btn:hover, .ps-slot-del-btn:hover { background: rgba(99, 102, 241, 0.10); }
+.ps-slot-del-btn { color: var(--danger); margin-left: 0; }
+.ps-slot-edit-btn:hover, .ps-slot-del-btn:hover { background: rgba(79, 124, 255, 0.10); }
 
 .ps-job-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 0 2px; }
 .ps-job-edit select { font-size: 12px; padding: 3px 6px; }
@@ -434,3 +504,19 @@
 .ps-slots.cdk-drop-list-dragging .ps-slot:not(.cdk-drag-placeholder) {
   transition: transform 180ms cubic-bezier(0, 0, 0.2, 1);
 }
+
+/* "Fill earlier alliances first" signup prompt. */
+.ps-nudge-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.ps-nudge-card {
+  max-width: 440px; width: 100%;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+}
+.ps-nudge-title { font-weight: 700; color: var(--fg); }
+.ps-nudge-body { margin: 0; font-size: 13px; color: var(--fg-3); }
+.ps-nudge-body strong { color: var(--fg); }
+.ps-nudge-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }

@@ -286,6 +286,64 @@ public sealed partial class ActivityDataController
 
         return Ok(new { commentCount = comments.Count, summary, configured = summarizer.IsConfigured });
     }
+
+    // The member's OVERALL ratings rollup across ALL their characters (main + alts):
+    // the average self gear/skill (their own assessment) and the average peer gear/skill
+    // (what the linkshell thinks), the distinct teammate count, plus an AI summary over
+    // EVERY peer comment they've received. Powers the "Overall" section of the View
+    // Profile on both the Activity modal and the web member page.
+    [HttpGet("job-ratings/{targetAppUserId}/overall")]
+    public async Task<IActionResult> GetJobRatingOverallAsync(
+        string targetAppUserId, [FromQuery] int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Sign in to view ratings." });
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null) return Forbid();
+
+        var rows = await _dbContext.JobRatings
+            .AsNoTracking()
+            .Where(r => r.LinkshellId == linkshellId && r.TargetAppUserId == targetAppUserId)
+            .ToListAsync(cancellationToken);
+
+        var jobRows = rows.Where(r => r.JobIndex >= 0).ToList();
+        var selfRows = jobRows.Where(r => r.RaterAppUserId == targetAppUserId).ToList();
+        var peerRows = jobRows.Where(r => r.RaterAppUserId != targetAppUserId).ToList();
+
+        static double Avg(IEnumerable<int> values)
+        {
+            var list = values.Where(v => v > 0).ToList();
+            return list.Count > 0 ? Math.Round(list.Average(), 1) : 0.0;
+        }
+
+        // Every peer comment the member has received, across all their characters.
+        var comments = rows
+            .Where(r => r.JobIndex == JobRating.PlayerCommentJobIndex
+                && r.RaterAppUserId != targetAppUserId
+                && !string.IsNullOrWhiteSpace(r.Comment))
+            .OrderByDescending(r => r.UpdatedAt)
+            .Select(r => r.Comment!)
+            .ToList();
+
+        var summarizer = HttpContext.RequestServices.GetRequiredService<AiCommentSummaryService>();
+        var summary = await summarizer.SummarizeAsync(comments, cancellationToken);
+
+        return Ok(new
+        {
+            selfCount = selfRows.Count,
+            selfAvgGear = Avg(selfRows.Select(r => r.Gear)),
+            selfAvgSkill = Avg(selfRows.Select(r => r.Skill)),
+            // Distinct teammates who rated ANY of the member's jobs on ANY character.
+            peerRaterCount = peerRows.Select(r => r.RaterAppUserId).Distinct().Count(),
+            peerAvgGear = Avg(peerRows.Select(r => r.Gear)),
+            peerAvgSkill = Avg(peerRows.Select(r => r.Skill)),
+            commentCount = comments.Count,
+            comments,
+            summary,
+            configured = summarizer.IsConfigured,
+        });
+    }
 }
 
 public sealed record ActivityJobRatingRequest(

@@ -236,7 +236,7 @@
     @if (!isMemberMode() && sentInvitesForTarget().length) {
       <div class="invite-section">
         <h3>Sent</h3>
-        <ul class="compact-list compact-list--dense">
+        <ul class="compact-list compact-list--dense compact-list--scroll">
           @for (invite of sentInvitesForTarget(); track invite.id) {
             <li>
               <div>

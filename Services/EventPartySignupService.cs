@@ -94,10 +94,13 @@ public static class EventPartySignupService
         existing.SubJob = jobs.SubJob;
         existing.SignedUpAtUtc = DateTime.UtcNow;
 
-        if (claimAsLeader)
+        // Claiming the party's DESIGNATED leader slot opts you into leadership by default
+        // (the same as the "Sign Up as Party Leader" button) — but leadership is no longer
+        // LOCKED to that slot: anyone can take it later via "Make Me Party Lead". Either
+        // path is first-claim-wins, so the crown only lands when the party has no leader
+        // yet (the member's own slot is excluded, so re-signing keeps an existing crown).
+        if (slot.IsPartyLeader || claimAsLeader)
         {
-            // First-claim-wins: only grant leadership if the party has no other
-            // leader yet (the member's own slot is excluded so re-signing keeps it).
             var partyHasOtherLeader = await db.EventPartySlotSignups.AnyAsync(
                 s => s.EventId == eventId
                      && s.PartySetupSlotId != slot.Id
@@ -108,6 +111,192 @@ public static class EventPartySignupService
         }
 
         return new ClaimResult(true, null);
+    }
+
+    // "Make Me Party Lead": the member — who must already hold a slot in this event
+    // — takes their party's leadership, moving the 👑 OFF whoever currently holds it.
+    // Identity is keyed by AppUserId (account signup) or DiscordUserId (board-only
+    // signup). Unlike the first-claim-wins sign-up path, this DELIBERATELY overrides
+    // an existing leader. Any member in the party may take it — there's no longer a
+    // designated-leader-slot lock. Rejected only when the member holds no slot or
+    // already leads. Does NOT commit — the caller owns SaveChanges. There's no
+    // party-leadership re-resolution to run afterwards: the crown is set explicitly
+    // here, so the party is never left leaderless.
+    public static async Task<ClaimResult> MakePartyLeaderAsync(
+        ApplicationDbContext db, int eventId, string? appUserId, string? discordUserId,
+        CancellationToken cancellationToken)
+    {
+        var isOutside = string.IsNullOrEmpty(appUserId);
+        var mine = isOutside
+            // Board-only clicker: match by Discord id ALONE (mirrors LeaveAsync) so it
+            // also finds a placeholder-matched slot (which carries a non-null AppUserId).
+            ? await db.EventPartySlotSignups
+                .Include(s => s.PartySetupSlot)
+                .FirstOrDefaultAsync(s => s.EventId == eventId && s.DiscordUserId == discordUserId, cancellationToken)
+            : await db.EventPartySlotSignups
+                .Include(s => s.PartySetupSlot)
+                .FirstOrDefaultAsync(s => s.EventId == eventId
+                    && (s.AppUserId == appUserId
+                        || (discordUserId != null && s.DiscordUserId == discordUserId)), cancellationToken);
+
+        if (mine is null)
+        {
+            return new ClaimResult(false, "You need a party slot first — sign up, then make yourself the leader.");
+        }
+        if (mine.PartySetupSlot?.PartySetupPartyId is not { } partyId)
+        {
+            return new ClaimResult(false, "Couldn't find your party — try signing up again.");
+        }
+        if (mine.IsPartyLeader)
+        {
+            return new ClaimResult(false, "You're already this party's leader 👑.");
+        }
+
+        // Move the crown: clear it from any current holder(s) in this party, set it on
+        // me. `mine` isn't a leader (checked above), so it's never in this set.
+        var currentLeaders = await db.EventPartySlotSignups
+            .Where(s => s.EventId == eventId
+                        && s.PartySetupSlot!.PartySetupPartyId == partyId
+                        && s.IsPartyLeader)
+            .ToListAsync(cancellationToken);
+        foreach (var leader in currentLeaders)
+        {
+            leader.IsPartyLeader = false;
+        }
+        mine.IsPartyLeader = true;
+
+        return new ClaimResult(true, null);
+    }
+
+    // "Make Me Alliance Lead": the member — who must already hold a slot in this event
+    // — takes their ALLIANCE's lead (👑 by the alliance name), moving it OFF whoever
+    // currently holds it in that alliance. One rung above MakePartyLeaderAsync (the
+    // whole 18-slot group rather than a single party); otherwise identical: identity
+    // keyed by AppUserId (account) or DiscordUserId (board-only), deliberately overrides
+    // the current holder, purely a designation (no perms), never auto-assigned. Does NOT
+    // commit — the caller owns SaveChanges.
+    public static async Task<ClaimResult> MakeAllianceLeaderAsync(
+        ApplicationDbContext db, int eventId, string? appUserId, string? discordUserId,
+        CancellationToken cancellationToken)
+    {
+        var isOutside = string.IsNullOrEmpty(appUserId);
+        var mine = isOutside
+            ? await db.EventPartySlotSignups
+                .Include(s => s.PartySetupSlot!).ThenInclude(slot => slot.Party!)
+                .FirstOrDefaultAsync(s => s.EventId == eventId && s.DiscordUserId == discordUserId, cancellationToken)
+            : await db.EventPartySlotSignups
+                .Include(s => s.PartySetupSlot!).ThenInclude(slot => slot.Party!)
+                .FirstOrDefaultAsync(s => s.EventId == eventId
+                    && (s.AppUserId == appUserId
+                        || (discordUserId != null && s.DiscordUserId == discordUserId)), cancellationToken);
+
+        if (mine is null)
+        {
+            return new ClaimResult(false, "You need a party slot first — sign up, then make yourself the alliance lead.");
+        }
+        if (mine.PartySetupSlot?.Party?.PartySetupAllianceId is not { } allianceId)
+        {
+            return new ClaimResult(false, "Couldn't find your alliance — try signing up again.");
+        }
+        if (mine.IsAllianceLeader)
+        {
+            return new ClaimResult(false, "You're already this alliance's lead 👑.");
+        }
+
+        // Move the crown: clear it from any current holder(s) in this alliance, set it on
+        // me. `mine` isn't a lead (checked above), so it's never in this set.
+        var currentLeads = await db.EventPartySlotSignups
+            .Where(s => s.EventId == eventId
+                        && s.PartySetupSlot!.Party!.PartySetupAllianceId == allianceId
+                        && s.IsAllianceLeader)
+            .ToListAsync(cancellationToken);
+        foreach (var lead in currentLeads)
+        {
+            lead.IsAllianceLeader = false;
+        }
+        mine.IsAllianceLeader = true;
+
+        return new ClaimResult(true, null);
+    }
+
+    // Officer action: set the party-leader crown (👑) on the member occupying a
+    // SPECIFIC slot (chosen by an officer), rather than the caller's own slot.
+    // Mirrors MakePartyLeaderAsync but keys off slotId: clears the crown from any
+    // current holder in that party and sets it on the chosen slot's signup. Does
+    // NOT commit — the caller owns SaveChanges.
+    public static async Task<ClaimResult> SetPartyLeaderBySlotAsync(
+        ApplicationDbContext db, int eventId, int slotId, CancellationToken cancellationToken)
+    {
+        var target = await db.EventPartySlotSignups
+            .Include(s => s.PartySetupSlot)
+            .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == slotId, cancellationToken);
+        if (target is null)
+        {
+            return new ClaimResult(false, "That member is no longer in that slot.");
+        }
+        if (target.PartySetupSlot?.PartySetupPartyId is not { } partyId)
+        {
+            return new ClaimResult(false, "Couldn't find that member's party.");
+        }
+        if (target.IsPartyLeader)
+        {
+            return new ClaimResult(false, "They're already this party's leader 👑.");
+        }
+
+        var currentLeaders = await db.EventPartySlotSignups
+            .Where(s => s.EventId == eventId
+                        && s.PartySetupSlot!.PartySetupPartyId == partyId
+                        && s.IsPartyLeader)
+            .ToListAsync(cancellationToken);
+        foreach (var leader in currentLeaders)
+        {
+            leader.IsPartyLeader = false;
+        }
+        target.IsPartyLeader = true;
+
+        return new ClaimResult(true, null);
+    }
+
+    // "🔒 Stay Next Window" (member): toggles the "survives the Next Window wipe" lock on
+    // the CLICKER's OWN slot in this event. Identity is keyed by AppUserId (account) or
+    // DiscordUserId (board-only), mirroring MakePartyLeaderAsync. Returns the NEW locked
+    // state, or null when the member holds no slot (nothing to lock). Does NOT commit —
+    // the caller owns SaveChanges.
+    public static async Task<bool?> ToggleStayNextWindowAsync(
+        ApplicationDbContext db, int eventId, string? appUserId, string? discordUserId,
+        CancellationToken cancellationToken)
+    {
+        var isOutside = string.IsNullOrEmpty(appUserId);
+        var mine = isOutside
+            ? await db.EventPartySlotSignups
+                .FirstOrDefaultAsync(s => s.EventId == eventId && s.DiscordUserId == discordUserId, cancellationToken)
+            : await db.EventPartySlotSignups
+                .FirstOrDefaultAsync(s => s.EventId == eventId
+                    && (s.AppUserId == appUserId
+                        || (discordUserId != null && s.DiscordUserId == discordUserId)), cancellationToken);
+        if (mine is null)
+        {
+            return null;
+        }
+        mine.StayNextWindow = !mine.StayNextWindow;
+        return mine.StayNextWindow;
+    }
+
+    // "🔒 Lock Member" (officer): toggles the stay-next-window lock on the member occupying
+    // a SPECIFIC slot (chosen by an officer), mirroring SetPartyLeaderBySlotAsync. Returns
+    // success, the NEW locked state, and the member's name (for the confirmation line).
+    // Does NOT commit — the caller owns SaveChanges.
+    public static async Task<(bool Success, string? Error, bool Locked, string? Name)> SetStayNextWindowBySlotAsync(
+        ApplicationDbContext db, int eventId, int slotId, CancellationToken cancellationToken)
+    {
+        var target = await db.EventPartySlotSignups
+            .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == slotId, cancellationToken);
+        if (target is null)
+        {
+            return (false, "That member is no longer in that slot.", false, null);
+        }
+        target.StayNextWindow = !target.StayNextWindow;
+        return (true, null, target.StayNextWindow, target.CharacterName);
     }
 
     // Releases whatever slot the member holds in this event. Returns the party id
@@ -356,6 +545,35 @@ public static class EventPartySignupService
         {
             db.AppUserEvents.RemoveRange(rows);
         }
+    }
+
+    // Officer action: remove a member from an event ENTIRELY — drop their party
+    // slot (if any) AND their participation/attendance (the DKP roster row). Works
+    // for account members (appUserId) and board-only members (discordUserId).
+    // Generalizes RemoveParticipationAsync to either identity. Self-committing, and
+    // re-resolves leadership for the freed party afterwards.
+    public static async Task RemoveMemberCompletelyAsync(
+        ApplicationDbContext db, int eventId, string? appUserId, string? discordUserId,
+        CancellationToken cancellationToken)
+    {
+        // Slot first (LeaveAsync matches by AppUserId, or by Discord id for a
+        // board-only member), then their attendance row.
+        var affectedPartyId = await LeaveAsync(db, eventId, appUserId, cancellationToken, discordUserId);
+
+        var participation = string.IsNullOrEmpty(appUserId)
+            ? await db.AppUserEvents
+                .Where(p => p.EventId == eventId && p.DiscordUserId == discordUserId)
+                .ToListAsync(cancellationToken)
+            : await db.AppUserEvents
+                .Where(p => p.EventId == eventId && p.AppUserId == appUserId)
+                .ToListAsync(cancellationToken);
+        if (participation.Count > 0)
+        {
+            db.AppUserEvents.RemoveRange(participation);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await ResolvePartyLeadershipAsync(db, eventId, affectedPartyId, cancellationToken);
     }
 
     // When an event's party setup changes, its slot signups are keyed to the OLD

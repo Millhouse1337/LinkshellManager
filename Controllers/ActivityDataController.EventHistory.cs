@@ -11,6 +11,11 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // recompute is delegated to EventHistoryEditService (same logic as the web).
 public sealed partial class ActivityDataController
 {
+    // Constructed per call rather than injected — it's stateless apart from the scoped services it
+    // wraps, and every DKP move it makes goes through the same DkpLedgerWriter this request uses,
+    // so pool attribution and the running balance stay consistent with the rest of the request.
+    private EventHistoryEditService EventHistoryEdits() => new(_dbContext, _dkpLedger, _dkpPools);
+
     [HttpGet("event-history")]
     public async Task<IActionResult> GetEventHistoryAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)
     {
@@ -115,7 +120,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        await new EventHistoryEditService(_dbContext).EditEventAsync(history!.Id,
+        await EventHistoryEdits().EditEventAsync(history!.Id,
             new EventHistoryEditInput(request.EventName, request.EventType, request.EventLocation,
                 request.Details, request.Duration, request.DkpPerHour),
             cancellationToken);
@@ -129,7 +134,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var ok = await new EventHistoryEditService(_dbContext)
+        var ok = await EventHistoryEdits()
             .SetParticipantDkpAsync(history!.Id, participantId, request.Amount, cancellationToken);
         return ok ? Ok(new { success = true }) : NotFound(new { error = "Attendee not found." });
     }
@@ -141,7 +146,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var ok = await new EventHistoryEditService(_dbContext)
+        var ok = await EventHistoryEdits()
             .RemoveParticipantAsync(history!.Id, participantId, cancellationToken);
         return ok ? Ok(new { success = true }) : NotFound(new { error = "Attendee not found." });
     }
@@ -153,7 +158,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var ok = await new EventHistoryEditService(_dbContext)
+        var ok = await EventHistoryEdits()
             .SetParticipantActiveCreditAsync(history!.Id, participantId, request.Credited, cancellationToken);
         return ok ? Ok(new { success = true }) : NotFound(new { error = "Attendee not found." });
     }
@@ -171,7 +176,7 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Select a member to add." });
         }
 
-        var ok = await new EventHistoryEditService(_dbContext).AddParticipantAsync(
+        var ok = await EventHistoryEdits().AddParticipantAsync(
             history!.Id, request.AppUserId, request.Dkp, request.JobType, request.JobName, request.SubJobName,
             activeCredit: true, cancellationToken);
         return ok
@@ -187,7 +192,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var changed = await new EventHistoryEditService(_dbContext)
+        var changed = await EventHistoryEdits()
             .SetAllParticipantsActiveCreditAsync(history!.Id, credited: false, cancellationToken);
         return Ok(new { success = true, changed });
     }
@@ -200,7 +205,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var changed = await new EventHistoryEditService(_dbContext)
+        var changed = await EventHistoryEdits()
             .SetEventCountsTowardActiveAsync(history!.Id, counts: false, cancellationToken);
         return Ok(new { success = true, changed });
     }
@@ -213,7 +218,7 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var ok = await new EventHistoryEditService(_dbContext).DeleteEventAsync(history!.Id, cancellationToken);
+        var ok = await EventHistoryEdits().DeleteEventAsync(history!.Id, cancellationToken);
         return ok ? Ok(new { success = true }) : NotFound(new { error = "Event not found." });
     }
 

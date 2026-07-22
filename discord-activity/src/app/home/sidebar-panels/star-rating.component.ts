@@ -30,8 +30,8 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
       background: none; border: 0; padding: 0 1px; cursor: pointer; line-height: 1;
       font-size: 15px; color: #41434c; transition: color .08s ease;
     }
-    .star.on { color: #8d92ff; }
-    .stars:not(.readonly) .star:hover { color: #8d92ff; filter: brightness(1.15); }
+    .star.on { color: var(--accent); }
+    .stars:not(.readonly) .star:hover { color: var(--accent); filter: brightness(1.15); }
     .stars.readonly .star { cursor: default; }
     .val { margin-left: 5px; font-size: 11px; color: var(--fg-3); }
   `]

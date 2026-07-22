@@ -90,15 +90,7 @@
             @if (isHnmSetup(row) && row.assignedMonsterName) { <span class="ps-assigned">&middot; {{ row.assignedMonsterName }}</span> }
           </div>
           <div class="section-head-right">
-            @if (canManage()) {
-              <button type="button" class="btn sm" (click)="openEdit(row.id)">Edit</button>
-              @if (confirmDeleteId() === row.id) {
-                <button type="button" class="btn sm danger-outline" (click)="confirmDelete(row.id)" [disabled]="partySetup.busy()">Confirm delete</button>
-                <button type="button" class="btn sm ghost" (click)="confirmDeleteId.set(null)">Cancel</button>
-              } @else {
-                <button type="button" class="btn sm danger-outline" (click)="confirmDeleteId.set(row.id)">Delete</button>
-              }
-            }
+            <!-- Edit/Delete live in the Setups table's Actions column above — no need to repeat them here. -->
             <button type="button" class="btn sm ghost" (click)="clearSelection()">Close</button>
           </div>
         </div>

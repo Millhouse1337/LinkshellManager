@@ -51,16 +51,32 @@ public sealed partial class ActivityDataController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
-            _dbContext, appUser.Id, selectedLinkshellId, cancellationToken);
-
         var auctionsLocked = await _dbContext.Linkshells
             .Where(l => l.Id == selectedLinkshellId)
             .Select(l => l.AuctionsLocked)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // Available DKP is now PER AUCTION, because each auction can draw from a different pool.
+        // Computed once per distinct pool in play (normally one), not once per auction.
+        var poolMap = await _dkpPools.GetMapAsync(selectedLinkshellId, cancellationToken);
+        var availableByPool = new Dictionary<int, double>();
+        foreach (var poolId in auctions.Select(a => a.DkpPoolId ?? poolMap.DefaultPoolId).Distinct())
+        {
+            availableByPool[poolId] = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+                _dbContext, _dkpPoolBalances, appUser.Id, selectedLinkshellId, poolId, cancellationToken);
+        }
+
         return Ok(auctions
-            .Select(auction => MapAuctionDto(auction, appUser.Id, nowUtc, availableDkp, auctionsLocked))
+            .Select(auction =>
+            {
+                var poolId = auction.DkpPoolId ?? poolMap.DefaultPoolId;
+                return MapAuctionDto(
+                    auction, appUser.Id, nowUtc, availableByPool.GetValueOrDefault(poolId), auctionsLocked,
+                    poolId,
+                    // Only name the pool when there's more than one — that's the client's cue to
+                    // hide the chip and look exactly like it did before pools existed.
+                    poolMap.HasMultiplePools ? poolMap.NameFor(poolId) : null);
+            })
             .ToList());
     }
 
@@ -218,6 +234,11 @@ public sealed partial class ActivityDataController
             }
         }
 
+        var createPoolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);
+        var createPoolId = request.DkpPoolId is int picked && createPoolMap.Pools.Any(pool => pool.Id == picked)
+            ? picked
+            : createPoolMap.DefaultPoolId;
+
         var auction = new Auction
         {
             LinkshellId = request.LinkshellId,
@@ -227,6 +248,7 @@ public sealed partial class ActivityDataController
             StartTime = startTimeUtc,
             EndTime = endTimeUtc,
             StartedAt = null,
+            DkpPoolId = createPoolId,
             AuctionItems = normalizedItems.Select(item => new AuctionItem
             {
                 ItemName = ResolveAuctionItemName(item),
@@ -296,6 +318,20 @@ public sealed partial class ActivityDataController
         {
             return BadRequest(new { error = validationError });
         }
+
+        var editPoolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);
+        var requestedPoolId = request.DkpPoolId is int picked && editPoolMap.Pools.Any(pool => pool.Id == picked)
+            ? picked
+            : editPoolMap.DefaultPoolId;
+        var currentPoolId = auction.DkpPoolId ?? editPoolMap.DefaultPoolId;
+        if (requestedPoolId != currentPoolId && auction.AuctionItems.Any(item => item.Bids.Count > 0))
+        {
+            // Bidders were validated against the balance in the CURRENT pool. Switching pools under
+            // them would debit a wallet they never agreed to spend from — and possibly one they
+            // can't afford.
+            return BadRequest(new { error = "The DKP pool can't be changed once bids have been placed. Close this auction and start a new one." });
+        }
+        auction.DkpPoolId = requestedPoolId;
 
         auction.LinkshellId = request.LinkshellId;
         auction.AuctionTitle = request.Title.Trim();
@@ -463,15 +499,18 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = $"Bid amount must be greater than the current high bid of {currentHigh}." });
         }
 
-        // Available = total minus DKP locked by bids the user is currently
-        // winning on OTHER live items. Exclude this item so raising a bid you
-        // already hold compares against the replacement, not old + new.
-        var availableDkp = await AuctionDkpService.ComputeAvailableDkpAsync(
-            _dbContext, appUser.Id, auctionItem.Auction.LinkshellId,
+        // Available = the balance in the auction's DKP pool, minus DKP locked by bids the user is
+        // currently winning on OTHER live items drawing from it. Exclude this item so raising a bid
+        // you already hold compares against the replacement, not old + new.
+        var bidPoolMap = await _dkpPools.GetMapAsync(auctionItem.Auction.LinkshellId, cancellationToken);
+        var bidPoolId = auctionItem.Auction.DkpPoolId ?? bidPoolMap.DefaultPoolId;
+        var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+            _dbContext, _dkpPoolBalances, appUser.Id, auctionItem.Auction.LinkshellId, bidPoolId,
             cancellationToken, excludeAuctionItemId: itemId);
         if (bidAmount > availableDkp)
         {
-            return BadRequest(new { error = $"Insufficient available DKP. You have {availableDkp:0.##} available (the rest is locked by bids you're currently winning)." });
+            var poolLabel = bidPoolMap.HasMultiplePools ? $" {bidPoolMap.NameFor(bidPoolId)}" : string.Empty;
+            return BadRequest(new { error = $"Insufficient available{poolLabel} DKP. You have {availableDkp:0.##} available (the rest is locked by bids you're currently winning)." });
         }
 
         var bid = new Bid
@@ -615,6 +654,13 @@ public sealed partial class ActivityDataController
 
         _dbContext.AuctionHistories.Add(history);
 
+        // The pool the bidders were validated against. PINNED — a later remap must never relocate
+        // a historical auction purchase. Copied onto the history row because `auction` is deleted
+        // below, taking its DkpPoolId with it.
+        var auctionPoolId = auction.DkpPoolId
+            ?? (await _dkpPools.GetMapAsync(auction.LinkshellId, cancellationToken)).DefaultPoolId;
+        history.DkpPoolId = auctionPoolId;
+
         foreach (var item in auction.AuctionItems.Where(item =>
                      !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId) &&
                      item.CurrentHighestBid.HasValue &&
@@ -632,25 +678,23 @@ public sealed partial class ActivityDataController
             }
 
             var winningBid = item.CurrentHighestBid.GetValueOrDefault();
-            winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) - winningBid;
-            _dbContext.DkpLedgerEntries.Add(new DkpLedgerEntry
-            {
-                AppUserId = winnerMembership.AppUserId,
-                LinkshellId = auction.LinkshellId,
-                EntryType = "AuctionSpent",
-                Amount = -winningBid,
-                Sequence = 1,
-                OccurredAt = closedAt,
-                CharacterName = winnerMembership.CharacterName,
-                EventName = auction.AuctionTitle,
-                EventStartTime = auction.StartedAt ?? auction.StartTime,
-                EventEndTime = auction.EndTime ?? closedAt,
-                ItemName = item.ItemName,
-                Details = $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
-                // Link to the new history row so ManualPoints batches this close
-                // into one sheet column (mirrors the web close path).
-                SourceAuctionHistory = history
-            });
+            await _dkpLedger.AppendAsync(
+                winnerMembership,
+                "AuctionSpent",
+                -winningBid,
+                closedAt,
+                DkpPoolRef.Pinned(auctionPoolId),
+                new DkpEntryContext(
+                    CharacterName: winnerMembership.CharacterName,
+                    EventName: auction.AuctionTitle,
+                    EventStartTime: auction.StartedAt ?? auction.StartTime,
+                    EventEndTime: auction.EndTime ?? closedAt,
+                    ItemName: item.ItemName,
+                    Details: $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
+                    // Link to the new history row so ManualPoints batches this close into one sheet
+                    // column (mirrors the web close path).
+                    SourceAuctionHistory: history),
+                cancellationToken);
 
             // Gil auctions pay out of the treasury: record the listed gil as a
             // negative RevenueEntry so it appears in revenue and lowers the total.

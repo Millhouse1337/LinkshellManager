@@ -43,13 +43,13 @@ td {
    tab's .btn.danger-outline) so the Delete/Confirm buttons read clearly
    without depending on cross-component CSS. */
 .btn.danger-outline {
-  border-color: rgba(248, 113, 113, 0.5);
-  color: #f87171;
+  border-color: rgba(255, 107, 107, 0.5);
+  color: var(--danger);
   background: transparent;
 }
 .btn.danger-outline:hover {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: #f87171;
+  background: var(--danger-weak);
+  border-color: var(--danger);
 }
 
 /* Soft "assigned monster" pill + muted dash, reused from attendance. */
@@ -109,7 +109,7 @@ td {
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 8px;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: var(--r-md);
   cursor: pointer;
   outline: none;
@@ -117,7 +117,7 @@ td {
 }
 
 .ps-assign-row select:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background-color: rgba(255, 255, 255, 0.04);
 }
 

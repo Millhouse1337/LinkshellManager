@@ -102,9 +102,10 @@ public sealed partial class ActivityDataController
             // default the camp zone, engage post-by-window UI, and strip the fields
             // the form hides (End/Duration/DKP/AutoStart/active tracking).
             eventEntity.AssignedMonsterName = monsterName;
+            eventEntity.DayNumber = request.DayNumber;
             if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
             {
-                eventEntity.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName!);
+                eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);
             }
             eventEntity.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
             eventEntity.EndTime = null;
@@ -118,10 +119,9 @@ public sealed partial class ActivityDataController
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Repeat-on-ToD: persist/refresh the recurring-board template so the board
-        // re-posts before the next predicted pop. Disabled for free-text "Other"
-        // monsters (recurrence needs an exact Tod.MonsterName match).
-        if (isHnm && request.RepeatOnTod
-            && !string.Equals(monsterName, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        // re-posts before the next predicted pop. Works for a custom monster too —
+        // recurrence keys on the (case-insensitive) AssignedMonsterName the ToD records.
+        if (isHnm && request.RepeatOnTod)
         {
             await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, request.RepeatLeadHours, appUser.Id, cancellationToken);
         }
@@ -204,7 +204,15 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "A live event's linkshell cannot be changed. End the event first." });
         }
 
+        // Only validate the party setup when it's actually CHANGING to a different one —
+        // keeping the event's current setup never needs re-checking (it was valid when
+        // attached). This matters because a customized board becomes a per-event SNAPSHOT
+        // (OwnerEventId != null), which PartySetupBelongsToLinkshellAsync intentionally
+        // rejects; without this guard, editing any other field on a snapshot-board event
+        // (e.g. toggling repeat-on-ToD) would fail with "does not belong to this linkshell".
+        // The snapshot is preserved further down (see currentIsSnapshot).
         if (request.PartySetupId.HasValue &&
+            request.PartySetupId != eventEntity.PartySetupId &&
             !await PartySetupBelongsToLinkshellAsync(request.PartySetupId.Value, request.LinkshellId, cancellationToken))
         {
             return BadRequest(new { error = "Selected party setup does not belong to this linkshell." });
@@ -256,9 +264,10 @@ public sealed partial class ActivityDataController
                 eventEntity.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
                 if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
                 {
-                    eventEntity.EventLocation = HnmConfig.HnmZones.GetValueOrDefault(monsterName);
+                    eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);
                 }
             }
+            eventEntity.DayNumber = request.DayNumber;
             eventEntity.EndTime = null;
             eventEntity.Duration = null;
             eventEntity.DkpPerHour = 0;
@@ -269,11 +278,10 @@ public sealed partial class ActivityDataController
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Keep the recurring-board template in sync with the edited "repeat on ToD" choice
-        // (mirrors create). Disabled for free-text "Other" monsters, which can't be matched
-        // to a ToD by name.
+        // (mirrors create). Works for a custom monster too — recurrence keys on the
+        // (case-insensitive) AssignedMonsterName the ToD records.
         var recurrenceMonster = eventEntity.AssignedMonsterName?.Trim();
-        if (isHnm && !string.IsNullOrWhiteSpace(recurrenceMonster)
-            && !string.Equals(recurrenceMonster, TodManagerViewModel.OtherMonster, StringComparison.OrdinalIgnoreCase))
+        if (isHnm && !string.IsNullOrWhiteSpace(recurrenceMonster))
         {
             if (request.RepeatOnTod)
             {
@@ -410,6 +418,11 @@ public sealed partial class ActivityDataController
         var isHybrid = lootStructure == "Hybrid";
         var roundingStep = DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement);
 
+        // Wrap the ENTIRE close (materialize → save) so ANY exception — not just a
+        // DbUpdateException at the save — returns actionable JSON instead of an HTML 500 that
+        // the Activity mislabels as "your session may have expired". See the catch below.
+        try
+        {
         // The live event card can show party-board signups before they exist as
         // persisted participants. Materialize any missing rows before writing
         // EventHistory so channel signups are not dropped on close.
@@ -449,14 +462,27 @@ public sealed partial class ActivityDataController
             .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var ledgerEntries = new List<DkpLedgerEntry>();
-        var nextSequenceByAppUserId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // The event's type decides which DKP pool it pays INTO and which pool its loot is paid
+        // OUT of — resolved once, not per participant. Mirrors the web EndEventCoreAsync.
+        var eventPool = DkpPoolRef.Derived(eventEntity.EventType);
+        // One account = one history/ledger row. There is no DB uniqueness on AppUserEvent, so
+        // an account can hold two participations for an event (e.g. a website join under the
+        // main name + an addon post under an alt). Emitting a history row per participation
+        // would violate the unique (EventHistoryId, AppUserId) index and throw at SaveChanges
+        // — which the Activity surfaces as the misleading "your session may have expired".
+        var creditedAppUserIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var participation in eventEntity.AppUserEvents)
         {
             // Outside (account-less) signups accrue NO DKP and write NO history —
             // they're board-only and cleared with the event below.
             if (string.IsNullOrWhiteSpace(participation.AppUserId))
+            {
+                continue;
+            }
+            // Collapse duplicate participations for the same account (first wins) so a second
+            // row can't trip the unique history index at save.
+            if (!creditedAppUserIds.Add(participation.AppUserId))
             {
                 continue;
             }
@@ -486,35 +512,25 @@ public sealed partial class ActivityDataController
                 ActiveCredit = eventEntity.CountsTowardActive
             });
 
-            if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&
-                membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
+            if (!isLootCouncil
+                && membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
             {
-                if (!isLootCouncil)
-                {
-                    linkshellMembership.LinkshellDkp = (linkshellMembership.LinkshellDkp ?? 0) + eventDkp;
-                }
-                nextSequenceByAppUserId[participation.AppUserId] = 2;
-            }
-
-            if (!isLootCouncil && !string.IsNullOrWhiteSpace(participation.AppUserId))
-            {
-                ledgerEntries.Add(new DkpLedgerEntry
-                {
-                    AppUserId = participation.AppUserId,
-                    EventHistory = history,
-                    LinkshellId = eventEntity.LinkshellId,
-                    EntryType = "EventEarned",
-                    Amount = eventDkp,
-                    Sequence = 1,
-                    OccurredAt = endTimeUtc,
-                    CharacterName = participation.CharacterName,
-                    EventName = eventEntity.EventName,
-                    EventType = eventEntity.EventType,
-                    EventLocation = eventEntity.EventLocation,
-                    EventStartTime = eventEntity.StartTime,
-                    EventEndTime = endTimeUtc,
-                    Details = "DKP earned from completed event."
-                });
+                await _dkpLedger.AppendAsync(
+                    linkshellMembership,
+                    "EventEarned",
+                    eventDkp,
+                    endTimeUtc,
+                    eventPool,
+                    new DkpEntryContext(
+                        CharacterName: participation.CharacterName,
+                        EventName: eventEntity.EventName,
+                        EventType: eventEntity.EventType,
+                        EventLocation: eventEntity.EventLocation,
+                        EventStartTime: eventEntity.StartTime,
+                        EventEndTime: endTimeUtc,
+                        Details: "DKP earned from completed event.",
+                        EventHistory: history),
+                    cancellationToken);
             }
         }
 
@@ -544,7 +560,13 @@ public sealed partial class ActivityDataController
                 if (isHybrid)
                 {
                     var pct = Math.Clamp(rawValue, 0, 100);
-                    var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
+                    // Hybrid takes a PERCENTAGE of the winner's balance — and a pool is a wallet,
+                    // so it's a percentage of the POOL this event pays from, not of their grand
+                    // total. With one pool that's LinkshellDkp, exactly as before. The writer's
+                    // in-request view means the second item in an event sees the first item's
+                    // debit, which is what the old read of the mutated LinkshellDkp did.
+                    var poolId = await _dkpPools.ResolveAsync(eventEntity.LinkshellId, eventEntity.EventType, cancellationToken);
+                    var currentBalance = Math.Max(0, await _dkpLedger.GetPoolBalanceAsync(winnerMembership, poolId, cancellationToken));
                     amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
                     lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
                 }
@@ -554,34 +576,31 @@ public sealed partial class ActivityDataController
                     lootDetailsText = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.";
                 }
 
-                winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0) + amount;
                 // Stamp the actual deducted amount so Loot History edits can refund precisely.
                 lootDetail.ActualDeductedDkp = Math.Abs(amount);
 
-                var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 2);
-                ledgerEntries.Add(new DkpLedgerEntry
-                {
-                    AppUserId = winnerMembership.AppUserId,
-                    EventHistory = history,
-                    LinkshellId = eventEntity.LinkshellId,
-                    EntryType = "LootSpent",
-                    Amount = amount,
-                    Sequence = currentSequence,
-                    OccurredAt = endTimeUtc,
-                    CharacterName = winnerMembership.CharacterName,
-                    EventName = eventEntity.EventName,
-                    EventType = eventEntity.EventType,
-                    EventLocation = eventEntity.EventLocation,
-                    EventStartTime = eventEntity.StartTime,
-                    EventEndTime = endTimeUtc,
-                    ItemName = lootDetail.ItemName,
-                    Details = lootDetailsText
-                });
-                nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
+                await _dkpLedger.AppendAsync(
+                    winnerMembership,
+                    "LootSpent",
+                    amount,
+                    endTimeUtc,
+                    eventPool,
+                    new DkpEntryContext(
+                        CharacterName: winnerMembership.CharacterName,
+                        EventName: eventEntity.EventName,
+                        EventType: eventEntity.EventType,
+                        EventLocation: eventEntity.EventLocation,
+                        EventStartTime: eventEntity.StartTime,
+                        EventEndTime: endTimeUtc,
+                        ItemName: lootDetail.ItemName,
+                        Details: lootDetailsText,
+                        EventHistory: history,
+                        // The web close has always stamped this; this one never did, which left
+                        // Loot History unable to find the ledger row it had to reverse.
+                        SourceEventLootDetailId: lootDetail.Id),
+                    cancellationToken);
             }
         }
-
-        _dbContext.DkpLedgerEntries.AddRange(ledgerEntries);
         // Preserve the loot rows post-close: re-parent each to the new EventHistory (and
         // detach the EventId before the Event is deleted) so they show in Loot History
         // instead of vanishing. EventLootDetail.EventId is SetNull, so the Event delete
@@ -593,14 +612,63 @@ public sealed partial class ActivityDataController
             lootDetail.Event = null;
             lootDetail.EventId = null;
         }
-        _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
+        // Participations materialized earlier in THIS close (late board signups) are still in
+        // the Added state with TEMPORARY keys — EF can't transition those to Deleted
+        // (InvalidOperationException: "AppUserEvent.Id has a temporary value"). Detach them
+        // (they were never persisted; their history + DKP were already recorded above) and
+        // delete only the rows that actually exist in the database.
+        foreach (var participation in eventEntity.AppUserEvents.ToList())
+        {
+            var entry = _dbContext.Entry(participation);
+            if (entry.State == EntityState.Added)
+            {
+                // Detach AND drop from the navigation so EF's change detector can't re-track it
+                // (and re-attempt the temp-key delete) when the event is removed below.
+                entry.State = EntityState.Detached;
+                eventEntity.AppUserEvents.Remove(participation);
+            }
+            else
+            {
+                _dbContext.AppUserEvents.Remove(participation);
+            }
+        }
         _dbContext.Events.Remove(eventEntity);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            // A financial close must not be half-committed: use None so a flaky Discord-iframe
+            // request abort (the client cancellation token) can't cancel the save mid-write.
+            await _dbContext.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Return actionable JSON instead of letting it bubble to the generic HTML error
+            // page — which the SPA can only read back as the misleading "your session may have
+            // expired" message. Broad on purpose: a narrow catch(DbUpdateException) let
+            // non-DbUpdate exceptions (EF tracking, etc.) escape. Don't echo the raw EF/Npgsql
+            // message to the client (it leaks schema/constraint/SQL detail); log the full
+            // exception with a correlation id and surface only that id for support to trace.
+            var correlationId = Guid.NewGuid().ToString("N");
+            _logger.LogError(ex,
+                "Failed to end event {EventId} for linkshell {LinkshellId}. CorrelationId={CorrelationId}",
+                eventId, eventEntity.LinkshellId, correlationId);
+            return StatusCode(500, new
+            {
+                error = "Ending the event failed — please retry; if it keeps happening, contact an admin.",
+                correlationId
+            });
+        }
 
-        // A counting event just closed → recompute each member's Active/Inactive
-        // status from attendance (no-op when tracking is disabled for the linkshell).
-        await _memberActivity.ApplyComputedStatusAsync(eventEntity.LinkshellId, cancellationToken);
+        // A counting event just closed → recompute each member's Active/Inactive status
+        // from attendance (no-op when tracking is disabled for the linkshell). This runs
+        // AFTER the close is committed, so a failure here must NOT fail the request — the
+        // event is already ended; just log it and return success.
+        try
+        {
+            await _memberActivity.ApplyComputedStatusAsync(eventEntity.LinkshellId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Event {EventId} ended, but recomputing member activity status for linkshell {LinkshellId} failed.", eventId, eventEntity.LinkshellId);
+        }
 
         return Ok(new { success = true });
     }

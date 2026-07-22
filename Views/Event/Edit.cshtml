@@ -27,7 +27,18 @@
     </form>
 </div>
 
+@* Inline "Create New Party Setup" modal — rendered OUTSIDE the event form so its
+   editor <form> isn't nested. Opened by the "+ Create New Party Setup" button. *@
+@if (Model.PartySetupEditor is not null)
+{
+    @await Html.PartialAsync("~/Views/Event/_PartySetupCreateModal.cshtml", Model.PartySetupEditor)
+}
+
 @section Scripts {
+    @if (Model.PartySetupEditor is not null)
+    {
+        @await Html.PartialAsync("~/Views/PartySetup/_EditorScripts.cshtml")
+    }
 <script nonce="@Html.CspNonce()">
 (() => {
     const mainJobOptions = @Html.Raw(mainJobOptionsJson);

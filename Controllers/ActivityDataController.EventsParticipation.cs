@@ -494,7 +494,7 @@ public sealed partial class ActivityDataController
         // Block awarding loot the winner can't afford (DKP is deducted at close,
         // so this is the only point we can stop the balance going negative).
         var insufficient = await LootDkpGuard.CheckEventLootAsync(
-            _dbContext, eventId, eventEntity.LinkshellId,
+            _dbContext, _dkpPools, _dkpPoolBalances, eventId, eventEntity.LinkshellId,
             request.ItemWinner, request.WinningDkpSpent ?? 0, cancellationToken);
         if (insufficient is not null)
         {

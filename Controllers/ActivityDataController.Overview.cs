@@ -181,6 +181,24 @@ public sealed partial class ActivityDataController
             ? await new MemberActivityService(_dbContext).ComputeStreaksByAppUserAsync(primaryLinkshellId.Value, cancellationToken)
             : new Dictionary<string, MemberStreaks>();
 
+        // Which primary-linkshell members have actually opened/synced the Discord
+        // Activity (a DiscordActivityUser row points at their AppUserId). Lets the
+        // roster tell real app users apart from outside-sign-up-board-only members,
+        // whose AppUserId alone no longer implies they've ever opened the Activity.
+        var primaryMemberAppUserIds = primaryLinkshellMembers
+            .Select(member => member.AppUserId)
+            .Where(id => id != null)
+            .Select(id => id!)
+            .Distinct()
+            .ToList();
+        var primarySyncedAppUserIds = primaryMemberAppUserIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await _dbContext.DiscordActivityUsers
+                .Where(d => d.IdentityUserId != null && primaryMemberAppUserIds.Contains(d.IdentityUserId))
+                .Select(d => d.IdentityUserId!)
+                .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.Ordinal);
+
         var primaryRules = primaryLinkshellId.HasValue
             ? await _dbContext.Rules
                 .AsNoTracking()
@@ -320,6 +338,38 @@ public sealed partial class ActivityDataController
                 ? byUser.GetValueOrDefault(userId)
                 : 0d;
 
+        // The same figure, narrowed to the DKP pool each LIVE EVENT draws from. That's the number
+        // an officer needs when they type a loot cost: on a Sky event, a member with Sky+Sea+Dynamis
+        // pooled together can spend the whole pooled total, and DKP sitting in an unrelated pool
+        // isn't theirs to spend here. Computed once per distinct (linkshell, pool) actually in play
+        // — normally one — so this costs the same round-trips it always did.
+        var poolMapByLinkshell = new Dictionary<int, DkpPoolMap>();
+        foreach (var lsId in linkshellIds)
+        {
+            poolMapByLinkshell[lsId] = await _dkpPools.GetMapAsync(lsId, cancellationToken);
+        }
+        int EventPoolId(int lsId, string? eventType) =>
+            poolMapByLinkshell.TryGetValue(lsId, out var map) ? map.Resolve(eventType) : 0;
+        string? EventPoolName(int lsId, string? eventType) =>
+            poolMapByLinkshell.TryGetValue(lsId, out var map) && map.HasMultiplePools
+                ? map.NameFor(map.Resolve(eventType))
+                : null;
+
+        var biddableByEventPool = new Dictionary<(int LinkshellId, int PoolId), Dictionary<string, double>>();
+        foreach (var key in activeEvents
+            .Select(evt => (evt.LinkshellId, PoolId: EventPoolId(evt.LinkshellId, evt.EventType)))
+            .Distinct())
+        {
+            if (key.PoolId == 0) { continue; }
+            biddableByEventPool[key] = await AuctionDkpService.ComputePoolBiddableDkpByUserAsync(
+                _dbContext, _dkpPoolBalances, key.LinkshellId, key.PoolId, cancellationToken);
+        }
+        double EventBiddableDkp(int lsId, string? eventType, string? userId) =>
+            userId != null
+            && biddableByEventPool.TryGetValue((lsId, EventPoolId(lsId, eventType)), out var byUser)
+                ? byUser.GetValueOrDefault(userId)
+                : BiddableDkp(lsId, userId);
+
         // Enabled repeat-on-ToD board lead times for this linkshell, keyed by lower-cased
         // monster, so the HNM edit form can repopulate the "Repeat post" toggle + lead.
         var hnmBoardLeadByMonster = (await _dbContext.HnmRecurringBoards
@@ -333,6 +383,18 @@ public sealed partial class ActivityDataController
             && hnmBoardLeadByMonster.TryGetValue(e.AssignedMonsterName.Trim().ToLowerInvariant(), out var lh)
                 ? lh
                 : (double?)null;
+
+        // Which linkshells have a dashboard banner (+ its version for cache-busting),
+        // fetched WITHOUT the image bytes so the polled overview stays lean.
+        var bannerVersions = (await _dbContext.LinkshellBanners
+                .Where(b => linkshellIds.Contains(b.LinkshellId))
+                .Select(b => new { b.LinkshellId, b.UpdatedAt })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(b => b.LinkshellId, b => b.UpdatedAt);
+        string? BannerUrl(int lsId) =>
+            bannerVersions.TryGetValue(lsId, out var updated)
+                ? $"/api/activity/linkshells/{lsId}/banner?v={updated.Ticks}"
+                : null;
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -368,7 +430,8 @@ public sealed partial class ActivityDataController
                 link.Linkshell?.Details,
                 ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName),
                 MapLinkshellSettingsDto(link.Linkshell),
-                link.Linkshell?.AuctionsLocked ?? false)).ToList(),
+                link.Linkshell?.AuctionsLocked ?? false,
+                BannerUrl(link.LinkshellId))).ToList(),
             primaryLinkshell is null
                 ? null
                 : new ActivityPrimaryLinkshellDto(
@@ -389,12 +452,14 @@ public sealed partial class ActivityDataController
                         member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Credit : 0,
                         member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Absent : 0,
                         IsPlaceholder: member.AppUser?.IsPlaceholder ?? false,
-                        BiddableDkp: BiddableDkp(primaryLinkshellId!.Value, member.AppUserId))).ToList(),
+                        BiddableDkp: BiddableDkp(primaryLinkshellId!.Value, member.AppUserId),
+                        HasSyncedActivity: member.AppUserId != null && primarySyncedAppUserIds.Contains(member.AppUserId))).ToList(),
                     primaryRules.Select(rule => new ActivityRuleDto(
                         rule.Id,
                         rule.LinkshellId,
                         rule.RuleTitle,
                         rule.RuleDetails,
+                        rule.Category,
                         rule.CreatedByAppUserId,
                         rule.CreatedByCharacterName,
                         rule.CreatedAt)).ToList(),
@@ -403,6 +468,7 @@ public sealed partial class ActivityDataController
                         announcement.LinkshellId,
                         announcement.AnnouncementTitle,
                         announcement.AnnouncementDetails,
+                        announcement.Category,
                         announcement.CreatedByAppUserId,
                         announcement.CreatedByCharacterName,
                         announcement.CreatedAt)).ToList(),
@@ -416,7 +482,10 @@ public sealed partial class ActivityDataController
                         item.CreatedByAppUserId,
                         item.CreatedByCharacterName,
                         item.CreatedAt,
-                        item.UpdatedAt)).ToList(),
+                        item.UpdatedAt,
+                        item.IsSold,
+                        item.SoldPrice,
+                        item.SoldByCharacterName)).ToList(),
                     primaryRevenue.Select(entry => new ActivityRevenueEntryDto(
                         entry.Id,
                         entry.LinkshellId,
@@ -518,7 +587,7 @@ public sealed partial class ActivityDataController
                                 item.DeniedBy,
                                 item.Source))
                             .ToList(),
-                        BiddableDkp(evt.LinkshellId, participation.AppUserId)))
+                        EventBiddableDkp(evt.LinkshellId, evt.EventType, participation.AppUserId)))
                     .ToList(),
                 evt.EventLootDetails
                     .OrderByDescending(loot => loot.Id)
@@ -532,6 +601,7 @@ public sealed partial class ActivityDataController
                 evt.PartySetup != null ? evt.PartySetup.Name : null,
                 evt.PartySetup != null ? evt.PartySetup.AssignedMonsterName : null,
                 evt.AssignedMonsterName,
+                evt.DayNumber,
                 evt.HnmDefeatedAt != null,
                 evt.HnmRepostAt,
                 evt.SourceTodId,
@@ -558,7 +628,8 @@ public sealed partial class ActivityDataController
                             .ToList()))
                     .ToList(),
                 ResolveActorName(evt.LinkshellId, evt.CreatorUserId),
-                ResolveActorName(evt.LinkshellId, evt.StarterUserId))).ToList(),
+                ResolveActorName(evt.LinkshellId, evt.StarterUserId),
+                EventPoolName(evt.LinkshellId, evt.EventType))).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,

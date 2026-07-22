@@ -1,0 +1,106 @@
+@* Shared styles + behaviour for the party-setup editor body (_EditorBody).
+   Rendered by both the full Create/Edit page and the inline event-form modal.
+   party-setup.js binds to #party-setup-form / #alliances-container (add/remove/
+   reindex); the inline script drives the Event Type -> Assigned Monster reveal. *@
+<style>
+    .ps-alliances { display: grid; gap: 16px; }
+    .ps-alliance .create-form__section-head { flex-wrap: wrap; }
+    .ps-name-field { display: grid; gap: 4px; }
+    .ps-name-field > span {
+        font-size: 11px; color: var(--fg-3);
+        text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .ps-name-field .ps-alliance-name { max-width: 240px; font-weight: 600; }
+    .ps-head-actions, .ps-party-head-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ps-parties {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+    }
+    .ps-party-head {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+    }
+    .ps-party-head .ps-party-name { max-width: 150px; font-weight: 600; }
+    .ps-slots { display: grid; gap: 6px; }
+    .ps-slot {
+        display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+        border-radius: 6px; transition: background .15s ease, box-shadow .15s ease;
+    }
+    .ps-slot__sel { flex: 1 1 80px; min-width: 64px; }
+    .ps-slot__any {
+        flex: 2 1 192px; min-width: 120px; min-height: 32px;
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 0 10px;
+        border: 1px dashed var(--border); border-radius: 6px;
+        color: var(--fg-3); font-size: 12px; font-style: italic;
+        letter-spacing: .04em; user-select: none;
+    }
+    .ps-slot .d-none { display: none !important; }
+    .ps-slot__remove { flex: 0 0 auto; padding: 0 7px; }
+    .ps-slot__dup {
+        flex: 0 0 auto; padding: 0 7px;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .ps-slot__dup svg { width: 14px; height: 14px; display: block; }
+    .ps-slot__dup:disabled { opacity: .4; cursor: default; }
+    .ps-add-slot-row { margin-top: 8px; }
+    .ps-add-slot-row .ps-add-slot { width: 100%; }
+    .ps-add-slot-row.d-none { display: none; }
+
+    .ps-leader-btn {
+        flex: 0 0 auto; display: inline-flex; align-items: center;
+        justify-content: center; width: 30px; height: 30px; padding: 0;
+        border: 1px solid var(--border); border-radius: 8px;
+        background: transparent; color: var(--fg-3); cursor: pointer;
+        transition: color .15s ease, background .15s ease,
+                    border-color .15s ease, box-shadow .15s ease, transform .1s ease;
+    }
+    .ps-leader-btn svg { width: 16px; height: 16px; fill: currentColor; }
+    .ps-leader-btn:hover { color: #f5c518; border-color: rgba(245,197,24,.45); }
+    .ps-leader-btn:active { transform: scale(.92); }
+    .ps-leader-btn.active {
+        color: #1a1300;
+        background: linear-gradient(180deg, #ffe27a, #f5b800);
+        border-color: #f5b800;
+        box-shadow: 0 0 10px rgba(245,197,24,.55);
+    }
+    .ps-slot.is-leader {
+        background: rgba(245,197,24,.07);
+        box-shadow: inset 0 0 0 1px rgba(245,197,24,.35);
+        padding: 4px 6px;
+    }
+</style>
+<script src="~/js/party-setup.js" asp-append-version="true"></script>
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var eventType = document.getElementById('ps-event-type');
+        var monsterField = document.getElementById('ps-monster-field');
+        var monsterSelect = document.getElementById('ps-monster-select');
+        var monsterCustom = document.getElementById('ps-monster-custom');
+
+        // "Both" linkshells: the Assigned Monster section only appears once
+        // the Event Type is set to HNM.
+        if (eventType && monsterField) {
+            var syncMonster = function () {
+                var isHnm = eventType.value === 'HNM';
+                monsterField.style.display = isHnm ? '' : 'none';
+                if (!isHnm && monsterSelect) {
+                    monsterSelect.value = '';            // don't post a stale monster
+                    if (monsterCustom) { monsterCustom.style.display = 'none'; }
+                }
+            };
+            eventType.addEventListener('change', syncMonster);
+            syncMonster();
+        }
+
+        // "Other" in the Assigned Monster dropdown reveals the custom-name box.
+        if (monsterSelect && monsterCustom) {
+            var syncCustom = function () {
+                monsterCustom.style.display = (monsterSelect.value === 'Other') ? '' : 'none';
+            };
+            monsterSelect.addEventListener('change', syncCustom);
+            syncCustom();
+        }
+    })();
+</script>

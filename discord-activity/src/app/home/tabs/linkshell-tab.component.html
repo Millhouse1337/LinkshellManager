@@ -43,8 +43,10 @@
                 [(ngModel)]="rosterSearch"
                 name="manageRosterSearch" />
               <!--
-                App Sync filter: limits the roster to app-linked members only.
-                Active/Inactive status is displayed, but never used to filter.
+                App Sync filter: limits the roster to members who have actually
+                opened/synced the Discord Activity (member.hasSyncedActivity) — not
+                merely account-linked (outside-sign-up-board members get an account
+                without opening the Activity). Status is shown but never filtered on.
               -->
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
                 <input
@@ -70,7 +72,12 @@
                   <div class="ac-roster-char">
                     <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
                     <div class="ac-roster-name-cell">
-                      <div class="ac-roster-name">{{ member.characterName }}</div>
+                      <div class="ac-roster-name">
+                        {{ member.characterName }}
+                        @if (member.hasSyncedActivity) {
+                          <span class="ac-roster-synced" title="Has opened and synced the Discord Activity">App</span>
+                        }
+                      </div>
                       @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
                         @if (alts) {
                           <div class="ac-roster-name-sub">Alts: {{ alts }}</div>
@@ -353,11 +360,12 @@
         @if (configItems().length > 0) {
           <ul class="entry-list">
             @for (item of configItems(); track item.id) {
-              <li class="entry-item">
+              <li class="entry-item" [style.opacity]="item.isSold ? 0.6 : 1">
                 <div class="entry-item__main">
                   <strong>{{ item.itemName }}</strong>
                   @if (item.itemType) { <span class="tag default">{{ item.itemType }}</span> }
                   <span class="tag default num">{{ item.quantity }}</span>
+                  @if (item.isSold) { <span class="tag accent">Sold {{ (item.soldPrice ?? 0).toLocaleString() }} gil</span> }
                 </div>
                 @if (item.notes) { <div class="entry-item__sub">{{ item.notes }}</div> }
                 <div class="entry-item__meta">
@@ -365,10 +373,27 @@
                   @if (activity.formatDateTime(item.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
                 </div>
                 @if (canManageConfigLinkshell()) {
-                  <div class="entry-item__actions">
-                    <button type="button" class="btn ghost sm" (click)="beginEditItem(item)" [disabled]="activity.busyItemId() === item.id">Edit</button>
-                    <button type="button" class="btn ghost sm" (click)="deleteItem(item.id)" [disabled]="activity.busyItemId() === item.id">Delete</button>
-                  </div>
+                  @if (sellingItemId() === item.id) {
+                    <div class="entry-item__actions" style="align-items:center;gap:8px;flex-wrap:wrap">
+                      <input type="number" min="0" step="1" inputmode="numeric" placeholder="Sale price (gil)"
+                             [(ngModel)]="sellPrice" style="max-width:160px" />
+                      <button type="button" class="btn primary sm" (click)="confirmSell(item.id)"
+                              [disabled]="activity.busyItemId() === item.id">
+                        {{ activity.busyItemId() === item.id ? 'Saving…' : 'Confirm sale' }}
+                      </button>
+                      <button type="button" class="btn ghost sm" (click)="cancelSell()">Cancel</button>
+                    </div>
+                  } @else {
+                    <div class="entry-item__actions">
+                      @if (!item.isSold) {
+                        <button type="button" class="btn primary sm" (click)="beginSell(item.id)" [disabled]="activity.busyItemId() === item.id">Sell</button>
+                        <button type="button" class="btn ghost sm" (click)="beginEditItem(item)" [disabled]="activity.busyItemId() === item.id">Edit</button>
+                      } @else {
+                        <button type="button" class="btn ghost sm" (click)="unsellItem(item.id)" [disabled]="activity.busyItemId() === item.id">Unsell</button>
+                      }
+                      <button type="button" class="btn ghost sm" (click)="deleteItem(item.id)" [disabled]="activity.busyItemId() === item.id">Delete</button>
+                    </div>
+                  }
                 }
               </li>
             }
@@ -433,28 +458,69 @@
           </form>
         }
         @if (configRevenue().length > 0) {
-          <ul class="entry-list">
-            @for (entry of configRevenue(); track entry.id) {
-              <li class="entry-item entry-item--{{ entry.entryType.toLowerCase() }}">
-                <div class="entry-item__main">
-                  <span class="tag {{ entry.entryType === 'Income' ? 'success' : 'warning' }}">{{ entry.entryType }}</span>
-                  @if (entry.category) { <strong>{{ entry.category }}</strong> }
-                  <span class="tag default num">{{ entry.value | number }}</span>
+          <!-- Search + type filter: keeps a long ledger scannable. -->
+          <div class="revenue-toolbar">
+            <input
+              type="search"
+              class="revenue-search"
+              placeholder="Search category, note, member…"
+              [ngModel]="revenueSearch()"
+              (ngModelChange)="onRevenueSearch($event)" />
+            <div class="revenue-filter">
+              @for (type of ['All', 'Income', 'Expense']; track type) {
+                <button
+                  type="button"
+                  class="btn sm {{ revenueTypeFilter() === type ? 'primary' : 'ghost' }}"
+                  (click)="setRevenueTypeFilter($any(type))">{{ type }}</button>
+              }
+            </div>
+          </div>
+
+          @if (filteredRevenue().length > 0) {
+            <!-- Scrollable, date-grouped ledger (one page at a time). -->
+            <div class="revenue-scroll">
+              @for (group of groupedRevenuePage(); track group.key) {
+                <div class="revenue-daygroup">
+                  <div class="revenue-day-head">{{ group.label }}</div>
+                  <ul class="entry-list">
+                    @for (entry of group.entries; track entry.id) {
+                      <li class="entry-item entry-item--{{ entry.entryType.toLowerCase() }}">
+                        <div class="entry-item__main">
+                          <span class="tag {{ entry.entryType === 'Income' ? 'success' : 'warning' }}">{{ entry.entryType }}</span>
+                          @if (entry.category) { <strong>{{ entry.category }}</strong> }
+                          <span class="tag default num">{{ entry.value | number }}</span>
+                        </div>
+                        @if (entry.details) { <div class="entry-item__sub">{{ entry.details }}</div> }
+                        <div class="entry-item__meta">
+                          <span>By {{ entry.createdByCharacterName || 'Unknown' }}</span>
+                          @if (activity.formatDateTime(entry.occurredAt); as when) { <span>&middot; {{ when }}</span> }
+                        </div>
+                        @if (canManageConfigLinkshell()) {
+                          <div class="entry-item__actions">
+                            <button type="button" class="btn ghost sm" (click)="beginEditRevenue(entry)" [disabled]="activity.busyRevenueId() === entry.id">Edit</button>
+                            <button type="button" class="btn ghost sm" (click)="deleteRevenue(entry.id)" [disabled]="activity.busyRevenueId() === entry.id">Delete</button>
+                          </div>
+                        }
+                      </li>
+                    }
+                  </ul>
                 </div>
-                @if (entry.details) { <div class="entry-item__sub">{{ entry.details }}</div> }
-                <div class="entry-item__meta">
-                  <span>By {{ entry.createdByCharacterName || 'Unknown' }}</span>
-                  @if (activity.formatDateTime(entry.occurredAt); as when) { <span>&middot; {{ when }}</span> }
-                </div>
-                @if (canManageConfigLinkshell()) {
-                  <div class="entry-item__actions">
-                    <button type="button" class="btn ghost sm" (click)="beginEditRevenue(entry)" [disabled]="activity.busyRevenueId() === entry.id">Edit</button>
-                    <button type="button" class="btn ghost sm" (click)="deleteRevenue(entry.id)" [disabled]="activity.busyRevenueId() === entry.id">Delete</button>
-                  </div>
-                }
-              </li>
+              }
+            </div>
+
+            <!-- Pager: only when more than one page of results. -->
+            @if (revenuePageCount() > 1) {
+              <div class="revenue-pager">
+                <button type="button" class="btn ghost sm" (click)="revenuePrevPage()" [disabled]="revenueCurrentPage() === 0">‹ Prev</button>
+                <span class="revenue-pager__label">Page {{ revenueCurrentPage() + 1 }} of {{ revenuePageCount() }} · {{ filteredRevenue().length | number }} entries</span>
+                <button type="button" class="btn ghost sm" (click)="revenueNextPage()" [disabled]="revenueCurrentPage() >= revenuePageCount() - 1">Next ›</button>
+              </div>
             }
-          </ul>
+          } @else {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">No entries match your search.</div>
+            </div>
+          }
         } @else {
           <div class="empty-state empty-state--compact">
             <div class="empty-state-desc">No revenue entries yet. Track income and expenses to keep the treasury up to date.</div>
@@ -469,50 +535,80 @@
           (click)="closeMemberProfile()">
           <div
             role="dialog" aria-modal="true"
-            style="background:var(--surface, #1f1f23);border:1px solid var(--border, rgba(255,255,255,.12));border-radius:12px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(0,0,0,.45)"
+            class="lsp-dialog"
             (click)="$event.stopPropagation()">
             @if (viewingProfileMember(); as m) {
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <strong style="font-size:15px">{{ m.characterName }}</strong>
-                  <span class="tag default">{{ m.rank || 'Member' }}</span>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div class="lsp-av">{{ initials(m.characterName) }}</div>
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    <strong style="font-size:18px;line-height:1">{{ m.characterName }}</strong>
+                    <span class="tag default" style="align-self:flex-start">{{ m.rank || 'Member' }}</span>
+                  </div>
                 </div>
                 <button type="button" class="btn ghost sm" (click)="closeMemberProfile()" aria-label="Close">✕</button>
               </div>
-              <div style="padding:14px 16px;max-height:60vh;overflow:auto">
-                <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Jobs</div>
+              <div class="lsp-body" (click)="closeSubPopover()">
+                <div class="lsp-grid">
+                  <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+                      <div style="font-weight:500;color:var(--fg);font-size:13px">Jobs</div>
+                      <button type="button" class="btn ghost sm" (click)="toggleProfileShowAll(); $event.stopPropagation()">{{ profileShowAllJobs() ? 'Show 75s only' : 'Show all jobs' }}</button>
+                    </div>
                 @for (ch of rosterCharacters(m); track ch.label) {
                   <div style="margin-top:8px">
                     @if (ch.isAlt) {
                       <div style="font-size:12px;color:var(--fg-2);margin-bottom:4px">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
                     }
-                    @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
+                    @if (jobsToShow(ch); as jobs) {
                       @if (jobs.length === 0) {
-                        <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
+                        @if (profileShowAllJobs()) {
+                          <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
+                        } @else {
+                          <div style="font-size:12px;color:var(--fg-3)">No level 75 jobs · <button type="button" class="btn ghost sm" (click)="toggleProfileShowAll(); $event.stopPropagation()">Show all</button></div>
+                        }
                       } @else {
                         <div style="display:flex;flex-wrap:wrap;gap:10px 6px">
                           @for (job of jobs; track job.name) {
-                            <span class="tag default" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)" style="display:inline-flex;gap:5px"><span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>@if (job.strong) { <span class="jr-strong" title="Merited">★</span> }</span>
+                            <span class="tag default" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)" style="display:inline-flex;gap:5px;cursor:default"
+                              (mouseenter)="openSubPopover($event, ch.levels, job.name)" (mouseleave)="closeSubPopover()"
+                              (click)="openSubPopover($event, ch.levels, job.name); $event.stopPropagation()"><span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>@if (job.strong) { <span class="jr-strong" title="Merited">★</span> }</span>
                           }
                         </div>
                       }
                     }
                   </div>
                 }
+                  </div><!-- /jobs column -->
 
+                  <div><!-- what the linkshell thinks column -->
                 <!-- What the linkshell thinks of this member, PER CHARACTER
                      (main + alts): per-job peer averages + anonymous comment
                      summary. Each alt's feedback shows under that alt's name. -->
                 @if (viewingProfileRatingBlocks().length > 0) {
-                  <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
-                    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">What the linkshell thinks</div>
-                    @if (viewingProfileHasFeedback()) {
+                  <div>
+                    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Ratings</div>
+                    @if (viewingProfileHasRatings()) {
                       @for (block of viewingProfileRatingBlocks(); track block.slot) {
-                        @if ((block.ratings?.peerRaterCount ?? 0) > 0 || (block.ratings?.peerCommentCount ?? 0) > 0) {
+                        @if (blockHasRatings(block)) {
                           <div style="margin-top:12px">
                             <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-bottom:6px">{{ block.name }}@if (block.isAlt) { <span style="opacity:.6;font-weight:400"> · alt</span> }</div>
                             @if (block.ratings; as vr) {
+                              @if (selfJobsFor(vr).length > 0) {
+                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);margin-bottom:4px">Self-rated</div>
+                                <div style="display:grid;grid-template-columns:54px 1fr 1fr;gap:10px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
+                                  <span>Job</span><span>Gear</span><span>Skill</span>
+                                </div>
+                                @for (job of selfJobsFor(vr); track job.jobIndex) {
+                                  <div style="display:grid;grid-template-columns:54px 1fr 1fr;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
+                                    <span style="font-weight:600">{{ ratingJobName(job.jobIndex) }}</span>
+                                    <app-star-rating [value]="job.selfGear" [readonly]="true" [showValue]="true" />
+                                    <app-star-rating [value]="job.selfSkill" [readonly]="true" [showValue]="true" />
+                                  </div>
+                                }
+                              }
                               @if (vr.peerRaterCount > 0) {
+                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);margin:12px 0 4px">What the linkshell thinks</div>
                                 <div style="font-size:11px;color:var(--fg-3);margin-bottom:8px">Based on feedback from {{ vr.peerRaterCount }} teammate{{ vr.peerRaterCount === 1 ? '' : 's' }}.</div>
                                 <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
                                   <span>Job</span><span>Gear</span><span>Skill</span><span title="Teammates who rated this job"># Rated</span>
@@ -526,30 +622,73 @@
                                   </div>
                                 }
                               }
-
-                              @if (vr.peerCommentCount > 0) {
-                                <div style="margin-top:12px">
-                                  <div style="font-size:12px;font-weight:600;color:var(--fg)">Summary</div>
-                                  @if (block.summary?.summary; as summary) {
-                                    <p style="font-size:12px;margin:6px 0 0;line-height:1.45;color:var(--fg-2)">{{ summary }}</p>
-                                  }
-                                  <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-                                    @for (c of vr.peerComments; track $index) {
-                                      <blockquote style="margin:0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;color:var(--fg-2)">{{ c }}</blockquote>
-                                    }
-                                  </div>
-                                </div>
-                              }
                             }
                           </div>
                         }
                       }
                     } @else {
-                      <div style="font-size:12px;color:var(--fg-3)">No teammates have rated this member's jobs yet.</div>
+                      <div style="font-size:12px;color:var(--fg-3)">No ratings yet for this member.</div>
+                    }
+
+                    <!-- OVERALL rollup across all the member's characters: average self +
+                         linkshell ratings, and an AI summary of every peer comment. -->
+                    @if (viewingProfileOverall(); as ov) {
+                      @if (ov.selfCount > 0 || ov.peerRaterCount > 0 || ov.commentCount > 0) {
+                        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+                          <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Overall</div>
+                          @if (ov.selfCount > 0 || ov.peerRaterCount > 0) {
+                            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
+                              <span></span><span>Gear</span><span>Skill</span>
+                            </div>
+                          }
+                          @if (ov.selfCount > 0) {
+                            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
+                              <span style="font-weight:600">Self</span>
+                              <app-star-rating [value]="ov.selfAvgGear" [readonly]="true" [showValue]="true" />
+                              <app-star-rating [value]="ov.selfAvgSkill" [readonly]="true" [showValue]="true" />
+                            </div>
+                          }
+                          @if (ov.peerRaterCount > 0) {
+                            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
+                              <span style="font-weight:600">Linkshell</span>
+                              <app-star-rating [value]="ov.peerAvgGear" [readonly]="true" [showValue]="true" />
+                              <app-star-rating [value]="ov.peerAvgSkill" [readonly]="true" [showValue]="true" />
+                            </div>
+                            <div style="font-size:11px;color:var(--fg-3);margin-top:4px">From {{ ov.peerRaterCount }} teammate{{ ov.peerRaterCount === 1 ? '' : 's' }}.</div>
+                          }
+                          @if (ov.commentCount > 0) {
+                            <div style="margin-top:12px">
+                              <div style="font-size:12px;font-weight:600;color:var(--fg)">Comments summary</div>
+                              @if (ov.summary) {
+                                <p style="font-size:12px;margin:6px 0 0;line-height:1.45;color:var(--fg-2)">{{ ov.summary }}</p>
+                              }
+                              <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+                                @for (c of ov.comments; track $index) {
+                                  <blockquote style="margin:0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;color:var(--fg-2)">{{ c }}</blockquote>
+                                }
+                              </div>
+                            </div>
+                          }
+                        </div>
+                      }
                     }
                   </div>
                 }
+                  </div><!-- /what the linkshell thinks column -->
+                </div><!-- /lsp-grid -->
               </div>
+              @if (subPopover(); as p) {
+                <div class="lsp-sub-popover" [style.top.px]="p.top" [style.left.px]="p.left" (click)="$event.stopPropagation()">
+                  <div class="lsp-sub-popover__title">{{ p.label }} · leveled subs (37+)</div>
+                  @if (p.jobs.length === 0) {
+                    <div class="lsp-sub-popover__empty">No leveled subjobs (37+).</div>
+                  } @else {
+                    @for (s of p.jobs; track s.name) {
+                      <span class="lsp-sub-chip">{{ s.name }}<span class="lvl">{{ s.level }}</span></span>
+                    }
+                  }
+                </div>
+              }
             } @else {
               <div style="padding:24px 16px;text-align:center;color:var(--fg-3);font-size:13px">Loading…</div>
             }

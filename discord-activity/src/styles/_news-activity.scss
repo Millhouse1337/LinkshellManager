@@ -108,12 +108,12 @@
   z-index: 1;
   background: var(--fg-3);
 }
-.panel-tab .activity-dot--loot { background: #c084fc; box-shadow: 0 0 6px rgba(192, 132, 252, 0.4); }
-.panel-tab .activity-dot--claim { background: #818cf8; box-shadow: 0 0 6px rgba(129, 140, 248, 0.4); }
-.panel-tab .activity-dot--no-claim { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
-.panel-tab .activity-dot--event { background: #4ade80; box-shadow: 0 0 6px rgba(74, 222, 128, 0.4); }
-.panel-tab .activity-dot--announcement { background: #4ade80; box-shadow: 0 0 6px rgba(74, 222, 128, 0.4); }
-.panel-tab .activity-dot--rule { background: #4ade80; box-shadow: 0 0 6px rgba(74, 222, 128, 0.4); }
+.panel-tab .activity-dot--loot { background: var(--feed-loot); box-shadow: 0 0 6px rgba(139, 92, 246, 0.4); }
+.panel-tab .activity-dot--claim { background: var(--feed-claim); box-shadow: 0 0 6px rgba(79, 124, 255, 0.4); }
+.panel-tab .activity-dot--no-claim { background: var(--warning); box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
+.panel-tab .activity-dot--event { background: var(--success); box-shadow: 0 0 6px rgba(67, 209, 122, 0.4); }
+.panel-tab .activity-dot--announcement { background: var(--success); box-shadow: 0 0 6px rgba(67, 209, 122, 0.4); }
+.panel-tab .activity-dot--rule { background: var(--success); box-shadow: 0 0 6px rgba(67, 209, 122, 0.4); }
 .panel-tab .activity-body {
   min-width: 0;
 }
@@ -155,12 +155,12 @@
   line-height: 1.4;
   white-space: nowrap;
 }
-.panel-tab .activity-badge--loot { background: rgba(192, 132, 252, 0.12); color: #c084fc; }
-.panel-tab .activity-badge--claim { background: rgba(129, 140, 248, 0.12); color: #818cf8; }
-.panel-tab .activity-badge--no-claim { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
-.panel-tab .activity-badge--event { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
-.panel-tab .activity-badge--announcement { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
-.panel-tab .activity-badge--rule { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
+.panel-tab .activity-badge--loot { background: rgba(139, 92, 246, 0.12); color: var(--feed-loot); }
+.panel-tab .activity-badge--claim { background: var(--accent-weak); color: var(--feed-claim); }
+.panel-tab .activity-badge--no-claim { background: var(--warning-weak); color: var(--warning); }
+.panel-tab .activity-badge--event { background: var(--success-weak); color: var(--success); }
+.panel-tab .activity-badge--announcement { background: var(--success-weak); color: var(--success); }
+.panel-tab .activity-badge--rule { background: var(--success-weak); color: var(--success); }
 
 /* ===== Inline forms & entry lists (Rules / Announcements) ===== */
 .panel-tab .inline-form {

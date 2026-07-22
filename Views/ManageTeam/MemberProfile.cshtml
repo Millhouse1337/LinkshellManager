@@ -1,3 +1,4 @@
+@using LinkshellManagerDiscordApp.Utils
 @model LinkshellManagerDiscordApp.ViewModels.MemberProfileViewModel
 @{
     ViewData["Title"] = "Member profile";
@@ -12,13 +13,14 @@
         return initials.Length > 2 ? initials[..2] : initials;
     }
 
-    // Main + each named alt, as labeled characters to render.
-    var characters = new List<(string Label, bool IsAlt, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong, IReadOnlyList<bool> Relic, IReadOnlyList<string> RelicName, IReadOnlyList<string> Merit, IReadOnlyList<int> Gear, IReadOnlyList<int> Skill)>
+    // Main + each named alt, as labeled characters to render (with their character
+    // slot: 0 = main, 1 = alt 1, 2 = alt 2 — used for the peer-feedback fetch).
+    var characters = new List<(string Label, bool IsAlt, int Slot, IReadOnlyList<int> Levels, IReadOnlyList<bool> Strong, IReadOnlyList<bool> Relic, IReadOnlyList<string> RelicName, IReadOnlyList<string> Merit, IReadOnlyList<int> Gear, IReadOnlyList<int> Skill)>
     {
-        (Model.Entry.CharacterName, false, Model.Entry.JobLevels, Model.Entry.StrongJobs, Model.Entry.RelicFlags, Model.Entry.RelicNames, Model.Entry.MeritJobs, Model.Entry.GearRatings, Model.Entry.SkillRatings)
+        (Model.Entry.CharacterName, false, 0, Model.Entry.JobLevels, Model.Entry.StrongJobs, Model.Entry.RelicFlags, Model.Entry.RelicNames, Model.Entry.MeritJobs, Model.Entry.GearRatings, Model.Entry.SkillRatings)
     };
-    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, Model.Entry.Alt1JobLevels, Model.Entry.Alt1StrongJobs, Model.Entry.Alt1RelicFlags, Model.Entry.Alt1RelicNames, Model.Entry.Alt1MeritJobs, Model.Entry.Alt1GearRatings, Model.Entry.Alt1SkillRatings)); }
-    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, Model.Entry.Alt2JobLevels, Model.Entry.Alt2StrongJobs, Model.Entry.Alt2RelicFlags, Model.Entry.Alt2RelicNames, Model.Entry.Alt2MeritJobs, Model.Entry.Alt2GearRatings, Model.Entry.Alt2SkillRatings)); }
+    if (Model.Entry.Alt1Name is not null) { characters.Add((Model.Entry.Alt1Name, true, 1, Model.Entry.Alt1JobLevels, Model.Entry.Alt1StrongJobs, Model.Entry.Alt1RelicFlags, Model.Entry.Alt1RelicNames, Model.Entry.Alt1MeritJobs, Model.Entry.Alt1GearRatings, Model.Entry.Alt1SkillRatings)); }
+    if (Model.Entry.Alt2Name is not null) { characters.Add((Model.Entry.Alt2Name, true, 2, Model.Entry.Alt2JobLevels, Model.Entry.Alt2StrongJobs, Model.Entry.Alt2RelicFlags, Model.Entry.Alt2RelicNames, Model.Entry.Alt2MeritJobs, Model.Entry.Alt2GearRatings, Model.Entry.Alt2SkillRatings)); }
 }
 
 <div class="page-head fade d1">
@@ -38,7 +40,7 @@
     </div>
 </div>
 
-<div class="card jr-card fade d2" style="max-width:720px">
+<div class="card jr-card jr-card--profile fade d2" style="max-width:920px">
     <div class="jr-card-head">
         <div class="jr-av">@InitialsFor(Model.Entry.CharacterName)</div>
         <div class="jr-id">
@@ -47,7 +49,12 @@
         </div>
     </div>
 
-    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-top:4px">Jobs</div>
+    <div class="jr-jobs-head">
+        <div style="font-weight:500;color:var(--fg);font-size:13px">Jobs</div>
+        <button type="button" class="btn ghost sm" id="jrShowAll">Show all jobs</button>
+    </div>
+
+    <div id="jrJobs">
     @foreach (var ch in characters)
     {
         var leveled = ch.Levels
@@ -63,6 +70,13 @@
                 Skill = i < ch.Skill.Count ? ch.Skill[i] : 0
             })
             .Where(x => x.Level > 0)
+            .OrderByDescending(x => x.Level)
+            .ToList();
+
+        // The character's leveled subjobs (37+), for the hover popover on each 75 pill.
+        var subPool = ch.Levels
+            .Select((lvl, i) => new { Name = Model.JobCatalog[i], Level = lvl })
+            .Where(x => x.Level >= ProfileJobLevels.SubJobMinLevel)
             .OrderByDescending(x => x.Level)
             .ToList();
 
@@ -85,13 +99,47 @@
                         if (job.Strong && !string.IsNullOrWhiteSpace(job.Merit)) { tipParts.Add("Merits: " + job.Merit); }
                         else if (job.Strong) { tipParts.Add("Merited"); }
                         var tip = tipParts.Count > 0 ? string.Join(" · ", tipParts) : null;
-                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "") @(job.Relic ? "relic-flame" : "")" title="@tip"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong">★</span>}@if (job.Gear > 0 || job.Skill > 0)
+                        var isMax = job.Level >= ProfileJobLevels.MaxLevel;
+                        var subs = subPool.Where(s => s.Name != job.Name).ToList();
+                        <span class="jr-pill @(job.Strong ? "jr-pill--strong" : "") @(job.Relic ? "relic-flame" : "") @(isMax ? "" : "jr-pill--sub-hidden")" data-lvl="@job.Level" tabindex="@(isMax ? 0 : -1)" title="@tip"><span class="jr-pill-job">@job.Name</span><span class="jr-pill-lvl">@job.Level</span>@if (job.Strong) {<span class="jr-pill-strong">★</span>}@if (isMax)
                         {
-                            <span class="jr-pill-rate" title="Self-rated — Gear @job.Gear/5 · Skill @job.Skill/5"><span class="jr-rate"><span class="jr-rate-k">G</span><span class="jr-stars">@for (var s = 1; s <= 5; s++){<span class="@(s <= job.Gear ? "on" : "")">★</span>}</span></span><span class="jr-rate"><span class="jr-rate-k">S</span><span class="jr-stars">@for (var s = 1; s <= 5; s++){<span class="@(s <= job.Skill ? "on" : "")">★</span>}</span></span></span>
+                            <span class="jr-subpop"><span class="jr-subpop-title">Leveled subs (37+)</span>@if (subs.Count == 0){<span class="jr-subpop-empty">None</span>}@foreach (var s in subs){<span class="jr-subchip">@s.Name<span class="lvl">@s.Level</span></span>}</span>
                         }</span>
                     }
                 </div>
             }
         </div>
     }
+    </div>
 </div>
+
+@if (Model.TargetAppUserId is not null)
+{
+    var peerConfig = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        linkshellId = Model.LinkshellId,
+        targetAppUserId = Model.TargetAppUserId,
+        jobs = Model.JobCatalog,
+        slots = characters.Select(c => new { slot = c.Slot, name = c.Label, isAlt = c.IsAlt })
+    });
+
+    <div class="card jr-card jr-card--profile fade d3" style="max-width:920px;margin-top:16px">
+        <div style="font-weight:600;color:var(--fg);font-size:14px">Ratings</div>
+        <div id="memberPeer" style="font-size:12px;color:var(--fg-3)">Loading ratings…</div>
+    </div>
+
+    <script id="member-peer-config" type="application/json" nonce="@Html.CspNonce()">@Html.Raw(peerConfig)</script>
+    <script src="~/js/member-peer.js" nonce="@Html.CspNonce()" asp-append-version="true"></script>
+}
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var btn = document.getElementById('jrShowAll');
+        var jobs = document.getElementById('jrJobs');
+        if (!btn || !jobs) { return; }
+        btn.addEventListener('click', function () {
+            var on = jobs.classList.toggle('jr-show-all');
+            btn.textContent = on ? 'Show 75s only' : 'Show all jobs';
+        });
+    })();
+</script>

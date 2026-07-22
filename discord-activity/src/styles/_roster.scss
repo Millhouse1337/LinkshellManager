@@ -33,15 +33,31 @@
   font-size: 11px;
   font-weight: 600;
   color: white;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, var(--av-a-1), var(--av-a-2));
 }
-.panel-tab .ac-roster-av.a { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
-.panel-tab .ac-roster-av.b { background: linear-gradient(135deg, #ec4899, #f43f5e); }
-.panel-tab .ac-roster-av.c { background: linear-gradient(135deg, #10b981, #06b6d4); }
-.panel-tab .ac-roster-av.d { background: linear-gradient(135deg, #f59e0b, #ef4444); }
-.panel-tab .ac-roster-av.e { background: linear-gradient(135deg, #8b5cf6, #3b82f6); }
+.panel-tab .ac-roster-av.a { background: linear-gradient(135deg, var(--av-a-1), var(--av-a-2)); }
+.panel-tab .ac-roster-av.b { background: linear-gradient(135deg, var(--av-b-1), var(--av-b-2)); }
+.panel-tab .ac-roster-av.c { background: linear-gradient(135deg, var(--av-c-1), var(--av-c-2)); }
+.panel-tab .ac-roster-av.d { background: linear-gradient(135deg, var(--av-d-1), var(--av-d-2)); }
+.panel-tab .ac-roster-av.e { background: linear-gradient(135deg, var(--av-e-1), var(--av-e-2)); }
 .panel-tab .ac-roster-name { font-size: 13px; color: var(--fg); font-weight: 500; }
 .panel-tab .ac-roster-name-sub { font-size: 11px; color: var(--fg-3); }
+/* "App" pill beside a member's name: they've actually opened/synced the Discord
+   Activity (vs. members who only ever used the outside sign-up board). Paired with
+   the "App Sync" roster filter, which hides everyone without this. */
+.panel-tab .ac-roster-synced {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: middle;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid var(--border-2);
+}
 .panel-tab .ac-roster-rank { font-size: 12px; color: var(--fg-1); }
 /* Active-credit streak chip shown beside the status tag (no extra grid column). */
 .panel-tab .ac-roster-credit {
@@ -98,6 +114,19 @@
   grid-template-columns: minmax(170px, 1.6fr) 120px 100px 100px 112px 60px 100px minmax(180px, 1fr);
   min-width: 960px;
 }
+/* Compact roster scroll (dashboard + DKP tab): show ~10 member rows then scroll,
+   pinning the column headers. max-height (not a fixed height) means a short
+   roster simply shows its rows with no empty filler. The base .ac-roster sets
+   overflow:hidden — overriding overflow-y to auto leaves overflow-x hidden. */
+.panel-tab .ac-roster--scroll {
+  overflow-y: auto;
+  max-height: 33rem;
+}
+.panel-tab .ac-roster--scroll .ac-roster-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 /* Character cell: avatar beside the name/alts stack. */
 .panel-tab .ac-roster-char { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .panel-tab .ac-roster-char .ac-roster-name-cell { min-width: 0; }
@@ -122,7 +151,7 @@
 }
 .panel-tab .ac-roster-count-input:focus {
   outline: none;
-  border-color: var(--accent, #6268ff);
+  border-color: var(--accent);
 }
 /* Tint the count input to preview the chip color the chosen streak produces. */
 .panel-tab .ac-roster-count-input.is-credit { color: var(--success); border-color: var(--success); }

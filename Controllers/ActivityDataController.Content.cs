@@ -57,6 +57,7 @@ public sealed partial class ActivityDataController
             LinkshellName = linkshell.LinkshellName,
             RuleTitle = title,
             RuleDetails = details,
+            Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
             CreatedByAppUserId = appUser.Id,
             CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
             CreatedAt = DateTime.UtcNow
@@ -106,6 +107,7 @@ public sealed partial class ActivityDataController
 
         rule.RuleTitle = title;
         rule.RuleDetails = details;
+        rule.Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -183,6 +185,7 @@ public sealed partial class ActivityDataController
             LinkshellName = linkshell.LinkshellName,
             AnnouncementTitle = title,
             AnnouncementDetails = details,
+            Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
             CreatedByAppUserId = appUser.Id,
             CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
             CreatedAt = DateTime.UtcNow
@@ -232,6 +235,7 @@ public sealed partial class ActivityDataController
 
         announcement.AnnouncementTitle = title;
         announcement.AnnouncementDetails = details;
+        announcement.Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -393,6 +397,105 @@ public sealed partial class ActivityDataController
 
         _dbContext.Items.Remove(item);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Mark an item sold for a price → record the income in the treasury (a matching
+    // RevenueEntry). The item stays flagged Sold; "unsell" reverses both.
+    [HttpPost("items/{itemId:int}/mark-sold")]
+    public async Task<IActionResult> MarkItemSoldAsync(
+        int itemId,
+        [FromBody] ActivityMarkItemSoldRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to sell items." });
+        }
+
+        var item = await _dbContext.Items.FirstOrDefaultAsync(entry => entry.Id == itemId, cancellationToken);
+        if (item is null)
+        {
+            return NotFound(new { error = "The item was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, item.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInventory, cancellationToken))
+        {
+            return Forbid();
+        }
+        if (item.IsSold)
+        {
+            return Ok(new { success = true });
+        }
+
+        var salePrice = request?.SalePrice ?? 0;
+        if (salePrice < 0) { salePrice = 0; }
+
+        var characterName = membership!.CharacterName ?? appUser.CharacterName;
+        var now = DateTime.UtcNow;
+        var entry = new RevenueEntry
+        {
+            LinkshellId = item.LinkshellId,
+            LinkshellName = item.LinkshellName,
+            EntryType = "Income",
+            Category = "Item Sale",
+            Value = salePrice,
+            Details = item.Quantity > 1 ? $"Sold: {item.ItemName} (x{item.Quantity})" : $"Sold: {item.ItemName}",
+            OccurredAt = now,
+            CreatedByAppUserId = appUser.Id,
+            CreatedByCharacterName = characterName,
+            CreatedAt = now
+        };
+        _dbContext.RevenueEntries.Add(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        item.IsSold = true;
+        item.SoldPrice = salePrice;
+        item.SoldAt = now;
+        item.SoldByCharacterName = characterName;
+        item.RevenueEntryId = entry.Id;
+        item.UpdatedAt = now;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("items/{itemId:int}/unsell")]
+    public async Task<IActionResult> UnsellItemAsync(int itemId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to manage items." });
+        }
+
+        var item = await _dbContext.Items.FirstOrDefaultAsync(entry => entry.Id == itemId, cancellationToken);
+        if (item is null)
+        {
+            return NotFound(new { error = "The item was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, item.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInventory, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (item.RevenueEntryId.HasValue)
+        {
+            var entry = await _dbContext.RevenueEntries.FirstOrDefaultAsync(e => e.Id == item.RevenueEntryId.Value, cancellationToken);
+            if (entry is not null) { _dbContext.RevenueEntries.Remove(entry); }
+        }
+        item.IsSold = false;
+        item.SoldPrice = null;
+        item.SoldAt = null;
+        item.SoldByCharacterName = null;
+        item.RevenueEntryId = null;
+        item.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         return Ok(new { success = true });
     }
 

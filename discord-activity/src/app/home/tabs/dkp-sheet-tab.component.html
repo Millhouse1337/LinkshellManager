@@ -5,76 +5,85 @@
       <div class="section-title">DKP Sheet</div>
     </div>
     <div class="section-head-right">
-      @if (data()?.openInSheetsUrl) {
-        <button type="button" class="btn sm ghost" (click)="openInSheets()">Open in Sheets</button>
-      }
       <button type="button" class="btn sm" (click)="dkpSheet.load(primaryLinkshellId())" [disabled]="dkpSheet.busy()">Refresh</button>
     </div>
   </div>
 
   @if (data(); as model) {
-    @if (!model.connected) {
-      <section class="card">
-        <div class="empty-state empty-state--compact">
-          <div class="empty-state-desc">{{ model.error || 'Connect the Google Sheet on the web to view it here.' }}</div>
-        </div>
-      </section>
-    } @else if (model.error) {
-      <section class="card">
-        <div class="empty-state empty-state--compact">
-          <div class="empty-state-desc">{{ model.error }}</div>
-        </div>
-      </section>
-    } @else if (model.tabs.length === 0) {
-      <section class="card">
-        <div class="empty-state empty-state--compact">
-          <div class="empty-state-desc">The sheet has no tabs to show.</div>
-        </div>
-      </section>
-    } @else {
-      <section class="card">
-        <div class="dkp-sheet-toolbar">
-          <div class="dkp-sheet-tabs">
-            @for (tab of model.tabs; track tab.name) {
-              <button type="button" class="dkp-sheet-tabbtn" [class.active]="activeTab()?.name === tab.name" (click)="selectTab(tab.name)">{{ tab.name }}</button>
-            }
-          </div>
-          <input type="search" class="dkp-sheet-search" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)" placeholder="Search..." />
-        </div>
+    <div class="dkp-stats">
+      <div class="dkp-stat">
+        <div class="dkp-stat-ico">👥</div>
+        <div><p>Total Members</p><h2>{{ model.totalMembers }}</h2></div>
+      </div>
+      <div class="dkp-stat">
+        <div class="dkp-stat-ico">🪙</div>
+        <div><p>Total DKP</p><h2>{{ model.totalDkp | number:'1.2-2' }}</h2></div>
+      </div>
+      <div class="dkp-stat">
+        <div class="dkp-stat-ico">🔨</div>
+        <div><p>Biddable DKP</p><h2>{{ model.biddable | number:'1.2-2' }}</h2></div>
+      </div>
+      <div class="dkp-stat">
+        <div class="dkp-stat-ico">💼</div>
+        <div><p>Total DKP Spent</p><h2>{{ model.totalSpent | number:'1.2-2' }}</h2></div>
+      </div>
+    </div>
 
-        @if (activeTab(); as tab) {
-          <div class="table-scroll">
-            <table class="dkp-sheet-table" [class.is-main]="tab.isMainTab">
-              <thead>
-                <tr>
-                  <th class="dkp-sheet-rownum"></th>
-                  @for (header of tab.headers; track $index) {
-                    <th [class.dkp-sheet-col0]="tab.isMainTab && $index === 0">{{ header }}</th>
-                  }
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of filteredRows(); track row.rowNumber) {
-                  <tr>
-                    <td class="dkp-sheet-rownum">{{ row.rowNumber }}</td>
-                    @for (cell of row.cells; track $index) {
-                      <td [class.dkp-sheet-col0]="tab.isMainTab && $index === 0">{{ cell }}</td>
-                    }
-                  </tr>
+    <section class="card dkp-table-card">
+      <div class="dkp-toolbar">
+        <input type="search" class="dkp-search" [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)" placeholder="Filter members..." />
+        <span class="dkp-rowcount">{{ filteredMembers().length }} rows</span>
+      </div>
+
+      <div class="table-scroll">
+        <table class="dkp-table">
+          <!-- Per-pool columns render only when the linkshell actually has more than one pool.
+               With a single pool `pools` is empty and this table is byte-for-byte what it was
+               before pools existed — same seven columns, same colspan. -->
+          <thead>
+            <tr>
+              <th>Member Name</th>
+              <th>Alt 1</th>
+              <th>Alt 2</th>
+              @for (pool of pools(); track pool.poolId) {
+                <th class="num" [title]="'Spendable ' + pool.name + ' DKP — what this member can put toward loot from any event type in the ' + pool.name + ' pool.'">{{ pool.name }}</th>
+              }
+              <th class="num">Current DKP</th>
+              <th class="num">Biddable DKP</th>
+              <th class="num">Total DKP</th>
+              <th class="num">Total DKP Spent</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of filteredMembers(); track m.id) {
+              <tr>
+                <td>{{ m.name }}</td>
+                <td [class.muted]="!m.alt1">{{ m.alt1 || '—' }}</td>
+                <td [class.muted]="!m.alt2">{{ m.alt2 || '—' }}</td>
+                @for (pool of pools(); track pool.poolId; let i = $index) {
+                  <!-- A pool can go negative when loot is charged to one that earns nothing.
+                       Surfaced, never clamped — clamping would break SUM(pools) == the balance. -->
+                  <td class="num" [class.dkp-negative]="m.poolCurrent[i] < 0">
+                    {{ m.poolCurrent[i] | number:'1.2-2' }}
+                  </td>
                 }
-                @if (filteredRows().length === 0) {
-                  <tr><td class="dkp-sheet-empty" [attr.colspan]="tab.headers.length + 1">No matching rows.</td></tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-      </section>
-    }
+                <td class="num">{{ m.current | number:'1.2-2' }}</td>
+                <td class="num">{{ m.biddable | number:'1.2-2' }}</td>
+                <td class="num">{{ m.total | number:'1.2-2' }}</td>
+                <td class="num">{{ m.spent | number:'1.2-2' }}</td>
+              </tr>
+            }
+            @if (filteredMembers().length === 0) {
+              <tr><td class="dkp-empty" [attr.colspan]="7 + pools().length">No members to show.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
   } @else {
     <section class="card">
       <div class="empty-state empty-state--compact">
-        <div class="empty-state-desc">Loading DKP sheet...</div>
+        <div class="empty-state-desc">Loading DKP sheet…</div>
       </div>
     </section>
   }

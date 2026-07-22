@@ -69,11 +69,15 @@ RESTART IDENTITY;
 -- The roster rows stay, but their cached DKP balance / seed watermarks are
 -- reset to 0. JobLevels + StrongJobs (profile jobs) are intentionally left
 -- untouched.
+-- DkpPoolLedgerFromId must be reset alongside the seed watermark: this script TRUNCATEs
+-- DkpLedgerEntries with RESTART IDENTITY, so new rows begin again at Id 1. A stale epoch would
+-- silently exclude every one of them from pool attribution.
 UPDATE "AppUserLinkshells"
-SET "LinkshellDkp"     = 0,
-    "SeededDkpEarned"  = 0,
-    "SeededDkpSpent"   = 0,
-    "DkpSeedLedgerId"  = 0;
+SET "LinkshellDkp"        = 0,
+    "SeededDkpEarned"     = 0,
+    "SeededDkpSpent"      = 0,
+    "DkpSeedLedgerId"     = 0,
+    "DkpPoolLedgerFromId" = 0;
 
 -- Sanity check — every wiped table should read 0; roster should be unchanged.
 SELECT

@@ -27,6 +27,15 @@ public class Tod
     // on those rows so the linkshell can settle the status after the fact.
     public bool? Claim { get; set; }
 
+    // Whether this pop/kill was HQ (officer-set from the Log ToD form). Shown in the
+    // ToD list alongside Claim.
+    public bool Hq { get; set; }
+
+    // Extra seconds added on top of the cooldown when computing RepopTime, for fine
+    // repop adjustments (the Log ToD form's "Additional seconds" input). Stored so the
+    // form round-trips on edit. 0 = none.
+    public int AdditionalSeconds { get; set; }
+
     public string? Cooldown { get; set; }
 
     [DataType(DataType.DateTime)]

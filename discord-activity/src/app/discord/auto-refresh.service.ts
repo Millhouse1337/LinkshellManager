@@ -43,6 +43,10 @@ export class AutoRefreshService {
   private readonly activeTab = signal<TabName | null>(null);
   // Set by LiveUpdateService so the timer can back off while push is healthy.
   private readonly liveConnected = signal(false);
+  // Bumps after every refresh (timer / manual button / live change-feed). Components
+  // that own data NOT on the overview (e.g. the per-event party board detail) can read
+  // this in an effect to reload themselves whenever the app refreshes.
+  readonly refreshSignal = signal(0);
   // Dedupes overlapping refreshes (timer + manual button + change-feed) into a
   // single in-flight fetch so a click during a tick never double-loads.
   private refreshInFlight: Promise<void> | null = null;
@@ -172,6 +176,8 @@ export class AutoRefreshService {
       await this.loadForTab(tab, linkshellId);
     } finally {
       this.refreshInFlight = null;
+      // Let board-detail panels (and anything else off the overview) reload.
+      this.refreshSignal.update(v => v + 1);
     }
   }
 

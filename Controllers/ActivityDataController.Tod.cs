@@ -141,7 +141,7 @@ public sealed partial class ActivityDataController
                 todTimeUtc,
                 cooldown,
                 interval,
-                todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)),
+                todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(Math.Max(0, request.AdditionalSeconds)),
                 SanitizeUploadedImagePath(request.ImagePath),
                 normalizedLootDetails
                     .Select(l => new TodSubmissionLootInput(l.ItemName, l.ItemWinner, l.WinningDkpSpent))
@@ -150,15 +150,18 @@ public sealed partial class ActivityDataController
             return Ok(new { pending = true, submissionId });
         }
 
+        var additionalSeconds = Math.Max(0, request.AdditionalSeconds);
         var tod = new Tod
         {
             LinkshellId = request.LinkshellId,
             MonsterName = monsterName,
             DayNumber = request.DayNumber,
             Claim = request.Claim,
+            Hq = request.Hq,
+            AdditionalSeconds = additionalSeconds,
             Time = todTimeUtc,
             Cooldown = cooldown,
-            RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)),
+            RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(additionalSeconds),
             Interval = interval,
             TimeStamp = nowUtc,
             TotalTods = 1,
@@ -177,7 +180,7 @@ public sealed partial class ActivityDataController
             }
 
             await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await AdjustTodLootDkpAsync(_dbContext, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
         }
@@ -216,7 +219,7 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        await AdjustTodLootDkpAsync(_dbContext, tod, tod.TodLootDetails.ToList(), DateTime.UtcNow, isRefund: true, cancellationToken);
+        await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), DateTime.UtcNow, isRefund: true, cancellationToken);
         _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
@@ -386,16 +389,18 @@ public sealed partial class ActivityDataController
         // Reverse DKP impact from existing loot, remove it, then apply the new set.
         if (tod.TodLootDetails.Count > 0)
         {
-            await AdjustTodLootDkpAsync(_dbContext, tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
+            await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
             _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
         }
 
         tod.MonsterName = monsterName;
         tod.DayNumber = request.DayNumber;
         tod.Claim = request.Claim;
+        tod.Hq = request.Hq;
+        tod.AdditionalSeconds = Math.Max(0, request.AdditionalSeconds);
         tod.Time = todTimeUtc;
         tod.Cooldown = cooldown;
-        tod.RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown));
+        tod.RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(tod.AdditionalSeconds);
         tod.Interval = interval;
         tod.TimeStamp = nowUtc;
         tod.TotalClaims = request.Claim == true ? 1 : 0;
@@ -414,7 +419,7 @@ public sealed partial class ActivityDataController
             }
 
             await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await AdjustTodLootDkpAsync(_dbContext, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
         }

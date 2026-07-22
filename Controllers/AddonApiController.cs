@@ -24,6 +24,9 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly HnmAutoEventService _hnmAutoEvent;
     private readonly DiscordWebhookQueue _discordWebhook;
     private readonly GlobalSettingsService _globalSettings;
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+    private readonly DkpPoolBalanceService _dkpPoolBalances;
     private readonly ILogger<AddonApiController> _logger;
 
     public AddonApiController(
@@ -35,6 +38,9 @@ public sealed partial class AddonApiController : ControllerBase
         HnmAutoEventService hnmAutoEvent,
         DiscordWebhookQueue discordWebhook,
         GlobalSettingsService globalSettings,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances,
         ILogger<AddonApiController> logger)
     {
         _dbContext = dbContext;
@@ -45,6 +51,9 @@ public sealed partial class AddonApiController : ControllerBase
         _hnmAutoEvent = hnmAutoEvent;
         _discordWebhook = discordWebhook;
         _globalSettings = globalSettings;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
+        _dkpPoolBalances = dkpPoolBalances;
         _logger = logger;
     }
 

@@ -20,11 +20,22 @@ public static class EventBoardHtmlBuilder
         PartySetup setup,
         IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
         IReadOnlyList<EventSignupLine> generalSignups,
-        string? theme = null)
+        string? theme = null,
+        bool wide = false)
     {
+        // Components V2 boards (wide) use a wider internal canvas so each party column is
+        // wider and more of the board reads at once. Kept at/below 2048px so the renderer
+        // can screenshot it at 2× density and still stay under Discord's 4096px/side cap.
+        var cardWidth = wide ? EventBoardImageRenderer.WideCardWidth : EventBoardImageRenderer.DefaultCardWidth;
+
         var parties = LabeledParties(setup).ToList();
         var totalSlots = parties.Sum(p => p.Party.Slots.Count);
         var filledSlots = parties.Sum(p => p.Party.Slots.Count(s => slotSignups.ContainsKey(s.Id)));
+        // How many signups are "locked" to survive the next window advance (window-cycle
+        // HNMs only) — surfaced as a stat tile so officers see the coming carryover at a glance.
+        var stayingCount = HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName)
+            ? slotSignups.Values.Count(s => s.StayNextWindow)
+            : 0;
 
         var sb = new StringBuilder();
         // The :root block is split: the theme-independent half (role colours,
@@ -65,9 +76,11 @@ public static class EventBoardHtmlBuilder
     .tile .lab{font-family:var(--cinzel);font-size:13px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;}
     .tile .val{font-size:22px;font-weight:600;color:var(--soft);margin-top:6px;display:flex;align-items:center;gap:9px;}
   .tile .val .rel{font-style:italic;color:var(--dim);font-weight:400;}
-    .legend{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;}
+    .legend{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 16px;background:var(--tint);border-left:2px solid var(--accent);border-radius:2px;}
     .legend .item{display:inline-flex;align-items:center;gap:10px;}
     .legend .name{font-family:var(--cinzel);font-size:14px;letter-spacing:1px;color:var(--muted);}
+    .legend .key-lab{font-family:var(--cinzel);font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-right:4px;}
+    .legend .crown{color:var(--accent);font-size:18px;line-height:1;}
   /* gem marker */
     .gem{position:relative;display:inline-block;flex-shrink:0;transform:rotate(45deg);width:20px;height:20px;}
     .gem.sm{width:14px;height:14px;}
@@ -97,12 +110,16 @@ public static class EventBoardHtmlBuilder
   .slot.empty .combo{color:var(--vacant);}
     .slot .who{font-size:18px;font-style:italic;color:var(--name);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .slot .crown{color:var(--accent);font-style:normal;}
+  .slot .lock{font-style:normal;font-size:15px;line-height:1;}
     .slot .vacant{font-family:var(--cinzel);font-size:14px;letter-spacing:2px;text-transform:uppercase;opacity:.8;}
   .v-tank{color:var(--tank);} .v-heal{color:var(--heal);} .v-supp{color:var(--supp);} .v-dps{color:var(--dps);} .v-any{color:var(--muted);}
     .foot{padding-top:22px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:12px;align-items:center;}
     .help{font-size:16px;font-style:italic;color:var(--dim);text-align:center;}
     /* Alliance grouping header above each alliance's row of parties. */
     .alliance-head{font-family:var(--cinzel);font-size:20px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--accent);padding-bottom:6px;border-bottom:1px solid var(--line);text-align:center;}
+    /* The alliance lead's name, shown to the right of the alliance name. */
+    .alliance-lead{margin-left:12px;font-size:16px;font-weight:600;letter-spacing:1px;color:var(--soft);}
+    .alliance-lead .crown{color:var(--accent);margin-right:4px;}
     /* Each alliance = header + its party row, with a SMALL internal gap so the
        title hugs its parties; the larger `.pad` gap between groups keeps the
        separation ABOVE each alliance title (dividing it from the alliance before). */
@@ -114,8 +131,11 @@ public static class EventBoardHtmlBuilder
     .extra-member{display:inline-flex;align-items:center;gap:10px;}
     .extra-name{font-size:18px;font-weight:600;color:var(--soft);}
     .extra-jobs{font-family:var(--cinzel);font-size:14px;letter-spacing:.5px;color:var(--name);}
-</style></head><body><div class="embed"><div class="toprule"></div><div class="pad">
 """);
+        // Card width override: a later .embed rule (equal specificity, later in source order)
+        // wins over the base width:1600px above, so the wide (V2) canvas needs no change to
+        // the big stylesheet literal.
+        sb.Append($".embed{{width:{cardWidth}px;}}</style></head><body><div class=\"embed\"><div class=\"toprule\"></div><div class=\"pad\">");
 
         // Header
         var eyebrow = string.IsNullOrWhiteSpace(ev.EventType)
@@ -135,21 +155,41 @@ public static class EventBoardHtmlBuilder
         var status = ev.CommencementStartTime is not null ? "Live" : "Recruiting";
         var reward = ev.DkpPerHour is { } dkp ? $"{Enc(dkp.ToString())} DKP/hr" : "&mdash;";
         var location = string.IsNullOrWhiteSpace(ev.EventLocation) ? "&mdash;" : Enc(ev.EventLocation!.Trim());
+        // Optional "Day N" tile for HNM boards (set on the create-event form).
+        var dayTile = ev.DayNumber is { } dayNum
+            ? $"""<div class="tile"><div class="lab">Day</div><div class="val">{Enc(dayNum.ToString())}</div></div>"""
+            : string.Empty;
+        // Optional "Staying" tile — how many locked signups carry into the next window.
+        var stayingTile = stayingCount > 0
+            ? $"""<div class="tile"><div class="lab">Staying</div><div class="val">&#128274; {stayingCount}</div></div>"""
+            : string.Empty;
         sb.Append($"""
 <div class="tiles">
-<div class="tile"><div class="lab">Status</div><div class="val">{status}</div></div>
+<div class="tile"><div class="lab">Status</div><div class="val">{status}</div></div>{dayTile}
 <div class="tile"><div class="lab">Reward</div><div class="val">{reward}</div></div>
-<div class="tile"><div class="lab">Location</div><div class="val">{location}</div></div></div>
+<div class="tile"><div class="lab">Location</div><div class="val">{location}</div></div>{stayingTile}</div>
 """);
 
-        // Legend
+        // Color key — explains what each gem colour / marker means so the board
+        // reads at a glance. Gem colour = the slot's ROLE; the dashed gem is an
+        // open slot; the crown marks the party leader.
         sb.Append("""
 <div class="legend">
+<span class="key-lab">Color Key</span>
 <span class="item"><span class="gem sm g-tank"><span class="face"></span><span class="spark"></span></span><span class="name">Tank</span></span>
 <span class="item"><span class="gem sm g-heal"><span class="face"></span><span class="spark"></span></span><span class="name">Healer</span></span>
 <span class="item"><span class="gem sm g-supp"><span class="face"></span><span class="spark"></span></span><span class="name">Support</span></span>
-<span class="item"><span class="gem sm g-dps"><span class="face"></span><span class="spark"></span></span><span class="name">DPS</span></span></div>
+<span class="item"><span class="gem sm g-dps"><span class="face"></span><span class="spark"></span></span><span class="name">DPS</span></span>
+<span class="item"><span class="gem sm g-any"><span class="face"></span><span class="spark"></span></span><span class="name">Any</span></span>
+<span class="item"><span class="gem sm empty b-any"><span class="face"></span></span><span class="name">Open slot</span></span>
+<span class="item"><span class="crown">&#9819;</span><span class="name">Party leader</span></span>
 """);
+        // Window-cycle HNMs explain the 🔒 (a signup staying through the next window advance).
+        if (HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        {
+            sb.Append("""<span class="item"><span class="lock">&#128274;</span><span class="name">Staying next window</span></span>""");
+        }
+        sb.Append("</div>");
 
         // Parties — grouped by alliance, 3 per row (matching the embed). Each
         // alliance gets a full-width header (when there's more than one) so the
@@ -167,7 +207,12 @@ public static class EventBoardHtmlBuilder
                 var allianceName = string.IsNullOrWhiteSpace(allianceGroups[ai].Name)
                     ? $"Alliance {ai + 1}"
                     : allianceGroups[ai].Name!;
-                sb.Append($"""<div class="alliance-head">{Enc(allianceName)}</div>""");
+                // The alliance lead (if claimed) rides to the right of the alliance name.
+                var lead = AllianceLeadName(allianceGroups[ai], slotSignups);
+                var leadHtml = string.IsNullOrEmpty(lead)
+                    ? string.Empty
+                    : $"""<span class="alliance-lead"><span class="crown">&#9819;</span>Alliance Lead: {Enc(lead)}</span>""";
+                sb.Append($"""<div class="alliance-head">{Enc(allianceName)}{leadHtml}</div>""");
             }
 
             sb.Append("<div class=\"parties\">");
@@ -221,6 +266,9 @@ public static class EventBoardHtmlBuilder
     {
         var slots = party.Slots.OrderBy(s => s.SortOrder).ToList();
         var filled = slots.Count(s => slotSignups.ContainsKey(s.Id));
+        // If someone in this party has already claimed leadership, their filled slot wears
+        // the crown — don't also crown the empty designated-leader seat (avoids two crowns).
+        var hasSignedUpLeader = slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader);
         var pctWidth = slots.Count > 0 ? (int)Math.Round(filled * 100.0 / slots.Count) : 0;
         var full = slots.Count > 0 && filled == slots.Count;
 
@@ -234,17 +282,44 @@ public static class EventBoardHtmlBuilder
             var roleClass = RoleClass(signup is not null && !string.IsNullOrWhiteSpace(signup.Role) ? signup.Role : slot.Role);
             if (signup is not null)
             {
+                // The crown follows the ACTUAL party leader (the signed-up leader), so it
+                // moves when a member takes leadership via "Make Me Party Lead".
                 var crown = signup.IsPartyLeader ? "<span class=\"crown\">&#9819;</span>" : string.Empty;
+                // 🔒 marks a signup locked to survive the next window advance (it's staying).
+                var lockMark = signup.StayNextWindow ? "<span class=\"lock\">&#128274;</span>" : string.Empty;
                 var combo = Enc(SignedUpCombo(signup, slot));
-                sb.Append($"""<div class="slot"><span class="gem g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="combo">{combo}</span><span class="who">{crown}{Enc(signup.CharacterName ?? "Member")}</span></div>""");
+                sb.Append($"""<div class="slot"><span class="gem g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="combo">{combo}</span><span class="who">{crown}{lockMark}{Enc(signup.CharacterName ?? "Member")}</span></div>""");
             }
             else
             {
+                // An open slot that's pre-configured as this party's leader seat still shows
+                // the crown, so signups can see up front that taking it makes them leader.
+                // (Once someone signs up, the crown follows the ACTUAL signed-up leader above.)
+                var crown = slot.IsPartyLeader && !hasSignedUpLeader ? "<span class=\"crown\">&#9819;</span>" : string.Empty;
                 var combo = Enc(SlotCombo(slot));
-                sb.Append($"""<div class="slot empty"><span class="gem empty b-{roleClass}"><span class="face"></span></span><span class="combo">{combo}</span><span class="vacant v-{roleClass}">&middot; vacant &middot;</span></div>""");
+                sb.Append($"""<div class="slot empty"><span class="gem empty b-{roleClass}"><span class="face"></span></span><span class="combo">{combo}</span><span class="vacant v-{roleClass}">{crown}&middot; vacant &middot;</span></div>""");
             }
         }
         sb.Append("</div>");
+    }
+
+    // The character name of the member designated this alliance's lead (👑 next to the
+    // alliance header), or null when nobody has claimed it. At most one signup per
+    // alliance carries IsAllianceLeader.
+    private static string? AllianceLeadName(
+        PartySetupAlliance alliance, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
+    {
+        foreach (var party in alliance.Parties)
+        {
+            foreach (var slot in party.Slots)
+            {
+                if (slotSignups.TryGetValue(slot.Id, out var su) && su.IsAllianceLeader)
+                {
+                    return string.IsNullOrWhiteSpace(su.CharacterName) ? "Member" : su.CharacterName!.Trim();
+                }
+            }
+        }
+        return null;
     }
 
     // (party, partyName, allianceName-or-null) in board order. Alliance name is

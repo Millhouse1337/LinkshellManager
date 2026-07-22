@@ -8,6 +8,14 @@
   gap: 10px;
 }
 
+/* Caps a long list (e.g. Sent invites) and scrolls it in place so it doesn't run
+   the section off the page. Right padding clears the scrollbar off the cards. */
+.panel-tab .compact-list--scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .panel-tab .compact-list > li {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -187,7 +195,7 @@
 }
 
 .panel-tab .action-button--danger:hover {
-  background: var(--danger-weak, rgba(239, 68, 68, 0.12));
+  background: var(--danger-weak);
   border-color: var(--danger);
   color: var(--danger);
 }

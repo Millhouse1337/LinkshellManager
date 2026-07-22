@@ -15,15 +15,24 @@ public partial class EventController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+    private readonly DkpPoolBalanceService _dkpPoolBalances;
 
     public EventController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TimeZoneConversionService timeZones)
+        TimeZoneConversionService timeZones,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
+        _dkpPoolBalances = dkpPoolBalances;
     }
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)
     {
@@ -72,11 +81,26 @@ public partial class EventController : Controller
             Event = eventDraft,
             PartySetupId = source?.PartySetupId ?? eventDraft.PartySetupId,
             AvailablePartySetups = availablePartySetups,
+            // Seed for the inline "Create New Party Setup" modal on the event form.
+            // Only the linkshell scope + content type are event-specific; the editor's
+            // option lists (roles/jobs/monsters/event types) default on the view model.
+            PartySetupEditor = selectedLinkshellId > 0
+                ? new PartySetupEditorViewModel
+                {
+                    LinkshellId = selectedLinkshellId,
+                    LinkshellName = selectedLinkshell?.LinkshellName,
+                    LinkshellType = LinkshellTypes.Normalize(selectedLinkshell?.LinkshellType),
+                    Slots = new()
+                }
+                : null,
             Linkshells = linkshells,
             LinkshellId = selectedLinkshellId,
-            // HNM signup-board controls: monster picker + the outside-signup gate.
-            MonsterOptions = TodManagerViewModel.SupportedMonsters.ToList(),
+            // HNM signup-board controls: monster picker + the outside-signup gate. Each merge
+            // pair is shown as ONE combined "Base/Stronger" entry (the stronger half is folded
+            // in); the DAY input only changes what the sign-up board prints, not this list.
+            MonsterOptions = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters),
             OutsidePartySignupEnabled = selectedLinkshell?.OutsidePartySignupEnabled ?? false,
+            HnmOutsideSignupEnabled = selectedLinkshell?.HnmOutsideSignupEnabled ?? false,
             RepeatOnTod = source?.RepeatOnTod ?? false,
             RepeatLeadHours = source?.RepeatLeadHours
         };

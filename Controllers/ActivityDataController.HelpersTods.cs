@@ -35,6 +35,8 @@ public sealed partial class ActivityDataController
     // explicit `dbContext` parameter; behavior is otherwise identical.
     internal static async Task AdjustTodLootDkpAsync(
         ApplicationDbContext dbContext,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
         Tod tod,
         IReadOnlyList<TodLootDetail> lootDetails,
         DateTime occurredAtUtc,
@@ -80,20 +82,14 @@ public sealed partial class ActivityDataController
             return;
         }
 
-        var appUserIds = membershipsByCharacterName.Values
-            .Select(link => link.AppUserId!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        // A ToD has a monster, not an event type, so its pool can't be derived — it's PINNED.
+        // New loot defaults to whichever pool "HNM" maps to (a linkshell that separates HNM DKP
+        // wants ToD loot paid from it) and is stamped onto the loot row. A refund then reads that
+        // stamp back, so removing loot always credits the pool it was taken from — even if the
+        // officer has remapped event types in between.
+        var map = await dkpPools.GetMapAsync(tod.LinkshellId, cancellationToken);
+        var hnmPoolId = map.Resolve("HNM");
 
-        var nextSequenceByAppUserId = appUserIds.Count == 0
-            ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-            : await dbContext.DkpLedgerEntries
-                .Where(entry => entry.LinkshellId == tod.LinkshellId && entry.AppUserId != null && appUserIds.Contains(entry.AppUserId))
-                .GroupBy(entry => entry.AppUserId!)
-                .Select(group => new { AppUserId = group.Key, NextSequence = group.Max(entry => entry.Sequence) + 1 })
-                .ToDictionaryAsync(item => item.AppUserId, item => item.NextSequence, StringComparer.OrdinalIgnoreCase, cancellationToken);
-
-        var ledgerEntries = new List<DkpLedgerEntry>();
         foreach (var detail in actionableLoot)
         {
             if (!membershipsByCharacterName.TryGetValue(detail.ItemWinner!.Trim(), out var winnerMembership) || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
@@ -101,13 +97,13 @@ public sealed partial class ActivityDataController
                 continue;
             }
 
+            var poolId = detail.DkpPoolId ?? (isRefund ? map.DefaultPoolId : hnmPoolId);
             var rawValue = detail.WinningDkpSpent.GetValueOrDefault();
             double amount;
             string detailsText;
             if (isHybrid)
             {
                 var pct = Math.Clamp((double)rawValue, 0, 100);
-                var currentBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
                 if (isRefund)
                 {
                     if (detail.ActualDeductedDkp.HasValue)
@@ -117,18 +113,23 @@ public sealed partial class ActivityDataController
                     }
                     else
                     {
-                        // Legacy approximation when the deducted amount wasn't stored.
+                        // Legacy approximation when the deducted amount wasn't stored. That debit
+                        // was taken as a percentage of the member's TOTAL (pools didn't exist yet),
+                        // so the inverse has to work off the total too or it under-refunds.
                         if (pct >= 100d)
                         {
                             continue;
                         }
-                        amount = LootDkpCalculator.ComputeHybridRefund(currentBalance, pct, roundingStep);
+                        var legacyBalance = Math.Max(0, winnerMembership.LinkshellDkp ?? 0);
+                        amount = LootDkpCalculator.ComputeHybridRefund(legacyBalance, pct, roundingStep);
                         detailsText = $"Refunded Hybrid DKP ({pct}%) for removed ToD loot on {tod.MonsterName ?? "Unknown monster"}.";
                     }
                 }
                 else
                 {
-                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
+                    // Hybrid takes a percentage of a wallet — and the wallet is the pool.
+                    var poolBalance = Math.Max(0, await dkpLedger.GetPoolBalanceAsync(winnerMembership, poolId, cancellationToken));
+                    amount = -LootDkpCalculator.ComputeHybridDebit(poolBalance, pct, roundingStep);
                     detail.ActualDeductedDkp = Math.Abs(amount);
                     detailsText = $"Hybrid DKP spent ({pct}%, {Math.Abs(amount):0.##} DKP) on ToD loot from {tod.MonsterName ?? "Unknown monster"}.";
                 }
@@ -148,34 +149,30 @@ public sealed partial class ActivityDataController
                 }
             }
 
-            winnerMembership.LinkshellDkp = (winnerMembership.LinkshellDkp ?? 0d) + amount;
-
-            var currentSequence = nextSequenceByAppUserId.GetValueOrDefault(winnerMembership.AppUserId, 1);
-            nextSequenceByAppUserId[winnerMembership.AppUserId] = currentSequence + 1;
-
-            ledgerEntries.Add(new DkpLedgerEntry
+            if (!isRefund)
             {
-                AppUserId = winnerMembership.AppUserId,
-                LinkshellId = tod.LinkshellId,
-                EntryType = isRefund ? "LootRefund" : "LootSpent",
-                Amount = amount,
-                Sequence = currentSequence,
-                OccurredAt = occurredAtUtc,
-                CharacterName = winnerMembership.CharacterName,
-                // Surface the monster name in the Event/Context column. Without
-                // this the cell renders blank because ToD loot has no parent
-                // Event row to source it from. Type and location stay null so
-                // the discord activity's conditional subtitle stays hidden
-                // (otherwise it would render "Behemoth Â· ToD Â· Unknown location").
-                EventName = tod.MonsterName,
-                ItemName = detail.ItemName,
-                Details = detailsText
-            });
-        }
+                detail.DkpPoolId = poolId;
+            }
 
-        if (ledgerEntries.Count > 0)
-        {
-            await dbContext.DkpLedgerEntries.AddRangeAsync(ledgerEntries, cancellationToken);
+            await dkpLedger.AppendAsync(
+                winnerMembership,
+                isRefund ? "LootRefund" : "LootSpent",
+                amount,
+                occurredAtUtc,
+                DkpPoolRef.Pinned(poolId),
+                new DkpEntryContext(
+                    CharacterName: winnerMembership.CharacterName,
+                    // Surface the monster name in the Event/Context column. Without this the cell
+                    // renders blank because ToD loot has no parent Event row to source it from.
+                    // Type and location stay null so the Activity's conditional subtitle stays
+                    // hidden (otherwise it would render "Behemoth · ToD · Unknown location").
+                    EventName: tod.MonsterName,
+                    ItemName: detail.ItemName,
+                    Details: detailsText,
+                    // Never set before, which left Loot History unable to trace a ToD ledger row
+                    // back to the loot that produced it.
+                    SourceTodLootDetailId: detail.Id > 0 ? detail.Id : null),
+                cancellationToken);
         }
     }
 

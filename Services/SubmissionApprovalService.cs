@@ -23,13 +23,20 @@ public sealed class SubmissionApprovalService
     private readonly HnmAutoEventService _hnmAutoEvent;
     private readonly ILogger<SubmissionApprovalService> _logger;
 
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+
     public SubmissionApprovalService(
         ApplicationDbContext db,
         HnmAutoEventService hnmAutoEvent,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
         ILogger<SubmissionApprovalService> logger)
     {
         _db = db;
         _hnmAutoEvent = hnmAutoEvent;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
         _logger = logger;
     }
 
@@ -174,7 +181,8 @@ public sealed class SubmissionApprovalService
         if (lootDetails.Count > 0)
         {
             await _db.TodLootDetails.AddRangeAsync(lootDetails, cancellationToken);
-            await ActivityDataController.AdjustTodLootDkpAsync(_db, tod, lootDetails, occurredAt, isRefund: false, cancellationToken);
+            await ActivityDataController.AdjustTodLootDkpAsync(
+                _db, _dkpLedger, _dkpPools, tod, lootDetails, occurredAt, isRefund: false, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
         }
 

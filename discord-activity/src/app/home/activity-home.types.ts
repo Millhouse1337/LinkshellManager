@@ -19,7 +19,9 @@ export const TAB_NAMES = [
   'endgame',
   'missions',
   'messages',
-  'configurations'
+  'configurations',
+  'permissions',
+  'addon'
 ] as const;
 
 export type TabName = typeof TAB_NAMES[number];
@@ -48,6 +50,36 @@ export const TOD_MONSTER_OPTIONS = [
 ] as const;
 
 export type TodMonsterOption = typeof TOD_MONSTER_OPTIONS[number];
+
+// HNM base -> stronger merge pairs (mirrors HnmConfig.MonsterMergePairs). On the
+// create-event monster dropdown the two are offered as ONE entry: the base name below
+// HNM_COMBINED_FROM_DAY, the combined "Base/Stronger" name at/above it. The chosen text is
+// stored verbatim in Event.AssignedMonsterName (the server splits it on '/' for lookups).
+export const HNM_MERGE_PAIRS: ReadonlyArray<{ base: string; stronger: string }> = [
+  { base: 'Adamantoise', stronger: 'Aspidochelone' },
+  { base: 'Behemoth', stronger: 'King Behemoth' },
+  { base: 'Fafnir', stronger: 'Nidhogg' }
+];
+
+// From this day number onward, the SIGN-UP BOARD prints the combined "Base/Stronger" name;
+// below it, only the base half (mirrors HnmConfig.CombinedFromDay). The board render is
+// server-side — this is documented here for parity, not used client-side.
+export const HNM_COMBINED_FROM_DAY = 4;
+
+// Build the create-event monster dropdown options: each merge pair as ONE combined
+// "Base/Stronger" entry (always), the stronger half dropped, other monsters intact.
+// Mirrors HnmConfig.CombinedMonsterOptions.
+export function combinedMonsterOptions(raw: readonly string[]): string[] {
+  const strongers = new Set(HNM_MERGE_PAIRS.map(p => p.stronger.toLowerCase()));
+  const byBase = new Map(HNM_MERGE_PAIRS.map(p => [p.base.toLowerCase(), p]));
+  const out: string[] = [];
+  for (const m of raw) {
+    if (strongers.has(m.toLowerCase())) continue; // folded into the base entry
+    const pair = byBase.get(m.toLowerCase());
+    out.push(pair ? `${pair.base}/${pair.stronger}` : m);
+  }
+  return out;
+}
 
 export const TOD_COOLDOWN_OPTIONS = ['5 Min', '2 Hour', '22 Hour', '72 Hour', 'Other'] as const;
 export type TodCooldownOption = typeof TOD_COOLDOWN_OPTIONS[number];

@@ -2,8 +2,9 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
-import { formatAlts, formatElapsed, parseDate } from '../activity-home.helpers';
+import { formatAlts, formatElapsed, memberAvatarClass, memberInitials, memberStatusClass, parseDate } from '../activity-home.helpers';
 import { HNM_NAMES, type TabName } from '../activity-home.types';
+import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
 
 @Component({
   selector: 'app-dashboard-tab',
@@ -14,6 +15,12 @@ import { HNM_NAMES, type TabName } from '../activity-home.types';
 export class DashboardTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly formatAlts = formatAlts;
+  // Shared roster helpers (avatar initials/color, status tag) — single source in
+  // activity-home.helpers so every roster renders members identically. `initials`
+  // keeps its template name and delegates to the shared memberInitials.
+  protected readonly initials = memberInitials;
+  protected readonly memberAvatarClass = memberAvatarClass;
+  protected readonly memberStatusClass = memberStatusClass;
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
 
@@ -28,14 +35,15 @@ export class DashboardTabComponent {
   @Input({ required: true }) rosterSearchChange!: (value: string) => void;
 
   protected get dashboardRosterSearch(): string { return this.rosterSearchValue; }
-  protected set dashboardRosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
+  protected set dashboardRosterSearch(value: string) { this.rosterSearchChange(value); }
 
-  // App Sync filter: limits the dashboard roster to members who are app-linked
-  // (appUserId set). Status stays visible but is never part of the filter.
+  // App Sync filter: limits the dashboard roster to members who have actually
+  // opened/synced the Discord Activity (member.hasSyncedActivity). NOT the same as
+  // having an account — outside-sign-up-board members get an appUserId without ever
+  // opening the Activity. Status stays visible but is never part of the filter.
   protected readonly appSyncOnly = signal(false);
   protected toggleAppSync(value: boolean): void {
     this.appSyncOnly.set(value);
-    this.rosterPage.set(1);
   }
 
   public constructor() {
@@ -44,31 +52,6 @@ export class DashboardTabComponent {
   }
 
   // ----- Re-implemented small reads via this.activity -----
-
-  protected initials(value: string | null | undefined): string {
-    const name = (value ?? '').trim();
-    if (!name) return '??';
-    const parts = name.split(/\s+/).filter(Boolean);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-
-  protected memberAvatarClass(name?: string | null): string {
-    const trimmed = (name ?? '').trim();
-    if (!trimmed) return 'a';
-    let hash = 0;
-    for (let i = 0; i < trimmed.length; i += 1) {
-      hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
-    }
-    return ['a', 'b', 'c', 'd', 'e'][hash % 5];
-  }
-
-  protected memberStatusClass(status?: string | null): string {
-    const normalized = (status ?? 'Active').toLowerCase();
-    if (normalized === 'active') return 'success';
-    if (normalized === 'pending') return 'warning';
-    return 'default';
-  }
 
   protected primaryLinkshell() {
     return this.activity.overview()?.primaryLinkshell ?? null;
@@ -115,7 +98,7 @@ export class DashboardTabComponent {
     const members = this.selectedDashboardMembers();
     return members.filter(member => {
       if (appSyncOnly) {
-        if (!member.appUserId) return false;
+        if (!member.hasSyncedActivity) return false;
       }
       if (term) {
         const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
@@ -124,35 +107,6 @@ export class DashboardTabComponent {
       }
       return true;
     });
-  }
-
-  // Roster pagination: 5 per page (compact dashboard card). rosterPage is
-  // 1-based; every read clamps to the valid range so a shrinking member list
-  // or a narrowed search can't strand the view on an empty out-of-range page
-  // (the search setter also resets to page 1). Clamping is pure — no signal
-  // writes during render; only the Prev/Next handlers mutate the signal.
-  protected readonly rosterPageSize = 5;
-  protected readonly rosterPage = signal(1);
-
-  protected rosterTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredDashboardMembers().length / this.rosterPageSize));
-  }
-
-  protected rosterCurrentPage(): number {
-    return Math.min(Math.max(1, this.rosterPage()), this.rosterTotalPages());
-  }
-
-  protected pagedDashboardMembers() {
-    const start = (this.rosterCurrentPage() - 1) * this.rosterPageSize;
-    return this.filteredDashboardMembers().slice(start, start + this.rosterPageSize);
-  }
-
-  protected rosterPrev(): void {
-    this.rosterPage.set(Math.max(1, this.rosterCurrentPage() - 1));
-  }
-
-  protected rosterNext(): void {
-    this.rosterPage.set(Math.min(this.rosterTotalPages(), this.rosterCurrentPage() + 1));
   }
 
   protected canManageSelectedDashboard(): boolean {
@@ -164,11 +118,43 @@ export class DashboardTabComponent {
   protected showRuleForm = signal(false);
   protected ruleTitle = '';
   protected ruleDetails = '';
+  protected ruleCategorySelect = '';
+  protected ruleCategoryCustom = '';
   protected editingRuleId = signal<number | null>(null);
   protected showAnnouncementForm = signal(false);
   protected announcementTitle = '';
   protected announcementDetails = '';
+  protected announcementCategorySelect = '';
+  protected announcementCategoryCustom = '';
   protected editingAnnouncementId = signal<number | null>(null);
+
+  // Category picker presets (the dropdown), shared with the web via
+  // rule-content.helpers (mirrors C# RuleContent).
+  protected readonly categoryOptions = RULE_CATEGORY_OPTIONS;
+
+  // Rules/announcements pre-shaped for the card layout: the row + its accent/icon
+  // badge + parsed detail blocks (paragraphs + bullet lists), computed once per render.
+  protected dashboardRuleCards() {
+    return this.selectedDashboardRules().map((rule, i) => ({
+      rule, badge: categoryBadge(rule.category, i), blocks: parseRuleDetails(rule.details)
+    }));
+  }
+  protected dashboardAnnouncementCards() {
+    return this.selectedDashboardAnnouncements().map((announcement, i) => ({
+      announcement, badge: categoryBadge(announcement.category, i), blocks: parseRuleDetails(announcement.details)
+    }));
+  }
+
+  // Map a stored category to the (select, custom) control values, and back.
+  private categoryToControls(category: string | null | undefined): { select: string; custom: string } {
+    const cur = (category ?? '').trim();
+    if (!cur) { return { select: '', custom: '' }; }
+    return RULE_CATEGORY_OPTIONS.includes(cur) ? { select: cur, custom: '' } : { select: '__other__', custom: cur };
+  }
+  private effectiveCategory(select: string, custom: string): string | null {
+    if (select === '__other__') { const c = custom.trim(); return c.length ? c : null; }
+    return select.trim().length ? select : null;
+  }
 
   protected selectedDashboardRules() {
     const selectedId = this.selectedDashboardLinkshellId();
@@ -188,6 +174,8 @@ export class DashboardTabComponent {
     if (!this.showRuleForm()) {
       this.ruleTitle = '';
       this.ruleDetails = '';
+      this.ruleCategorySelect = '';
+      this.ruleCategoryCustom = '';
     }
   }
 
@@ -197,13 +185,18 @@ export class DashboardTabComponent {
     if (!this.showAnnouncementForm()) {
       this.announcementTitle = '';
       this.announcementDetails = '';
+      this.announcementCategorySelect = '';
+      this.announcementCategoryCustom = '';
     }
   }
 
-  protected startEditRule(rule: { id: number; title: string; details: string }): void {
+  protected startEditRule(rule: { id: number; title: string; details: string; category?: string | null }): void {
     this.editingRuleId.set(rule.id);
     this.ruleTitle = rule.title;
     this.ruleDetails = rule.details;
+    const c = this.categoryToControls(rule.category);
+    this.ruleCategorySelect = c.select;
+    this.ruleCategoryCustom = c.custom;
     this.showRuleForm.set(true);
   }
 
@@ -211,13 +204,18 @@ export class DashboardTabComponent {
     this.editingRuleId.set(null);
     this.ruleTitle = '';
     this.ruleDetails = '';
+    this.ruleCategorySelect = '';
+    this.ruleCategoryCustom = '';
     this.showRuleForm.set(false);
   }
 
-  protected startEditAnnouncement(announcement: { id: number; title: string; details: string }): void {
+  protected startEditAnnouncement(announcement: { id: number; title: string; details: string; category?: string | null }): void {
     this.editingAnnouncementId.set(announcement.id);
     this.announcementTitle = announcement.title;
     this.announcementDetails = announcement.details;
+    const c = this.categoryToControls(announcement.category);
+    this.announcementCategorySelect = c.select;
+    this.announcementCategoryCustom = c.custom;
     this.showAnnouncementForm.set(true);
   }
 
@@ -225,6 +223,8 @@ export class DashboardTabComponent {
     this.editingAnnouncementId.set(null);
     this.announcementTitle = '';
     this.announcementDetails = '';
+    this.announcementCategorySelect = '';
+    this.announcementCategoryCustom = '';
     this.showAnnouncementForm.set(false);
   }
 
@@ -235,14 +235,17 @@ export class DashboardTabComponent {
     const details = this.ruleDetails.trim();
     if (!title || !details) return;
     const editingId = this.editingRuleId();
+    const category = this.effectiveCategory(this.ruleCategorySelect, this.ruleCategoryCustom);
     try {
       if (editingId !== null) {
-        await this.activity.updateRule(editingId, title, details);
+        await this.activity.updateRule(editingId, title, details, category);
       } else {
-        await this.activity.createRule(linkshellId, title, details);
+        await this.activity.createRule(linkshellId, title, details, category);
       }
       this.ruleTitle = '';
       this.ruleDetails = '';
+      this.ruleCategorySelect = '';
+      this.ruleCategoryCustom = '';
       this.showRuleForm.set(false);
       this.editingRuleId.set(null);
     } catch {
@@ -257,14 +260,17 @@ export class DashboardTabComponent {
     const details = this.announcementDetails.trim();
     if (!title || !details) return;
     const editingId = this.editingAnnouncementId();
+    const category = this.effectiveCategory(this.announcementCategorySelect, this.announcementCategoryCustom);
     try {
       if (editingId !== null) {
-        await this.activity.updateAnnouncement(editingId, title, details);
+        await this.activity.updateAnnouncement(editingId, title, details, category);
       } else {
-        await this.activity.createAnnouncement(linkshellId, title, details);
+        await this.activity.createAnnouncement(linkshellId, title, details, category);
       }
       this.announcementTitle = '';
       this.announcementDetails = '';
+      this.announcementCategorySelect = '';
+      this.announcementCategoryCustom = '';
       this.showAnnouncementForm.set(false);
       this.editingAnnouncementId.set(null);
     } catch {
@@ -327,10 +333,10 @@ export class DashboardTabComponent {
     const now = new Date(this.now());
     const sameDay = date.toDateString() === now.toDateString();
     if (sameDay) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
     }
     const weekday = date.toLocaleDateString([], { weekday: 'short' });
-    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
     return `${weekday} ${time}`;
   }
 
@@ -429,7 +435,9 @@ export class DashboardTabComponent {
           ? `Announcement · ${announcement.createdByCharacterName}`
           : 'Announcement',
         dkp: null,
-        iconPath: null,
+        // Relative path (no leading slash) so it resolves against the app's
+        // /discord-activity/ base href; the file ships from discord-activity/public/.
+        iconPath: 'ffxi_assets/Other/Announcements.png',
         relative: this.shortPastRelative(when),
         colorClass: 'c',
         when
@@ -442,7 +450,9 @@ export class DashboardTabComponent {
         title: rule.title,
         subtitle: 'Rule updated',
         dkp: null,
-        iconPath: null,
+        // Relative path (no leading slash) so it resolves against the app's
+        // /discord-activity/ base href; the file ships from discord-activity/public/.
+        iconPath: 'ffxi_assets/Other/New_Rule.jpg',
         relative: this.shortPastRelative(when),
         colorClass: 'd',
         when

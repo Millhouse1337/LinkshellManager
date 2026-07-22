@@ -2,7 +2,7 @@
       <div class="section-head">
         <div>
           <div class="section-label">Settings</div>
-          <div class="section-title">Configurations</div>
+          <div class="section-title">{{ viewTitle() }}</div>
           @if (activeLinkshellName(); as activeName) {
             <div class="section-sub">
               Currently configuring <span class="tag accent">{{ activeName }}</span>
@@ -10,7 +10,9 @@
           }
         </div>
         <div class="section-head-right">
-          <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">+ New Linkshell</button>
+          @if (view() === 'configurations') {
+            <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">+ New Linkshell</button>
+          }
         </div>
       </div>
 
@@ -42,32 +44,47 @@
         </div>
       }
 
-      @if (dashboardLinkshells().length > 0) {
+      <!-- ===== Configurations view (settings cards) ===== -->
+      @if (view() === 'configurations') {
+
+      @if (canCustomizeSelectedLinkshell()) {
         <div class="card">
           <div class="card-head">
-            <div class="card-title">Switch Linkshells</div>
+            <div class="card-title">🖼 Dashboard banner</div>
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Configuring the currently active linkshell">{{ activeName }}</span>
+            }
           </div>
-          <form class="inline-form" (submit)="$event.preventDefault(); switchPrimaryLinkshell()">
-            <label>
-              <span>Active linkshell</span>
-              <select
-                name="switchLinkshellSelect"
-                [ngModel]="effectiveSwitchLinkshellId()"
-                (ngModelChange)="onSwitchLinkshellChange($event)">
-                @for (linkshell of dashboardLinkshells(); track linkshell.id) {
-                  <option [ngValue]="linkshell.id">
-                    {{ linkshell.name }}{{ linkshell.id === selectedDashboardLinkshellId() ? ' (current)' : '' }}
-                  </option>
-                }
-              </select>
-            </label>
-            <div class="inline-form__actions" style="justify-content:flex-end">
-              <button type="submit" class="btn primary sm"
-                [disabled]="isSwitchTargetCurrent() || activity.busyLinkshellId() === effectiveSwitchLinkshellId()">
-                {{ activity.busyLinkshellId() === effectiveSwitchLinkshellId() ? 'Switching…' : 'Switch Linkshell' }}
-              </button>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+            <p class="muted" style="margin:0">
+              Shown at the top of the dashboard (web + Activity). Recommended <strong>1200 × 200</strong> px —
+              displayed full-width at 200&nbsp;px tall and cropped to fit.
+            </p>
+            @if (activeBannerUrl(); as bannerUrl) {
+              <img [src]="bannerUrl" alt="Current banner"
+                   style="display:block;width:100%;height:160px;object-fit:cover;border-radius:12px;border:1px solid var(--border)" />
+            }
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label class="btn ghost sm" style="cursor:pointer;margin:0">
+                Choose image
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif"
+                       (change)="onBannerFileChange($event)" hidden />
+              </label>
+              <span class="muted">{{ bannerFileName() || 'No file chosen' }}</span>
             </div>
-          </form>
+            @if (bannerError(); as err) {
+              <p class="muted" style="margin:0;color:var(--danger)">{{ err }}</p>
+            }
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary sm"
+                      [disabled]="bannerBusy() || !bannerFileName()" (click)="uploadBanner()">
+                {{ bannerBusy() ? 'Saving…' : 'Upload banner' }}
+              </button>
+              @if (activeBannerUrl()) {
+                <button type="button" class="btn ghost sm" [disabled]="bannerBusy()" (click)="removeBanner()">Remove</button>
+              }
+            </div>
+          </div>
         </div>
       }
 
@@ -96,8 +113,8 @@
                         [ngModel]="customizeDraft.lootStructure"
                         (ngModelChange)="customizeDraft.lootStructure = $event; onCustomizeFieldChange()" />
                       <span>
-                        <strong>DKP</strong>
-                        <span class="muted">Time-based DKP earned per event, spent on loot.</span>
+                        <strong>DKP Based</strong>
+                        <span class="muted">DKP earned per event, spent on loot.</span>
                       </span>
                     </label>
                     <label class="customize-form__option">
@@ -132,8 +149,8 @@
                         [ngModel]="customizeDraft.linkshellType"
                         (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
                       <span>
-                        <strong>Sky/Sea/Dynamis etc.</strong>
-                        <span class="muted">Timed-event experience only. No HNM presets.</span>
+                        <strong>Timed Events Only</strong>
+                        <span class="muted">Timed-event experience only.</span>
                       </span>
                     </label>
                     <label class="customize-form__option">
@@ -141,8 +158,8 @@
                         [ngModel]="customizeDraft.linkshellType"
                         (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
                       <span>
-                        <strong>HNM Only</strong>
-                        <span class="muted">HNM snapshot sessions only. Hides the Event System.</span>
+                        <strong>Snapshot Only</strong> <span class="muted">(requires addon)</span>
+                        <span class="muted">Snapshot sessions only</span>
                       </span>
                     </label>
                     <label class="customize-form__option">
@@ -151,7 +168,7 @@
                         (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
                       <span>
                         <strong>Both</strong>
-                        <span class="muted">Everything — timed events and HNM. Default.</span>
+                        <span class="muted">timed events and snapshots. Default.</span>
                       </span>
                     </label>
                   </div>
@@ -159,7 +176,7 @@
               </section>
             </div>
 
-            <div style="display:flex;gap:24px 72px;flex-wrap:wrap;align-items:flex-start;justify-content:center">
+            <div style="display:flex;gap:28px 24px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between">
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
                 <div class="customize-form__section" style="flex:0 0 260px">
                   <strong>DKP rounding increment</strong>
@@ -172,6 +189,11 @@
                       <option value="Half">Nearest Half (0.5)</option>
                     </select>
                   </label>
+                  <p class="muted" style="margin-top:8px">
+                    📥 <strong>Importing existing DKP?</strong> Open LinkshellManager on the web →
+                    <em>Customize Linkshell → Import DKP</em> to upload a spreadsheet of your current
+                    balances.
+                  </p>
                 </div>
               }
 
@@ -199,17 +221,17 @@
                 <strong>Feature toggles</strong>
                 <p class="muted">Hide sections your linkshell doesn't use.</p>
                 <div class="customize-form__toggles">
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableEndgameDraft"
-                    [ngModel]="customizeDraft.enableEndgame"
-                    (ngModelChange)="customizeDraft.enableEndgame = $event; onCustomizeFieldChange()" />
-                  <span>Endgame tab</span>
+                <!-- Charts and Missions aren't built yet: locked off + (TBA). Re-enable the
+                     ngModel bindings (and drop the guard in isFeatureEnabled) when they ship. -->
+                <label class="customize-form__toggle" style="opacity:.55;cursor:not-allowed"
+                  title="Not developed yet — coming soon.">
+                  <input type="checkbox" disabled />
+                  <span>Charts tab <span class="muted">(TBA)</span></span>
                 </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableMissionsDraft"
-                    [ngModel]="customizeDraft.enableMissions"
-                    (ngModelChange)="customizeDraft.enableMissions = $event; onCustomizeFieldChange()" />
-                  <span>Missions tab</span>
+                <label class="customize-form__toggle" style="opacity:.55;cursor:not-allowed"
+                  title="Not developed yet — coming soon.">
+                  <input type="checkbox" disabled />
+                  <span>Missions tab <span class="muted">(TBA)</span></span>
                 </label>
                 <label class="customize-form__toggle">
                   <input type="checkbox" name="enableAuctionsDraft"
@@ -239,13 +261,13 @@
                   <input type="checkbox" name="enableItemsDraft"
                     [ngModel]="customizeDraft.enableItems"
                     (ngModelChange)="customizeDraft.enableItems = $event; onCustomizeFieldChange()" />
-                  <span>Items tile on dashboard</span>
+                  <span>Items</span>
                 </label>
                 <label class="customize-form__toggle">
                   <input type="checkbox" name="enableRevenueDraft"
                     [ngModel]="customizeDraft.enableRevenue"
                     (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
-                  <span>Revenue tile on dashboard</span>
+                  <span>Revenue</span>
                 </label>
               </div>
               </div>
@@ -295,8 +317,25 @@
                     (ngModelChange)="customizeDraft.outsidePartySignupEnabled = $event; onCustomizeFieldChange()" />
                   <span>Allow outside (non-account) Discord signups</span>
                 </label>
+              </div>
 
-                <strong style="margin-top:18px">HNM Outside Sign Up</strong>
+              <div class="customize-form__section" style="flex:0 0 280px">
+                <strong>Fill alliances in order</strong>
+                <p class="muted">
+                  When someone signs up for a later alliance while an open slot their job can fill is still
+                  free in an earlier alliance, they're warned and offered that earlier slot first. A soft,
+                  job-aware nudge (they can still sign up where they chose); no effect on single-alliance events.
+                </p>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="fillAlliancesInOrderDraft"
+                    [ngModel]="customizeDraft.fillAlliancesInOrder"
+                    (ngModelChange)="customizeDraft.fillAlliancesInOrder = $event; onCustomizeFieldChange()" />
+                  <span>Nudge members to fill earlier alliances first</span>
+                </label>
+              </div>
+
+              <div class="customize-form__section" style="flex:0 0 280px">
+                <strong>HNM Outside Sign Up</strong>
                 <p class="muted">
                   A separate switch for <strong>HNM signup boards</strong>. Turning this on adds the HNM event type
                   when creating an event and lets outside Discord members sign up to HNM boards. HNM is
@@ -311,7 +350,57 @@
                   <span>Allow HNM outside sign-ups (roster only — no DKP)</span>
                 </label>
               </div>
+
+              <div class="customize-form__section" style="flex:0 0 280px">
+                <strong>Components V2 boards <span class="muted">(experimental)</span></strong>
+                <p class="muted">
+                  Post Discord event sign-up boards as Discord <strong>Components V2</strong> messages: the rendered
+                  board sits in a <strong>full-width media gallery</strong> (no embed frame) and is drawn on a
+                  <strong>wider canvas</strong>, so it reads larger. Same buttons and signup flow. Discord won't let a
+                  board switch modes once posted, so this only affects boards posted <strong>after</strong> you turn it on.
+                </p>
+                <label class="customize-form__toggle">
+                  <input type="checkbox" name="useComponentsV2BoardsDraft"
+                    [ngModel]="customizeDraft.useComponentsV2Boards"
+                    (ngModelChange)="customizeDraft.useComponentsV2Boards = $event; onCustomizeFieldChange()" />
+                  <span>Use Components V2 event boards</span>
+                </label>
+              </div>
             </div>
+
+            @if (canCustomizeSelectedLinkshell()) {
+              <div class="card">
+                <div class="card-head">
+                  <div class="card-title">💬 After-event discussion channel</div>
+                  @if (activeLinkshellName(); as activeName) {
+                    <span class="tag accent" title="Discussion channel for the currently active linkshell">{{ activeName }}</span>
+                  }
+                </div>
+                <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+                  <p class="muted" style="font-size:12px;margin:0">
+                    Optional. New comments on a completed event are mirrored to this channel. Leave blank to keep discussion in-app only.
+                  </p>
+                  <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                    <label class="route-field grow" style="max-width:340px">
+                      <span>Discussion channel</span>
+                      @if (discordChannelsAvailable().length > 0) {
+                        <select name="discussionChannel" [(ngModel)]="discussionChannelDraft" [ngModelOptions]="{standalone: true}">
+                          <option value="">— none (in-app only) —</option>
+                          @for (channel of discordChannelsAvailable(); track channel.id) {
+                            <option [value]="channel.id">#{{ channel.name }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input type="text" inputmode="numeric" maxlength="20" placeholder="Channel ID (blank = none)"
+                          name="discussionChannel" [(ngModel)]="discussionChannelDraft" [ngModelOptions]="{standalone: true}" />
+                      }
+                    </label>
+                    <button type="button" class="btn primary" (click)="saveDiscussionChannel()"
+                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">Save</button>
+                  </div>
+                </div>
+              </div>
+            }
 
             <div class="customize-form__row" style="margin-top:24px">
               <button type="button"
@@ -381,15 +470,35 @@
           </div>
           <div class="card-body">
             <p class="muted">
-              Associate this linkshell with a Discord server to power the member roster, invites,
-              and channel posting. Setting a server does <strong>not</strong> restrict who can view
-              it — that's the separate lock below.
+              Associate this linkshell with a Discord server.
             </p>
 
             <div class="discord-grid">
+              <!-- Set up the bot -->
+              <div class="discord-inner" style="text-align:left;align-items:stretch">
+                <h4>Set up the bot</h4>
+                <p class="muted" style="margin:0 0 12px;font-size:12px;line-height:1.5">
+                  The LSM bot allows linkshell info to be posted in your Discord server's channels.
+                </p>
+                <ol class="muted" style="margin:0 0 14px;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:1.5">
+                  <li><strong>Add the bot to your server</strong> — click below, choose your server, authorize (you must own the server or have the <em>Manage Server</em> Discord permission).</li>
+                  <li><strong>Give your bot the following permissions</strong> — <strong>Send Messages</strong>, <strong>Embed Links</strong>, and <strong>Attach Files</strong>.</li>
+                </ol>
+                <div style="margin-top:auto">
+                  <button type="button" class="btn primary"
+                    (click)="activity.openExternalLink('https://discord.com/oauth2/authorize?client_id=1320463503848636568')">
+                    Add the LSM bot to Discord ↗
+                  </button>
+                </div>
+              </div>
+
               <!-- Server: set / change / clear -->
               <div class="discord-inner">
                 <h4>Server</h4>
+                <p class="muted" style="font-size:12px;margin:0 0 12px;line-height:1.5">
+                  Set your server here, then run <strong>/lsm</strong> in Discord to drop a "Join"
+                  button for members to launch the app.
+                </p>
 
                 @if (setGuildId()) {
                   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -505,9 +614,7 @@
           </div>
           <div class="card-body">
             <p class="muted">
-              Add a route for each channel the bot should post to, then tick which kinds of post it
-              receives. Combine several into one channel, or give each its own. Events can optionally
-              be limited to specific event types (an unfiltered event route catches the rest).
+              Select a channel for the bot to post to.
             </p>
 
             @if (!discordGuildConfigured()) {
@@ -518,7 +625,29 @@
             }
 
             @for (route of channelRoutes; track $index) {
-              <div class="route-card" [class.is-compact]="!route.postEvents" [class.is-saved]="isRouteSaved(route)">
+              <div class="route-card" [class.is-collapsed]="isCollapsed(route)" [class.is-saved]="isRouteSaved(route)">
+                @if (isCollapsed(route)) {
+                  <!-- Collapsed once saved: the channel name (read-only) + Expand to edit. -->
+                  <div class="route-collapsed">
+                    <span class="pill is-success">✓ Saved</span>
+                    <span class="route-collapsed-name">{{ routeChannelLabel(route) }}</span>
+                    <button type="button" class="btn ghost sm route-expand" (click)="route.expanded = true">Expand</button>
+                  </div>
+                } @else {
+                <!-- Per-route save / saved status, pinned to the card's top-left.
+                     Shows a green "✓ Saved" pill once persisted, "Save route" when edited. -->
+                <button type="button" class="btn sm route-save"
+                  [class.primary]="!isRouteSaved(route)"
+                  [class.is-saved]="isRouteSaved(route)"
+                  [disabled]="!route.channelId || isRouteSaved(route) || activity.busyDiscordChannels() || !!channelRoutesError()"
+                  (click)="saveDiscordChannels()">
+                  {{ isRouteSaved(route) ? '✓ Saved' : 'Save route' }}
+                </button>
+                <!-- Collapse pinned to the top-right, once the route is saved. -->
+                @if (isRouteSaved(route)) {
+                  <button type="button" class="btn ghost sm route-collapse-top" (click)="route.expanded = false">Collapse</button>
+                }
+
                 <div class="route-main">
                   <div class="route-top">
                     <label class="route-field grow">
@@ -535,68 +664,68 @@
                           [name]="'rchan_' + $index" [(ngModel)]="route.channelId" (ngModelChange)="markRouteDirty(route)" />
                       }
                     </label>
-                    <button type="button" class="btn ghost sm route-remove" (click)="removeRoute(route)">Remove</button>
                   </div>
 
-                  <div class="post-types">
-                    @for (pt of channelPostTypes(); track pt.key) {
-                      <label class="check">
-                        @switch (pt.key) {
-                          @case ('Events') { <input type="checkbox" [name]="'pe_' + $index" [(ngModel)]="route.postEvents" (ngModelChange)="markRouteDirty(route)" /> }
-                          @case ('Loot') { <input type="checkbox" [name]="'pl_' + $index" [(ngModel)]="route.postLoot" (ngModelChange)="markRouteDirty(route)" /> }
-                          @case ('Auctions') { <input type="checkbox" [name]="'pa_' + $index" [(ngModel)]="route.postAuctions" (ngModelChange)="markRouteDirty(route)" /> }
-                          @case ('Attendance') { <input type="checkbox" [name]="'pt_' + $index" [(ngModel)]="route.postAttendance" (ngModelChange)="markRouteDirty(route)" /> }
-                          @case ('TodBoard') { <input type="checkbox" [name]="'pd_' + $index" [(ngModel)]="route.postTodBoard" (ngModelChange)="markRouteDirty(route)" /> }
-                        }
-                        <span>{{ pt.label }}</span>
-                      </label>
-                    }
-                  </div>
-                </div>
-
-                @if (route.postEvents) {
-                  <div class="event-filter">
-                    <h4>Event types</h4>
-                    <div class="event-grid">
-                      @for (et of channelEventTypes(); track et) {
-                        <label class="check">
-                          <input type="checkbox"
-                            [checked]="isEventTypeOn(route, et)"
-                            (change)="toggleEventType(route, et, $any($event.target).checked)" />
-                          <span>{{ et }}</span>
+                  <div class="route-group">
+                    <h4>Choose What to Post</h4>
+                    <div class="chip-grid post-types">
+                      @for (pt of channelPostTypes(); track pt.key) {
+                        <label class="chip">
+                          @switch (pt.key) {
+                            @case ('Events') { <input type="checkbox" [name]="'pe_' + $index" [(ngModel)]="route.postEvents" (ngModelChange)="markRouteDirty(route)" /> }
+                            @case ('Loot') { <input type="checkbox" [name]="'pl_' + $index" [(ngModel)]="route.postLoot" (ngModelChange)="markRouteDirty(route)" /> }
+                            @case ('Auctions') { <input type="checkbox" [name]="'pa_' + $index" [(ngModel)]="route.postAuctions" (ngModelChange)="markRouteDirty(route)" /> }
+                            @case ('Attendance') { <input type="checkbox" [name]="'pt_' + $index" [(ngModel)]="route.postAttendance" (ngModelChange)="markRouteDirty(route)" /> }
+                            @case ('TodBoard') { <input type="checkbox" [name]="'pd_' + $index" [(ngModel)]="route.postTodBoard" (ngModelChange)="markRouteDirty(route)" /> }
+                            @case ('DkpSheet') { <input type="checkbox" [name]="'pk_' + $index" [(ngModel)]="route.postDkpSheet" (ngModelChange)="markRouteDirty(route)" /> }
+                          }
+                          <span>{{ pt.label }}</span>
                         </label>
                       }
                     </div>
                   </div>
+                </div>
 
-                  <!-- Per-monster narrowing: only when this route catches HNM. Empty = all
-                       HNMs go here; pick monsters to route ONLY those to this channel. -->
-                  @if (routeCatchesHnm(route)) {
-                    <div class="event-filter">
-                      <h4>HNM monsters <span class="muted">(leave empty = all HNMs)</span></h4>
-                      <div class="event-grid event-grid--wide">
-                        @for (monster of channelMonsterOptions(); track monster) {
-                          <label class="check">
+                @if (route.postEvents) {
+                  <div class="route-side">
+                    <div class="route-group">
+                      <h4>Choose what Event Type</h4>
+                      <div class="chip-grid event-grid">
+                        @for (et of channelEventTypes(); track et) {
+                          <label class="chip">
                             <input type="checkbox"
-                              [checked]="isMonsterOn(route, monster)"
-                              (change)="toggleMonster(route, monster, $any($event.target).checked)" />
-                            <span>{{ monster }}</span>
+                              [checked]="isEventTypeOn(route, et)"
+                              (change)="toggleEventType(route, et, $any($event.target).checked)" />
+                            <span>{{ et }}</span>
                           </label>
                         }
                       </div>
                     </div>
-                  }
+
+                    <!-- Per-monster narrowing: only when this route catches HNM. Empty = all
+                         HNMs go here; pick monsters to route ONLY those to this channel. -->
+                    @if (routeCatchesHnm(route)) {
+                      <div class="route-group">
+                        <h4>Choose what HNM Monsters</h4>
+                        <div class="chip-grid event-grid--wide">
+                          @for (monster of channelMonsterOptions(); track monster) {
+                            <label class="chip">
+                              <input type="checkbox"
+                                [checked]="isMonsterOn(route, monster)"
+                                (change)="toggleMonster(route, monster, $any($event.target).checked)" />
+                              <span>{{ monster }}</span>
+                            </label>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
                 }
 
-                <!-- Per-route save: spans the full card width and sits at the far
-                     right; shows green "Saved" once persisted, "Save route" when edited. -->
-                <button type="button" class="btn sm route-save"
-                  [class.primary]="!isRouteSaved(route)"
-                  [class.is-saved]="isRouteSaved(route)"
-                  [disabled]="!route.channelId || isRouteSaved(route) || activity.busyDiscordChannels() || !!channelRoutesError()"
-                  (click)="saveDiscordChannels()">
-                  {{ isRouteSaved(route) ? '✓ Saved' : 'Save route' }}
-                </button>
+                <div class="route-remove-row">
+                  <button type="button" class="btn ghost sm" (click)="removeRoute(route)">Remove</button>
+                </div>
+                }
               </div>
             }
 
@@ -622,37 +751,149 @@
       @if (canCustomizeSelectedLinkshell()) {
         <div class="card">
           <div class="card-head">
-            <div class="card-title">💬 Post-event discussion channel</div>
+            <div class="card-title">💰 DKP grouping</div>
             @if (activeLinkshellName(); as activeName) {
-              <span class="tag accent" title="Discussion channel for the currently active linkshell">{{ activeName }}</span>
+              <span class="tag accent">{{ activeName }}</span>
             }
           </div>
-          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
             <p class="muted" style="font-size:12px;margin:0">
-              Optional. New comments on a completed event are mirrored to this channel. Leave blank to keep discussion in-app only.
+              Create a DKP Group. Customize what event categories are grouped together so that DKP
+              earned and DKP spent can be separated based on event type.
             </p>
-            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-              <label class="route-field grow" style="max-width:340px">
-                <span>Discussion channel</span>
-                @if (discordChannelsAvailable().length > 0) {
-                  <select name="discussionChannel" [(ngModel)]="discussionChannelDraft">
-                    <option value="">— none (in-app only) —</option>
-                    @for (channel of discordChannelsAvailable(); track channel.id) {
-                      <option [value]="channel.id">#{{ channel.name }}</option>
+
+            <p class="muted" style="font-size:12px;margin:0">
+              Every event type starts in the <em>Default</em> group, so all event DKP is pooled
+              together until you create another group and move event types into it.
+            </p>
+
+            <div class="pool-section-label">Groups</div>
+            <!-- Column headers, aligned to the .pool-row flex columns below. -->
+            <div class="pool-row-head">
+              <div style="flex:1;min-width:0">Group Name</div>
+              <div style="flex:0 0 150px">Group Color</div>
+              <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              @for (pool of poolDrafts; track $index) {
+                <div class="pool-row">
+                  @if (pool.isDefault) {
+                    <!-- The default group is permanent: the catch-all every unassigned event type,
+                         plus adjustments and imports, land in. It can't be renamed or removed. -->
+                    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px"
+                      title="The catch-all group: every event type you don't assign, plus adjustments and imports, land here. It can't be renamed or removed.">
+                      <span>{{ pool.name }}</span>
+                    </div>
+                  } @else {
+                    <input type="text" [(ngModel)]="pool.name" (ngModelChange)="markPoolsDirty()"
+                      maxlength="64" placeholder="Enter a Group Name" style="flex:1;min-width:0"
+                      title="What to call this group. Members see this name (e.g. Endgame, Sky/Sea)." />
+                  }
+                  <div style="flex:0 0 150px;display:flex;align-items:center;gap:8px"
+                    title="A colour to tell this group apart at a glance.">
+                    <span style="width:14px;height:14px;border-radius:4px;flex:0 0 auto;border:1px solid var(--border)"
+                      [style.background]="poolSwatchColor(pool.accent)"></span>
+                    <select [(ngModel)]="pool.accent" (ngModelChange)="markPoolsDirty()" style="flex:1;min-width:0">
+                      @for (accent of poolAccents(); track accent) {
+                        <option [value]="accent">{{ accent }}</option>
+                      }
+                    </select>
+                  </div>
+                  @if (pool.isDefault) {
+                    <!-- No Remove for the default group. Keep the column width so rows stay aligned. -->
+                    <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
+                  } @else {
+                    <button type="button" class="btn ghost sm" style="flex:0 0 auto" (click)="removePool($index)"
+                      title="Remove this group">Remove</button>
+                  }
+                </div>
+              }
+            </div>
+            <div style="display:flex;justify-content:flex-end">
+              <button type="button" class="btn ghost sm" (click)="addPool()">+ Add New Group</button>
+            </div>
+
+            <div class="pool-section-label">Event types</div>
+            <p class="muted" style="font-size:12px;margin:0">
+              Anything left on <em>Default</em> earns into the Default group — including event types you
+              haven't run yet, and any custom name typed into the event form's "Other" field.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              @for (type of poolEventTypes(); track type.key) {
+                <div class="pool-assign-row">
+                  <div class="pool-assign-name">
+                    <span>{{ type.key }}</span>
+                    @if (type.isCustom) {
+                      <span class="tag" style="font-size:10px;font-weight:400">custom</span>
+                    }
+                    @if (type.earnedTotal > 0) {
+                      <span class="muted" style="font-size:11px">{{ type.earnedTotal | number:'1.0-2' }} DKP earned</span>
+                    }
+                  </div>
+                  <!-- [ngModel]/[ngValue], not [value]: a plain [value] on a native <select> doesn't
+                       reliably reflect the -1 ("Default") selection, so the control renders blank. -->
+                  <select [ngModel]="poolByEventType[type.key]"
+                    (ngModelChange)="setPoolForEventType(type.key, $event)"
+                    style="min-width:170px"
+                    title="Which group this event type earns into — and pays its loot out of. Leave on Default to use the default group.">
+                    <option [ngValue]="-1">Default</option>
+                    @for (pool of poolDrafts; track $index) {
+                      @if (!pool.isDefault) {
+                        <option [ngValue]="$index">{{ pool.name || 'Unnamed group' }}</option>
+                      }
                     }
                   </select>
+                </div>
+              }
+            </div>
+
+            <!-- The preview is a SUMMARY, not a per-member before/after table. Pool balances are
+                 derived from the ledger, so re-partitioning it can move DKP between pools but
+                 provably cannot change anyone's total — a table of unchanged totals would only
+                 imply otherwise. What matters is where the DKP moves, and which pools end up unable
+                 to pay for the loot they're charged for. -->
+            @if (poolPreview(); as preview) {
+              <div class="pool-preview">
+                @if (preview.moves.length === 0) {
+                  <div style="font-size:12px">No DKP moves between groups.</div>
                 } @else {
-                  <input type="text" inputmode="numeric" maxlength="20" placeholder="Channel ID (blank = none)"
-                    name="discussionChannel" [(ngModel)]="discussionChannelDraft" />
+                  <div style="font-size:12px;font-weight:600;margin-bottom:6px">
+                    {{ preview.affectedLedgerRows }} ledger rows across {{ preview.affectedMembers }} members move.
+                    Nobody's total DKP changes.
+                  </div>
+                  @for (move of preview.moves; track move.eventType) {
+                    <div style="font-size:12px" class="muted">
+                      {{ move.eventType }} ({{ move.earnedTotal | number:'1.0-2' }} DKP earned):
+                      {{ move.fromPool }} → {{ move.toPool }}
+                    </div>
+                  }
                 }
-              </label>
-              <button type="button" class="btn primary" (click)="saveDiscussionChannel()"
-                [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">Save</button>
+                @for (warning of preview.warnings; track warning) {
+                  <div class="pool-warning">⚠ {{ warning }}</div>
+                }
+              </div>
+            }
+
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn ghost sm" (click)="previewDkpPools()"
+                [disabled]="activity.busyDkpPools() || !!dkpPoolsError()"
+                title="See what this would move before committing to it">
+                Preview changes
+              </button>
+              <button type="button" class="btn primary" (click)="saveDkpPools()"
+                [disabled]="activity.busyDkpPools() || !!dkpPoolsError()">
+                {{ activity.busyDkpPools() ? 'Saving…' : 'Save DKP grouping' }}
+              </button>
+              @if (dkpPoolsError(); as err) {
+                <span class="routes-error">{{ err }}</span>
+              }
             </div>
           </div>
         </div>
       }
-
+      }
+      <!-- ===== Permissions view (its own tab) ===== -->
+      @if (view() === 'permissions') {
       <div class="card">
         <div class="card-head">
           <div class="card-title">Permissions</div>
@@ -751,8 +992,125 @@
           </form>
         }
       </div>
+      }
+      <!-- ===== Game Addon view (its own tab) ===== -->
+      @if (view() === 'addon' && !addonGloballyDisabled()) {
+      <!-- Stylized "about the addon" section (adapted from the LSM landing page,
+           remapped onto the app's design tokens). -->
+      <div class="addon-about">
+        <div class="addon-hero">
+          <div class="addon-hero__mark">LSM</div>
+          <div class="addon-hero__copy">
+            <div class="addon-hero__eyebrow">LinkshellManager Addon</div>
+            <h2 class="addon-hero__title">LSM Game Addon</h2>
+            <p class="addon-hero__lede">
+              The LSM addon is a small in-game addon for Ashita v3 (FFXI). Once paired to your
+              linkshell, it sends data into LinkshellManager app in real time.
+            </p>
+          </div>
+          <div class="addon-hero__badge">
+            <span>ASHITA V3</span>
+            <strong>FFXI</strong>
+          </div>
+        </div>
 
-      @if (!addonGloballyDisabled()) {
+        <div class="addon-grid">
+          <section class="addon-panel">
+            <header class="addon-panel__head">
+              <span class="addon-panel__icon">✦</span>
+              <h3>What it can do</h3>
+            </header>
+            <div class="addon-featurelist">
+              <div class="addon-feature">
+                <div class="addon-feature__icon">📅</div>
+                <div>
+                  <h4>Timed Event Management</h4>
+                  <p>Create, browse, and run timed events from the in-game launcher
+                    (<code>/attend</code>). Queued events sync from the web and Discord, and members
+                    can sign up and be marked present without leaving the game.</p>
+                </div>
+              </div>
+              <div class="addon-feature">
+                <div class="addon-feature__icon">📸</div>
+                <div>
+                  <h4>Attendance snapshots</h4>
+                  <p>Capture everyone in your party, zone, or alliance and post them as a Window Event.
+                    Add a monster name to auto-tag the camp (Kings / Wyrms / Misc).</p>
+                </div>
+              </div>
+              <div class="addon-feature">
+                <div class="addon-feature__icon">⏱️</div>
+                <div>
+                  <h4>Time-of-Death tracking</h4>
+                  <p>Watches chat for kills, tracks pop windows, and sends the results to the ToDs tab.</p>
+                </div>
+              </div>
+              <div class="addon-feature">
+                <div class="addon-feature__icon">🔄</div>
+                <div>
+                  <h4>Real-time sync</h4>
+                  <p>Anything captured by the addon appears in LinkshellManager while it's paired.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="addon-panel">
+            <header class="addon-panel__head">
+              <span class="addon-panel__icon">🛠️</span>
+              <h3>Setting it up</h3>
+            </header>
+            <ol class="addon-steps">
+              <li>
+                <span class="addon-steps__num">1</span>
+                <div>
+                  <h4>Install it</h4>
+                  <p>Copy the <code>lsm</code> folder into <code>Ashita/addons/lsm/</code> and run
+                    <code>/addon load lsm</code>.</p>
+                </div>
+              </li>
+              <li>
+                <span class="addon-steps__num">2</span>
+                <div>
+                  <h4>Set the server</h4>
+                  <p>Run <code>/lsm server https://linkshellmanager.com</code></p>
+                </div>
+              </li>
+              <li>
+                <span class="addon-steps__num">3</span>
+                <div>
+                  <h4>Pair the linkshell</h4>
+                  <p>Click <span class="addon-chip">+ Get Code</span> below, then run
+                    <code>/lsm link &lt;code&gt;</code> in FFXI.</p>
+                </div>
+              </li>
+              <li>
+                <span class="addon-steps__num">4</span>
+                <div>
+                  <h4>Use it</h4>
+                  <p>Open attendance with <code>/attend</code>, take a snapshot with <code>/lsm now</code>,
+                    or open ToD tracking with <code>/tod</code>.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
+          <section class="addon-panel">
+            <header class="addon-panel__head">
+              <span class="addon-panel__icon">⌨️</span>
+              <h3>Handy commands</h3>
+            </header>
+            <div class="addon-cmds">
+              <div class="addon-cmd"><code>/lsm now [name] [p|z|a]</code><p>Snapshot your party, zone, or alliance.</p></div>
+              <div class="addon-cmd"><code>/attend</code><p>Open or close the attendance window.</p></div>
+              <div class="addon-cmd"><code>/tod</code><p>Open or close the Time-of-Death tracker.</p></div>
+              <div class="addon-cmd"><code>/lsm status</code><p>Show the server URL and pairing status.</p></div>
+              <div class="addon-cmd"><code>/lsm help</code><p>Print the full in-game command list.</p></div>
+            </div>
+          </section>
+        </div>
+      </div>
+
       <div class="card" (mouseenter)="loadAddonTokensForCurrent()">
         <div class="card-head">
           <div>
@@ -875,37 +1233,6 @@
      .panel-tab context (the fixed-position backdrops give it zero height) to
      pick up the shared .btn / .btn.primary styling like the rest of the tab. -->
 <div class="panel-tab">
-
-<!-- Entry modal: confirm/choose which linkshell is about to be edited. -->
-@if (entryModalOpen() && dashboardLinkshells().length > 0) {
-  <div class="addon-modal-backdrop">
-    <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
-      <div class="addon-modal-header">
-        <strong>Which linkshell do you wish to make changes to?</strong>
-      </div>
-      <div class="addon-modal-body">
-        <div class="addon-modal-field">
-          <span>Linkshell</span>
-          <select name="entryLinkshellSelect"
-            [ngModel]="entryEffectiveId()"
-            (ngModelChange)="onEntrySelectChange($event)">
-            @for (linkshell of dashboardLinkshells(); track linkshell.id) {
-              <option [ngValue]="linkshell.id">
-                {{ linkshell.name }}{{ linkshell.id === selectedDashboardLinkshellId() ? ' (current)' : '' }}
-              </option>
-            }
-          </select>
-        </div>
-        <p class="muted" style="font-size:12px;margin-top:8px">
-          You're editing settings for the linkshell selected here. Choosing a different one switches to it.
-        </p>
-      </div>
-      <div class="addon-modal-footer">
-        <button type="button" class="btn primary" (click)="confirmEntryTarget()">Continue</button>
-      </div>
-    </div>
-  </div>
-}
 
 <!-- Confirm modal: reused by every save action on this tab. -->
 @if (confirmModalOpen()) {

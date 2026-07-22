@@ -17,16 +17,23 @@ public class LootHistoryController : Controller
     private readonly TimeZoneConversionService _timeZones;
     private readonly LootEditService _lootEditService;
 
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
+
     public LootHistoryController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        LootEditService lootEditService)
+        LootEditService lootEditService,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools)
     {
         _context = context;
         _userManager = userManager;
         _timeZones = timeZones;
         _lootEditService = lootEditService;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
     }
 
     [HttpGet("/LootHistory/Add")]
@@ -48,13 +55,18 @@ public class LootHistoryController : Controller
         if (membership is null) return Forbid();
         if (!await ResolveCanAddLootAsync(membership)) return Forbid();
 
+        var addPoolMap = await _dkpPools.GetMapAsync(linkshellId.Value, HttpContext.RequestAborted);
         return View(new LootAddViewModel
         {
             LinkshellId = linkshellId.Value,
             LinkshellName = linkshellName,
             LinkshellLootStructure = membership.Linkshell?.LootStructure,
             LinkshellType = membership.Linkshell?.LinkshellType,
-            RosterCharacterNames = await LoadRosterCharacterNamesAsync(linkshellId.Value)
+            RosterCharacterNames = await LoadRosterCharacterNamesAsync(linkshellId.Value),
+            // Defaults to the pool HNM maps to — a linkshell that separates HNM DKP wants its ToD
+            // loot paid from that wallet, which is the whole reason this defaults rather than asks.
+            DkpPoolId = addPoolMap.Resolve("HNM"),
+            DkpPools = addPoolMap.Pools.Select(pool => new LootDkpPoolOption { Id = pool.Id, Name = pool.Name }).ToList()
         });
     }
 
@@ -100,6 +112,8 @@ public class LootHistoryController : Controller
             ModelState.AddModelError(nameof(model.ItemWinner), "Winner must be a current linkshell member.");
         }
 
+        var poolMap = await _dkpPools.GetMapAsync(linkshellId.Value, HttpContext.RequestAborted);
+
         if (!ModelState.IsValid)
         {
             model.LinkshellId = linkshellId.Value;
@@ -107,6 +121,7 @@ public class LootHistoryController : Controller
             model.LinkshellLootStructure = membership.Linkshell?.LootStructure;
             model.LinkshellType = membership.Linkshell?.LinkshellType;
             model.RosterCharacterNames = roster;
+            model.DkpPools = poolMap.Pools.Select(pool => new LootDkpPoolOption { Id = pool.Id, Name = pool.Name }).ToList();
             return View(model);
         }
 
@@ -128,12 +143,17 @@ public class LootHistoryController : Controller
             Tod = tod,
             ItemName = model.ItemName!.Trim(),
             ItemWinner = model.ItemWinner!.Trim(),
-            WinningDkpSpent = model.WinningDkpSpent
+            WinningDkpSpent = model.WinningDkpSpent,
+            // Stamped here so the refund path later reads it back and credits the same wallet the
+            // debit came out of, even if the officer has remapped event types in between.
+            DkpPoolId = model.DkpPoolId is int chosen && poolMap.Pools.Any(pool => pool.Id == chosen)
+                ? chosen
+                : poolMap.Resolve("HNM")
         };
         _context.Tods.Add(tod);
         _context.TodLootDetails.Add(detail);
         await ActivityDataController.AdjustTodLootDkpAsync(
-            _context, tod, new[] { detail }, nowUtc, isRefund: false, HttpContext.RequestAborted);
+            _context, _dkpLedger, _dkpPools, tod, new[] { detail }, nowUtc, isRefund: false, HttpContext.RequestAborted);
         await _context.SaveChangesAsync();
 
         TempData["LootHistoryMessage"] = $"Loot added: {detail.ItemName} → {detail.ItemWinner} ({detail.WinningDkpSpent} DKP).";

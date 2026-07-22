@@ -284,26 +284,26 @@ import type {
     /* Reset / shared buttons */
     button { font: inherit; }
     .ghost, .mini {
-      border: 1px solid rgba(139, 92, 246, .35); background: rgba(139, 92, 246, .10);
-      color: #c6a8ff; border-radius: 8px; padding: 7px 12px; cursor: pointer;
+      border: 1px solid rgba(79, 124, 255, .35); background: rgba(79, 124, 255, .10);
+      color: #cdd9ff; border-radius: 8px; padding: 7px 12px; cursor: pointer;
       display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
       transition: background .12s ease, border-color .12s ease;
     }
-    .ghost:hover, .mini:hover { background: rgba(139, 92, 246, .18); }
+    .ghost:hover, .mini:hover { background: rgba(79, 124, 255, .18); }
     .ghost.sm, .mini.sm { padding: 5px 10px; font-size: 12px; }
     .mini { padding: 6px 12px; font-size: 12.5px; }
     .danger {
-      color: var(--danger, #ff5d5d); background: rgba(255, 93, 93, .08);
-      border: 1px solid rgba(255, 93, 93, .35); border-radius: 8px; padding: 7px 12px;
+      color: var(--danger); background: var(--danger-weak);
+      border: 1px solid rgba(255, 107, 107, .35); border-radius: 8px; padding: 7px 12px;
       cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
     }
-    .danger:hover { background: rgba(255, 93, 93, .15); }
+    .danger:hover { background: rgba(255, 107, 107, .18); }
     .danger.sm { padding: 5px 10px; font-size: 12px; }
     .primary {
-      background: linear-gradient(180deg, #9b6cff, #7047e8); border: 0; color: #fff;
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong)); border: 0; color: #fff;
       border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer;
       display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-      box-shadow: 0 6px 16px rgba(112, 71, 232, .28);
+      box-shadow: 0 6px 16px rgba(79, 124, 255, .28);
     }
     .primary:hover { filter: brightness(1.06); }
     .primary.mini { padding: 7px 13px; font-size: 12.5px; box-shadow: none; }
@@ -312,9 +312,9 @@ import type {
     /* Card */
     .event-card {
       margin-bottom: 16px; padding: 18px;
-      background: linear-gradient(180deg, #171923, #11131b);
-      border: 1px solid rgba(139, 92, 246, .42); border-radius: 12px;
-      box-shadow: 0 0 30px rgba(0, 0, 0, .3);
+      background: linear-gradient(180deg, var(--bg-elev), var(--bg));
+      border: 1px solid var(--border-2); border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
     }
     .event-head {
       display: flex; align-items: center; gap: 14px; width: 100%;
@@ -322,7 +322,7 @@ import type {
     }
     .event-title { display: inline-flex; align-items: center; gap: 10px; min-width: 150px; font-size: 17px; }
     .event-title strong { font-weight: 700; }
-    .ico { color: var(--accent, #8b5cf6); display: inline-flex; }
+    .ico { color: var(--accent); display: inline-flex; }
     .ico svg { width: 18px; height: 18px; }
     .event-meta { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
     .chip {
@@ -331,12 +331,12 @@ import type {
     }
     .chip svg { width: 13px; height: 13px; opacity: .85; }
     .badge {
-      color: #c6a8ff; background: rgba(139, 92, 246, .16); border: 1px solid rgba(139, 92, 246, .35);
+      color: #cdd9ff; background: var(--accent-weak); border: 1px solid rgba(79, 124, 255, .35);
       border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; white-space: nowrap;
     }
     .chevron {
       width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; color: var(--fg);
-      background: #171923; border: 1px solid var(--border);
+      background: var(--bg-elev); border: 1px solid var(--border);
       display: inline-flex; align-items: center; justify-content: center; transition: transform .18s ease;
     }
     .chevron svg { width: 18px; height: 18px; }
@@ -352,7 +352,7 @@ import type {
     .panel:last-child { margin-bottom: 0; }
     .panel h3 { margin: 0 0 14px; font-size: 16px; display: inline-flex; align-items: center; gap: 9px; }
     .count {
-      font-style: normal; color: var(--accent, #8b5cf6); background: rgba(139, 92, 246, .16);
+      font-style: normal; color: var(--accent); background: var(--accent-weak);
       border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600;
     }
     .hint { color: var(--fg-3); margin: 10px 0 0; font-size: 12px; }
@@ -361,11 +361,11 @@ import type {
     /* Inputs */
     label { display: grid; gap: 6px; color: var(--fg-3); font-size: 12px; }
     input, select, textarea {
-      width: 100%; color: var(--fg); background: #12141d; border: 1px solid var(--border);
+      width: 100%; color: var(--fg); background: var(--surface); border: 1px solid var(--border);
       border-radius: 8px; padding: 9px 11px; font: inherit;
     }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent, #8b5cf6); }
-    input[type=checkbox] { width: auto; accent-color: var(--accent, #8b5cf6); cursor: pointer; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    input[type=checkbox] { width: auto; accent-color: var(--accent); cursor: pointer; }
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 20px; align-items: end; }
     .form-grid .primary { justify-self: end; }
@@ -399,7 +399,7 @@ import type {
     .avatar.sm { width: 24px; height: 24px; margin-right: 8px; font-size: 11px; }
     .job {
       display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
-      color: #c6a8ff; background: rgba(139, 92, 246, .12); border: 1px solid rgba(139, 92, 246, .28);
+      color: #cdd9ff; background: var(--accent-weak); border: 1px solid rgba(79, 124, 255, .28);
     }
     .dkp { max-width: 96px; text-align: right; }
     .evt-actions { white-space: nowrap; text-align: right; }
@@ -407,14 +407,14 @@ import type {
 
     /* Toggle switch (Absent) */
     .toggle {
-      display: inline-block; width: 42px; height: 22px; border-radius: 999px; background: #343846;
+      display: inline-block; width: 42px; height: 22px; border-radius: 999px; background: var(--surface-3);
       border: 0; position: relative; cursor: pointer; vertical-align: middle; padding: 0; transition: background .15s ease;
     }
     .toggle::after {
       content: ""; position: absolute; width: 18px; height: 18px; top: 2px; left: 3px;
-      border-radius: 50%; background: #d8dbe4; transition: left .15s ease;
+      border-radius: 50%; background: var(--fg); transition: left .15s ease;
     }
-    .toggle.is-on { background: var(--accent, #8b5cf6); }
+    .toggle.is-on { background: var(--accent); }
     .toggle.is-on::after { left: 21px; }
     span.toggle { cursor: default; opacity: .85; }
 
@@ -423,7 +423,7 @@ import type {
       min-height: 180px; border: 1px dashed var(--border); border-radius: 10px;
       display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center; color: var(--fg-3);
     }
-    .empty__ico { color: var(--fg-4, var(--fg-3)); }
+    .empty__ico { color: var(--fg-4); }
     .empty__ico svg { width: 30px; height: 30px; }
     .empty strong { color: var(--fg-2); font-weight: 600; }
     .absent-list { display: flex; flex-direction: column; gap: 8px; }
@@ -440,7 +440,7 @@ import type {
     .ro-row .evt-who small { color: var(--fg-3); margin-left: 6px; font-weight: 400; }
     .ro-dkp { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-2); }
     .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-3); }
-    .tag.success { color: #6ee7b7; border-color: rgba(110,231,183,.4); background: rgba(110,231,183,.10); }
+    .tag.success { color: var(--success); border-color: rgba(67,209,122,.4); background: var(--success-weak); }
 
     /* Discussion */
     .discussion p { color: var(--fg-3); }
@@ -458,11 +458,11 @@ import type {
     /* Delete */
     .delete-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
     .delete {
-      color: var(--danger, #ff5d5d); background: rgba(255, 93, 93, .08); border: 1px solid rgba(255, 93, 93, .35);
+      color: var(--danger); background: var(--danger-weak); border: 1px solid rgba(255, 107, 107, .35);
       border-radius: 8px; padding: 9px 14px; font-weight: 700; cursor: pointer;
       display: inline-flex; align-items: center; gap: 7px;
     }
-    .delete:hover { background: rgba(255, 93, 93, .15); }
+    .delete:hover { background: rgba(255, 107, 107, .18); }
     .delete svg { width: 15px; height: 15px; }
 
     @media (max-width: 860px) {

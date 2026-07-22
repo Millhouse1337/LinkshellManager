@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -323,7 +325,7 @@ public sealed class DiscordBotClient
         }
     }
 
-    // payload_json + files[0] for a single-image message/edit.
+    // payload_json + files[0] for a single-file image message/edit (the rendered board).
     private MultipartFormDataContent BuildMultipart(object payload, byte[] image, string fileName)
     {
         var form = new MultipartFormDataContent();
@@ -335,42 +337,192 @@ public sealed class DiscordBotClient
         return form;
     }
 
-    // Edits an existing message in place (used to refresh an event's signup
-    // roster). Returns false on failure.
-    public async Task<bool> EditMessageAsync(
+    // A single attachment to upload alongside a message (bytes + filename + MIME).
+    public sealed record OutgoingFile(byte[] Bytes, string FileName, string ContentType);
+
+    // Posts a message carrying MULTIPLE attachments (e.g. the rendered PNG shown in
+    // the embed via attachment://, PLUS a downloadable .xlsx). `payload` must list
+    // each file in attachments:[{id:N,filename:…}] where N is its index in `files`.
+    // Returns the new message id or null.
+    public async Task<string?> PostMessageWithFilesAsync(
+        string channelId, object payload, IReadOnlyList<OutgoingFile> files, CancellationToken cancellationToken)
+    {
+        var outcome = await SendMultipartAsync(channelId, null, payload, files, cancellationToken);
+        return outcome.Result == DiscordEditResult.Edited ? outcome.MessageId : null;
+    }
+
+    // Edits a message to carry a fresh set of attachments (replacing the prior set,
+    // since payload's attachments array fully redefines them). Returns a three-way
+    // result so the caller can repost only when the message is genuinely gone, and
+    // keep the stored id on a transient failure — see DiscordEditResult.
+    public async Task<DiscordEditResult> EditMessageWithFilesAsync(
+        string channelId, string messageId, object payload, IReadOnlyList<OutgoingFile> files,
+        CancellationToken cancellationToken)
+        => (await SendMultipartAsync(channelId, messageId, payload, files, cancellationToken)).Result;
+
+    // messageId null → POST (Edited carries the new id); non-null → PATCH (Edited
+    // echoes messageId). Failure classification + 429 retry live in SendClassifiedAsync.
+    private async Task<MultipartOutcome> SendMultipartAsync(
+        string channelId, string? messageId, object payload, IReadOnlyList<OutgoingFile> files,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(channelId))
+        {
+            return new(DiscordEditResult.TransientFailure, null);
+        }
+        if (messageId is not null && string.IsNullOrWhiteSpace(messageId))
+        {
+            return new(DiscordEditResult.TransientFailure, null);
+        }
+
+        var url = messageId is null
+            ? $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages"
+            : $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}";
+
+        return await SendClassifiedAsync(
+            messageId is null ? HttpMethod.Post : HttpMethod.Patch,
+            url,
+            () => BuildMultipart(payload, files),
+            returnNewId: messageId is null,
+            existingMessageId: messageId,
+            channelId,
+            messageId is null ? "multi-file post" : "multi-file edit",
+            cancellationToken);
+    }
+
+    // Sends a request, rebuilding its content per attempt (so a 429 can be retried),
+    // honoring one Retry-After backoff, and classifying the outcome. On a successful
+    // POST (returnNewId) the new message id is read from the body; otherwise
+    // existingMessageId is echoed back on success.
+    private async Task<MultipartOutcome> SendClassifiedAsync(
+        HttpMethod method, string url, Func<HttpContent> contentFactory, bool returnNewId,
+        string? existingMessageId, string channelId, string verb, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = CreateClient();
+            for (var attempt = 0; ; attempt++)
+            {
+                using var content = contentFactory();
+                using var request = new HttpRequestMessage(method, url) { Content = content };
+                using var response = await client.SendAsync(request, cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    if (!returnNewId)
+                    {
+                        return new(DiscordEditResult.Edited, existingMessageId);
+                    }
+                    var message = await response.Content.ReadFromJsonAsync<DiscordMessagePayload>(
+                        cancellationToken: cancellationToken);
+                    return new(DiscordEditResult.Edited, message?.Id);
+                }
+
+                // One retry on a rate-limit: a DKP burst (e.g. closing an event credits the
+                // whole roster) can momentarily exhaust the channel budget; a brief wait +
+                // single retry avoids dropping the refresh without busy-looping.
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt == 0)
+                {
+                    var delay = ResolveRetryAfter(response);
+                    _logger.LogWarning(
+                        "Discord {Verb} to channel {ChannelId} was rate-limited (429); retrying once after {Delay}.",
+                        verb, channelId, delay);
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                // 401/403 = the bot was removed from the server or lacks the channel perms;
+                // this won't fix itself, so log it distinctly and actionably (the generic
+                // warning below buries it among normal transient blips). We still classify it
+                // as transient so the existing post/binding is kept, not orphaned.
+                if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    _logger.LogError(
+                        "Discord {Verb} to channel {ChannelId} was rejected ({Status}). The bot may have been " +
+                        "removed from the server or lacks Send Messages / Embed Links / Attach Files in that channel — " +
+                        "re-invite the bot or re-select the channel in settings. {Body}",
+                        verb, channelId, response.StatusCode, Truncate(body, 300));
+                    return new(DiscordEditResult.TransientFailure, null);
+                }
+                _logger.LogWarning(
+                    "Discord {Verb} to channel {ChannelId} failed: {Status} {Body}.",
+                    verb, channelId, response.StatusCode, Truncate(body, 300));
+                return new(ClassifyFailure(response.StatusCode, body), null);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Unable to {Verb} channel {ChannelId}.", verb, channelId);
+            return new(DiscordEditResult.TransientFailure, null);
+        }
+    }
+
+    // A genuinely gone target — HTTP 404 or Discord JSON error code 10008 ("Unknown
+    // Message") — means the caller should repost fresh; everything else (429 after our
+    // retry, 5xx, network) is transient and should keep the stored id for a later retry.
+    private static DiscordEditResult ClassifyFailure(HttpStatusCode status, string body)
+        => status == HttpStatusCode.NotFound
+            || body.Contains("\"code\": 10008") || body.Contains("\"code\":10008")
+            ? DiscordEditResult.MessageGone
+            : DiscordEditResult.TransientFailure;
+
+    // Backoff for a 429: prefer Discord's precise X-RateLimit-Reset-After (float
+    // seconds), fall back to the standard Retry-After, clamped so a global limit can't
+    // stall the background loop.
+    private static TimeSpan ResolveRetryAfter(HttpResponseMessage response)
+    {
+        double seconds = 1;
+        if (response.Headers.TryGetValues("X-RateLimit-Reset-After", out var resetValues)
+            && double.TryParse(resetValues.FirstOrDefault(), NumberStyles.Any, CultureInfo.InvariantCulture, out var reset)
+            && reset > 0)
+        {
+            seconds = reset;
+        }
+        else if (response.Headers.RetryAfter?.Delta is { } delta && delta > TimeSpan.Zero)
+        {
+            seconds = delta.TotalSeconds;
+        }
+        return TimeSpan.FromSeconds(Math.Clamp(seconds, 0.5, 10));
+    }
+
+    // payload_json + files[0..n] for a multi-file message/edit.
+    private MultipartFormDataContent BuildMultipart(object payload, IReadOnlyList<OutgoingFile> files)
+    {
+        var form = new MultipartFormDataContent();
+        var json = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
+        form.Add(json, "payload_json");
+        for (var i = 0; i < files.Count; i++)
+        {
+            var part = new ByteArrayContent(files[i].Bytes);
+            part.Headers.ContentType = new MediaTypeHeaderValue(files[i].ContentType);
+            form.Add(part, $"files[{i}]", files[i].FileName);
+        }
+        return form;
+    }
+
+    // Edits an existing message in place (text/embed only — used to refresh an event's
+    // signup roster, the ToD board, etc.). Returns a three-way result so callers can
+    // repost only when the message is genuinely gone — see DiscordEditResult.
+    public async Task<DiscordEditResult> EditMessageAsync(
         string channelId, string messageId, object payload, CancellationToken cancellationToken)
     {
         if (!IsConfigured || string.IsNullOrWhiteSpace(channelId) || string.IsNullOrWhiteSpace(messageId))
         {
-            return false;
+            return DiscordEditResult.TransientFailure;
         }
 
-        try
-        {
-            using var client = CreateClient();
-            using var content = new StringContent(
-                JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
-            using var request = new HttpRequestMessage(
-                HttpMethod.Patch,
-                $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}")
-            {
-                Content = content
-            };
-            using var response = await client.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning(
-                    "Discord edit of message {MessageId} in channel {ChannelId} failed: {Status}.",
-                    messageId, channelId, response.StatusCode);
-                return false;
-            }
-            return true;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Unable to edit message {MessageId} in channel {ChannelId}.", messageId, channelId);
-            return false;
-        }
+        var url = $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}";
+        var outcome = await SendClassifiedAsync(
+            HttpMethod.Patch,
+            url,
+            () => new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json"),
+            returnNewId: false,
+            existingMessageId: messageId,
+            channelId,
+            "edit",
+            cancellationToken);
+        return outcome.Result;
     }
 
     // Deletes a message (used to remove an event's signup board once the event
@@ -408,6 +560,9 @@ public sealed class DiscordBotClient
     private static string Truncate(string value, int max) =>
         string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max] + "…";
 
+    // Result + (for a POST) the new message id, from SendClassifiedAsync.
+    private readonly record struct MultipartOutcome(DiscordEditResult Result, string? MessageId);
+
     private sealed record DiscordChannelPayload(
         [property: JsonPropertyName("id")] string Id,
         [property: JsonPropertyName("name")] string? Name,
@@ -425,3 +580,9 @@ public sealed class DiscordBotClient
 
 // A Discord channel (id + name + position) the bot can post to.
 public sealed record DiscordChannelInfo(string Id, string Name, int Position);
+
+// Outcome of an edit/post a caller may need to branch on: Edited = success;
+// MessageGone = the target message no longer exists (HTTP 404 / "Unknown Message"),
+// so repost fresh; TransientFailure = a rate-limit/5xx/network error, so keep any
+// stored message id and retry on the next refresh rather than orphaning it.
+public enum DiscordEditResult { Edited, MessageGone, TransientFailure }

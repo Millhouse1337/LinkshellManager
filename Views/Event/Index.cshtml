@@ -49,6 +49,9 @@
         font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
         color: var(--accent); margin: 6px 0 8px;
     }
+    .event-ps-alliance-lead {
+        font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--fg);
+    }
     .event-ps-party-grid { display: flex; flex-wrap: wrap; gap: 12px; }
     .event-ps-party {
         flex: 1 1 280px; min-width: 260px;
@@ -284,13 +287,25 @@ else
                         }
                         else if (string.Equals((item.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
                         {
-                            @* HNM events are addon-only-startable. Render a disabled
-                               button with a hover hint so officers see why they
-                               can't start it from the web. The server-side
-                               StartEvent guard rejects this anyway. *@
-                            <button class="btn ghost sm" type="button" disabled
-                                    title="HNM events are started with the in-game addon (Att launcher)">
-                                Start (addon-only)
+                            @* HNM signup boards aren't "started" — logging the monster's Time
+                               of Death is what drives the board (re-post + repop). Mirrors the
+                               Activity's "Post ToD" / "Edit ToD" button. Opens the shared modal
+                               below, pre-filled with this board's monster. *@
+                            var awaitingRepost = item.Event.HnmDefeatedAt is not null;
+                            var prefill = item.BoardTod;
+                            var claimAttr = prefill?.Claim == true ? "true" : (prefill?.Claim == false ? "false" : "");
+                            <button class="btn primary sm event-tod-open" type="button"
+                                    data-event-id="@item.Event.Id"
+                                    data-monster="@item.Event.AssignedMonsterName"
+                                    data-editing="@(awaitingRepost ? "true" : "false")"
+                                    data-tod-time="@prefill?.TimeLocal"
+                                    data-cooldown="@prefill?.Cooldown"
+                                    data-interval="@prefill?.Interval"
+                                    data-day="@(item.Event.DayNumber?.ToString())"
+                                    data-hq="@(prefill?.Hq == true ? "true" : "false")"
+                                    data-claim="@claimAttr"
+                                    title="@(awaitingRepost ? "Edit the logged Time of Death (updates the repop + re-post time)." : "Log the Time of Death. The board wipes signups and re-posts before the next pop.")">
+                                @(awaitingRepost ? "Edit ToD" : "Post ToD")
                             </button>
                         }
                         else
@@ -312,6 +327,38 @@ else
                 </div>
 
                 <div>
+                @* HNM "defeated / awaiting re-post" banner — shown after a ToD is logged from
+                   this board. Signups are wiped; the board re-posts before the next pop.
+                   Mirrors the Discord Activity's queue-card banner. *@
+                @if (item.Event.HnmDefeatedAt is not null)
+                {
+                    var monsterLabel = string.IsNullOrWhiteSpace(item.Event.AssignedMonsterName)
+                        ? item.Event.EventName : item.Event.AssignedMonsterName;
+                    string? leadLabel = null;
+                    if (item.Event.StartTime is DateTime repop && item.Event.HnmRepostAt is DateTime repost && repop > repost)
+                    {
+                        var lead = repop - repost;
+                        var parts = new List<string>();
+                        if ((int)lead.TotalHours > 0) { parts.Add($"{(int)lead.TotalHours}h"); }
+                        if (lead.Minutes > 0) { parts.Add($"{lead.Minutes}m"); }
+                        if (parts.Count == 0) { parts.Add($"{lead.Seconds}s"); }
+                        leadLabel = string.Join(" ", parts);
+                    }
+                    <div style="margin:0 16px 12px;padding:12px 14px;border:1px solid var(--accent);border-radius:8px;background:var(--surface-2)">
+                        <div style="font-weight:600;color:var(--fg)">💀 @monsterLabel defeated</div>
+                        <div style="color:var(--fg-2);font-size:13px;margin-top:2px">
+                            Will repop @(item.Event.StartTime?.ToString("ddd MMM d, HH:mm:ss") ?? "soon").
+                            @if (item.Event.HnmRepostAt is not null)
+                            {
+                                <text>Sign-up board automatically re-posts @item.Event.HnmRepostAt?.ToString("ddd MMM d, HH:mm:ss")@(leadLabel is not null ? $" ({leadLabel} before the first window)" : "").</text>
+                            }
+                            else
+                            {
+                                <text>Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.</text>
+                            }
+                        </div>
+                    </div>
+                }
                 @if (!string.IsNullOrWhiteSpace(item.Event.Details))
                 {
                     <div style="padding:0 16px 12px;color:var(--fg-3);font-size:13px">@item.Event.Details</div>
@@ -364,9 +411,28 @@ else
                         {
                             <div class="event-ps-empty">This party setup has no alliances yet.</div>
                         }
+                        @{ var multiAllianceBoard = board.Alliances.Count > 1; }
                         @foreach (var alliance in board.Alliances)
                         {
-                            <div class="event-ps-alliance-title">@alliance.Name</div>
+                            var iHoldSlotHere = !string.IsNullOrEmpty(currentAppUserId)
+                                && alliance.Parties.SelectMany(p => p.Slots).Any(s => s.SignedUpAppUserId == currentAppUserId);
+                            var iAmAllianceLead = !string.IsNullOrEmpty(currentAppUserId) && alliance.LeadAppUserId == currentAppUserId;
+                            <div class="event-ps-alliance-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                                <span>@alliance.Name</span>
+                                @if (multiAllianceBoard && !string.IsNullOrEmpty(alliance.LeadCharacterName))
+                                {
+                                    <span class="event-ps-alliance-lead" title="Alliance lead">👑 Alliance Lead: @alliance.LeadCharacterName</span>
+                                }
+                                @if (multiAllianceBoard && iHoldSlotHere && !iAmAllianceLead)
+                                {
+                                    <form asp-controller="Event" asp-action="MakeAllianceLead" method="post" style="display:inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                        <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                        <button type="submit" class="btn xs" title="Take this alliance's lead">👑 Make me alliance lead</button>
+                                    </form>
+                                }
+                            </div>
                             <div class="event-ps-party-grid">
                                 @foreach (var party in alliance.Parties)
                                 {
@@ -662,4 +728,180 @@ else
             </div>
         }
     </div>
+
+    @* Shared HNM board ToD modal — opened by each HNM card's "Post ToD" / "Edit ToD"
+       button. Posts to PostBoardTod, which records the ToD, moves the board to the next
+       repop, wipes signups, and re-posts before the pop. Mirrors the Activity's board-mode
+       ToD dialog. The monster is locked to the board's monster (read-only). *@
+    <div id="tod-modal" hidden
+         style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)">
+        <div style="max-width:560px;width:calc(100% - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <strong id="tod-modal-title" style="font-size:16px;color:var(--fg)">Post ToD</strong>
+                <button type="button" class="btn ghost sm" id="tod-modal-close">Close</button>
+            </div>
+            <form asp-action="PostBoardTod" method="post">
+                <input type="hidden" name="eventId" id="tod-modal-eventid" value="" />
+                <input type="hidden" name="returnUrl" id="tod-modal-returnurl" value="" />
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;align-items:start">
+                    @* Monster is locked to the board; Day (read-only) comes from the event and
+                       drives whether the HQ toggle shows. Day fills the row when absent. *@
+                    <div class="field" id="tod-modal-monster-field" style="grid-column:1/-1;display:flex;flex-direction:column">
+                        <label>Monster</label>
+                        <input class="form-control" id="tod-modal-monster" readonly
+                               title="Locked to this board's monster" />
+                    </div>
+                    <div class="field" id="tod-modal-day-field" hidden style="display:none;flex-direction:column">
+                        <label>Day</label>
+                        <input class="form-control" id="tod-modal-day-display" readonly
+                               title="Set on the event; days 1–3 show just the base monster, day 4+ shows the merge pair" />
+                        <input type="hidden" name="dayNumber" id="tod-modal-day" value="" />
+                    </div>
+                    <div class="field" style="display:flex;flex-direction:column">
+                        <label for="tod-modal-time">Time of death</label>
+                        <input class="form-control" id="tod-modal-time" name="todTimeLocal" type="datetime-local" step="1" required />
+                    </div>
+                    <div class="field" style="display:flex;flex-direction:column">
+                        <label for="tod-modal-cooldown">Cooldown</label>
+                        <select class="form-select" id="tod-modal-cooldown" name="cooldown">
+                            @foreach (var cd in TodManagerViewModel.SupportedCooldowns)
+                            {
+                                <option value="@cd">@cd</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field" style="display:flex;flex-direction:column">
+                        <label for="tod-modal-interval">Interval</label>
+                        <select class="form-select" id="tod-modal-interval" name="interval">
+                            @foreach (var iv in TodManagerViewModel.SupportedIntervals)
+                            {
+                                <option value="@iv">@iv</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field" style="display:flex;flex-direction:column">
+                        <label for="tod-modal-claim">Claim</label>
+                        <select class="form-select" id="tod-modal-claim" name="claim">
+                            <option value="true" selected>Yes</option>
+                            <option value="false">No</option>
+                            <option value="">Not specified</option>
+                        </select>
+                    </div>
+                    @* HQ is hidden by the modal JS on days 1–3 (no HQ variant exists then). *@
+                    <div class="field" id="tod-modal-hq-field" style="display:flex;flex-direction:column">
+                        <label for="tod-modal-hq">HQ</label>
+                        <label class="tod-toggle" style="display:inline-flex;align-items:center;gap:6px">
+                            <input type="checkbox" id="tod-modal-hq" name="hq" value="true" />
+                            <span>Yes</span>
+                        </label>
+                    </div>
+                </div>
+                <div style="margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)">
+                    <div style="font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.04em">Calculated repop</div>
+                    <strong id="tod-modal-repop" style="color:var(--fg)">Pick a time of death.</strong>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+                    <button type="button" class="btn ghost" id="tod-modal-cancel">Cancel</button>
+                    <button type="submit" class="btn primary" id="tod-modal-submit">Log ToD</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var modal = document.getElementById('tod-modal');
+            if (!modal) { return; }
+            var titleEl = document.getElementById('tod-modal-title');
+            var submitEl = document.getElementById('tod-modal-submit');
+            var eventIdEl = document.getElementById('tod-modal-eventid');
+            var returnUrlEl = document.getElementById('tod-modal-returnurl');
+            var monsterEl = document.getElementById('tod-modal-monster');
+            var timeEl = document.getElementById('tod-modal-time');
+            var cooldownEl = document.getElementById('tod-modal-cooldown');
+            var intervalEl = document.getElementById('tod-modal-interval');
+            var repopEl = document.getElementById('tod-modal-repop');
+            var monsterFieldEl = document.getElementById('tod-modal-monster-field');
+            var dayFieldEl = document.getElementById('tod-modal-day-field');
+            var dayDisplayEl = document.getElementById('tod-modal-day-display');
+            var dayHiddenEl = document.getElementById('tod-modal-day');
+            var hqFieldEl = document.getElementById('tod-modal-hq-field');
+            var hqEl = document.getElementById('tod-modal-hq');
+            // Window-cycle HNMs use the long 72h window / 1h interval; the rest 22h / 10m.
+            var LONG = ['Tiamat', 'Jormungand', 'Vrtra'];
+
+            function cooldownHours(v) {
+                if (v === '5 Min') { return 5 / 60; }
+                if (v === '2 Hour') { return 2; }
+                if (v === '72 Hour') { return 72; }
+                return 22;
+            }
+
+            function updateRepop() {
+                if (!timeEl.value) { repopEl.textContent = 'Pick a time of death.'; return; }
+                var d = new Date(timeEl.value);
+                if (isNaN(d.getTime())) { repopEl.textContent = 'Pick a time of death.'; return; }
+                var repop = new Date(d.getTime() + cooldownHours(cooldownEl.value) * 3600000);
+                repopEl.textContent = repop.toLocaleString();
+            }
+
+            function openModal(btn) {
+                var monster = btn.getAttribute('data-monster') || '';
+                var editing = btn.getAttribute('data-editing') === 'true';
+                eventIdEl.value = btn.getAttribute('data-event-id') || '';
+                returnUrlEl.value = window.location.pathname + window.location.search;
+                monsterEl.value = monster;
+                titleEl.textContent = editing ? 'Edit ToD' : 'Post ToD';
+                submitEl.textContent = editing ? 'Save ToD' : 'Log ToD';
+
+                // Day comes from the event (read-only). When present it takes half the row,
+                // so the Monster field drops from full-width to half; otherwise it fills the row.
+                var dayRaw = btn.getAttribute('data-day') || '';
+                var dayNum = dayRaw === '' ? null : parseInt(dayRaw, 10);
+                var hasDay = dayNum !== null && !isNaN(dayNum);
+                dayHiddenEl.value = hasDay ? String(dayNum) : '';
+                dayDisplayEl.value = hasDay ? String(dayNum) : '';
+                dayFieldEl.hidden = !hasDay;
+                dayFieldEl.style.display = hasDay ? 'flex' : 'none';
+                monsterFieldEl.style.gridColumn = hasDay ? 'auto' : '1/-1';
+
+                // HQ (stronger merge-pair monster) only exists on day 4+; hide the toggle on
+                // days 1–3 and never carry a stale checked state into a hidden field.
+                var hqAllowed = !hasDay || dayNum >= 4;
+                hqFieldEl.style.display = hqAllowed ? 'flex' : 'none';
+                hqEl.checked = hqAllowed && editing && btn.getAttribute('data-hq') === 'true';
+
+                var prefillTime = btn.getAttribute('data-tod-time') || '';
+                if (editing && prefillTime) {
+                    // Edit ToD: open with the board's already-logged values.
+                    timeEl.value = prefillTime;
+                    cooldownEl.value = btn.getAttribute('data-cooldown') || '22 Hour';
+                    intervalEl.value = btn.getAttribute('data-interval') || '10 Min';
+                    // data-claim is 'true' / 'false' / '' (Not specified) — matches the select.
+                    document.getElementById('tod-modal-claim').value = btn.getAttribute('data-claim') || '';
+                } else {
+                    // Post ToD: blank time, defaults keyed to the monster's window length.
+                    var isLong = LONG.indexOf(monster) !== -1;
+                    timeEl.value = '';
+                    cooldownEl.value = isLong ? '72 Hour' : '22 Hour';
+                    intervalEl.value = isLong ? '1 Hour' : '10 Min';
+                    document.getElementById('tod-modal-claim').value = 'true';
+                }
+                updateRepop();
+                modal.removeAttribute('hidden');
+            }
+
+            function closeModal() { modal.setAttribute('hidden', ''); }
+
+            document.addEventListener('click', function (e) {
+                var open = e.target.closest('.event-tod-open');
+                if (open) { e.preventDefault(); openModal(open); return; }
+                if (e.target.closest('#tod-modal-close, #tod-modal-cancel')) { closeModal(); return; }
+                if (e.target === modal) { closeModal(); return; } // backdrop click
+            });
+            timeEl.addEventListener('input', updateRepop);
+            timeEl.addEventListener('change', updateRepop);
+            cooldownEl.addEventListener('change', updateRepop);
+        })();
+    </script>
 }

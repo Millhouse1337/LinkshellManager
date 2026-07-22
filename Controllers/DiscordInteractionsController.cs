@@ -69,6 +69,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _discordClientId;
     private readonly SignupCharacterChoiceCache _charChoice;
+    private readonly OfficerAddTargetCache _officerAddTargets;
     private readonly ManualMemberService _manualMembers;
 
     // This component interaction's token, captured per request so a success
@@ -93,7 +94,10 @@ public sealed class DiscordInteractionsController : ControllerBase
         IHttpClientFactory httpClientFactory,
         IOptions<DiscordOAuthOptions> discordOptions,
         SignupCharacterChoiceCache charChoice,
-        ManualMemberService manualMembers)
+        OfficerAddTargetCache officerAddTargets,
+        ManualMemberService manualMembers,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances)
     {
         _verifier = verifier;
         _db = db;
@@ -102,8 +106,14 @@ public sealed class DiscordInteractionsController : ControllerBase
         _httpClientFactory = httpClientFactory;
         _discordClientId = discordOptions.Value.ClientId;
         _charChoice = charChoice;
+        _officerAddTargets = officerAddTargets;
         _manualMembers = manualMembers;
+        _dkpPools = dkpPools;
+        _dkpPoolBalances = dkpPoolBalances;
     }
+
+    private readonly DkpPoolResolver _dkpPools;
+    private readonly DkpPoolBalanceService _dkpPoolBalances;
 
     [HttpPost("interactions")]
     public async Task<IActionResult> HandleAsync(CancellationToken cancellationToken)
@@ -383,6 +393,32 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: false, cancellationToken);
         }
 
+        // Drill-down step 1 → 2: the member picked an alliance (value = alliance index);
+        // morph the ephemeral to its party picker. Leader checked first (distinct string).
+        if (customId.StartsWith(DiscordEventMessageBuilder.AlliancePickLeaderPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.AlliancePickLeaderPrefix);
+            return await HandleAlliancePickedAsync(eventId, SelectedSlotId(data), asLeader: true, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.AlliancePickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.AlliancePickPrefix);
+            return await HandleAlliancePickedAsync(eventId, SelectedSlotId(data), asLeader: false, cancellationToken);
+        }
+
+        // Drill-down step 2 → 3: the member picked a party (value = party id); morph the
+        // ephemeral to its open-slot picker (which reuses the claim prefix).
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyPickLeaderPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartyPickLeaderPrefix);
+            return await HandlePartyPickedAsync(eventId, SelectedSlotId(data), asLeader: true, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyPickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartyPickPrefix);
+            return await HandlePartyPickedAsync(eventId, SelectedSlotId(data), asLeader: false, cancellationToken);
+        }
+
         // Leader picker select → the member chose a slot to lead; claim it as leader
         // (checked before the normal claim prefix — distinct strings).
         if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix, StringComparison.Ordinal))
@@ -398,10 +434,46 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await HandlePartySlotClaimAsync(eventId, SelectedSlotId(data), appUserId, asLeader: false, cancellationToken);
         }
 
+        // "Fill earlier alliances first" nudge buttons: Take = claim the suggested
+        // earlier slot; Keep = claim the slot they chose anyway. Both carry the
+        // resolved picks in the custom_id and bypass the nudge re-check.
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyNudgeTakePrefix, StringComparison.Ordinal))
+        {
+            return await HandlePartyNudgeClaimAsync(customId, DiscordEventMessageBuilder.PartyNudgeTakePrefix, appUserId, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.PartyNudgeKeepPrefix, StringComparison.Ordinal))
+        {
+            return await HandlePartyNudgeClaimAsync(customId, DiscordEventMessageBuilder.PartyNudgeKeepPrefix, appUserId, cancellationToken);
+        }
+
         if (customId.StartsWith(DiscordEventMessageBuilder.PartySlotLeavePrefix, StringComparison.Ordinal))
         {
             var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PartySlotLeavePrefix);
             return await HandlePartySlotLeaveAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "Make Me Party Lead" → a member already holding a slot takes their party's
+        // crown from whoever currently holds it (overrides the existing leader).
+        if (customId.StartsWith(DiscordEventMessageBuilder.MakeLeaderPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.MakeLeaderPrefix);
+            return await HandleMakePartyLeaderAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "Make Me Alliance Lead" → a member already holding a slot takes their whole
+        // alliance's crown from whoever currently holds it (overrides the existing lead).
+        if (customId.StartsWith(DiscordEventMessageBuilder.MakeAllianceLeaderPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.MakeAllianceLeaderPrefix);
+            return await HandleMakeAllianceLeaderAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "🔒 Stay Next Window" → the clicker toggles the lock on their OWN slot so it
+        // survives the next officer "Next Window" advance (window-cycle HNM boards).
+        if (customId.StartsWith(DiscordEventMessageBuilder.LockNextWindowPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.LockNextWindowPrefix);
+            return await HandleLockNextWindowAsync(eventId, appUserId, cancellationToken);
         }
 
         // "Next Window" (window-cycle HNM boards) → officers only: wipe signups + advance.
@@ -409,6 +481,130 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.NextWindowPrefix);
             return await HandleNextWindowAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "Prev Window" → officers only: step the window back one (undo an accidental Next).
+        if (customId.StartsWith(DiscordEventMessageBuilder.PrevWindowPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PrevWindowPrefix);
+            return await HandlePrevWindowAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "➕ Add Member (officers)" → officers only: ephemeral picker of who to seat.
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddButtonPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddButtonPrefix);
+            return await HandleOfficerAddStartAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // Officer "Move Member" — pick a participant → pick a destination slot (or bench).
+        // The more-specific src/dest/bench prefixes are checked before the bare button.
+        if (customId.StartsWith(DiscordEventMessageBuilder.MoveSourcePickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.MoveSourcePickPrefix);
+            return await HandleMoveSourcePickedAsync(eventId, appUserId, SelectedValue(data), cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.MoveDestClaimPrefix, StringComparison.Ordinal))
+        {
+            return await HandleMoveDestinationPickedAsync(customId, appUserId, SelectedSlotId(data), cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.MoveBenchPrefix, StringComparison.Ordinal))
+        {
+            return await HandleMoveBenchAsync(customId, appUserId, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.MoveMemberButtonPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.MoveMemberButtonPrefix);
+            return await HandleMoveStartAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // Officer "Set Leader" — pick a seated member → set their party's 👑.
+        if (customId.StartsWith(DiscordEventMessageBuilder.SetLeaderPickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.SetLeaderPickPrefix);
+            return await HandleSetLeaderPickedAsync(eventId, appUserId, SelectedValue(data), cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.SetLeaderButtonPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.SetLeaderButtonPrefix);
+            return await HandleSetLeaderStartAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // Officer "🔒 Lock Member" — pick a seated member (value = s:{slotId}), toggle their
+        // "stay next window" lock. The pick prefix is checked first (it's the more specific
+        // string, though the two don't actually overlap under StartsWith).
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerLockPickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerLockPickPrefix);
+            return await HandleOfficerLockPickedAsync(eventId, appUserId, SelectedValue(data), cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerLockButtonPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerLockButtonPrefix);
+            return await HandleOfficerLockStartAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // Officer "Remove Member" — pick a participant → confirm → remove completely.
+        if (customId.StartsWith(DiscordEventMessageBuilder.WithdrawMemberConfirmPrefix, StringComparison.Ordinal))
+        {
+            return await HandleWithdrawConfirmAsync(customId, appUserId, cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.WithdrawMemberPickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.WithdrawMemberPickPrefix);
+            return await HandleWithdrawPickedAsync(eventId, appUserId, SelectedValue(data), cancellationToken);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.WithdrawMemberButtonPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.WithdrawMemberButtonPrefix);
+            return await HandleWithdrawStartAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // Officer-add member picker → an existing member (value = AppUserId) or "add new"
+        // (sentinel → name modal). The chosen target is cached, then the slot picker shows.
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddMemberPickPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddMemberPickPrefix);
+            return await HandleOfficerAddMemberPickedAsync(eventId, appUserId, SelectedValue(data), cancellationToken);
+        }
+
+        // Officer-add slot picker select → claim the chosen slot for the cached target member.
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddSlotClaimPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddSlotClaimPrefix);
+            return await HandlePartySlotClaimAsync(
+                eventId, SelectedSlotId(data), appUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }
+
+        // Officer-add job wizard (role → main → sub) — same shape as the self-signup
+        // wizard, but each step re-enters with officerAdd:true so the final claim is
+        // attributed to the cached target rather than the clicking officer.
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddWizardRolePrefix, StringComparison.Ordinal))
+        {
+            var p = customId[DiscordEventMessageBuilder.OfficerAddWizardRolePrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            return await AdvancePartyJobWizardAsync(
+                eventId, slotId, SelectedValue(data), null, null, false, appUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddWizardMainPrefix, StringComparison.Ordinal))
+        {
+            var p = customId[DiscordEventMessageBuilder.OfficerAddWizardMainPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            var role = p.Length > 2 ? NormalizeWizardValue(p[2]) : null;
+            return await AdvancePartyJobWizardAsync(
+                eventId, slotId, role, SelectedValue(data), null, false, appUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddWizardSubPrefix, StringComparison.Ordinal))
+        {
+            var p = customId[DiscordEventMessageBuilder.OfficerAddWizardSubPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            var role = p.Length > 2 ? NormalizeWizardValue(p[2]) : null;
+            var main = p.Length > 3 ? NormalizeWizardValue(p[3]) : null;
+            return await AdvancePartyJobWizardAsync(
+                eventId, slotId, role, main, SelectedValue(data), true, appUserId, asLeader: false, cancellationToken, officerAdd: true);
         }
 
         // "Sign Up (No Slot)" → open an ephemeral job-pick wizard (role optional, job
@@ -484,7 +680,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (customId.StartsWith(AuctionBidService.BidButtonPrefix, StringComparison.Ordinal))
         {
             var itemId = ParseTrailingId(customId, AuctionBidService.BidButtonPrefix);
-            return BidModal(itemId);
+            return await BidModalAsync(itemId, appUserId, cancellationToken);
         }
 
         return Ephemeral("That action isn't recognized.");
@@ -528,10 +724,18 @@ public sealed class DiscordInteractionsController : ControllerBase
     // identified by Discord id and named via a one-time modal (cached per event).
     // `promptTail` ("slot:42", "join:42", "job:42:War", …) lets the picker/modal
     // resume the right flow afterwards.
-    // "Next Window" button on a window-cycle HNM board (Tiamat/Jormungand/Vrtra). Officers
-    // only: wipe the board's signups and advance Event.HnmWindowNumber up to MaxWindow, then
-    // re-post the board (new "Window N" title + empty roster) off the 3s window via the queue.
-    private async Task<IActionResult> HandleNextWindowAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    // "Next Window" / "Prev Window" buttons on a window-cycle HNM board (Tiamat/
+    // Jormungand/Vrtra). Officers only: wipe the board's signups and step
+    // Event.HnmWindowNumber by ±1 within [1, MaxWindow], then re-post the board (new
+    // "Window N" title + empty roster) off the 3s window via the queue. Prev is the
+    // undo for an accidental Next double-click.
+    private Task<IActionResult> HandleNextWindowAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+        => ShiftWindowAsync(eventId, appUserId, +1, cancellationToken);
+
+    private Task<IActionResult> HandlePrevWindowAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+        => ShiftWindowAsync(eventId, appUserId, -1, cancellationToken);
+
+    private async Task<IActionResult> ShiftWindowAsync(int eventId, string? appUserId, int delta, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -556,26 +760,42 @@ public sealed class DiscordInteractionsController : ControllerBase
                 m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
         if (!LinkshellRanks.IsLeaderOrOfficer(membership?.Rank))
         {
-            return Ephemeral("Only officers can advance the window.");
+            return Ephemeral("Only officers can change the window.");
         }
 
-        if (ev.HnmWindowNumber >= HnmConfig.MaxWindow)
+        if (delta > 0 && ev.HnmWindowNumber >= HnmConfig.MaxWindow)
         {
             return Ephemeral($"Already on the final window ({HnmConfig.MaxWindow}).");
         }
-
-        // Each window is a fresh sign-up → wipe slot signups + no-slot attendees.
-        var slotSignups = await _db.EventPartySlotSignups.Where(s => s.EventId == eventId).ToListAsync(cancellationToken);
-        _db.EventPartySlotSignups.RemoveRange(slotSignups);
-        var attendees = await _db.AppUserEvents.Where(p => p.EventId == eventId).ToListAsync(cancellationToken);
-        _db.AppUserEvents.RemoveRange(attendees);
-
-        ev.HnmWindowNumber += 1;
-        // Each window is ~an hour later, so push the predicted start/pop forward an hour.
-        if (ev.StartTime.HasValue)
+        if (delta < 0 && ev.HnmWindowNumber <= 1)
         {
-            ev.StartTime = ev.StartTime.Value.AddHours(1);
+            return Ephemeral("Already on the first window (1).");
         }
+
+        // Each window is normally a fresh sign-up → wipe slot signups + no-slot attendees.
+        // EXCEPTION: a member (or an officer) can LOCK a signup ("Stay Next Window") so it
+        // survives the advance. Those rows are kept, and so is their AppUserEvent
+        // participation, so a locked camper isn't cleared and doesn't lose earned DKP when
+        // the window ticks. StayNextWindow is deliberately NOT reset — the lock persists
+        // into the next window too, until the member unlocks, withdraws, or is removed.
+        var slotSignups = await _db.EventPartySlotSignups.Where(s => s.EventId == eventId).ToListAsync(cancellationToken);
+        var keptSignups = slotSignups.Where(s => s.StayNextWindow).ToList();
+        _db.EventPartySlotSignups.RemoveRange(slotSignups.Where(s => !s.StayNextWindow));
+
+        // Spare the participation of anyone whose slot is staying (locked outside/Discord-
+        // only signups have no AppUserEvent, so in practice this only ever keeps account rows).
+        var keptAppUserIds = keptSignups.Where(s => s.AppUserId != null).Select(s => s.AppUserId!).ToHashSet();
+        var keptDiscordIds = keptSignups.Where(s => s.DiscordUserId != null).Select(s => s.DiscordUserId!).ToHashSet();
+        var attendees = await _db.AppUserEvents.Where(p => p.EventId == eventId).ToListAsync(cancellationToken);
+        _db.AppUserEvents.RemoveRange(attendees.Where(p =>
+            !(p.AppUserId != null && keptAppUserIds.Contains(p.AppUserId))
+            && !(p.DiscordUserId != null && keptDiscordIds.Contains(p.DiscordUserId))));
+
+        // Advance only the window counter + wipe signups. The officer-entered start/pop
+        // time is left untouched — stepping windows must not silently rewrite the time
+        // they scheduled (previously each step shifted StartTime ±1h, so a board on
+        // Window 12 drifted +11h from the entered time).
+        ev.HnmWindowNumber = Math.Clamp(ev.HnmWindowNumber + delta, 1, HnmConfig.MaxWindow);
         await _db.SaveChangesAsync(cancellationToken);
 
         _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
@@ -834,11 +1054,42 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     // Returns a Discord modal (type 9) asking for the bid amount. custom_id
     // carries the auction item id so the submit handler knows what to bid on.
-    private IActionResult BidModal(int itemId)
+    //
+    // The label and placeholder name the DKP pool this auction draws from and how much the bidder
+    // has in it — otherwise someone in a linkshell with separate Sky and Sea wallets has no way to
+    // know which one they're spending, and finds out only when the bid is rejected.
+    private async Task<IActionResult> BidModalAsync(int itemId, string? appUserId, CancellationToken cancellationToken)
     {
         if (itemId <= 0)
         {
             return Ephemeral("That auction item isn't recognized.");
+        }
+
+        // Both default to the plain, pool-free text this modal has always shown. A linkshell with
+        // one pool never sees a difference, and if we can't resolve the caller we quietly fall back
+        // rather than block the bid.
+        var label = "Your bid (DKP)";
+        var placeholder = "e.g. 100";
+
+        var auction = await _db.AuctionItems
+            .Where(item => item.Id == itemId)
+            .Select(item => new { item.Auction!.LinkshellId, item.Auction.DkpPoolId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (auction is not null && !string.IsNullOrWhiteSpace(appUserId))
+        {
+            var map = await _dkpPools.GetMapAsync(auction.LinkshellId, cancellationToken);
+            if (map.HasMultiplePools)
+            {
+                var poolId = auction.DkpPoolId ?? map.DefaultPoolId;
+                var poolName = map.NameFor(poolId);
+                var available = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+                    _db, _dkpPoolBalances, appUserId, auction.LinkshellId, poolId, cancellationToken);
+
+                // Discord caps a text input's label at 45 chars and its placeholder at 100.
+                label = Truncate($"Your bid ({poolName} DKP)", 45);
+                placeholder = Truncate($"You have {available:0.##} {poolName} DKP available", 100);
+            }
         }
 
         return Ok(new
@@ -859,12 +1110,12 @@ public sealed class DiscordInteractionsController : ControllerBase
                             {
                                 type = 4, // text input
                                 custom_id = AuctionBidService.BidAmountFieldId,
-                                label = "Your bid (DKP)",
+                                label,
                                 style = 1, // short
                                 min_length = 1,
                                 max_length = 7,
                                 required = true,
-                                placeholder = "e.g. 100"
+                                placeholder
                             }
                         }
                     }
@@ -872,6 +1123,9 @@ public sealed class DiscordInteractionsController : ControllerBase
             }
         });
     }
+
+    private static string Truncate(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
 
     private async Task<IActionResult> HandleModalSubmitAsync(JsonElement root, CancellationToken cancellationToken)
     {
@@ -938,6 +1192,53 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await ResumeSignupFlowAsync(token, nameEventId, appUserId: null, job, cancellationToken);
         }
 
+        // Officer-only "add a new player" modal → find-or-create the named member (no Discord
+        // link — the officer is seating someone else), cache them as the add target, and show
+        // the slot picker. Re-checks the officer here since a modal submit is its own request.
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddNewModalPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddNewModalPrefix);
+            if (eventId <= 0)
+            {
+                return Ephemeral("That event isn't recognized.");
+            }
+            var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+            if (ev is null || ev.PartySetup is null)
+            {
+                return Ephemeral("That event is no longer open.");
+            }
+
+            var officerAppUserId = await _db.DiscordActivityUsers
+                .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
+                .Select(link => link.IdentityUserId!)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!await IsEventOfficerAsync(ev, officerAppUserId, cancellationToken))
+            {
+                return Ephemeral("Only officers can add members to the board.");
+            }
+
+            var name = ExtractModalValue(data, DiscordEventMessageBuilder.OfficerAddNewNameFieldId)?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return Ephemeral("Enter a character name to add.");
+            }
+
+            var addResult = await _manualMembers.FindOrCreateByNameAsync(ev.LinkshellId, name, cancellationToken);
+            if (!addResult.Success || string.IsNullOrEmpty(addResult.AppUserId))
+            {
+                return Ephemeral(addResult.Error ?? "Couldn't add that player.");
+            }
+            // Use the member's canonical name (a pre-existing match may differ in case) and
+            // carry any Discord link so a placeholder can still self-withdraw from the board.
+            var membership = await _db.AppUserLinkshells
+                .FirstOrDefaultAsync(m => m.LinkshellId == ev.LinkshellId && m.AppUserId == addResult.AppUserId, cancellationToken);
+            var targetName = membership?.CharacterName?.Trim() is { Length: > 0 } cn ? cn : name!;
+            _officerAddTargets.Set(discordUserId, eventId,
+                new OfficerAddTargetCache.Target(addResult.AppUserId!, targetName, membership?.DiscordUserId));
+
+            return await ShowOfficerAddSlotPickerAsync(ev, targetName, cancellationToken);
+        }
+
         var account = await _db.DiscordActivityUsers
             .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
             .Select(link => new
@@ -963,7 +1264,7 @@ public sealed class DiscordInteractionsController : ControllerBase
 
             var fallbackName = account.CharacterName ?? account.UserName ?? "User";
             var result = await AuctionBidService.PlaceBidAsync(
-                _db, account.IdentityUserId!, fallbackName, itemId, amount, cancellationToken);
+                _db, _dkpPools, _dkpPoolBalances, account.IdentityUserId!, fallbackName, itemId, amount, cancellationToken);
 
             return Ephemeral(result.Success
                 ? $"✅ Bid placed: {result.Amount} DKP on {result.ItemName ?? "the item"}."
@@ -1087,10 +1388,576 @@ public sealed class DiscordInteractionsController : ControllerBase
         return await UpdatedEventMessageAsync(ev.Id, cancellationToken);
     }
 
-    // "Sign Up" / "Sign Up as Party Leader" on the board → an ephemeral message with
-    // a select of the OPEN slots (per-event). The leader path restricts the picker
-    // to leaderless parties (BuildSlotPickerComponents) and routes the select through
-    // the leader claim prefix. Picking a slot runs HandlePartySlotClaimAsync.
+    // ─── Officer "Add Member" ───────────────────────────────────────────────────────────
+
+    // True when `appUserId` is a Leader/Officer of the event's linkshell. Used to gate the
+    // shared (visible-to-everyone) "Add Member" button + its follow-up steps on click.
+    private async Task<bool> IsEventOfficerAsync(Event ev, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(appUserId))
+        {
+            return false;
+        }
+        var rank = await _db.AppUserLinkshells
+            .Where(m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId)
+            .Select(m => m.Rank)
+            .FirstOrDefaultAsync(cancellationToken);
+        return LinkshellRanks.IsLeaderOrOfficer(rank);
+    }
+
+    // "➕ Add Member (officers)" → officers only: an ephemeral select of roster members who
+    // aren't already on this board, plus an "add a new player" option (opens a name modal).
+    // The select is capped at Discord's 25-option limit; rosters past that are reachable via
+    // the "add a new player" path, which find-or-creates by name (so an over-the-cap member
+    // typed exactly is matched, not duplicated).
+    private async Task<IActionResult> HandleOfficerAddStartAsync(
+        int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+        if (ev is null || ev.PartySetup is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        if (!await IsEventOfficerAsync(ev, appUserId, cancellationToken))
+        {
+            return Ephemeral("Only officers can add members to the board.");
+        }
+
+        // Exclude anyone already on the board (a slot signup or a no-slot attendance) so the
+        // list is just people who still need seating.
+        var slotUserIds = await _db.EventPartySlotSignups
+            .Where(s => s.EventId == eventId && s.AppUserId != null)
+            .Select(s => s.AppUserId!)
+            .ToListAsync(cancellationToken);
+        var attendeeUserIds = await _db.AppUserEvents
+            .Where(p => p.EventId == eventId && p.AppUserId != null)
+            .Select(p => p.AppUserId!)
+            .ToListAsync(cancellationToken);
+        var onBoard = new HashSet<string>(slotUserIds.Concat(attendeeUserIds), StringComparer.Ordinal);
+
+        var members = await _db.AppUserLinkshells
+            .Where(m => m.LinkshellId == ev.LinkshellId && m.AppUserId != null && m.CharacterName != null)
+            .Select(m => new { m.AppUserId, m.CharacterName })
+            .ToListAsync(cancellationToken);
+
+        var options = members
+            .Where(m => !onBoard.Contains(m.AppUserId!))
+            .OrderBy(m => m.CharacterName, StringComparer.OrdinalIgnoreCase)
+            .Take(24) // 25-option cap, less one reserved for "add a new player"
+            .Select(m => (object)new { label = m.CharacterName!.Trim(), value = m.AppUserId })
+            .Append((object)new { label = "➕ Add a new player…", value = DiscordEventMessageBuilder.OfficerAddNewSentinel })
+            .ToArray();
+
+        return PickerResponse(
+            EventHeading(ev.EventName, "Add a member to the board — pick who to seat:"),
+            SelectRow(DiscordEventMessageBuilder.OfficerAddMemberPickPrefix, eventId.ToString(), "Pick a member", options));
+    }
+
+    // Officer-add member picker select → either open the "add a new player" name modal, or
+    // (an existing member) cache them as the add target and show the slot picker.
+    private async Task<IActionResult> HandleOfficerAddMemberPickedAsync(
+        int eventId, string? appUserId, string? value, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+        if (ev is null || ev.PartySetup is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        if (!await IsEventOfficerAsync(ev, appUserId, cancellationToken))
+        {
+            return Ephemeral("Only officers can add members to the board.");
+        }
+        if (string.IsNullOrEmpty(_discordUserId))
+        {
+            return Ephemeral("Couldn't read your Discord account from that click.");
+        }
+
+        if (string.Equals(value, DiscordEventMessageBuilder.OfficerAddNewSentinel, StringComparison.Ordinal))
+        {
+            return OfficerAddNewModal(eventId);
+        }
+
+        var membership = string.IsNullOrEmpty(value)
+            ? null
+            : await _db.AppUserLinkshells
+                .FirstOrDefaultAsync(m => m.LinkshellId == ev.LinkshellId && m.AppUserId == value, cancellationToken);
+        if (membership?.AppUserId is null)
+        {
+            return Ephemeral("That member isn't in this linkshell anymore.");
+        }
+
+        var targetName = membership.CharacterName?.Trim() is { Length: > 0 } cn ? cn : "Member";
+        _officerAddTargets.Set(_discordUserId, eventId,
+            new OfficerAddTargetCache.Target(membership.AppUserId, targetName, membership.DiscordUserId));
+
+        return await ShowOfficerAddSlotPickerAsync(ev, targetName, cancellationToken);
+    }
+
+    // The "add a new player" modal: the officer types a character name. On submit
+    // (HandleModalSubmitAsync) it's find-or-created in the linkshell (no Discord link) and
+    // becomes the add target. A single text field — Discord modals are text-only.
+    private IActionResult OfficerAddNewModal(int eventId)
+    {
+        return Ok(new
+        {
+            type = ResponseModal,
+            data = new
+            {
+                custom_id = $"{DiscordEventMessageBuilder.OfficerAddNewModalPrefix}{eventId}",
+                title = "Add a new player",
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 1, // action row
+                        components = new object[]
+                        {
+                            new
+                            {
+                                type = 4, // text input
+                                custom_id = DiscordEventMessageBuilder.OfficerAddNewNameFieldId,
+                                label = "Character name",
+                                style = 1, // short
+                                min_length = 1,
+                                max_length = ManualMemberService.MaxCharacterNameLength,
+                                required = true,
+                                placeholder = "e.g. Millhouse",
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Ephemeral OPEN-slot picker for the officer-add flow, routed through the officer-add
+    // claim prefix so a pick seats the cached target member. `ev` must have its party-setup
+    // tree loaded.
+    private async Task<IActionResult> ShowOfficerAddSlotPickerAsync(
+        Event ev, string targetName, CancellationToken cancellationToken)
+    {
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, ev.Id, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(
+            ev.Id, ev.PartySetup!, slotSignups, asLeader: false,
+            claimPrefixOverride: DiscordEventMessageBuilder.OfficerAddSlotClaimPrefix);
+        if (picker.Length == 0)
+        {
+            return Ephemeral("Every slot is taken right now — free one up first.");
+        }
+        return PickerResponse(
+            EventHeading(ev.EventName, $"Seat {targetName} — pick a slot:"),
+            picker);
+    }
+
+    // ─── Officer "Move / Set Leader / Remove Member" ────────────────────────────────────
+    //
+    // All three share the participant picker (BuildMoveSourceComponents). The chosen
+    // member rides in the select VALUE as a source token: "s:{slotId}" (seated),
+    // "a:{appUserId}" or "d:{discordUserId}" (Also Attending). Each step re-checks the
+    // officer gate (the buttons are visible to everyone). Final actions reuse the same
+    // backend the web Activity uses.
+
+    private static bool IsValidSourceToken(string? src)
+        => src is not null && src.Length > 2
+           && (src.StartsWith("s:", StringComparison.Ordinal)
+               || src.StartsWith("a:", StringComparison.Ordinal)
+               || src.StartsWith("d:", StringComparison.Ordinal));
+
+    // Maps a source token → MoveMemberAsync's (fromSlotId, appUserId, discordUserId).
+    private static (int? FromSlotId, string? AppUserId, string? DiscordUserId) MapSource(string src)
+    {
+        var val = src.Length > 2 ? src[2..] : string.Empty;
+        if (src.StartsWith("s:", StringComparison.Ordinal))
+        {
+            return (int.TryParse(val, out var slotId) ? slotId : (int?)null, null, null);
+        }
+        if (src.StartsWith("a:", StringComparison.Ordinal)) { return (null, val, null); }
+        if (src.StartsWith("d:", StringComparison.Ordinal)) { return (null, null, val); }
+        return (null, null, null);
+    }
+
+    // Splits "{prefix}{eventId}:{kind}:{val}[:{ai}]" → (eventId, "kind:val").
+    private static (int EventId, string? Src) ParseEventAndSource(string customId, string prefix)
+    {
+        var parts = customId[prefix.Length..].Split(':');
+        var eventId = parts.Length > 0 && int.TryParse(parts[0], out var e) ? e : 0;
+        var src = parts.Length >= 3 ? $"{parts[1]}:{parts[2]}" : null;
+        return (eventId, src);
+    }
+
+    // Builds the "Also Attending" picker options (no-slot AppUserEvent rows that aren't
+    // currently seated), value-encoded as a:/d: source tokens.
+    private async Task<List<(string Label, string Value)>> LoadAttendeeSourceOptionsAsync(
+        int eventId, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, CancellationToken cancellationToken)
+    {
+        var seatedAppUsers = new HashSet<string>(
+            slotSignups.Values.Where(s => s.AppUserId != null).Select(s => s.AppUserId!), StringComparer.Ordinal);
+        var seatedDiscord = new HashSet<string>(
+            slotSignups.Values.Where(s => s.DiscordUserId != null).Select(s => s.DiscordUserId!), StringComparer.Ordinal);
+
+        var attendees = await _db.AppUserEvents
+            .AsNoTracking()
+            .Where(p => p.EventId == eventId)
+            .Select(p => new { p.AppUserId, p.DiscordUserId, p.CharacterName, p.JobType, p.JobName, p.SubJobName })
+            .ToListAsync(cancellationToken);
+
+        var options = new List<(string Label, string Value)>();
+        foreach (var a in attendees)
+        {
+            if (a.AppUserId != null && seatedAppUsers.Contains(a.AppUserId)) { continue; }
+            if (a.AppUserId == null && a.DiscordUserId != null && seatedDiscord.Contains(a.DiscordUserId)) { continue; }
+            var value = a.AppUserId != null ? $"a:{a.AppUserId}"
+                : a.DiscordUserId != null ? $"d:{a.DiscordUserId}"
+                : null;
+            if (value is null) { continue; }
+            var name = string.IsNullOrWhiteSpace(a.CharacterName) ? "Member" : a.CharacterName!.Trim();
+            var role = string.IsNullOrWhiteSpace(a.JobType) ? null : a.JobType!.Trim();
+            var job = string.IsNullOrWhiteSpace(a.JobName) ? null
+                : (string.IsNullOrWhiteSpace(a.SubJobName) ? a.JobName!.Trim() : $"{a.JobName!.Trim()}/{a.SubJobName!.Trim()}");
+            var jobs = string.Join(" - ", new[] { role, job }.Where(s => !string.IsNullOrEmpty(s)));
+            options.Add((jobs.Length > 0 ? $"{name} — {jobs}" : name, value));
+        }
+        return options;
+    }
+
+    private async Task<string?> ResolveSourceNameAsync(int eventId, string src, CancellationToken cancellationToken)
+    {
+        var val = src.Length > 2 ? src[2..] : string.Empty;
+        if (src.StartsWith("s:", StringComparison.Ordinal) && int.TryParse(val, out var slotId))
+        {
+            return await _db.EventPartySlotSignups.AsNoTracking()
+                .Where(s => s.EventId == eventId && s.PartySetupSlotId == slotId)
+                .Select(s => s.CharacterName).FirstOrDefaultAsync(cancellationToken);
+        }
+        if (src.StartsWith("a:", StringComparison.Ordinal))
+        {
+            return await _db.AppUserEvents.AsNoTracking()
+                .Where(p => p.EventId == eventId && p.AppUserId == val)
+                .Select(p => p.CharacterName).FirstOrDefaultAsync(cancellationToken);
+        }
+        if (src.StartsWith("d:", StringComparison.Ordinal))
+        {
+            return await _db.AppUserEvents.AsNoTracking()
+                .Where(p => p.EventId == eventId && p.DiscordUserId == val)
+                .Select(p => p.CharacterName).FirstOrDefaultAsync(cancellationToken);
+        }
+        return null;
+    }
+
+    // The (appUserId, discordUserId) for a source token, used for a complete removal.
+    // For a seated source we read the slot signup so BOTH identity columns are passed
+    // (a placeholder-matched slot carries an AppUserId AND a DiscordUserId). Null when
+    // the seated source row is gone.
+    private async Task<(string? AppUserId, string? DiscordUserId)?> ResolveSourceIdentityAsync(
+        int eventId, string src, CancellationToken cancellationToken)
+    {
+        var val = src.Length > 2 ? src[2..] : string.Empty;
+        if (src.StartsWith("s:", StringComparison.Ordinal) && int.TryParse(val, out var slotId))
+        {
+            var row = await _db.EventPartySlotSignups.AsNoTracking()
+                .Where(s => s.EventId == eventId && s.PartySetupSlotId == slotId)
+                .Select(s => new { s.AppUserId, s.DiscordUserId })
+                .FirstOrDefaultAsync(cancellationToken);
+            return row is null ? null : (row.AppUserId, row.DiscordUserId);
+        }
+        if (src.StartsWith("a:", StringComparison.Ordinal)) { return (val, null); }
+        if (src.StartsWith("d:", StringComparison.Ordinal)) { return (null, val); }
+        return null;
+    }
+
+    // Loads the event (with party setup) and verifies the clicker is an officer.
+    // Returns the event on success, or an ephemeral error result in `error`.
+    private async Task<Event?> LoadOfficerEventAsync(
+        int eventId, string? appUserId, string deniedMessage, CancellationToken cancellationToken,
+        Func<string, IActionResult> ephemeral, Action<IActionResult> setError)
+    {
+        if (eventId <= 0) { setError(ephemeral("That event isn't recognized.")); return null; }
+        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+        if (ev is null || ev.PartySetup is null) { setError(ephemeral("That event is no longer open.")); return null; }
+        if (!await IsEventOfficerAsync(ev, appUserId, cancellationToken)) { setError(ephemeral(deniedMessage)); return null; }
+        return ev;
+    }
+
+    // ── Move ──
+    private async Task<IActionResult> HandleMoveStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var attendees = await LoadAttendeeSourceOptionsAsync(eventId, slotSignups, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildMoveSourceComponents(
+            eventId, ev.PartySetup!, slotSignups, attendees,
+            DiscordEventMessageBuilder.MoveSourcePickPrefix, seatedOnly: false);
+        if (picker.Length == 0) { return Ephemeral("Nobody's on the board to move yet."); }
+        return PickerResponse(EventHeading(ev.EventName, "Move a member — pick who to move:"), picker);
+    }
+
+    private async Task<IActionResult> HandleMoveSourcePickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (!IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
+
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(
+            eventId, ev.PartySetup!, slotSignups, asLeader: false,
+            claimPrefixOverride: DiscordEventMessageBuilder.MoveDestClaimPrefix,
+            idSuffixOverride: $":{src}");
+
+        var rows = new List<object>(picker);
+        var seated = src!.StartsWith("s:", StringComparison.Ordinal);
+        if (seated && rows.Count < 5)
+        {
+            rows.Add(new
+            {
+                type = 1,
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 2, style = 2,
+                        label = "⬇ Bench → Also Attending",
+                        custom_id = $"{DiscordEventMessageBuilder.MoveBenchPrefix}{eventId}:{src}",
+                    },
+                },
+            });
+        }
+        if (rows.Count == 0) { return Ephemeral("Every slot is taken and there's nothing to bench."); }
+        return PickerResponse(
+            EventHeading(ev.EventName, "Pick a destination slot" + (seated ? ", or bench:" : ":")),
+            rows.ToArray());
+    }
+
+    private async Task<IActionResult> HandleMoveDestinationPickedAsync(string customId, string? appUserId, int slotId, CancellationToken cancellationToken)
+    {
+        var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.MoveDestClaimPrefix);
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (slotId <= 0 || !IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
+
+        var (fromSlotId, mAppUser, mDiscord) = MapSource(src!);
+        var result = await EventPartyBoardEditService.MoveMemberAsync(
+            _db, eventId, fromSlotId, toSlotId: slotId, mAppUser, mDiscord, cancellationToken);
+        if (!result.Success) { return WizardStep($"⚠️ {result.Error}", Array.Empty<object>()); }
+        _eventQueue.Enqueue(eventId);
+        return DismissPickerSilently();
+    }
+
+    private async Task<IActionResult> HandleMoveBenchAsync(string customId, string? appUserId, CancellationToken cancellationToken)
+    {
+        var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.MoveBenchPrefix);
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (src is null || !src.StartsWith("s:", StringComparison.Ordinal)) { return Ephemeral("Only a seated member can be benched."); }
+
+        var (fromSlotId, _, _) = MapSource(src);
+        var result = await EventPartyBoardEditService.MoveMemberAsync(
+            _db, eventId, fromSlotId, toSlotId: null, null, null, cancellationToken);
+        if (!result.Success) { return WizardStep($"⚠️ {result.Error}", Array.Empty<object>()); }
+        _eventQueue.Enqueue(eventId);
+        return DismissPickerSilently();
+    }
+
+    // ── Set Leader ──
+    private async Task<IActionResult> HandleSetLeaderStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can set the party leader.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildMoveSourceComponents(
+            eventId, ev.PartySetup!, slotSignups, Array.Empty<(string Label, string Value)>(),
+            DiscordEventMessageBuilder.SetLeaderPickPrefix, seatedOnly: true);
+        if (picker.Length == 0) { return Ephemeral("Nobody's in a slot to make leader yet."); }
+        return PickerResponse(EventHeading(ev.EventName, "Set the 👑 party leader — pick a member:"), picker);
+    }
+
+    private async Task<IActionResult> HandleSetLeaderPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can set the party leader.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (src is null || !src.StartsWith("s:", StringComparison.Ordinal)
+            || !int.TryParse(src[2..], out var slotId) || slotId <= 0)
+        {
+            return Ephemeral("That selection isn't recognized.");
+        }
+
+        var result = await EventPartySignupService.SetPartyLeaderBySlotAsync(_db, eventId, slotId, cancellationToken);
+        if (!result.Success) { return WizardStep($"⚠️ {result.Error}", Array.Empty<object>()); }
+        await _db.SaveChangesAsync(cancellationToken);
+        _eventQueue.Enqueue(eventId);
+        return DismissPickerSilently();
+    }
+
+    // ── Lock Member (stay next window) ──
+    // Officers pin a member's slot so it survives the "Next Window" wipe. Same shape as
+    // Set Leader: button → seated-member picker → the select toggles the chosen slot's lock.
+    private async Task<IActionResult> HandleOfficerLockStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can lock members.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildMoveSourceComponents(
+            eventId, ev.PartySetup!, slotSignups, Array.Empty<(string Label, string Value)>(),
+            DiscordEventMessageBuilder.OfficerLockPickPrefix, seatedOnly: true);
+        if (picker.Length == 0) { return Ephemeral("Nobody's in a slot to lock yet."); }
+        return PickerResponse(EventHeading(ev.EventName, "🔒 Lock a member for next window — pick who stays:"), picker);
+    }
+
+    private async Task<IActionResult> HandleOfficerLockPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can lock members.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (src is null || !src.StartsWith("s:", StringComparison.Ordinal)
+            || !int.TryParse(src[2..], out var slotId) || slotId <= 0)
+        {
+            return Ephemeral("That selection isn't recognized.");
+        }
+
+        var result = await EventPartySignupService.SetStayNextWindowBySlotAsync(_db, eventId, slotId, cancellationToken);
+        if (!result.Success) { return WizardStep($"⚠️ {result.Error}", Array.Empty<object>()); }
+        await _db.SaveChangesAsync(cancellationToken);
+        _eventQueue.Enqueue(eventId);
+
+        // Re-render the picker so an officer can lock/unlock several members in one sitting;
+        // the board itself (with the 🔒 marks + count) refreshes via the queue above.
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildMoveSourceComponents(
+            eventId, ev.PartySetup!, slotSignups, Array.Empty<(string Label, string Value)>(),
+            DiscordEventMessageBuilder.OfficerLockPickPrefix, seatedOnly: true);
+        if (picker.Length == 0) { return DismissPickerSilently(); }
+        var who = string.IsNullOrWhiteSpace(result.Name) ? "that member" : result.Name!.Trim();
+        var verb = result.Locked ? $"🔒 Locked **{who}** for next window" : $"🔓 Unlocked **{who}**";
+        return PickerResponse(EventHeading(ev.EventName, $"{verb} — pick another to toggle, or dismiss:"), picker);
+    }
+
+    // ── Remove Member ──
+    private async Task<IActionResult> HandleWithdrawStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can remove members from the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        var attendees = await LoadAttendeeSourceOptionsAsync(eventId, slotSignups, cancellationToken);
+        var picker = DiscordEventMessageBuilder.BuildMoveSourceComponents(
+            eventId, ev.PartySetup!, slotSignups, attendees,
+            DiscordEventMessageBuilder.WithdrawMemberPickPrefix, seatedOnly: false);
+        if (picker.Length == 0) { return Ephemeral("Nobody's on the board to remove yet."); }
+        return PickerResponse(EventHeading(ev.EventName, "Remove a member — pick who to remove:"), picker);
+    }
+
+    private async Task<IActionResult> HandleWithdrawPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    {
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can remove members from the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (!IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
+
+        var name = await ResolveSourceNameAsync(eventId, src!, cancellationToken);
+        var who = string.IsNullOrWhiteSpace(name) ? "this member" : name!.Trim();
+        var confirm = new object[]
+        {
+            new
+            {
+                type = 1,
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 2, style = 4, // danger
+                        label = "Remove from event",
+                        custom_id = $"{DiscordEventMessageBuilder.WithdrawMemberConfirmPrefix}{eventId}:{src}",
+                    },
+                },
+            },
+        };
+        return PickerResponse(
+            EventHeading(ev.EventName, $"Remove **{who}** from the event entirely? This frees their slot and drops their attendance/DKP."),
+            confirm);
+    }
+
+    private async Task<IActionResult> HandleWithdrawConfirmAsync(string customId, string? appUserId, CancellationToken cancellationToken)
+    {
+        var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.WithdrawMemberConfirmPrefix);
+        IActionResult? err = null;
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can remove members from the board.",
+            cancellationToken, Ephemeral, e => err = e);
+        if (ev is null) { return err!; }
+        if (!IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
+
+        var identity = await ResolveSourceIdentityAsync(eventId, src!, cancellationToken);
+        if (identity is null) { return WizardStep("⚠️ That member is no longer on the board.", Array.Empty<object>()); }
+        var (mAppUser, mDiscord) = identity.Value;
+        await EventPartySignupService.RemoveMemberCompletelyAsync(_db, eventId, mAppUser, mDiscord, cancellationToken);
+        _eventQueue.Enqueue(eventId);
+        return DismissPickerSilently();
+    }
+
+    // The signer a slot claim / job wizard should be attributed to. For a normal signup
+    // that's the clicker (ResolveSignupContextAsync). For an officer-add it's the cached
+    // TARGET member — the clicker (the officer) is re-verified, then their cached target is
+    // returned (keyed by the officer's Discord id + event). The target always has an
+    // AppUserId; its Discord id is carried only for placeholders (so they can still
+    // self-withdraw), which PlaceholderMatch dual-stamps onto the claim.
+    private async Task<SignupContext> ResolveSignerForClaimAsync(
+        Event ev, string? clickerAppUserId, bool officerAdd, string promptTail, CancellationToken cancellationToken)
+    {
+        if (!officerAdd)
+        {
+            return await ResolveSignupContextAsync(ev, clickerAppUserId, promptTail, cancellationToken);
+        }
+        if (!await IsEventOfficerAsync(ev, clickerAppUserId, cancellationToken))
+        {
+            return SignupContext.Stop(Ephemeral("Only officers can add members to the board."));
+        }
+        if (string.IsNullOrEmpty(_discordUserId))
+        {
+            return SignupContext.Stop(Ephemeral("Couldn't read your Discord account from that click."));
+        }
+        var target = _officerAddTargets.Peek(_discordUserId, ev.Id);
+        if (target is null)
+        {
+            return SignupContext.Stop(Ephemeral("That add-member session expired — tap **➕ Add Member** again."));
+        }
+        return string.IsNullOrEmpty(target.DiscordUserId)
+            ? SignupContext.Account(target.AppUserId, target.CharacterName)
+            : SignupContext.PlaceholderMatch(target.AppUserId, target.DiscordUserId, target.CharacterName);
+    }
+
+    // "Sign Up" / "Sign Up as Party Leader" on the board → the ephemeral drill-down:
+    // Alliance → Party → Slot, each a select that morphs the previous in place. Single-
+    // choice levels are skipped so you never pick from a list of one. The final slot pick
+    // runs HandlePartySlotClaimAsync (job wizard + claim), unchanged. The leader path
+    // restricts every level to leaderless parties.
     private async Task<IActionResult> HandlePartySlotSignUpAsync(
         int eventId, string? appUserId, bool asLeader, CancellationToken cancellationToken, bool skipQuickCombo = false)
     {
@@ -1106,7 +1973,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         // Resolve identity (and prompt the alt picker / outside-name modal if needed)
-        // before showing the slot picker — the claim itself re-resolves the same way.
+        // before showing the picker — the claim itself re-resolves the same way.
         var ctx = await ResolveSignupContextAsync(ev, appUserId, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
         if (ctx.ShouldStop)
         {
@@ -1115,32 +1982,126 @@ public sealed class DiscordInteractionsController : ControllerBase
 
         var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
 
-        // Quick sign up (regular flow): offer the member's recent job combos that
-        // have a matching open slot, so they can one-tap in. "Manual" or no
-        // available combo falls through to the full slot picker below. Outside
-        // (account-less) signups have no event history, so skip straight to the picker.
-        if (!asLeader && !skipQuickCombo && ctx.AppUserId is not null)
-        {
-            var combos = await RecentCombosAsync(ctx.AppUserId!, ev.LinkshellId, cancellationToken);
-            var available = combos.Where(c => FindBestOpenSlotForCombo(ev.PartySetup, slotSignups, c) is not null).ToList();
-            if (available.Count > 0)
-            {
-                var unavailable = combos.Where(c => !available.Contains(c)).ToList();
-                return QuickComboPicker(eventId, available, unavailable, ev.PartySetup, slotSignups, ev.EventName);
-            }
-        }
-
-        var picker = DiscordEventMessageBuilder.BuildSlotPickerComponents(eventId, ev.PartySetup, slotSignups, asLeader);
-        if (picker.Length == 0)
+        // Start the drill-down at the alliance step (skipping it when only one alliance
+        // has an opening — then the party step, likewise skipped when only one party has one).
+        var alliances = ev.PartySetup.Alliances.OrderBy(a => a.SortOrder).ToList();
+        var openAllianceIndexes = Enumerable.Range(0, alliances.Count)
+            .Where(i => AllianceHasOpening(alliances[i], slotSignups, asLeader))
+            .ToList();
+        if (openAllianceIndexes.Count == 0)
         {
             return Ephemeral(asLeader
                 ? "There's no party to lead right now — every party already has a leader (or has no open slots)."
                 : "Every slot is taken right now.");
         }
+        if (openAllianceIndexes.Count == 1)
+        {
+            return ShowPartyStep(ev, slotSignups, openAllianceIndexes[0], asLeader);
+        }
 
+        var allianceRows = DiscordEventMessageBuilder.BuildAlliancePickerComponents(eventId, ev.PartySetup, slotSignups, asLeader);
+        return PickerResponse(
+            EventHeading(ev.EventName, asLeader ? "Pick an alliance to lead in:" : "Pick an alliance:"),
+            allianceRows);
+    }
+
+    // Drill-down step 1 → 2: the member chose an alliance (value = its SortOrder index).
+    private async Task<IActionResult> HandleAlliancePickedAsync(
+        int eventId, int allianceIndex, bool asLeader, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+        if (ev is null || ev.PartySetup is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        if (allianceIndex < 0 || allianceIndex >= ev.PartySetup.Alliances.Count)
+        {
+            return Ephemeral("That alliance is no longer available.");
+        }
+        return ShowPartyStep(ev, slotSignups, allianceIndex, asLeader);
+    }
+
+    // Drill-down step 2 → 3: the member chose a party (value = party id).
+    private async Task<IActionResult> HandlePartyPickedAsync(
+        int eventId, int partyId, bool asLeader, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0 || partyId <= 0)
+        {
+            return Ephemeral("That party isn't recognized.");
+        }
+        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
+        if (ev is null || ev.PartySetup is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
+        return ShowSlotStep(ev, slotSignups, partyId, asLeader);
+    }
+
+    // Show the party picker for one alliance, or skip straight to the slot step when that
+    // alliance has just one party with an opening.
+    private IActionResult ShowPartyStep(
+        Event ev, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, int allianceIndex, bool asLeader)
+    {
+        var alliance = ev.PartySetup!.Alliances.OrderBy(a => a.SortOrder).ElementAt(allianceIndex);
+        var openParties = alliance.Parties.OrderBy(p => p.SortOrder)
+            .Where(p => PartyHasOpening(p, slotSignups, asLeader))
+            .ToList();
+        if (openParties.Count == 0)
+        {
+            // Reached only on a race (parties filled between clicks) → morph the picker to
+            // the notice in place (PickerResponse falls back to a fresh ephemeral on a
+            // board-click source, so it never edits the public board).
+            return PickerResponse(
+                asLeader ? "That alliance has no party to lead right now." : "That alliance is full right now.",
+                Array.Empty<object>());
+        }
+        if (openParties.Count == 1)
+        {
+            return ShowSlotStep(ev, slotSignups, openParties[0].Id, asLeader);
+        }
+        var rows = DiscordEventMessageBuilder.BuildPartyPickerComponents(ev.Id, ev.PartySetup, slotSignups, allianceIndex, asLeader);
+        return PickerResponse(
+            EventHeading(ev.EventName, asLeader ? "Pick a party to lead:" : "Pick a party:"),
+            rows);
+    }
+
+    // Show the open-slot picker for one party (the terminal drill-down step; picking a
+    // slot routes to the existing claim + job wizard).
+    private IActionResult ShowSlotStep(
+        Event ev, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, int partyId, bool asLeader)
+    {
+        var rows = DiscordEventMessageBuilder.BuildPartySlotPickerComponents(ev.Id, ev.PartySetup!, slotSignups, partyId, asLeader);
+        if (rows.Length == 0)
+        {
+            // Race: slots filled between clicks → morph in place (fresh ephemeral on a
+            // board-click source).
+            return PickerResponse("Every slot in that party was just taken. Tap Sign Up again to pick another.", Array.Empty<object>());
+        }
         return PickerResponse(
             EventHeading(ev.EventName, asLeader ? "Pick a slot to claim as party leader 👑:" : "Pick a slot to claim:"),
-            picker);
+            rows);
+    }
+
+    // An alliance/party still has an opening for this flow (leader: a leaderless party
+    // with an open slot; regular: any open slot).
+    private static bool AllianceHasOpening(
+        PartySetupAlliance alliance, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, bool asLeader)
+        => alliance.Parties.Any(p => PartyHasOpening(p, slotSignups, asLeader));
+
+    private static bool PartyHasOpening(
+        PartySetupParty party, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, bool asLeader)
+    {
+        if (asLeader && party.Slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader))
+        {
+            return false; // leader flow: skip parties that already have a leader
+        }
+        return party.Slots.Any(s => !slotSignups.ContainsKey(s.Id));
     }
 
     private sealed record JobCombo(string Main, string? Sub, string? Role);
@@ -1316,7 +2277,8 @@ public sealed class DiscordInteractionsController : ControllerBase
     // a role and a main job, claim immediately; otherwise open a modal to collect
     // the missing job pick(s) (the claim then happens on modal submit).
     private async Task<IActionResult> HandlePartySlotClaimAsync(
-        int eventId, int slotId, string? appUserId, bool asLeader, CancellationToken cancellationToken)
+        int eventId, int slotId, string? appUserId, bool asLeader, CancellationToken cancellationToken,
+        bool officerAdd = false)
     {
         if (eventId <= 0 || slotId <= 0)
         {
@@ -1346,14 +2308,18 @@ public sealed class DiscordInteractionsController : ControllerBase
             || string.IsNullOrWhiteSpace(slot.MainJob)
             || string.IsNullOrWhiteSpace(slot.SubJob))
         {
-            return await AdvancePartyJobWizardAsync(eventId, slotId, null, null, null, false, appUserId, asLeader, cancellationToken);
+            return await AdvancePartyJobWizardAsync(eventId, slotId, null, null, null, false, appUserId, asLeader, cancellationToken, officerAdd);
         }
 
-        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
+        var ctx = await ResolveSignerForClaimAsync(ev, appUserId, officerAdd, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
         if (ctx.ShouldStop)
         {
             return ctx.Interrupt!;
         }
+
+        // Fully-pinned slot: nudge toward an open earlier-alliance slot first (if enabled).
+        var pinnedNudge = await TryPartyFillNudgeAsync(ev, slot, null, null, null, asLeader, officerAdd, cancellationToken);
+        if (pinnedNudge is not null) { return pinnedNudge; }
 
         var result = await EventPartySignupService.ClaimSlotAsync(
             _db, eventId, slot, ctx.AppUserId, ctx.CharacterName!, null, null, null, cancellationToken, asLeader,
@@ -1372,12 +2338,123 @@ public sealed class DiscordInteractionsController : ControllerBase
         await _db.SaveChangesAsync(cancellationToken);
         // Auto-promote earliest signup if the party just filled with no leader.
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
+        if (officerAdd) { ClearOfficerAddTarget(eventId); }
 
         // The select lives on the ephemeral picker; queue the board refresh (the
         // image render runs off the 3s window) and silently dismiss the picker.
         _eventQueue.Enqueue(eventId);
         return DismissPickerSilently();
     }
+
+    // "Fill earlier alliances first" nudge: when the linkshell wants it and an open
+    // slot this member's job can fill is still free in an EARLIER alliance, returns an
+    // ephemeral prompt (Take that slot / Sign up here anyway). Null = no nudge, proceed.
+    // Bypassed for officer-add. role/main/sub are the member's resolved picks (or null
+    // to resolve from the slot's pins).
+    private async Task<IActionResult?> TryPartyFillNudgeAsync(
+        Event ev, PartySetupSlot slot, string? role, string? main, string? sub,
+        bool asLeader, bool officerAdd, CancellationToken cancellationToken)
+    {
+        if (officerAdd || ev.PartySetupId is null) { return null; }
+        var fillInOrder = await _db.Linkshells
+            .Where(l => l.Id == ev.LinkshellId)
+            .Select(l => l.FillAlliancesInOrder)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!fillInOrder) { return null; }
+
+        var jobs = PartySetupSignupService.ResolveSignupJobs(slot, role, main, sub);
+        if (!jobs.Success) { return null; }
+
+        var setup = await _db.PartySetups
+            .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
+            .FirstOrDefaultAsync(ps => ps.Id == ev.PartySetupId.Value, cancellationToken);
+        if (setup is null) { return null; }
+
+        var signups = await EventPartySignupService.GetSignupsForEventAsync(_db, ev.Id, cancellationToken);
+        var suggestion = PartyFillSuggestion.SuggestEarlierSlot(setup, signups, slot, jobs.Role, jobs.MainJob);
+        if (suggestion is null || suggestion.Id == slot.Id) { return null; }
+
+        var location = PartyFillSuggestion.DescribeSlot(setup, suggestion);
+        var requirement = PartyFillSuggestion.RequirementLabel(suggestion);
+        var spot = string.Equals(requirement, "open", StringComparison.OrdinalIgnoreCase) ? "an open spot" : $"an open {requirement} spot";
+        var l = asLeader ? "1" : "0";
+        var r = ToNudgeArg(jobs.Role);
+        var m = ToNudgeArg(jobs.MainJob);
+        var s = ToNudgeArg(jobs.SubJob);
+        var takeId = $"{DiscordEventMessageBuilder.PartyNudgeTakePrefix}{ev.Id}:{suggestion.Id}:{l}:{r}:{m}:{s}";
+        var keepId = $"{DiscordEventMessageBuilder.PartyNudgeKeepPrefix}{ev.Id}:{slot.Id}:{l}:{r}:{m}:{s}";
+        var takeLabel = $"Take {location}";
+        if (takeLabel.Length > 80) { takeLabel = takeLabel[..80]; }
+
+        return PickerResponse(
+            $"⚠️ There's still **{spot}** in **{location}**. Filling earlier alliances first keeps parties together — take that slot, or sign up where you chose.",
+            new object[]
+            {
+                new
+                {
+                    type = 1,
+                    components = new object[]
+                    {
+                        new { type = 2, style = 1, label = takeLabel, custom_id = takeId },
+                        new { type = 2, style = 2, label = "Sign up here anyway", custom_id = keepId },
+                    },
+                },
+            });
+    }
+
+    // Take/keep nudge buttons: claim the carried slot (suggested or original) with the
+    // carried resolved picks; no further nudge. Tail: {eventId}:{slotId}:{L}:{role}:{main}:{sub}.
+    private async Task<IActionResult> HandlePartyNudgeClaimAsync(string customId, string prefix, string? appUserId, CancellationToken cancellationToken)
+    {
+        var parts = customId[prefix.Length..].Split(':');
+        if (parts.Length < 6 || !int.TryParse(parts[0], out var eventId) || !int.TryParse(parts[1], out var slotId))
+        {
+            return Ephemeral("That action isn't recognized.");
+        }
+        var asLeader = parts[2] == "1";
+        var role = FromNudgeArg(parts[3]);
+        var main = FromNudgeArg(parts[4]);
+        var sub = FromNudgeArg(parts[5]);
+
+        var ev = await _db.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null || ev.PartySetupId is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        var slot = await _db.PartySetupSlots
+            .Include(s => s.Party!).ThenInclude(p => p.Alliance!)
+            .FirstOrDefaultAsync(s => s.Id == slotId, cancellationToken);
+        if (slot is null || slot.Party?.Alliance?.PartySetupId != ev.PartySetupId)
+        {
+            return Ephemeral("That slot isn't part of this event.");
+        }
+
+        var ctx = await ResolveSignerForClaimAsync(ev, appUserId, false, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
+        {
+            return ctx.Interrupt!;
+        }
+
+        var result = await EventPartySignupService.ClaimSlotAsync(
+            _db, eventId, slot, ctx.AppUserId, ctx.CharacterName!, role, main, sub, cancellationToken, asLeader,
+            discordUserId: ctx.DiscordUserId);
+        if (!result.Success)
+        {
+            return Ephemeral(result.Error ?? "Couldn't claim that slot.");
+        }
+        if (!await TryCommitSlotClaimAsync(cancellationToken))
+        {
+            return Ephemeral("That slot was just taken by another member. Pick another open slot.");
+        }
+        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
+        await _db.SaveChangesAsync(cancellationToken);
+        await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
+        _eventQueue.Enqueue(eventId);
+        return DismissPickerSilently();
+    }
+
+    private static string ToNudgeArg(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+    private static string? FromNudgeArg(string value) => value == "-" || string.IsNullOrWhiteSpace(value) ? null : value;
 
     // Drives the job-pick wizard: presents the next needed dropdown (role → main →
     // sub) as an ephemeral message update, carrying the picks made so far in the
@@ -1386,7 +2463,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // picked, or pinned by the slot).
     private async Task<IActionResult> AdvancePartyJobWizardAsync(
         int eventId, int slotId, string? role, string? main, string? sub, bool subPicked,
-        string? appUserId, bool asLeader, CancellationToken cancellationToken)
+        string? appUserId, bool asLeader, CancellationToken cancellationToken, bool officerAdd = false)
     {
         if (eventId <= 0 || slotId <= 0)
         {
@@ -1408,34 +2485,44 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         // Resolve identity once (the name was cached at the signup entry, so this
-        // won't re-prompt). Used at the final claim below.
-        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
+        // won't re-prompt). For an officer-add this is the cached TARGET member, not the
+        // clicking officer. Used at the final claim below.
+        var ctx = await ResolveSignerForClaimAsync(ev, appUserId, officerAdd, $"{(asLeader ? "slotL" : "slot")}:{eventId}", cancellationToken);
         if (ctx.ShouldStop)
         {
             return ctx.Interrupt!;
         }
 
-        // Carry the leader intent through the wizard via the leader-variant
-        // prefixes (same tail format); the normal prefixes drive the regular flow.
-        var rolePrefix = asLeader ? DiscordEventMessageBuilder.PartyWizardLeaderRolePrefix : DiscordEventMessageBuilder.PartyWizardRolePrefix;
-        var mainPrefix = asLeader ? DiscordEventMessageBuilder.PartyWizardLeaderMainPrefix : DiscordEventMessageBuilder.PartyWizardMainPrefix;
-        var subPrefix = asLeader ? DiscordEventMessageBuilder.PartyWizardLeaderSubPrefix : DiscordEventMessageBuilder.PartyWizardSubPrefix;
+        // Carry the flow's intent through the wizard via the matching prefix family (same
+        // tail format): officer-add seats the cached target, the leader variant claims as
+        // party leader, and the plain prefixes drive a normal self-signup. Officer-add never
+        // also claims leadership (asLeader is forced false on that path).
+        var rolePrefix = officerAdd ? DiscordEventMessageBuilder.OfficerAddWizardRolePrefix
+            : asLeader ? DiscordEventMessageBuilder.PartyWizardLeaderRolePrefix : DiscordEventMessageBuilder.PartyWizardRolePrefix;
+        var mainPrefix = officerAdd ? DiscordEventMessageBuilder.OfficerAddWizardMainPrefix
+            : asLeader ? DiscordEventMessageBuilder.PartyWizardLeaderMainPrefix : DiscordEventMessageBuilder.PartyWizardMainPrefix;
+        var subPrefix = officerAdd ? DiscordEventMessageBuilder.OfficerAddWizardSubPrefix
+            : asLeader ? DiscordEventMessageBuilder.PartyWizardLeaderSubPrefix : DiscordEventMessageBuilder.PartyWizardSubPrefix;
         var leaderTag = asLeader ? " (as leader 👑)" : string.Empty;
+        // Officer-add phrases the steps about the target ("Seat X" / "the main job") rather
+        // than the clicker ("Sign up" / "your main job").
+        var stepLead = officerAdd ? $"Seat {ctx.CharacterName}" : $"Sign up{leaderTag}";
+        var possessive = officerAdd ? "the" : "your";
 
         // Present the next unpinned-and-not-yet-picked field as a dropdown.
         if (string.IsNullOrWhiteSpace(slot.Role) && string.IsNullOrWhiteSpace(role))
         {
             return WizardStep(
-                EventHeading(ev.EventName, $"Sign up{leaderTag} — {DiscordEventMessageBuilder.SlotRequirement(slot)}"),
+                EventHeading(ev.EventName, $"{stepLead} — {DiscordEventMessageBuilder.SlotRequirement(slot)}"),
                 JobSelectRow(rolePrefix, $"{eventId}:{slotId}",
                     "Pick a role", EventJobCatalog.JobTypeOptions));
         }
         if (string.IsNullOrWhiteSpace(slot.MainJob) && string.IsNullOrWhiteSpace(main))
         {
             return WizardStep(
-                EventHeading(ev.EventName, "Pick your main job:"),
+                EventHeading(ev.EventName, $"Pick {possessive} main job:"),
                 JobSelectRow(mainPrefix, $"{eventId}:{slotId}:{role ?? "-"}",
-                    "Pick your main job", EventJobCatalog.MainJobOptions));
+                    $"Pick {possessive} main job", EventJobCatalog.MainJobOptions));
         }
         if (string.IsNullOrWhiteSpace(slot.SubJob) && !subPicked)
         {
@@ -1447,10 +2534,16 @@ public sealed class DiscordInteractionsController : ControllerBase
                 .Select(j => (object)new { label = j, value = j })
                 .ToArray();
             return WizardStep(
-                EventHeading(ev.EventName, "Pick your sub job:"),
+                EventHeading(ev.EventName, $"Pick {possessive} sub job:"),
                 SelectRow(subPrefix, $"{eventId}:{slotId}:{role ?? "-"}:{main ?? "-"}",
-                    "Pick your sub job", subOptions));
+                    $"Pick {possessive} sub job", subOptions));
         }
+
+        // All picks gathered → nudge toward an open earlier-alliance slot first (if enabled).
+        var wizardNudge = await TryPartyFillNudgeAsync(
+            ev, slot, NormalizeWizardValue(role), NormalizeWizardValue(main), NormalizeWizardValue(sub),
+            asLeader, officerAdd, cancellationToken);
+        if (wizardNudge is not null) { return wizardNudge; }
 
         // Everything needed is collected → claim, edit the board, confirm.
         var result = await EventPartySignupService.ClaimSlotAsync(
@@ -1470,8 +2563,16 @@ public sealed class DiscordInteractionsController : ControllerBase
         await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
         await _db.SaveChangesAsync(cancellationToken);
         await EventPartySignupService.ResolvePartyLeadershipAsync(_db, eventId, slot.PartySetupPartyId, cancellationToken);
+        if (officerAdd) { ClearOfficerAddTarget(eventId); }
         _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
         return DismissPickerSilently();
+    }
+
+    // Forget the officer's cached add target for this event (a successful seat completes the
+    // flow; a stale target would otherwise mis-route a later officer-add wizard step).
+    private void ClearOfficerAddTarget(int eventId)
+    {
+        if (!string.IsNullOrEmpty(_discordUserId)) { _officerAddTargets.Clear(_discordUserId, eventId); }
     }
 
     // Commits a pending slot claim. ClaimSlotAsync's check-then-insert is a
@@ -1637,6 +2738,134 @@ public sealed class DiscordInteractionsController : ControllerBase
         // refreshed board is the feedback.
         _eventQueue.Enqueue(eventId);
         return Ok(new { type = ResponseDeferredUpdate });
+    }
+
+    // "Make Me Party Lead" → the pressing member, already in a party slot, takes that
+    // party's leadership (👑), replacing whoever currently holds it. Like Withdraw,
+    // it's a shared board button (Discord can't gate per-user), so the handler resolves
+    // the clicker, finds their slot, and refuses with a private notice when there's
+    // nothing to do. Leadership is purely a board designation (no perms), so it's
+    // allowed before AND during a live event.
+    private async Task<IActionResult> HandleMakePartyLeaderAsync(
+        int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+
+        var ev = await _db.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null || ev.PartySetupId is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+
+        // Identity resolves the same way as Withdraw: an account signup by AppUserId, a
+        // board-only player by Discord id (no alt picker / name modal — they must
+        // already hold a slot, so their identity is already on record).
+        var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
+        if (identity is null)
+        {
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+        var (idAppUser, idDiscord) = identity.Value;
+
+        var result = await EventPartySignupService.MakePartyLeaderAsync(_db, eventId, idAppUser, idDiscord, cancellationToken);
+        if (!result.Success)
+        {
+            return Ephemeral(result.Error ?? "Couldn't make you the party leader.");
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        // Queue the board re-render (runs off the 3s window) and silently acknowledge —
+        // the moved 👑 on the refreshed board is the feedback.
+        _eventQueue.Enqueue(eventId);
+        return Ok(new { type = ResponseDeferredUpdate });
+    }
+
+    // "Make Me Alliance Lead" → the pressing member, already in a party slot, takes their
+    // whole ALLIANCE's lead (👑 by the alliance name), replacing whoever currently holds it.
+    // Mirrors HandleMakePartyLeaderAsync one rung up: shared board button (Discord can't gate
+    // per-user), so the handler resolves the clicker, finds their slot's alliance, and
+    // refuses with a private notice when there's nothing to do. Purely a board designation
+    // (no perms), so it's allowed before AND during a live event.
+    private async Task<IActionResult> HandleMakeAllianceLeaderAsync(
+        int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+
+        var ev = await _db.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null || ev.PartySetupId is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+
+        var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
+        if (identity is null)
+        {
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+        var (idAppUser, idDiscord) = identity.Value;
+
+        var result = await EventPartySignupService.MakeAllianceLeaderAsync(_db, eventId, idAppUser, idDiscord, cancellationToken);
+        if (!result.Success)
+        {
+            return Ephemeral(result.Error ?? "Couldn't make you the alliance lead.");
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        // Queue the board re-render (runs off the 3s window) and silently acknowledge —
+        // the moved 👑 on the refreshed board is the feedback.
+        _eventQueue.Enqueue(eventId);
+        return Ok(new { type = ResponseDeferredUpdate });
+    }
+
+    // "🔒 Stay Next Window" → the clicker toggles the lock on their OWN slot so it survives
+    // the officer "Next Window" wipe. Shared board button (Discord can't gate per-user), so
+    // the handler resolves the clicker (like Withdraw / Make Me Party Lead), toggles their
+    // slot, and confirms privately — the board's 🔒 marker + count is the shared feedback.
+    private async Task<IActionResult> HandleLockNextWindowAsync(
+        int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That event isn't recognized.");
+        }
+
+        var ev = await _db.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null || ev.PartySetupId is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        // The button only shows on window-cycle HNM boards, but re-check on click (a stale
+        // board could surface it, and there's nothing to "stay" for without a window advance).
+        if (!HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        {
+            return Ephemeral("This board doesn't use windows, so there's nothing to stay for.");
+        }
+
+        var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
+        if (identity is null)
+        {
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+        var (idAppUser, idDiscord) = identity.Value;
+
+        var nowLocked = await EventPartySignupService.ToggleStayNextWindowAsync(
+            _db, eventId, idAppUser, idDiscord, cancellationToken);
+        if (nowLocked is null)
+        {
+            return Ephemeral("You need to hold a slot to stay next window — sign up first.");
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        _eventQueue.Enqueue(eventId); // refresh the board so the 🔒 marker + count update
+        return Ephemeral(nowLocked.Value
+            ? "🔒 You're locked in — you'll keep your slot when an officer advances the window."
+            : "🔓 Lock removed — you'll be cleared on the next window like everyone else.");
     }
 
     // "Join (no slot)" button on the board → a NEW ephemeral wizard message (so the

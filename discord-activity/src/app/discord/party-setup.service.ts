@@ -11,7 +11,8 @@ import type {
   BoardAddSlotInput,
   BoardMoveMemberInput,
   BoardRenameInput,
-  BoardSlotRequirementInput
+  BoardSlotRequirementInput,
+  PartySignupNudge
 } from './discord-activity.types';
 
 // Discord Activity client for the raid-composition planner (Party Setup).
@@ -118,13 +119,27 @@ export class PartySetupService {
     }
   }
 
-  async signUpEvent(eventId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean> {
-    return this.mutateEventSlot(
-      eventId,
-      `/api/activity/events/${eventId}/party-slots/${slotId}/signup`,
-      input,
-      'Signed up.'
-    );
+  // Returns true on signup, false on error, or a PartySignupNudge when the server
+  // suggests an open slot in an earlier alliance (nothing committed yet).
+  async signUpEvent(eventId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean | PartySignupNudge> {
+    this.busy.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      const res = await this.http.postActivityJson<{ success?: boolean; nudge?: PartySignupNudge }>(
+        `/api/activity/events/${eventId}/party-slots/${slotId}/signup`, input);
+      if (res?.nudge) {
+        return res.nudge;
+      }
+      await this.loadEventBoard(eventId);
+      this.auth.setActionMessage('Signed up.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Signing up failed.'));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   async withdrawEvent(eventId: number, slotId: number): Promise<boolean> {
@@ -133,6 +148,17 @@ export class PartySetupService {
       `/api/activity/events/${eventId}/party-slots/${slotId}/withdraw`,
       undefined,
       'Slot released.'
+    );
+  }
+
+  // "Make Me Alliance Lead": the caller (who must already hold a slot in this
+  // event) takes their alliance's lead (👑 by the alliance name). Reloads the board.
+  async makeAllianceLead(eventId: number): Promise<boolean> {
+    return this.mutateEventSlot(
+      eventId,
+      `/api/activity/events/${eventId}/make-alliance-lead`,
+      undefined,
+      "You're now the alliance lead."
     );
   }
 

@@ -27,7 +27,20 @@
       <div class="brand-bar__mark" aria-hidden="true">L</div>
       <span class="brand-bar__name">LinkshellManager</span>
       <span class="identity-divider" aria-hidden="true">·</span>
-      <span class="identity-ls">{{ primaryLinkshellName() }}</span>
+      @if (switchableLinkshells().length > 1) {
+        <div class="identity-ls-switch">
+          <span class="identity-ls-icon" aria-hidden="true">⚔</span>
+          <select class="identity-ls-select" aria-label="Switch linkshell"
+                  [disabled]="activity.busyRefresh()"
+                  (change)="onSwitchLinkshell($any($event.target).value)">
+            @for (ls of switchableLinkshells(); track ls.id) {
+              <option [value]="ls.id" [selected]="ls.id === primaryLinkshell()?.id">{{ ls.name }}</option>
+            }
+          </select>
+        </div>
+      } @else {
+        <span class="identity-ls">{{ primaryLinkshellName() }}</span>
+      }
       @if (primaryMemberCount() > 0) {
         <span class="identity-badge">{{ primaryMemberCount() }} members</span>
       }
@@ -58,6 +71,31 @@
     </div>
   </div>
 
+  <!-- ===== Claim-your-DKP banner ===== -->
+  <!-- Imported placeholders matching this user's character name — they confirm
+       "that's me" to inherit the seeded DKP a leader imported before they joined. -->
+  @if (claimCandidates().length > 0) {
+    <section class="claim-banner" role="region" aria-label="Claim your DKP">
+      <div class="claim-banner__head">
+        <strong>We found imported DKP that looks like you.</strong>
+        <button type="button" class="claim-banner__dismiss" (click)="dismissClaim()" aria-label="Dismiss">✕</button>
+      </div>
+      <ul class="claim-banner__list">
+        @for (candidate of claimCandidates(); track candidate.placeholderAppUserId + ':' + candidate.linkshellId) {
+          <li class="claim-banner__row">
+            <span class="claim-banner__text">
+              <strong>{{ candidate.characterName }}</strong> in <strong>{{ candidate.linkshellName }}</strong>
+              · {{ candidate.currentDkp }} DKP
+            </span>
+            <button type="button" class="action-button" [disabled]="claim.busy()" (click)="onClaim(candidate)">
+              {{ claim.busy() ? 'Claiming…' : 'Claim' }}
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
   <!-- ===== Tab bar ===== -->
   <div class="tabs" role="tablist" aria-label="Activity sections" (keydown)="onTabKeydown($event)">
     @if (hasOverview()) {
@@ -84,7 +122,7 @@
                 [attr.aria-selected]="activeTab() === 'endgame'"
                 [attr.tabindex]="activeTab() === 'endgame' ? 0 : -1"
                 [class.active]="activeTab() === 'endgame'"
-                (click)="setActiveTab('endgame')">Endgame</button>
+                (click)="setActiveTab('endgame')">Charts</button>
       }
       @if (isFeatureEnabled('enableAuctions') && isDkpModeEnabled()) {
         <button type="button" class="tab" role="tab"
@@ -196,6 +234,20 @@
               [attr.tabindex]="activeTab() === 'configurations' ? 0 : -1"
               [class.active]="activeTab() === 'configurations'"
               (click)="setActiveTab('configurations')">Configurations</button>
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('permissions')"
+              [attr.aria-controls]="panelId('permissions')"
+              [attr.aria-selected]="activeTab() === 'permissions'"
+              [attr.tabindex]="activeTab() === 'permissions' ? 0 : -1"
+              [class.active]="activeTab() === 'permissions'"
+              (click)="setActiveTab('permissions')">Permissions</button>
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('addon')"
+              [attr.aria-controls]="panelId('addon')"
+              [attr.aria-selected]="activeTab() === 'addon'"
+              [attr.tabindex]="activeTab() === 'addon' ? 0 : -1"
+              [class.active]="activeTab() === 'addon'"
+              (click)="setActiveTab('addon')">Game Addon</button>
     }
   </div>
 
@@ -299,14 +351,14 @@
       <div class="section-head">
         <div>
           <div class="section-label">Content</div>
-          <div class="section-title">End Game</div>
+          <div class="section-title">Charts</div>
         </div>
       </div>
 
       <div class="coming-soon-banner">Feature Coming Soon!</div>
 
       <div class="card">
-        <div class="card-head"><div class="card-title">End Game</div></div>
+        <div class="card-head"><div class="card-title">Charts</div></div>
         <div class="list-row"><div class="list-row-left"><div class="member-name">Sky</div></div><span class="list-chevron">&rsaquo;</span></div>
         <div class="list-row"><div class="list-row-left"><div class="member-name">Sea</div></div><span class="list-chevron">&rsaquo;</span></div>
         <div class="list-row"><div class="list-row-left"><div class="member-name">HNM</div></div><span class="list-chevron">&rsaquo;</span></div>
@@ -357,9 +409,12 @@
   }
 
   <!-- ===== CONFIGURATIONS TAB ===== -->
-  @if (activeTab() === 'configurations') {
-    <div role="tabpanel" [id]="panelId('configurations')" [attr.aria-labelledby]="tabId('configurations')">
-      <app-configurations-tab />
+  <!-- Configurations, Permissions and Game Addon are three tabs backed by ONE
+       component instance (it swaps sections by [view]), so switching between them
+       keeps state and doesn't reload. -->
+  @if (activeTab() === 'configurations' || activeTab() === 'permissions' || activeTab() === 'addon') {
+    <div role="tabpanel" [id]="panelId(activeTab())" [attr.aria-labelledby]="tabId(activeTab())">
+      <app-configurations-tab [view]="activeTab()" />
     </div>
   }
 </main>

@@ -124,7 +124,8 @@ export class EventService {
         countsTowardActive: input.countsTowardActive ?? true,
         monsterName: input.monsterName ?? null,
         repeatOnTod: input.repeatOnTod ?? false,
-        repeatLeadHours: input.repeatLeadHours ?? null
+        repeatLeadHours: input.repeatLeadHours ?? null,
+        dayNumber: input.dayNumber ?? null
       });
 
       await this.auth.refreshOverview();
@@ -155,7 +156,8 @@ export class EventService {
         countsTowardActive: input.countsTowardActive ?? true,
         monsterName: input.monsterName ?? null,
         repeatOnTod: input.repeatOnTod ?? false,
-        repeatLeadHours: input.repeatLeadHours ?? null
+        repeatLeadHours: input.repeatLeadHours ?? null,
+        dayNumber: input.dayNumber ?? null
       });
 
       await this.auth.refreshOverview();

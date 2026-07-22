@@ -133,6 +133,13 @@ public class PartySetupAllianceView
     // officer drag-drop / add-party / rename can target it. 0 elsewhere (unused).
     public int AllianceId { get; set; }
     public string Name { get; set; } = string.Empty;
+
+    // The member designated this alliance's lead (👑 shown next to the alliance
+    // name), or null when nobody has claimed it. Set only via "Make me alliance
+    // lead". Per-event, mirrors PartySetupSlotView.SignedUpIsPartyLeader.
+    public string? LeadAppUserId { get; set; }
+    public string? LeadCharacterName { get; set; }
+
     public List<PartySetupPartyView> Parties { get; set; } = new();
 }
 

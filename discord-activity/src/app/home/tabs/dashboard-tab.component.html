@@ -1,6 +1,9 @@
     <div class="panel-tab fade">
       <!-- Linkshell overview stat strip -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
+        @if (dashboardLinkshell.bannerUrl) {
+          <img class="dash-banner" [src]="dashboardLinkshell.bannerUrl" alt="" />
+        }
         <div class="section-head">
           <div>
             <div class="section-label">Dashboard</div>
@@ -59,6 +62,17 @@
               <input type="text" class="form-input" name="ruleTitle" [(ngModel)]="ruleTitle" maxlength="256" required />
             </div>
             <div class="form-row">
+              <label class="form-label">Category</label>
+              <select class="form-input" name="ruleCategorySelect" [(ngModel)]="ruleCategorySelect">
+                <option value="">No category</option>
+                @for (opt of categoryOptions; track opt) { <option [value]="opt">{{ opt }}</option> }
+                <option value="__other__">Other…</option>
+              </select>
+              @if (ruleCategorySelect === '__other__') {
+                <input type="text" class="form-input" name="ruleCategoryCustom" [(ngModel)]="ruleCategoryCustom" maxlength="32" placeholder="Custom category" style="margin-top:6px" />
+              }
+            </div>
+            <div class="form-row">
               <label class="form-label">Details</label>
               <textarea class="form-input" name="ruleDetails" rows="3" [(ngModel)]="ruleDetails" maxlength="4000" required></textarea>
             </div>
@@ -74,31 +88,38 @@
         }
 
         @if (selectedDashboardRules().length > 0) {
-          <ul class="entry-list">
-            @for (rule of selectedDashboardRules(); track rule.id) {
-              <li class="entry-item">
-                <div class="entry-body">
-                  <div class="entry-title">{{ rule.title }}</div>
-                  <div class="entry-details">{{ rule.details }}</div>
-                  @if (rule.createdByCharacterName) {
-                    <div class="entry-meta">Added by {{ rule.createdByCharacterName }}</div>
+          <div class="rule-list">
+            @for (card of dashboardRuleCards(); track card.rule.id) {
+              <article class="rule-card {{ card.badge.accent }}">
+                <div class="rule-ico">{{ card.badge.icon }}</div>
+                <div class="rule-content">
+                  <h3>{{ card.rule.title }}</h3>
+                  @if (card.blocks.length === 0) {
+                    <p>{{ card.rule.details }}</p>
+                  }
+                  @for (block of card.blocks; track $index) {
+                    @if (block.isList) {
+                      <ul [class.cols]="block.items.length > 4">
+                        @for (item of block.items; track $index) { <li>{{ item }}</li> }
+                      </ul>
+                    } @else {
+                      <p>{{ block.text }}</p>
+                    }
                   }
                 </div>
-                @if (canManageSelectedDashboard()) {
-                  <div class="entry-actions">
-                    <button type="button" class="btn ghost sm" (click)="startEditRule(rule)"
-                            [disabled]="activity.busyRuleId() === rule.id">
-                      Edit
-                    </button>
-                    <button type="button" class="btn ghost sm" (click)="deleteRule(rule.id)"
-                            [disabled]="activity.busyRuleId() === rule.id">
-                      {{ activity.busyRuleId() === rule.id ? '…' : 'Delete' }}
-                    </button>
-                  </div>
-                }
-              </li>
+                <div class="rule-meta">
+                  @if (card.rule.category) { <span class="rule-tag">{{ card.rule.category }}</span> }
+                  @if (card.rule.createdByCharacterName) { <span class="rule-by">Added by {{ card.rule.createdByCharacterName }}</span> }
+                  @if (canManageSelectedDashboard()) {
+                    <div class="rule-tools">
+                      <button type="button" class="rule-iconbtn" (click)="startEditRule(card.rule)" [disabled]="activity.busyRuleId() === card.rule.id" title="Edit" aria-label="Edit rule">✎</button>
+                      <button type="button" class="rule-iconbtn danger" (click)="deleteRule(card.rule.id)" [disabled]="activity.busyRuleId() === card.rule.id" title="Delete" aria-label="Delete rule">🗑</button>
+                    </div>
+                  }
+                </div>
+              </article>
             }
-          </ul>
+          </div>
         } @else {
           <div class="empty-state empty-state--compact">
             <div class="empty-state-desc">No rules defined yet. Add rules so members know what's expected.</div>
@@ -124,6 +145,17 @@
               <input type="text" class="form-input" name="announcementTitle" [(ngModel)]="announcementTitle" maxlength="256" required />
             </div>
             <div class="form-row">
+              <label class="form-label">Category</label>
+              <select class="form-input" name="announcementCategorySelect" [(ngModel)]="announcementCategorySelect">
+                <option value="">No category</option>
+                @for (opt of categoryOptions; track opt) { <option [value]="opt">{{ opt }}</option> }
+                <option value="__other__">Other…</option>
+              </select>
+              @if (announcementCategorySelect === '__other__') {
+                <input type="text" class="form-input" name="announcementCategoryCustom" [(ngModel)]="announcementCategoryCustom" maxlength="32" placeholder="Custom category" style="margin-top:6px" />
+              }
+            </div>
+            <div class="form-row">
               <label class="form-label">Details</label>
               <textarea class="form-input" name="announcementDetails" rows="3" [(ngModel)]="announcementDetails" maxlength="4000" required></textarea>
             </div>
@@ -139,31 +171,38 @@
         }
 
         @if (selectedDashboardAnnouncements().length > 0) {
-          <ul class="entry-list">
-            @for (announcement of selectedDashboardAnnouncements(); track announcement.id) {
-              <li class="entry-item">
-                <div class="entry-body">
-                  <div class="entry-title">{{ announcement.title }}</div>
-                  <div class="entry-details">{{ announcement.details }}</div>
-                  @if (announcement.createdByCharacterName) {
-                    <div class="entry-meta">Posted by {{ announcement.createdByCharacterName }}</div>
+          <div class="rule-list">
+            @for (card of dashboardAnnouncementCards(); track card.announcement.id) {
+              <article class="rule-card {{ card.badge.accent }}">
+                <div class="rule-ico">{{ card.badge.icon }}</div>
+                <div class="rule-content">
+                  <h3>{{ card.announcement.title }}</h3>
+                  @if (card.blocks.length === 0) {
+                    <p>{{ card.announcement.details }}</p>
+                  }
+                  @for (block of card.blocks; track $index) {
+                    @if (block.isList) {
+                      <ul [class.cols]="block.items.length > 4">
+                        @for (item of block.items; track $index) { <li>{{ item }}</li> }
+                      </ul>
+                    } @else {
+                      <p>{{ block.text }}</p>
+                    }
                   }
                 </div>
-                @if (canManageSelectedDashboard()) {
-                  <div class="entry-actions">
-                    <button type="button" class="btn ghost sm" (click)="startEditAnnouncement(announcement)"
-                            [disabled]="activity.busyAnnouncementId() === announcement.id">
-                      Edit
-                    </button>
-                    <button type="button" class="btn ghost sm" (click)="deleteAnnouncement(announcement.id)"
-                            [disabled]="activity.busyAnnouncementId() === announcement.id">
-                      {{ activity.busyAnnouncementId() === announcement.id ? '…' : 'Delete' }}
-                    </button>
-                  </div>
-                }
-              </li>
+                <div class="rule-meta">
+                  @if (card.announcement.category) { <span class="rule-tag">{{ card.announcement.category }}</span> }
+                  @if (card.announcement.createdByCharacterName) { <span class="rule-by">Posted by {{ card.announcement.createdByCharacterName }}</span> }
+                  @if (canManageSelectedDashboard()) {
+                    <div class="rule-tools">
+                      <button type="button" class="rule-iconbtn" (click)="startEditAnnouncement(card.announcement)" [disabled]="activity.busyAnnouncementId() === card.announcement.id" title="Edit" aria-label="Edit announcement">✎</button>
+                      <button type="button" class="rule-iconbtn danger" (click)="deleteAnnouncement(card.announcement.id)" [disabled]="activity.busyAnnouncementId() === card.announcement.id" title="Delete" aria-label="Delete announcement">🗑</button>
+                    </div>
+                  }
+                </div>
+              </article>
             }
-          </ul>
+          </div>
         } @else {
           <div class="empty-state empty-state--compact">
             <div class="empty-state-desc">No announcements yet. Create one to share news with your linkshell.</div>
@@ -191,8 +230,10 @@
                 [(ngModel)]="dashboardRosterSearch"
                 name="dashboardRosterSearch" />
               <!--
-                App Sync filter: limits the roster to app-linked members only.
-                Active/Inactive status is displayed, but never used to filter.
+                App Sync filter: limits the roster to members who have actually
+                opened/synced the Discord Activity (member.hasSyncedActivity) — not
+                merely account-linked (outside-sign-up-board members get an account
+                without opening the Activity). Status is shown but never filtered on.
               -->
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
                 <input
@@ -202,7 +243,7 @@
                 App Sync
               </label>
             </div>
-            <div class="ac-roster">
+            <div class="ac-roster ac-roster--scroll">
               <div class="ac-roster-head">
                 <div></div>
                 <div>Character</div>
@@ -210,11 +251,16 @@
                 <div class="ac-roster-dkp-head">DKP</div>
                 <div>Status</div>
               </div>
-              @for (member of pagedDashboardMembers(); track member.id) {
+              @for (member of filteredDashboardMembers(); track member.id) {
                 <div class="ac-roster-row">
                   <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
                   <div class="ac-roster-name-cell">
-                    <div class="ac-roster-name">{{ member.characterName }}</div>
+                    <div class="ac-roster-name">
+                      {{ member.characterName }}
+                      @if (member.hasSyncedActivity) {
+                        <span class="ac-roster-synced" title="Has opened and synced the Discord Activity">App</span>
+                      }
+                    </div>
                     @if (formatAlts(member.altCharacterName1, member.altCharacterName2); as alts) {
                       @if (alts) {
                         <div class="ac-roster-name-sub">Alts: {{ alts }}</div>
@@ -230,16 +276,6 @@
                 <div class="ac-roster-row"><div style="grid-column: 1 / -1; color: var(--fg-3); font-size: 12px;">No members matched your search.</div></div>
               }
             </div>
-            @if (rosterTotalPages() > 1) {
-              <div class="table-paginator">
-                <button type="button" class="btn sm" [disabled]="rosterCurrentPage() <= 1" (click)="rosterPrev()">Prev</button>
-                <span class="muted" style="font-size:12px">
-                  Page {{ rosterCurrentPage() }} of {{ rosterTotalPages() }}
-                  &middot; {{ filteredDashboardMembers().length }} member{{ filteredDashboardMembers().length === 1 ? '' : 's' }}
-                </span>
-                <button type="button" class="btn sm" [disabled]="rosterCurrentPage() >= rosterTotalPages()" (click)="rosterNext()">Next</button>
-              </div>
-            }
           } @else {
             <div class="empty-state empty-state--compact">
               <div class="empty-state-desc">No members in this linkshell yet.</div>

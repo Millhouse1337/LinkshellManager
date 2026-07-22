@@ -119,6 +119,22 @@
                 <span asp-validation-for="WinningDkpSpent" class="text-danger"></span>
                 <span class="muted" style="font-size:11px">@dkpHint</span>
             </div>
+
+            @* Manual/ToD loot has a monster, not an event type, so its pool can't be derived. Defaults
+               to whichever pool HNM maps to. Hidden entirely on a single-pool linkshell. *@
+            @if (Model.HasMultiplePools && !isLootCouncil)
+            {
+                <div class="field">
+                    <label asp-for="DkpPoolId">DKP pool</label>
+                    <select asp-for="DkpPoolId" class="form-control">
+                        @foreach (var pool in Model.DkpPools)
+                        {
+                            <option value="@pool.Id" selected="@(Model.DkpPoolId == pool.Id)">@pool.Name</option>
+                        }
+                    </select>
+                    <span class="muted" style="font-size:11px">Which pool this DKP comes out of. Refunds go back to the same one.</span>
+                </div>
+            }
         </div>
 
         <div style="margin-top:16px;display:flex;gap:8px">

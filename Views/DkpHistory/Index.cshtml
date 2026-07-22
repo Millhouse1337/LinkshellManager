@@ -65,6 +65,48 @@
                             </div>
                         }
                     </div>
+
+                    @* Two DIFFERENT numbers, deliberately kept apart:
+                       "Spendable now" is a wallet balance (earned − spent), which is what loot and
+                       bids actually draw on. "Earned (lifetime)" is a provenance breakdown and never
+                       goes down. They coincide only until the member spends something — showing them
+                       under one heading would invite exactly that confusion. *@
+                    @if (Model.HasMultiplePools)
+                    {
+                        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+                            <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-bottom:8px">Spendable now</div>
+                            <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+                                @foreach (var pool in Model.PoolBalances)
+                                {
+                                    <div style="display:flex;justify-content:space-between;gap:12px">
+                                        <span style="color:var(--fg-3)">@pool.Name</span>
+                                        <span class="num" style="font-weight:600;@(pool.Balance < 0 ? "color:var(--danger,#ff6b6b)" : "")">@pool.Balance.ToString("0.##")</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (Model.EarnedByEventType.Count > 0)
+                    {
+                        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+                            <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-bottom:4px">Earned (lifetime)</div>
+                            <div style="font-size:11px;color:var(--fg-4);margin-bottom:8px">
+                                What each event type has earned them. This never goes down — it isn't a balance.
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                @foreach (var earned in Model.EarnedByEventType)
+                                {
+                                    var chipTitle = earned.PoolName is null
+                                        ? $"{earned.Earned:0.##} DKP earned from {earned.EventType} events"
+                                        : $"{earned.Earned:0.##} DKP earned from {earned.EventType} events — earns into the {earned.PoolName} pool";
+                                    <span class="tag" style="font-size:11px;font-weight:400" title="@chipTitle">
+                                        @earned.EventType <strong>@earned.Earned.ToString("0.##")</strong>@(earned.PoolName is null ? "" : $" · {earned.PoolName}")
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -134,7 +176,15 @@
                                     }
                                 </td>
                                 <td>
-                                    <div style="font-weight:500">@(entry.EventName ?? "Unknown event")</div>
+                                    <div style="font-weight:500">
+                                        @(entry.EventName ?? "Unknown event")
+                                        @* Which wallet this row landed in. Only shown when the linkshell
+                                           has more than one, so nothing changes for everyone else. *@
+                                        @if (Model.HasMultiplePools && entry.DkpPoolName is not null)
+                                        {
+                                            <span class="tag" style="font-size:10px;font-weight:400">@entry.DkpPoolName</span>
+                                        }
+                                    </div>
                                     <div style="color:var(--fg-4);font-size:11px">
                                         @(entry.EventType ?? "Event") · @(entry.EventLocation ?? "—")
                                     </div>

@@ -1,14 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { DkpSheetService } from '../../discord/dkp-sheet.service';
-import type { ActivityDkpSheetTab } from '../../discord/discord-activity.types';
+import type { ActivityDkpSheetMember, ActivityDkpSheetPool } from '../../discord/discord-activity.types';
 
-// Read-only viewer for the linkshell's synced Google Sheet: a tab strip + a
-// search box + the active tab's table. Main tab pins column A narrow (mirrors
-// the web viewer). Not-connected/error states render in place.
+// Always-on DKP sheet for the Activity: summary cards + a filterable member
+// table, computed from the app's own DKP (no Google connection). Mirrors the
+// web DKP Sheet page.
 @Component({
   selector: 'app-dkp-sheet-tab',
   imports: [CommonModule, FormsModule],
@@ -20,7 +20,6 @@ export class DkpSheetTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly dkpSheet = inject(DkpSheetService);
 
-  protected readonly activeTabName = signal<string | null>(null);
   protected readonly searchTerm = signal('');
 
   constructor() {
@@ -38,28 +37,15 @@ export class DkpSheetTabComponent {
     return this.dkpSheet.data();
   }
 
-  // Resolved active tab: the selected one, else the first (so the view has a
-  // tab to show before the user clicks). Highlighting uses activeTab()?.name.
-  protected activeTab(): ActivityDkpSheetTab | null {
-    const tabs = this.data()?.tabs ?? [];
-    const name = this.activeTabName();
-    return tabs.find(tab => tab.name === name) ?? tabs[0] ?? null;
-  }
-
-  protected selectTab(name: string): void {
-    this.activeTabName.set(name);
-  }
-
-  protected filteredRows() {
-    const tab = this.activeTab();
-    if (!tab) return [];
+  protected readonly filteredMembers = computed<ActivityDkpSheetMember[]>(() => {
+    const members = this.dkpSheet.data()?.members ?? [];
     const term = this.searchTerm().trim().toLowerCase();
-    if (!term) return tab.rows;
-    return tab.rows.filter(row => row.searchText.includes(term));
-  }
+    if (!term) return members;
+    return members.filter(m =>
+      `${m.name} ${m.alt1} ${m.alt2}`.toLowerCase().includes(term));
+  });
 
-  protected async openInSheets(): Promise<void> {
-    const url = this.data()?.openInSheetsUrl;
-    if (url) await this.activity.openExternalLink(url);
-  }
+  // Empty unless the linkshell has more than one DKP pool, in which case the table grows a
+  // spendable-balance column per pool between the alts and Current DKP.
+  protected readonly pools = computed<ActivityDkpSheetPool[]>(() => this.dkpSheet.data()?.pools ?? []);
 }

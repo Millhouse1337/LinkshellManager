@@ -31,6 +31,16 @@ public class Auction
     [DataType(DataType.DateTime)]
     public DateTime? StartedAt { get; set; }
 
+    // The DKP pool bids are drawn from, chosen by the officer at create time. An auction has
+    // no event type of its own, so unlike event loot this can't be derived — it has to be
+    // picked. Null = the linkshell's default pool. Locked once a bid exists (a bidder
+    // validated against one pool's balance must not be debited from another), and copied to
+    // AuctionHistory.DkpPoolId at close because this row is deleted there.
+    public int? DkpPoolId { get; set; }
+
+    [ForeignKey(nameof(DkpPoolId))]
+    public DkpPool? DkpPool { get; set; }
+
     // Discord channel id of the per-auction channel created (when the
     // linkshell has bot config). Null if not created. Carried into
     // AuctionHistory on close so the channel can be cleaned up.

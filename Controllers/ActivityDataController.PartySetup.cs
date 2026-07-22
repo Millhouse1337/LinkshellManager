@@ -71,7 +71,12 @@ public sealed partial class ActivityDataController
     public sealed record ActivityPartySetupAllianceDto(
         int AllianceId,
         string Name,
-        IReadOnlyList<ActivityPartySetupPartyDto> Parties);
+        IReadOnlyList<ActivityPartySetupPartyDto> Parties,
+        // The member designated this alliance's lead (👑 by the alliance name) for this
+        // event, or null. Only populated on the live event board (the standalone template
+        // view has no per-event signups). Set via "Make Me Alliance Lead".
+        string? LeadAppUserId = null,
+        string? LeadCharacterName = null);
 
     public sealed record ActivityPartySetupDetailDto(
         int Id,
@@ -93,7 +98,7 @@ public sealed partial class ActivityDataController
         string? SubJob,
         string? AppUserId = null);
 
-    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false, string? CharacterName = null);
+    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false, string? CharacterName = null, bool Force = false);
 
     [HttpGet("party-setups")]
     public async Task<IActionResult> GetPartySetupsAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)

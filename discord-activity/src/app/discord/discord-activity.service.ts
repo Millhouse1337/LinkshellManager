@@ -26,6 +26,7 @@ import type {
   ActivityCreateLinkshellInput,
   ActivityCreateTodInput,
   ActivityChannelRouteInput,
+  ActivityDkpPoolInput,
   ActivityChannelRoutesResponse,
   ActivityDkpHistory,
   ActivityDkpRoundingIncrement,
@@ -40,6 +41,7 @@ import type {
   ActivityItemInput,
   ActivityGuildOption,
   ActivityJobRatingCommentSummary,
+  ActivityJobRatingOverall,
   ActivityJobRatingsResponse,
   ActivityJobsRoster,
   ActivityLinkshellRolePermissionsInput,
@@ -68,6 +70,11 @@ export type {
   ActivityAddEventMemberInput,
   ActivityAnnouncement,
   ActivityAttendanceWindow,
+  ActivityDkpPool,
+  ActivityDkpPoolEventType,
+  ActivityDkpPoolInput,
+  ActivityDkpPoolPreview,
+  ActivityDkpPoolsResponse,
   ActivityAttendanceWindowAttendee,
   ActivityAuction,
   ActivityAuctionBid,
@@ -178,6 +185,7 @@ export class DiscordActivityService {
   readonly busyMemberId = this.linkshellService.busyMemberId;
   readonly busyRoles = this.linkshellService.busyRoles;
   readonly busyDiscordChannels = this.linkshellService.busyDiscordChannels;
+  readonly busyDkpPools = this.linkshellService.busyDkpPools;
   readonly linkshellDetail = this.linkshellService.linkshellDetail;
   readonly linkshellDetailBusy = this.linkshellService.linkshellDetailBusy;
   readonly inviteSearchResults = this.inviteService.inviteSearchResults;
@@ -626,6 +634,46 @@ export class DiscordActivityService {
     }).format(date);
   }
 
+  // Date only (no time), in the viewer's timezone. Used for date-group headers.
+  formatDate(value?: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: this.viewerTimeZone(),
+      dateStyle: 'medium'
+    }).format(date);
+  }
+
+  // Stable viewer-local calendar-day key ("YYYY-MM-DD") for grouping entries by
+  // date. Built from formatToParts so the grouping matches what formatDate shows.
+  localDayKey(value?: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: this.viewerTimeZone(),
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes): string =>
+      parts.find(part => part.type === type)?.value ?? '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+
   // Same as formatDateTime but renders seconds. Used for ToD displays
   // (TIME OF DEATH / REPOP STARTS) where the addon now captures down to
   // the second and the user wants the precision to round-trip.
@@ -715,7 +763,7 @@ export class DiscordActivityService {
   // --- TodService ---
   createTod(input: ActivityCreateTodInput): Promise<void> { return this.todService.createTod(input); }
   updateTod(input: ActivityUpdateTodInput): Promise<void> { return this.todService.updateTod(input); }
-  postBoardTod(eventId: number, fields: { timeLocal: string; cooldown: string | null; interval: string | null; dayNumber: number | null; claim: boolean | null }): Promise<void> { return this.todService.postBoardTod(eventId, fields); }
+  postBoardTod(eventId: number, fields: { timeLocal: string; cooldown: string | null; interval: string | null; dayNumber: number | null; claim: boolean | null; hq: boolean; additionalSeconds: number }): Promise<void> { return this.todService.postBoardTod(eventId, fields); }
   deleteTod(todId: number): Promise<void> { return this.todService.deleteTod(todId); }
   uploadTodImage(file: File): Promise<string | null> { return this.todService.uploadTodImage(file); }
 
@@ -793,7 +841,7 @@ export class DiscordActivityService {
   loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
   clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
-  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null; eventBoardTheme?: string | null; outsidePartySignupEnabled?: boolean | null; hnmOutsideSignupEnabled?: boolean | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
+  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null; eventBoardTheme?: string | null; outsidePartySignupEnabled?: boolean | null; fillAlliancesInOrder?: boolean | null; hnmOutsideSignupEnabled?: boolean | null; useComponentsV2Boards?: boolean | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
   loadEligibleGuilds(): Promise<ActivityGuildOption[]> { return this.linkshellService.loadEligibleGuilds(); }
   setLinkshellGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.setLinkshellGuild(linkshellId, guildId, guildName); }
@@ -802,6 +850,11 @@ export class DiscordActivityService {
   setDiscussionChannel(linkshellId: number, channelId: string | null): Promise<boolean> { return this.linkshellService.setDiscussionChannel(linkshellId, channelId); }
   loadDiscordChannels(linkshellId: number, refresh = false): Promise<ActivityChannelRoutesResponse | null> { return this.linkshellService.loadDiscordChannels(linkshellId, refresh); }
   saveDiscordChannels(linkshellId: number, routes: ActivityChannelRouteInput[]): Promise<boolean> { return this.linkshellService.saveDiscordChannels(linkshellId, routes); }
+  loadDkpPools(linkshellId: number) { return this.linkshellService.loadDkpPools(linkshellId); }
+  previewDkpPools(linkshellId: number, pools: ActivityDkpPoolInput[]) { return this.linkshellService.previewDkpPools(linkshellId, pools); }
+  saveDkpPools(linkshellId: number, pools: ActivityDkpPoolInput[]) { return this.linkshellService.saveDkpPools(linkshellId, pools); }
+  uploadLinkshellBanner(linkshellId: number, dataUrl: string): Promise<boolean> { return this.linkshellService.uploadBanner(linkshellId, dataUrl); }
+  removeLinkshellBanner(linkshellId: number): Promise<boolean> { return this.linkshellService.removeBanner(linkshellId); }
   // Discord guild id the Activity is launched in (null on web). Drives the
   // "lock to this server" config card.
   currentGuildId(): string | null { return this.auth.discordGuildId(); }
@@ -815,6 +868,7 @@ export class DiscordActivityService {
   rateJob(linkshellId: number, targetAppUserId: string, jobIndex: number, gear: number, skill: number, hasRelic: boolean, slot = 0, relicNames: string[] = []): Promise<boolean> { return this.linkshellService.rateJob(linkshellId, targetAppUserId, jobIndex, gear, skill, hasRelic, slot, relicNames); }
   rateJobComment(linkshellId: number, targetAppUserId: string, comment: string, slot = 0): Promise<boolean> { return this.linkshellService.rateJobComment(linkshellId, targetAppUserId, comment, slot); }
   loadJobRatingCommentSummary(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingCommentSummary | null> { return this.linkshellService.loadJobRatingCommentSummary(linkshellId, targetAppUserId, slot); }
+  loadJobRatingOverall(linkshellId: number, targetAppUserId: string): Promise<ActivityJobRatingOverall | null> { return this.linkshellService.loadJobRatingOverall(linkshellId, targetAppUserId); }
   loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> { return this.linkshellService.loadLinkshellRoles(linkshellId); }
   loadJobsRoster(linkshellId: number): Promise<ActivityJobsRoster | null> { return this.linkshellService.loadJobsRoster(linkshellId); }
   createLinkshellRole(linkshellId: number, input: ActivityLinkshellRolePermissionsInput): Promise<boolean> { return this.linkshellService.createLinkshellRole(linkshellId, input); }
@@ -869,15 +923,17 @@ export class DiscordActivityService {
   }
 
   // --- LinkshellContentService (rules / announcements / items / revenue) ---
-  createRule(linkshellId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.createRule(linkshellId, title, details); }
-  updateRule(ruleId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.updateRule(ruleId, title, details); }
+  createRule(linkshellId: number, title: string, details: string, category: string | null): Promise<void> { return this.linkshellContentService.createRule(linkshellId, title, details, category); }
+  updateRule(ruleId: number, title: string, details: string, category: string | null): Promise<void> { return this.linkshellContentService.updateRule(ruleId, title, details, category); }
   deleteRule(ruleId: number): Promise<void> { return this.linkshellContentService.deleteRule(ruleId); }
-  createAnnouncement(linkshellId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.createAnnouncement(linkshellId, title, details); }
-  updateAnnouncement(announcementId: number, title: string, details: string): Promise<void> { return this.linkshellContentService.updateAnnouncement(announcementId, title, details); }
+  createAnnouncement(linkshellId: number, title: string, details: string, category: string | null): Promise<void> { return this.linkshellContentService.createAnnouncement(linkshellId, title, details, category); }
+  updateAnnouncement(announcementId: number, title: string, details: string, category: string | null): Promise<void> { return this.linkshellContentService.updateAnnouncement(announcementId, title, details, category); }
   deleteAnnouncement(announcementId: number): Promise<void> { return this.linkshellContentService.deleteAnnouncement(announcementId); }
   createItem(linkshellId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.createItem(linkshellId, input); }
   updateItem(itemId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.updateItem(itemId, input); }
   deleteItem(itemId: number): Promise<void> { return this.linkshellContentService.deleteItem(itemId); }
+  markItemSold(itemId: number, salePrice: number): Promise<void> { return this.linkshellContentService.markItemSold(itemId, salePrice); }
+  unsellItem(itemId: number): Promise<void> { return this.linkshellContentService.unsellItem(itemId); }
   createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.createRevenueEntry(linkshellId, input); }
   updateRevenueEntry(entryId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.updateRevenueEntry(entryId, input); }
   deleteRevenueEntry(entryId: number): Promise<void> { return this.linkshellContentService.deleteRevenueEntry(entryId); }

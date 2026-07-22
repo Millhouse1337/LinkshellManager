@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, inject, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateTodInput,
@@ -12,6 +12,7 @@ import {
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
+  HNM_COMBINED_FROM_DAY,
   LONG_WINDOW_TOD_MONSTERS,
   TOD_COOLDOWN_OPTIONS,
   TOD_INTERVAL_OPTIONS,
@@ -33,6 +34,7 @@ import {
 })
 export class TodFormComponent {
   protected readonly activity = inject(DiscordActivityService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   // The form is rendered inside a native <dialog> opened with showModal() so it floats
   // above whichever tab embeds it. Always present in the DOM (shown on demand) so the
@@ -46,6 +48,8 @@ export class TodFormComponent {
     linkshellId: 0,
     monsterName: TOD_MONSTER_OPTIONS[0],
     dayNumber: null,
+    hq: false,
+    additionalSeconds: 0,
     claim: true,
     timeLocal: '',
     cooldown: '22 Hour',
@@ -70,6 +74,10 @@ export class TodFormComponent {
   protected boardMode = false;
   protected boardEventId: number | null = null;
   protected boardMonsterDisplay = '';
+  // The board's day number (from the event). Shown read-only next to the locked
+  // monster, and it gates the HQ toggle: a merge pair's stronger "HQ" monster only
+  // appears on day 4+, so on days 1–3 there is no HQ to record and the toggle hides.
+  protected boardDayNumber: number | null = null;
 
   // ----- Public API -----
 
@@ -78,6 +86,7 @@ export class TodFormComponent {
   public openCreate(linkshellId: number, prefillMonster?: string | null): void {
     this.boardMode = false;
     this.boardEventId = null;
+    this.boardDayNumber = null;
     this.editingTodId = null;
     this.resetTodDraft(linkshellId);
     const monster = (prefillMonster ?? '').trim();
@@ -98,9 +107,10 @@ export class TodFormComponent {
   // Open the form to log a ToD for an HNM signup board (the card's "Post ToD" button).
   // The monster is locked to the board's monster; screenshot/loot are hidden. boardEventId
   // ties the ToD to the event so submit can drive the board (handled server-side).
-  public openForBoard(linkshellId: number, monster: string, eventId: number): void {
+  public openForBoard(linkshellId: number, monster: string, eventId: number, dayNumber: number | null = null): void {
     this.boardMode = true;
     this.boardEventId = eventId;
+    this.boardDayNumber = dayNumber;
     this.editingTodId = null;
     this.resetTodDraft(linkshellId);
     const m = (monster ?? '').trim();
@@ -119,23 +129,43 @@ export class TodFormComponent {
   // Open the board form pre-filled with the board's existing ToD (the card's "Edit ToD"
   // button). Submitting re-posts to the same board endpoint, which updates both the ToD and
   // the event's StartTime.
-  public openEditForBoard(tod: any, eventId: number, monster: string): void {
+  public openEditForBoard(tod: any, eventId: number, monster: string, dayNumber: number | null = null): void {
     this.boardMode = true;
     this.boardEventId = eventId;
+    this.boardDayNumber = dayNumber;
     this.boardMonsterDisplay = (monster ?? '').trim();
     this.beginEditTod(tod);
+    // Days 1–3 have no HQ variant, so never carry a stale HQ=true into the form.
+    if (!this.hqOptionVisible()) {
+      this.todDraft.hq = false;
+    }
   }
 
   // Open the form to edit an existing ToD (used by the ToDs tab's per-row Edit buttons).
   public openEdit(tod: any): void {
     this.boardMode = false;
     this.boardEventId = null;
+    this.boardDayNumber = null;
     this.beginEditTod(tod);
+  }
+
+  // HQ is only meaningful on day 4+ (the merge pair's stronger monster). On a board
+  // whose day number is 1–3 there is no HQ to log, so the toggle is hidden. When the
+  // day is unknown (null) we keep the toggle available.
+  protected hqOptionVisible(): boolean {
+    return !(this.boardDayNumber != null && this.boardDayNumber < HNM_COMBINED_FROM_DAY);
   }
 
   // ----- Dialog open/close -----
 
   private openLogTodDialog(): void {
+    // The public open*() methods are invoked imperatively by a parent (via viewChild),
+    // which does NOT mark this OnPush component dirty. Without this the view keeps the
+    // stale pre-open state — e.g. boardMode still false, so the Monster <select> (default
+    // "Adamantoise") renders instead of the read-only board input — until an unrelated
+    // event inside the form forces a check. markForCheck() makes the new state render the
+    // moment the dialog appears.
+    this.cdr.markForCheck();
     // Defer one tick so the dialog element is laid out before showModal().
     setTimeout(() => {
       const dialog = this.logTodDialog()?.nativeElement;
@@ -323,7 +353,18 @@ export class TodFormComponent {
       return;
     }
     todLocalTime.setHours(todLocalTime.getHours() + cooldownHours);
+    // Fine repop offset: add the "Additional seconds" the officer entered.
+    const extraSeconds = Math.max(0, Math.floor(Number(this.todDraft.additionalSeconds) || 0));
+    if (extraSeconds > 0) {
+      todLocalTime.setSeconds(todLocalTime.getSeconds() + extraSeconds);
+    }
     this.todRepopLocalValue = toDateTimeLocalValue(todLocalTime);
+  }
+
+  // The "Additional seconds" input changed → normalize + recompute the repop preview.
+  protected onTodAdditionalSecondsChange(value: number | null): void {
+    this.todDraft.additionalSeconds = Math.max(0, Math.floor(Number(value) || 0));
+    this.updateTodRepopTime();
   }
 
   protected todRepopSummary(): string {
@@ -378,7 +419,9 @@ export class TodFormComponent {
         cooldown: cooldown ?? null,
         interval: interval ?? null,
         dayNumber: dayNumber ?? null,
-        claim: this.todDraft.claim ?? null
+        claim: this.todDraft.claim ?? null,
+        hq: this.todDraft.hq,
+        additionalSeconds: this.todDraft.additionalSeconds
       });
       this.closeLogTodDialog();
     } catch {
@@ -455,6 +498,8 @@ export class TodFormComponent {
           todId: this.editingTodId,
           monsterName,
           dayNumber,
+          hq: this.todDraft.hq,
+          additionalSeconds: this.todDraft.additionalSeconds,
           claim: this.todDraft.claim,
           timeLocal: this.todDraft.timeLocal,
           cooldown,
@@ -468,6 +513,8 @@ export class TodFormComponent {
           linkshellId,
           monsterName,
           dayNumber,
+          hq: this.todDraft.hq,
+          additionalSeconds: this.todDraft.additionalSeconds,
           claim: this.todDraft.claim,
           timeLocal: this.todDraft.timeLocal,
           cooldown,
@@ -490,6 +537,8 @@ export class TodFormComponent {
     this.editingTodId = tod.id;
     this.todDraft.linkshellId = linkshellId;
     this.todDraft.dayNumber = tod.dayNumber ?? null;
+    this.todDraft.hq = !!tod.hq;
+    this.todDraft.additionalSeconds = tod.additionalSeconds ?? 0;
     this.todDraft.claim = !!tod.claim;
     this.todClaimChoice = tod.claim ? 'Yes' : 'No';
     this.todDayNumberNotSpecified = tod.dayNumber == null;
@@ -552,6 +601,8 @@ export class TodFormComponent {
     this.todDraft.linkshellId = linkshellId;
     this.todDraft.monsterName = TOD_MONSTER_OPTIONS[0];
     this.todDraft.dayNumber = null;
+    this.todDraft.hq = false;
+    this.todDraft.additionalSeconds = 0;
     this.todDraft.claim = true;
     this.todDraft.timeLocal = '';
     this.todDraft.cooldown = '22 Hour';

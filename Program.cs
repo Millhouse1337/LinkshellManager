@@ -191,9 +191,6 @@ builder.Services.AddOptions<DiscordOAuthOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-builder.Services.AddOptions<GoogleSheetsOptions>()
-    .Bind(builder.Configuration.GetSection("GoogleSheets"));
-
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<DiscordIdentityService>();
 builder.Services.AddScoped<InviteCandidateService>();
@@ -209,6 +206,7 @@ builder.Services.AddScoped<EventHistoryEditService>();
 builder.Services.AddScoped<EventCommentService>();
 builder.Services.AddSingleton<AiCommentSummaryService>();
 builder.Services.AddSingleton<SignupCharacterChoiceCache>();
+builder.Services.AddSingleton<OfficerAddTargetCache>();
 builder.Services.AddScoped<TodImageUploadService>();
 builder.Services.AddScoped<SubmissionApprovalService>();
 // Data Protection guards the encrypted Google refresh tokens, auth cookies and
@@ -229,13 +227,30 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeyRingPath))
     Directory.CreateDirectory(dataProtectionKeyRingPath);
     dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath));
 }
-builder.Services.AddSingleton<GoogleSheetsSyncService>();
-builder.Services.AddScoped<GoogleOAuthService>();
-builder.Services.AddScoped<DkpTemplateSheetService>();
-// Live DKP template sync (push-only): a SaveChanges hook enqueues affected
-// linkshells; the hosted service debounces + re-exports the "LSM DKP" tab.
-builder.Services.AddSingleton<SheetTemplateSyncQueue>();
-builder.Services.AddHostedService<SheetTemplateSyncBackgroundService>();
+builder.Services.AddScoped<DkpSheetService>();
+// DKP pools: a per-linkshell partition of event types into named wallets. The resolver answers
+// "which pool does this event type pay into", the balance service DERIVES per-pool balances from
+// the ledger (nothing is stored), and DkpLedgerWriter is the single choke-point every DKP
+// mutation goes through so the balance and the ledger can never disagree.
+builder.Services.AddScoped<DkpPoolProvisioner>();
+builder.Services.AddScoped<DkpPoolResolver>();
+builder.Services.AddScoped<DkpPoolBalanceService>();
+builder.Services.AddScoped<DkpLedgerWriter>();
+// Shared save logic for the pools config (Activity + web), and the catalog of event types an
+// officer can assign — including the free-text ones their own events actually used.
+builder.Services.AddScoped<DkpPoolEventTypeCatalog>();
+builder.Services.AddScoped<DkpPoolEditor>();
+// DKP import (Excel/CSV → update existing members + create placeholders) and the
+// first-launch "claim your DKP" merge that links an imported placeholder to a
+// real account.
+builder.Services.AddScoped<DkpImportService>();
+builder.Services.AddScoped<PlaceholderClaimService>();
+// Live DKP sheet → Discord channel (full table + .xlsx, edit-in-place): a
+// SaveChanges hook enqueues linkshells whose DKP changed; the hosted service
+// debounces + refreshes the channel post. No-ops when no DKP channel is set.
+builder.Services.AddSingleton<DkpSheetPostQueue>();
+builder.Services.AddScoped<DiscordDkpSheetPublisher>();
+builder.Services.AddHostedService<DkpSheetPostBackgroundService>();
 builder.Services.AddMemoryCache();
 
 // Liveness has no checks (process up = healthy); readiness verifies the database

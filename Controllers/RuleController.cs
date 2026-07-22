@@ -41,6 +41,7 @@ public class RuleController : Controller
                     LinkshellName = r.LinkshellName,
                     RuleTitle = r.RuleTitle,
                     RuleDetails = r.RuleDetails,
+                    Category = r.Category,
                     CreatedByCharacterName = r.CreatedByCharacterName,
                     CreatedAt = r.CreatedAt,
                     CanManage = canManage
@@ -109,6 +110,7 @@ public class RuleController : Controller
             LinkshellName = selectedLinkshell.LinkshellName,
             RuleTitle = model.RuleTitle.Trim(),
             RuleDetails = model.RuleDetails.Trim(),
+            Category = string.IsNullOrWhiteSpace(model.Category) ? null : model.Category.Trim(),
             CreatedByAppUserId = user.Id,
             CreatedByCharacterName = membership?.CharacterName ?? user.CharacterName,
             CreatedAt = DateTime.UtcNow
@@ -138,6 +140,7 @@ public class RuleController : Controller
             LinkshellName = rule.LinkshellName,
             RuleTitle = rule.RuleTitle,
             RuleDetails = rule.RuleDetails,
+            Category = rule.Category,
             CreatedByCharacterName = rule.CreatedByCharacterName,
             CreatedAt = rule.CreatedAt,
             CanManage = true
@@ -167,6 +170,7 @@ public class RuleController : Controller
 
         rule.RuleTitle = model.RuleTitle.Trim();
         rule.RuleDetails = model.RuleDetails.Trim();
+        rule.Category = string.IsNullOrWhiteSpace(model.Category) ? null : model.Category.Trim();
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }

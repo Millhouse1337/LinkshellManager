@@ -101,6 +101,77 @@ public sealed class ManualMemberService
         return new CreateResult(true, null, placeholder.Id);
     }
 
+    // Officer-initiated path (the Discord board's "Add Member"): find-or-create a roster
+    // member by MAIN name with NO Discord link — the officer is seating someone else, so we
+    // must not attach the officer's Discord id. Matches an existing member of that name
+    // (synced OR unsynced) and otherwise creates an unsynced placeholder so the AppUserId-
+    // keyed DKP / history system can track them. Unlike FindOrCreateForOutsideAsync this
+    // never rejects a synced match — the officer legitimately wants to seat a real member
+    // who simply didn't sign up themselves.
+    public Task<CreateResult> FindOrCreateByNameAsync(
+        int linkshellId, string? mainName, CancellationToken cancellationToken)
+        => FindOrCreateByNameAsync(linkshellId, mainName, null, null, cancellationToken);
+
+    // Overload that also carries optional alt names — used by the DKP import (a migrating
+    // linkshell's sheet has Alt 1 / Alt 2 columns). On a name match, fills only alts that
+    // are currently empty (never clobbers existing data); on create, seeds them.
+    public async Task<CreateResult> FindOrCreateByNameAsync(
+        int linkshellId, string? mainName, string? alt1, string? alt2, CancellationToken cancellationToken)
+    {
+        var main = (mainName ?? string.Empty).Trim();
+        if (main.Length == 0)
+        {
+            return new CreateResult(false, "Enter a character name to add.", null);
+        }
+        if (main.Length > MaxCharacterNameLength) { main = main[..MaxCharacterNameLength]; }
+        var a1 = Truncate(alt1);
+        var a2 = Truncate(alt2);
+
+        var members = await _context.AppUserLinkshells
+            .Include(m => m.AppUser)
+            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null && m.AppUserId != null)
+            .ToListAsync(cancellationToken);
+        var match = members.FirstOrDefault(m =>
+            string.Equals(m.CharacterName!.Trim(), main, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+        {
+            if (match.AppUser is not null)
+            {
+                if (!string.IsNullOrEmpty(a1) && string.IsNullOrWhiteSpace(match.AppUser.AltCharacterName1)) { match.AppUser.AltCharacterName1 = a1; }
+                if (!string.IsNullOrEmpty(a2) && string.IsNullOrWhiteSpace(match.AppUser.AltCharacterName2)) { match.AppUser.AltCharacterName2 = a2; }
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            return new CreateResult(true, null, match.AppUserId);
+        }
+
+        var placeholder = new AppUser
+        {
+            UserName = $"placeholder-{Guid.NewGuid():N}",
+            CharacterName = main,
+            AltCharacterName1 = a1,
+            AltCharacterName2 = a2,
+            IsPlaceholder = true,
+        };
+        var createResult = await _userManager.CreateAsync(placeholder);
+        if (!createResult.Succeeded)
+        {
+            return new CreateResult(false, string.Join("; ", createResult.Errors.Select(e => e.Description)), null);
+        }
+
+        _context.AppUserLinkshells.Add(new AppUserLinkshell
+        {
+            AppUserId = placeholder.Id,
+            LinkshellId = linkshellId,
+            LinkshellDkp = 0,
+            DateJoined = DateTime.UtcNow,
+            CharacterName = main,
+            Rank = LinkshellRanks.Member,
+            Status = "Active",
+        });
+        await _context.SaveChangesAsync(cancellationToken);
+        return new CreateResult(true, null, placeholder.Id);
+    }
+
     private static string? Truncate(string? value)
     {
         var trimmed = (value ?? string.Empty).Trim();

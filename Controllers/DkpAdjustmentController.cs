@@ -15,15 +15,21 @@ public class DkpAdjustmentController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
 
     public DkpAdjustmentController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        WindowEventDkpLedgerService windowEventDkpLedger)
+        WindowEventDkpLedgerService windowEventDkpLedger,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools)
     {
         _context = context;
         _userManager = userManager;
         _windowEventDkpLedger = windowEventDkpLedger;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
     }
 
     public async Task<IActionResult> Index(int? linkshellId)
@@ -78,6 +84,12 @@ public class DkpAdjustmentController : Controller
             })
             .ToList();
 
+        var poolMap = await _dkpPools.GetMapAsync(selectedLinkshellId, HttpContext.RequestAborted);
+        viewModel.DefaultPoolId = poolMap.DefaultPoolId;
+        viewModel.Pools = poolMap.Pools
+            .Select(pool => new DkpAdjustmentPoolOption { Id = pool.Id, Name = pool.Name })
+            .ToList();
+
         return View(viewModel);
     }
 
@@ -100,20 +112,24 @@ public class DkpAdjustmentController : Controller
             .FirstOrDefaultAsync(link => link.Id == input.MembershipId && link.LinkshellId == input.LinkshellId);
         if (membership is null) return NotFound();
 
-        membership.LinkshellDkp = (membership.LinkshellDkp ?? 0) + input.Amount;
+        // An adjustment has no event type to follow, so the officer picks the pool. PINNED —
+        // remapping event types must never move a manual correction. Defaults to the default pool,
+        // which is where everything lives for a linkshell that hasn't partitioned its event types.
+        var map = await _dkpPools.GetMapAsync(input.LinkshellId, HttpContext.RequestAborted);
+        var poolId = input.DkpPoolId is int chosen && map.Pools.Any(pool => pool.Id == chosen)
+            ? chosen
+            : map.DefaultPoolId;
 
-        var ledgerEntry = new DkpLedgerEntry
-        {
-            AppUserId = membership.AppUserId,
-            LinkshellId = membership.LinkshellId,
-            EntryType = "Adjustment",
-            Amount = input.Amount,
-            Sequence = 1,
-            OccurredAt = DateTime.UtcNow,
-            CharacterName = membership.CharacterName,
-            Details = input.Reason.Trim()
-        };
-        _context.DkpLedgerEntries.Add(ledgerEntry);
+        await _dkpLedger.AppendAsync(
+            membership,
+            "Adjustment",
+            input.Amount,
+            DateTime.UtcNow,
+            DkpPoolRef.Pinned(poolId),
+            new DkpEntryContext(
+                CharacterName: membership.CharacterName,
+                Details: input.Reason.Trim()),
+            HttpContext.RequestAborted);
 
         await _context.SaveChangesAsync();
         TempData["DkpAdjustmentSuccess"] = $"Adjusted {membership.CharacterName}'s DKP by {input.Amount:+0.##;-0.##;0}.";

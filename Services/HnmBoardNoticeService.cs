@@ -22,7 +22,10 @@ public sealed class HnmBoardNoticeService
     // Edits the event's posted board message to the defeated note. No-op (returns false) if
     // the event was never posted to Discord (no channel configured). Reads the repop time
     // from ev.StartTime and the re-post time from ev.HnmRepostAt, so callers set those first.
-    public async Task<bool> PostDefeatedNoticeAsync(Event ev, CancellationToken cancellationToken)
+    // useComponentsV2 mirrors the board's posted mode: a V2 board can't be edited with a
+    // classic payload (Discord forbids dropping the V2 flag on edit), so the note is sent as
+    // a V2 message too when the board was posted that way.
+    public async Task<bool> PostDefeatedNoticeAsync(Event ev, bool useComponentsV2, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(ev.DiscordChannelId) || string.IsNullOrWhiteSpace(ev.DiscordMessageId))
         {
@@ -50,25 +53,31 @@ public sealed class HnmBoardNoticeService
             description.Append($"\n\nThe sign-up board will automatically re-post in this channel <t:{repost}:R>.");
         }
 
-        var payload = new
-        {
-            content = string.Empty,
-            embeds = new[]
+        var title = $"💀 {monster} defeated";
+        object payload = useComponentsV2
+            ? DiscordEventMessageBuilder.BuildV2DefeatedNoticeMessage(title, description.ToString())
+            : new
             {
-                new
+                content = string.Empty,
+                embeds = new[]
                 {
-                    title = $"💀 {monster} defeated",
-                    description = description.ToString(),
-                    color = 0x6B7280
-                }
-            },
-            // Empty arrays REPLACE the existing buttons + board image (Discord keeps fields
-            // that are omitted, so they must be sent explicitly to clear them).
-            components = Array.Empty<object>(),
-            attachments = Array.Empty<object>()
-        };
+                    new
+                    {
+                        title,
+                        description = description.ToString(),
+                        color = 0x6B7280
+                    }
+                },
+                // Empty arrays REPLACE the existing buttons + board image (Discord keeps fields
+                // that are omitted, so they must be sent explicitly to clear them).
+                components = Array.Empty<object>(),
+                attachments = Array.Empty<object>()
+            };
 
-        var ok = await _bot.EditMessageAsync(ev.DiscordChannelId!, ev.DiscordMessageId!, payload, cancellationToken);
+        // Intentionally collapses the 3-way result to success/not — this is a one-shot
+        // "defeated" edit, not a kept-alive board, so transient vs gone are treated the same.
+        var ok = await _bot.EditMessageAsync(ev.DiscordChannelId!, ev.DiscordMessageId!, payload, cancellationToken)
+            == DiscordEditResult.Edited;
         if (!ok)
         {
             _logger.LogWarning(

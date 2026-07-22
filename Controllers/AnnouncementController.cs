@@ -41,6 +41,7 @@ public class AnnouncementController : Controller
                     LinkshellName = a.LinkshellName,
                     AnnouncementTitle = a.AnnouncementTitle,
                     AnnouncementDetails = a.AnnouncementDetails,
+                    Category = a.Category,
                     CreatedByCharacterName = a.CreatedByCharacterName,
                     CreatedAt = a.CreatedAt,
                     CanManage = canManage
@@ -109,6 +110,7 @@ public class AnnouncementController : Controller
             LinkshellName = selectedLinkshell.LinkshellName,
             AnnouncementTitle = model.AnnouncementTitle.Trim(),
             AnnouncementDetails = model.AnnouncementDetails.Trim(),
+            Category = string.IsNullOrWhiteSpace(model.Category) ? null : model.Category.Trim(),
             CreatedByAppUserId = user.Id,
             CreatedByCharacterName = membership?.CharacterName ?? user.CharacterName,
             CreatedAt = DateTime.UtcNow
@@ -138,6 +140,7 @@ public class AnnouncementController : Controller
             LinkshellName = announcement.LinkshellName,
             AnnouncementTitle = announcement.AnnouncementTitle,
             AnnouncementDetails = announcement.AnnouncementDetails,
+            Category = announcement.Category,
             CreatedByCharacterName = announcement.CreatedByCharacterName,
             CreatedAt = announcement.CreatedAt,
             CanManage = true
@@ -167,6 +170,7 @@ public class AnnouncementController : Controller
 
         announcement.AnnouncementTitle = model.AnnouncementTitle.Trim();
         announcement.AnnouncementDetails = model.AnnouncementDetails.Trim();
+        announcement.Category = string.IsNullOrWhiteSpace(model.Category) ? null : model.Category.Trim();
         await _context.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
     }

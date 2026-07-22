@@ -162,6 +162,9 @@
                    by setting ViewData["BodyClass"] = "" (used by the few pages
                    with their own full-bleed bespoke styling). *@
                 <div class="content @(ViewData["BodyClass"] as string ?? "lsm-page")">
+                    @* "Claim your DKP" banner — populated by dkp-claim.js when an
+                       imported placeholder matches this user's character name. *@
+                    <div id="dkp-claim-mount"></div>
                     @RenderBody()
                 </div>
             </div>
@@ -178,6 +181,10 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="~/js/sidebar.js" asp-append-version="true"></script>
+    @if (isSignedIn)
+    {
+        <script src="~/js/dkp-claim.js" asp-append-version="true"></script>
+    }
     <partial name="_ValidationScriptsPartial" />
     @await RenderSectionAsync("Scripts", required: false)
 </body>

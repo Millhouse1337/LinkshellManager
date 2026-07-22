@@ -28,6 +28,24 @@ public class DkpLedgerEntry
 
     public double Amount { get; set; }
 
+    // The DKP pool (wallet) this amount belongs to. Null means "the linkshell's default
+    // pool" — that's the state of every row written before pools existed, and of every row
+    // in a linkshell that never customized its pools, so it never needs backfilling.
+    //
+    // Intentionally NOT a foreign key, matching SourceTodLootDetailId / SourceEventLootDetailId
+    // below: the ledger is immutable history and must survive whatever happens to the rows it
+    // points at.
+    public int? DkpPoolId { get; set; }
+
+    // False (the default): DkpPoolId is a CACHE of "which pool does EventType map to right
+    // now", and DkpPoolEditor re-stamps it whenever an officer remaps event types. True: the
+    // pool was an explicit officer/system choice (an auction's pool, ToD loot, an adjustment,
+    // an import) and a remap must never move it.
+    //
+    // Stored rather than inferred from EntryType because "LootSpent" is genuinely ambiguous —
+    // it's written both by event close (derived from the event's type) and by ToD loot (pinned).
+    public bool DkpPoolPinned { get; set; }
+
     public int Sequence { get; set; }
 
     public DateTime OccurredAt { get; set; }

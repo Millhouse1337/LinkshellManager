@@ -85,13 +85,13 @@ public class ManageTeamController : Controller
                 && (ul.Status == null || ul.Status == "Active"));
         }
 
-        // Keep the single Status current before listing members: the attendance
-        // rule auto-drives Active/Inactive (no-op when tracking is off). This also
-        // backfills linkshells whose events closed before auto-status existed.
-        await _memberActivity.ApplyComputedStatusAsync(targetId, HttpContext.RequestAborted);
-
-        // Current credit / absent streaks per member (consecutive most-recent
-        // counting events) for the roster's "Active credit" + "Absent streak" columns.
+        // Active/Inactive status is deliberately NOT recomputed here. A GET must not
+        // mutate data, and re-deriving + persisting Status on every page load is what
+        // made this web roster disagree with the Discord Activity (which simply shows
+        // the stored Status). Status is kept current at the authoritative WRITE moments
+        // instead — event close, event-history edits, and threshold/enable changes
+        // (see the other ApplyComputedStatusAsync callers) — so both surfaces now read
+        // the same value. The two streak columns below are computed live (read-only).
         ViewBag.MemberStreaks = await _memberActivity.ComputeStreaksByAppUserAsync(targetId, HttpContext.RequestAborted);
 
         // Biddable DKP per member (committed − bid locks − pending live-event loot spend),
@@ -327,7 +327,8 @@ public class ManageTeamController : Controller
         {
             Entry = entry,
             LinkshellId = member.LinkshellId,
-            LinkshellName = member.Linkshell?.LinkshellName
+            LinkshellName = member.Linkshell?.LinkshellName,
+            TargetAppUserId = member.AppUserId
         });
     }
 

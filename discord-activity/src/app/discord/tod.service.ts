@@ -28,6 +28,8 @@ export class TodService {
         linkshellId: input.linkshellId,
         monsterName: input.monsterName,
         dayNumber: input.dayNumber ?? null,
+        hq: input.hq,
+        additionalSeconds: input.additionalSeconds,
         claim: input.claim,
         timeLocal: input.timeLocal,
         cooldown: input.cooldown || null,
@@ -61,6 +63,8 @@ export class TodService {
       await this.http.postActivityAction(`/api/activity/tods/${input.todId}/update`, {
         monsterName: input.monsterName,
         dayNumber: input.dayNumber ?? null,
+        hq: input.hq,
+        additionalSeconds: input.additionalSeconds,
         claim: input.claim,
         timeLocal: input.timeLocal,
         cooldown: input.cooldown || null,
@@ -92,6 +96,8 @@ export class TodService {
     interval: string | null;
     dayNumber: number | null;
     claim: boolean | null;
+    hq: boolean;
+    additionalSeconds: number;
   }): Promise<void> {
     this.busyTodSave.set(true);
     this.auth.setActionError(null);
@@ -103,7 +109,9 @@ export class TodService {
         cooldown: fields.cooldown || null,
         interval: fields.interval || null,
         dayNumber: fields.dayNumber ?? null,
-        claim: fields.claim
+        claim: fields.claim,
+        hq: fields.hq,
+        additionalSeconds: fields.additionalSeconds
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Time of Death posted — the board re-posts automatically before the next pop.');

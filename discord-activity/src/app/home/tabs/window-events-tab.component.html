@@ -14,11 +14,15 @@
   </header>
 
   <!-- Instructions block: mirrors the web view's "diamond + monospace chip"
-       crystal-themed callout so leaders/officers see how snapshots flow in. -->
-  <section class="card instructions-card">
-    <div class="card-head">
+       crystal-themed callout so leaders/officers see how snapshots flow in.
+       Collapsed by default (native <details>) to keep the tab compact. -->
+  <details class="card instructions-card">
+    <summary class="card-head instructions-summary">
       <div class="card-title"><span class="we-crystal" aria-hidden="true"></span> Instructions</div>
-    </div>
+      <span class="we-snapshot__caret" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
+      </span>
+    </summary>
     <div class="instructions-body">
       <div class="instruction-line">
         <code>/lsm now &lt;Monster Name&gt;</code>
@@ -32,7 +36,7 @@
         <span>Closed events move to <strong class="hl-gold">Attendance History</strong>.</span>
       </div>
     </div>
-  </section>
+  </details>
 
   @if (data(); as model) {
     @if (model.unlinkedSnapshots.length > 0) {

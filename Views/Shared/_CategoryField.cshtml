@@ -1,0 +1,39 @@
+@model string
+@{
+    // Category picker: a preset dropdown + an "Other…" choice that reveals a free-text
+    // box. The real posted field is the hidden-until-needed <input name="Category">;
+    // the <select> is just a UI helper (no name, so it isn't submitted). Shared by the
+    // Rule + Announcement create/edit forms (both bind a "Category" property).
+    var current = (Model ?? string.Empty).Trim();
+}
+<div class="field" style="grid-column:1/-1">
+    <label for="categoryCustom">Category</label>
+    <select id="categorySelect" class="form-select" aria-label="Category">
+        <option value="">No category</option>
+        @foreach (var opt in LinkshellManagerDiscordApp.Utils.RuleContent.CategoryOptions)
+        {
+            <option value="@opt">@opt</option>
+        }
+        <option value="__other__">Other…</option>
+    </select>
+    <input type="text" id="categoryCustom" name="Category" class="form-control" maxlength="32"
+           value="@current" placeholder="Custom category" style="margin-top:8px;display:none" />
+    <span class="text-danger" data-valmsg-for="Category" data-valmsg-replace="true"></span>
+</div>
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var sel = document.getElementById('categorySelect');
+        var custom = document.getElementById('categoryCustom');
+        if (!sel || !custom) { return; }
+        var presets = Array.prototype.slice.call(sel.options).map(function (o) { return o.value; });
+        function show(on) { custom.style.display = on ? '' : 'none'; }
+        var cur = (custom.value || '').trim();
+        if (!cur) { sel.value = ''; show(false); }
+        else if (presets.indexOf(cur) >= 0 && cur !== '__other__' && cur !== '') { sel.value = cur; show(false); }
+        else { sel.value = '__other__'; show(true); }
+        sel.addEventListener('change', function () {
+            if (sel.value === '__other__') { custom.value = ''; show(true); custom.focus(); }
+            else { custom.value = sel.value; show(false); }
+        });
+    })();
+</script>

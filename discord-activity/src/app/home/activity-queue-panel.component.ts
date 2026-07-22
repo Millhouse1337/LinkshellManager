@@ -19,14 +19,16 @@ import {
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
+import { combinedMonsterOptions } from './activity-home.types';
 import { PartySetupService } from '../discord/party-setup.service';
 import type { ActivityPartySetupListRow } from '../discord/discord-activity.types';
+import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';
 import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
 import { TodFormComponent } from './tabs/tod-form.component';
 
 @Component({
   selector: 'app-activity-queue-panel',
-  imports: [CommonModule, FormsModule, PartySetupPanelComponent, TodFormComponent],
+  imports: [CommonModule, FormsModule, PartySetupPanelComponent, PartySetupEditorComponent, TodFormComponent],
   templateUrl: './activity-queue-panel.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -41,6 +43,10 @@ export class ActivityQueuePanelComponent {
   // Shared Log ToD form (the same component the ToDs tab uses). The "Post ToD" button
   // on an HNM board opens it pre-filled with the event's monster.
   private readonly todForm = viewChild<TodFormComponent>('todForm');
+  // Shared party-setup editor (the same dialog the Party Setup tab uses). The
+  // "Create New Party Setup" button in the create-event form opens it; on save we
+  // auto-select the fresh setup in the linked-setup dropdown.
+  private readonly partySetupEditor = viewChild<PartySetupEditorComponent>('partySetupEditor');
   protected editingEventId: number | null = null;
   protected isEditingLiveEvent = false;
   // The event's party setup as it was when the edit form opened. Used to detect
@@ -70,7 +76,8 @@ export class ActivityQueuePanelComponent {
     countsTowardActive: true,
     monsterName: null,
     repeatOnTod: false,
-    repeatLeadHours: 1
+    repeatLeadHours: 1,
+    dayNumber: null
   };
 
   // Free-text monster name when "Other" is picked in the HNM monster dropdown.
@@ -187,11 +194,12 @@ export class ActivityQueuePanelComponent {
     return (this.createModel.eventType ?? '').trim().toUpperCase() === 'HNM';
   }
 
-  // The 16 canonical monsters (from the party-setup list payload) + the "Other"
-  // sentinel, which reveals a free-text field.
+  // The canonical monsters (from the party-setup list payload) + the "Other" sentinel.
+  // The three merge pairs are always shown as ONE combined "Base/Stronger" entry; the Day
+  // input only changes what the sign-up board prints (server-side), not this list.
   protected monsterOptions(): string[] {
-    const list = this.partySetups.list()?.monsterOptions ?? [];
-    return [...list, 'Other'];
+    const raw = this.partySetups.list()?.monsterOptions ?? [];
+    return [...combinedMonsterOptions(raw), 'Other'];
   }
 
   // Native-select change handler for the monster dropdown. Driven by the option's
@@ -206,10 +214,17 @@ export class ActivityQueuePanelComponent {
     return (this.createModel.monsterName ?? '') === 'Other';
   }
 
-  // Repeat-on-ToD needs an exact Tod.MonsterName match, so it's disabled for the
-  // free-text "Other" monster.
+  // Repeat-on-ToD keys on an exact (case-insensitive) Tod.MonsterName match. For a
+  // custom "Other" monster that's the typed name, so it's allowed once a non-empty
+  // name is entered; while the box is still empty there's nothing to match on.
   protected canRepeatOnTod(): boolean {
-    return this.isHnmSelected() && !this.isOtherMonsterSelected();
+    if (!this.isHnmSelected()) {
+      return false;
+    }
+    if (this.isOtherMonsterSelected()) {
+      return this.customMonsterName.trim().length > 0;
+    }
+    return true;
   }
 
   protected onPartySetupNotSpecifiedChange(checked: boolean): void {
@@ -217,6 +232,22 @@ export class ActivityQueuePanelComponent {
     if (checked) {
       this.createModel.partySetupId = null;
     }
+  }
+
+  // Open the shared party-setup editor to build a new setup without leaving the
+  // create-event form (same dialog the Party Setup tab uses).
+  protected openCreatePartySetup(): void {
+    this.partySetupEditor()?.openForCreate();
+  }
+
+  // The editor emitted a saved setup id. Its create() already reloaded the list
+  // (so availablePartySetups() now includes it) — just select it and make sure the
+  // dropdown is showing (Party Setup = Yes). OnPush: markForCheck so the newly
+  // selected value + preview render immediately.
+  protected onPartySetupCreated(setupId: number): void {
+    this.partySetupNotSpecified = false;
+    this.createModel.partySetupId = setupId;
+    this.cdr.markForCheck();
   }
 
   protected onEndTimeNotSpecifiedChange(checked: boolean): void {
@@ -392,18 +423,20 @@ export class ActivityQueuePanelComponent {
     partySetupAssignedMonsterName?: string | null;
     hnmAwaitingRepost?: boolean;
     sourceTodId?: number | null;
+    dayNumber?: number | null;
   }): void {
     const monster = event.assignedMonsterName ?? event.partySetupAssignedMonsterName ?? null;
+    const dayNumber = event.dayNumber ?? null;
     // Already defeated/awaiting re-post → "Edit ToD": pre-fill the board's logged ToD.
     if (event.hnmAwaitingRepost && event.sourceTodId != null) {
       const tod = (this.activity.overview()?.recentTods ?? []).find(t => t.id === event.sourceTodId);
       if (tod) {
-        this.todForm()?.openEditForBoard(tod, event.id, monster ?? '');
+        this.todForm()?.openEditForBoard(tod, event.id, monster ?? '', dayNumber);
         return;
       }
     }
     if (monster) {
-      this.todForm()?.openForBoard(event.linkshellId, monster, event.id);
+      this.todForm()?.openForBoard(event.linkshellId, monster, event.id, dayNumber);
     } else {
       this.todForm()?.openCreate(event.linkshellId, null);
     }
@@ -427,6 +460,19 @@ export class ActivityQueuePanelComponent {
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
     }
+    this.showEditDialog();
+  }
+
+  // Show the shared create/edit form as a native modal <dialog>. Deferred so Angular
+  // has rendered the <dialog> (from the @if (isCreateOpen) branch) before showModal()
+  // runs — the viewChild would otherwise still resolve to undefined.
+  private showEditDialog(): void {
+    setTimeout(() => {
+      const dialog = this.editDialog()?.nativeElement;
+      if (dialog && !dialog.open) {
+        dialog.showModal();
+      }
+    });
   }
 
   // Display name for the read-only Linkshell field, resolved from the model's
@@ -535,6 +581,7 @@ export class ActivityQueuePanelComponent {
     autoStart?: boolean;
     countsTowardActive?: boolean;
     assignedMonsterName?: string | null;
+    dayNumber?: number | null;
     repeatOnTod?: boolean;
     repeatLeadHours?: number | null;
   }): void {
@@ -568,6 +615,7 @@ export class ActivityQueuePanelComponent {
     // HNM repeat-board fields so editing preserves the monster + repeat-on-ToD + lead time.
     this.createModel.monsterName = event.assignedMonsterName ?? null;
     this.customMonsterName = '';
+    this.createModel.dayNumber = event.dayNumber ?? null;
     this.createModel.repeatOnTod = !!event.repeatOnTod;
     this.setRepeatLeadFromHours(event.repeatLeadHours);
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
@@ -581,17 +629,7 @@ export class ActivityQueuePanelComponent {
     // method through a viewChild — Angular's OnPush check for the queue panel
     // wouldn't otherwise run on this synchronous mutation.
     this.cdr.markForCheck();
-    if (this.isEditingLiveEvent) {
-      // Defer showModal() until Angular has rendered the <dialog> element from
-      // the @if branch above — otherwise the viewChild signal still resolves
-      // to undefined.
-      setTimeout(() => {
-        const dialog = this.editDialog()?.nativeElement;
-        if (dialog && !dialog.open) {
-          dialog.showModal();
-        }
-      });
-    }
+    this.showEditDialog();
   }
 
   // Two-stage inline confirmation for cancelling a queued event.
@@ -639,6 +677,7 @@ export class ActivityQueuePanelComponent {
     this.createModel.monsterName = null;
     this.createModel.repeatOnTod = false;
     this.createModel.repeatLeadHours = 1;
+    this.createModel.dayNumber = null;
     this.repeatLeadH = 1;
     this.repeatLeadM = 0;
     this.repeatLeadS = 0;

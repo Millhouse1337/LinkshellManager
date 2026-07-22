@@ -1,0 +1,648 @@
+@model LinkshellCustomizeViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Game Addon";
+    ViewData["BodyClass"] = "lsm-page";
+    var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Game Addon</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName)) { <span>@Model.LinkshellName</span> } else { <span>Settings</span> }
+        </div>
+    </div>
+</div>
+
+<!-- Stylized "about the addon" section (ported from the Discord Activity, on web tokens). -->
+<style>
+    .addon-about { display: flex; flex-direction: column; gap: 18px; margin-bottom: 16px; }
+    .addon-hero {
+        display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 24px; align-items: center;
+        padding: 24px 28px; border: 1px solid var(--border-2); border-radius: 20px;
+        background: linear-gradient(135deg, var(--surface-2), var(--bg-elev));
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+    .addon-hero__mark {
+        display: grid; place-items: center; width: 100px; aspect-ratio: 1;
+        border: 1px solid var(--border-hot); border-radius: 24px;
+        font-size: 30px; font-weight: 700; letter-spacing: 0.08em; color: var(--fg);
+        background: radial-gradient(circle, color-mix(in srgb, var(--accent) 30%, transparent), transparent 62%), var(--surface-3);
+        box-shadow: inset 0 0 30px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 26px color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    .addon-hero__eyebrow { margin-bottom: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); }
+    .addon-hero__title { margin: 0 0 8px; font-size: clamp(26px, 4vw, 42px); line-height: 1.05; font-weight: 700; }
+    .addon-hero__lede { max-width: 720px; margin: 0; color: var(--fg-2); font-size: 14px; line-height: 1.7; }
+    .addon-hero__badge { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; color: var(--fg-2); letter-spacing: 0.14em; }
+    .addon-hero__badge span { font-size: 11px; }
+    .addon-hero__badge strong { font-size: 24px; font-weight: 700; color: var(--fg); }
+
+    .addon-grid { display: grid; grid-template-columns: 1fr 1.08fr 1.12fr; gap: 16px; }
+    .addon-panel {
+        min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: 18px;
+        background: linear-gradient(180deg, var(--surface-2), var(--bg-elev)); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+    .addon-panel__head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .addon-panel__head h3 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: 0.04em; color: var(--fg); }
+    .addon-panel__icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--border-hot); border-radius: 11px; font-size: 15px; color: var(--accent); background: var(--accent-weak); }
+
+    .addon-featurelist, .addon-cmds { display: grid; gap: 12px; }
+    .addon-feature { display: grid; grid-template-columns: 46px 1fr; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+    .addon-feature__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; font-size: 20px; background: var(--accent-weak); }
+    .addon-feature h4, .addon-steps h4 { margin: 0 0 6px; font-size: 14px; font-weight: 600; color: var(--fg); }
+    .addon-feature p, .addon-steps p, .addon-cmd p { margin: 0; color: var(--fg-2); font-size: 12.5px; line-height: 1.55; }
+
+    .addon-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+    .addon-steps li { display: grid; grid-template-columns: 40px 1fr; gap: 14px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+    .addon-steps__num { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--border-hot); border-radius: 50%; font-weight: 700; color: var(--fg); background: var(--accent-weak); }
+
+    .addon-about code, .addon-chip { display: inline-block; padding: 3px 8px; border: 1px solid var(--border-2); border-radius: 7px; font-family: var(--font-mono); font-size: 0.9em; color: var(--accent-hover); background: var(--bg); }
+    .addon-chip { color: var(--accent); }
+
+    .addon-cmd { padding: 13px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+    .addon-cmd code { margin-bottom: 8px; font-size: 12.5px; }
+
+    @@media (max-width: 1100px) {
+        .addon-grid { grid-template-columns: 1fr 1fr; }
+        .addon-grid .addon-panel:last-child { grid-column: 1 / -1; }
+    }
+    @@media (max-width: 760px) {
+        .addon-hero { grid-template-columns: 80px 1fr; padding: 18px; }
+        .addon-hero__badge { display: none; }
+        .addon-grid { grid-template-columns: 1fr; }
+        .addon-grid .addon-panel:last-child { grid-column: auto; }
+    }
+</style>
+
+<div class="addon-about">
+    <div class="addon-hero">
+        <div class="addon-hero__mark">LSM</div>
+        <div class="addon-hero__copy">
+            <div class="addon-hero__eyebrow">LinkshellManager Addon</div>
+            <h2 class="addon-hero__title">LSM Game Addon</h2>
+            <p class="addon-hero__lede">
+                The LSM addon is a small in-game addon for Ashita v3 (FFXI). Once paired to your
+                linkshell, it sends data into LinkshellManager app in real time.
+            </p>
+        </div>
+        <div class="addon-hero__badge">
+            <span>ASHITA V3</span>
+            <strong>FFXI</strong>
+        </div>
+    </div>
+
+    <div class="addon-grid">
+        <section class="addon-panel">
+            <header class="addon-panel__head">
+                <span class="addon-panel__icon">✦</span>
+                <h3>What it can do</h3>
+            </header>
+            <div class="addon-featurelist">
+                <div class="addon-feature">
+                    <div class="addon-feature__icon">📅</div>
+                    <div>
+                        <h4>Timed Event Management</h4>
+                        <p>Create, browse, and run timed events from the in-game launcher
+                            (<code>/attend</code>). Queued events sync from the web and Discord, and members
+                            can sign up and be marked present without leaving the game.</p>
+                    </div>
+                </div>
+                <div class="addon-feature">
+                    <div class="addon-feature__icon">📸</div>
+                    <div>
+                        <h4>Attendance snapshots</h4>
+                        <p>Capture everyone in your party, zone, or alliance and post them as a Window Event.
+                            Add a monster name to auto-tag the camp (Kings / Wyrms / Misc).</p>
+                    </div>
+                </div>
+                <div class="addon-feature">
+                    <div class="addon-feature__icon">⏱️</div>
+                    <div>
+                        <h4>Time-of-Death tracking</h4>
+                        <p>Watches chat for kills, tracks pop windows, and sends the results to the ToDs tab.</p>
+                    </div>
+                </div>
+                <div class="addon-feature">
+                    <div class="addon-feature__icon">🔄</div>
+                    <div>
+                        <h4>Real-time sync</h4>
+                        <p>Anything captured by the addon appears in LinkshellManager while it's paired.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="addon-panel">
+            <header class="addon-panel__head">
+                <span class="addon-panel__icon">🛠️</span>
+                <h3>Setting it up</h3>
+            </header>
+            <ol class="addon-steps">
+                <li>
+                    <span class="addon-steps__num">1</span>
+                    <div>
+                        <h4>Install it</h4>
+                        <p>Copy the <code>lsm</code> folder into <code>Ashita/addons/lsm/</code> and run
+                            <code>/addon load lsm</code>.</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="addon-steps__num">2</span>
+                    <div>
+                        <h4>Set the server</h4>
+                        <p>Run <code>/lsm server https://linkshellmanager.com</code></p>
+                    </div>
+                </li>
+                <li>
+                    <span class="addon-steps__num">3</span>
+                    <div>
+                        <h4>Pair the linkshell</h4>
+                        <p>Generate a pairing code below, then run
+                            <code>/lsm link &lt;code&gt;</code> in FFXI.</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="addon-steps__num">4</span>
+                    <div>
+                        <h4>Use it</h4>
+                        <p>Open attendance with <code>/attend</code>, take a snapshot with <code>/lsm now</code>,
+                            or open ToD tracking with <code>/tod</code>.</p>
+                    </div>
+                </li>
+            </ol>
+        </section>
+
+        <section class="addon-panel">
+            <header class="addon-panel__head">
+                <span class="addon-panel__icon">⌨️</span>
+                <h3>Handy commands</h3>
+            </header>
+            <div class="addon-cmds">
+                <div class="addon-cmd"><code>/lsm now [name] [p|z|a]</code><p>Snapshot your party, zone, or alliance.</p></div>
+                <div class="addon-cmd"><code>/attend</code><p>Open or close the attendance window.</p></div>
+                <div class="addon-cmd"><code>/tod</code><p>Open or close the Time-of-Death tracker.</p></div>
+                <div class="addon-cmd"><code>/lsm status</code><p>Show the server URL and pairing status.</p></div>
+                <div class="addon-cmd"><code>/lsm help</code><p>Print the full in-game command list.</p></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<!-- Game Addon (att) pairing card. Lives outside the customize form because tokens
+     are managed via separate XHR endpoints (no full-form post). Hidden entirely
+     while a super admin has globally disabled the addon. -->
+@if (!Model.AddonGloballyDisabled)
+{
+<div class="card fade d2" id="addonTokenCard" style="margin-top:16px"
+     data-linkshellid="@Model.LinkshellId"
+     data-csrf-header="@antiforgeryTokens.HeaderName"
+     data-csrf-token="@antiforgeryTokens.RequestToken">
+    <div class="card-head">
+        <div>
+            <div class="card-title">Game Addon (att)</div>
+            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
+                Generate a one-time pairing code, then in FFXI type
+                <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/lsm link &lt;code&gt;</code>
+                to connect the addon to this linkshell.
+            </div>
+        </div>
+        <div class="page-actions">
+            <button type="button" class="btn primary sm" id="addonGenerateBtn">+ Generate pairing code</button>
+        </div>
+    </div>
+    <div id="addonTokensWrapper" style="padding:0 4px 4px">
+        <div id="addonTokensEmpty" class="empty" style="display:none">No active addon tokens. Generate one to get started.</div>
+        <table class="table themed" id="addonTokensTable" style="display:none">
+            <thead>
+                <tr>
+                    <th>Token</th>
+                    <th>Created</th>
+                    <th>Last used</th>
+                    <th style="text-align:right">Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-modal" id="addonPairModal" role="dialog" aria-modal="true">
+    <div class="mt-modal__backdrop" data-mt-close="1"></div>
+    <div class="mt-modal__dialog">
+        <div class="mt-modal__content">
+            <div class="mt-modal__header">
+                <h5 class="mt-modal__title">Pairing code</h5>
+                <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
+            </div>
+            <div class="mt-modal__body">
+                @* Lets the leader pick which linkshell the code is for without
+                   leaving the Customize page. *@
+                <div class="field" style="margin-bottom:14px">
+                    <label for="addonPairLinkshell">Linkshell</label>
+                    <select id="addonPairLinkshell" class="form-select" style="margin-top:6px;width:100%">
+                        @foreach (var linkshell in Model.ManageableLinkshells)
+                        {
+                            if (linkshell.Id == Model.LinkshellId)
+                            {
+                                <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
+                            }
+                            else
+                            {
+                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div id="addonPairCodeWrapper" style="display:none">
+                    <div style="text-align:center;margin:12px 0">
+                        <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
+                        <div style="margin-top:10px">
+                            <span class="tag warning" id="addonPairStatusTag">Status: <span id="addonPairStatusText">Unpaired</span></span>
+                        </div>
+                        <div style="color:var(--fg-3);font-size:12px;margin-top:6px">
+                            Expires in <span id="addonPairCountdown">10:00</span>
+                        </div>
+                    </div>
+                    <div style="color:var(--fg-2);font-size:13px;line-height:1.5;margin-top:10px">
+                        Enter this code in your FFXI client as
+                        <code id="addonPairCmd1">/lsm link &lt;code&gt;</code>
+                        to connect the addon to <strong id="addonPairLsName">this linkshell</strong>.
+                        This window closes automatically once the code is linked.
+                    </div>
+                </div>
+                <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
+            </div>
+            <div class="mt-modal__footer">
+                <button type="button" class="btn ghost" data-mt-close="1">Close</button>
+                <button type="button" class="btn primary" id="addonPairCreateBtn">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+<!-- Confirm modal: reused by every save action on this page. -->
+<div class="mt-modal" id="customizeConfirmModal" role="dialog" aria-modal="true">
+    <div class="mt-modal__backdrop"></div>
+    <div class="mt-modal__dialog">
+        <div class="mt-modal__content">
+            <div class="mt-modal__header">
+                <h5 class="mt-modal__title">Confirm changes</h5>
+            </div>
+            <div class="mt-modal__body">
+                <p style="margin:0;font-size:14px;color:var(--fg-1)">
+                    You are about to make changes to
+                    <strong id="customizeConfirmName">@Model.LinkshellName</strong>. Are you sure?
+                </p>
+            </div>
+            <div class="mt-modal__footer">
+                <button type="button" class="btn ghost" id="customizeConfirmNo">No</button>
+                <button type="button" class="btn primary" id="customizeConfirmYes">Yes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script nonce="@Html.CspNonce()">
+        // Entry "which linkshell" modal + a promise-based confirm gate reused by
+        // every save action on this page (window.lsmConfirmChange). Defined first
+        // so the permissions/addon scripts below can call it.
+        (function () {
+            function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('mt-modal--open'); }
+            function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('mt-modal--open'); }
+
+            var pendingResolve = null;
+            window.lsmConfirmChange = function () {
+                return new Promise(function (resolve) {
+                    pendingResolve = resolve;
+                    openModal('customizeConfirmModal');
+                });
+            };
+            function settle(result) {
+                closeModal('customizeConfirmModal');
+                var r = pendingResolve; pendingResolve = null;
+                if (r) r(result);
+            }
+            var yes = document.getElementById('customizeConfirmYes');
+            var no = document.getElementById('customizeConfirmNo');
+            if (yes) yes.addEventListener('click', function () { settle(true); });
+            if (no) no.addEventListener('click', function () { settle(false); });
+
+            // Drop the one-shot ?switched flag (set by the inline linkshell switcher)
+            // so a later manual reload behaves normally and the URL stays clean.
+            if (window.history && window.history.replaceState) {
+                try {
+                    var cleanUrl = new URL(window.location.href);
+                    if (cleanUrl.searchParams.has('switched')) {
+                        cleanUrl.searchParams.delete('switched');
+                        window.history.replaceState({}, '', cleanUrl.toString());
+                    }
+                } catch (e) { /* no-op */ }
+            }
+
+            // Gate the main customize form (loot structure, linkshell type,
+            // feature toggles, hide ToD mobs, Discord webhooks) behind confirm.
+            var form = document.getElementById('customizeForm');
+            if (form) {
+                var confirmed = false;
+                form.addEventListener('submit', function (e) {
+                    if (confirmed) return;
+                    e.preventDefault();
+                    window.lsmConfirmChange().then(function (ok) {
+                        if (ok) { confirmed = true; form.submit(); }
+                    });
+                });
+            }
+
+            // Gate the standalone server-lock / unlock forms (and any future
+            // .lsm-confirm-form) through the same "Are you sure?" modal.
+            document.querySelectorAll('form.lsm-confirm-form').forEach(function (cf) {
+                var ok = false;
+                cf.addEventListener('submit', function (e) {
+                    if (ok) return;
+                    e.preventDefault();
+                    window.lsmConfirmChange().then(function (yes) {
+                        if (yes) { ok = true; cf.submit(); }
+                    });
+                });
+            });
+        })();
+    </script>
+    <script nonce="@Html.CspNonce()">
+        // Addon-pairing card UX. Self-contained so this view doesn't depend on
+        // manage-team.js (which has been retired alongside the old card location).
+        (function () {
+            var addonCard = document.getElementById('addonTokenCard');
+            if (!addonCard) return;
+
+            // Read CSRF header/token from data-* attributes so the token never
+            // gets interpolated as a JS string literal — the runtime parses it
+            // as plain text from the DOM, which keeps it out of the script body
+            // and is safe under the strict CSP nonce policy.
+            var antiforgeryHeader = addonCard.dataset.csrfHeader || '';
+            var antiforgeryToken = addonCard.dataset.csrfToken || '';
+            function withCsrf(headers) {
+                headers = headers || {};
+                if (antiforgeryHeader && antiforgeryToken) {
+                    headers[antiforgeryHeader] = antiforgeryToken;
+                }
+                return headers;
+            }
+
+            function openModal(id) {
+                var el = document.getElementById(id);
+                if (el) { el.classList.add('mt-modal--open'); document.body.style.overflow = 'hidden'; }
+            }
+            function closeModal(id) {
+                var el = document.getElementById(id);
+                if (el) { el.classList.remove('mt-modal--open'); document.body.style.overflow = ''; }
+            }
+            document.querySelectorAll('[data-mt-close]').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    var modal = el.closest('.mt-modal');
+                    if (modal) closeModal(modal.id);
+                });
+            });
+
+            var addonLinkshellId = parseInt(addonCard.dataset.linkshellid, 10);
+            var addonGenerateBtn = document.getElementById('addonGenerateBtn');
+            var addonPairCreateBtn = document.getElementById('addonPairCreateBtn');
+            var addonPairCodeWrapper = document.getElementById('addonPairCodeWrapper');
+            var addonPairCode = document.getElementById('addonPairCode');
+            var addonPairCountdown = document.getElementById('addonPairCountdown');
+            var addonPairError = document.getElementById('addonPairError');
+            var addonPairStatusTag = document.getElementById('addonPairStatusTag');
+            var addonPairStatusText = document.getElementById('addonPairStatusText');
+            var addonPairCmd1 = document.getElementById('addonPairCmd1');
+            var addonPairLsName = document.getElementById('addonPairLsName');
+            var addonTokensTable = document.getElementById('addonTokensTable');
+            var addonTokensEmpty = document.getElementById('addonTokensEmpty');
+            var countdownTimer = null;
+            var pairStatusTimer = null;
+
+            // Restores the modal to its pre-generate state: Generate button
+            // visible, code/instructions hidden, both timers stopped. Called
+            // on open (fresh start) and on close (so the next open is clean).
+            function resetPairModalUi() {
+                if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                if (pairStatusTimer) { clearInterval(pairStatusTimer); pairStatusTimer = null; }
+                addonPairCodeWrapper.style.display = 'none';
+                addonPairCode.textContent = '';
+                addonPairCreateBtn.style.display = '';
+                addonPairCreateBtn.disabled = false;
+                if (addonPairStatusTag) {
+                    addonPairStatusTag.className = 'tag warning';
+                }
+                if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
+            }
+
+            var escapeHtml = window.escapeHtml;
+
+            function setAddonPairError(msg) {
+                addonPairError.textContent = msg || '';
+                addonPairError.style.display = msg ? 'block' : 'none';
+            }
+
+            function renderTokens(tokens) {
+                var tbody = addonTokensTable.querySelector('tbody');
+                tbody.innerHTML = '';
+                if (!tokens || tokens.length === 0) {
+                    addonTokensTable.style.display = 'none';
+                    addonTokensEmpty.style.display = 'block';
+                    return;
+                }
+                addonTokensEmpty.style.display = 'none';
+                addonTokensTable.style.display = '';
+                tokens.forEach(function (t) {
+                    var tr = document.createElement('tr');
+                    var lastUsed = t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '—';
+                    var created = new Date(t.createdAt).toLocaleString();
+                    tr.innerHTML =
+                        '<td><code>' + escapeHtml(t.prefix) + '…</code></td>' +
+                        '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(created) + '</td>' +
+                        '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(lastUsed) + '</td>' +
+                        '<td style="text-align:right"><button type="button" class="btn warn sm" data-revoke="' + t.id + '">Revoke</button></td>';
+                    tbody.appendChild(tr);
+                });
+                tbody.querySelectorAll('button[data-revoke]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var id = parseInt(btn.dataset.revoke, 10);
+                        if (!id) return;
+                        var doRevoke = function () {
+                            btn.disabled = true;
+                            fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: withCsrf()
+                            }).then(function (res) {
+                                if (!res.ok) { btn.disabled = false; return; }
+                                loadTokens();
+                            }).catch(function () { btn.disabled = false; });
+                        };
+                        if (window.lsmConfirmChange) {
+                            window.lsmConfirmChange().then(function (ok) { if (ok) doRevoke(); });
+                        } else {
+                            doRevoke();
+                        }
+                    });
+                });
+            }
+
+            function loadTokens() {
+                fetch('/api/addon/management/tokens?linkshellId=' + addonLinkshellId, {
+                    credentials: 'same-origin'
+                }).then(function (res) {
+                    if (!res.ok) return null;
+                    return res.json();
+                }).then(function (data) {
+                    if (!data) return;
+                    renderTokens(data.tokens || []);
+                });
+            }
+
+            function startCountdown(totalSeconds) {
+                if (countdownTimer) clearInterval(countdownTimer);
+                var remaining = totalSeconds;
+                function tick() {
+                    if (remaining <= 0) {
+                        addonPairCountdown.textContent = 'expired';
+                        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                        // An expired code can't be redeemed; stop polling and
+                        // flag the chip so the state is unambiguous.
+                        if (pairStatusTimer) { clearInterval(pairStatusTimer); pairStatusTimer = null; }
+                        if (addonPairStatusTag) addonPairStatusTag.className = 'tag danger';
+                        if (addonPairStatusText) addonPairStatusText.textContent = 'Expired';
+                        return;
+                    }
+                    var m = Math.floor(remaining / 60);
+                    var s = remaining % 60;
+                    addonPairCountdown.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+                    remaining--;
+                }
+                tick();
+                countdownTimer = setInterval(tick, 1000);
+            }
+
+            addonGenerateBtn.addEventListener('click', function () {
+                setAddonPairError('');
+                // Fresh state every open: Generate button back, code +
+                // instructions hidden, any prior poll/countdown stopped.
+                resetPairModalUi();
+                // Re-enable the linkshell picker the previous generation may
+                // have locked.
+                var lsSelect = document.getElementById('addonPairLinkshell');
+                if (lsSelect) {
+                    lsSelect.disabled = false;
+                    // Reset to the current page's linkshell each time the
+                    // modal opens; user can change it before generating.
+                    lsSelect.value = String(addonLinkshellId);
+                }
+                openModal('addonPairModal');
+            });
+
+            addonPairCreateBtn.addEventListener('click', function () {
+                setAddonPairError('');
+                addonPairCreateBtn.disabled = true;
+                // The picker lets leaders generate codes for any linkshell
+                // they manage without leaving this page; fall back to the page
+                // LS if the dropdown was somehow cleared.
+                var lsSelect = document.getElementById('addonPairLinkshell');
+                var lsId = lsSelect && lsSelect.value ? parseInt(lsSelect.value, 10) : addonLinkshellId;
+                if (!lsId) {
+                    setAddonPairError('Pick a linkshell to generate a code for.');
+                    addonPairCreateBtn.disabled = false;
+                    return;
+                }
+                fetch('/api/addon/management/pairing-code', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: withCsrf({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ linkshellId: lsId })
+                }).then(function (res) {
+                    if (!res.ok) {
+                        return res.text().then(function (txt) {
+                            var msg = 'Could not generate pairing code.';
+                            try { var j = JSON.parse(txt); if (j && j.error) msg = j.error; } catch (e) {}
+                            setAddonPairError(msg);
+                            return null;
+                        });
+                    }
+                    return res.json();
+                }).then(function (data) {
+                    if (!data) return;
+                    addonPairCode.textContent = data.code;
+
+                    // Resolve the chosen linkshell's display name from the
+                    // (now-locked) dropdown for the instruction text.
+                    var lsName = 'this linkshell';
+                    if (lsSelect && lsSelect.options && lsSelect.selectedIndex >= 0) {
+                        lsName = lsSelect.options[lsSelect.selectedIndex].text || lsName;
+                    }
+                    if (addonPairLsName) addonPairLsName.textContent = lsName;
+                    if (addonPairCmd1) addonPairCmd1.textContent = '/lsm link ' + data.code;
+                    if (addonPairStatusTag) addonPairStatusTag.className = 'tag warning';
+                    if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
+
+                    addonPairCodeWrapper.style.display = 'block';
+                    // The code is issued — replace the Generate button with
+                    // the live "waiting to be linked" state. It comes back
+                    // via resetPairModalUi() on next open / close.
+                    addonPairCreateBtn.style.display = 'none';
+                    // Lock the linkshell selection once a code is issued so the
+                    // displayed code can't drift from the LS saved on the token.
+                    var lockedLs = document.getElementById('addonPairLinkshell');
+                    if (lockedLs) lockedLs.disabled = true;
+                    startCountdown((data.expiresInMinutes || 10) * 60);
+                    startStatusPoll(lsId, data.code);
+                }).catch(function () {
+                    setAddonPairError('Network error generating pairing code.');
+                }).finally(function () {
+                    // Only re-enable when still showing Generate; once a code
+                    // is issued the button is hidden and shouldn't flip back.
+                    if (addonPairCreateBtn.style.display !== 'none') {
+                        addonPairCreateBtn.disabled = false;
+                    }
+                });
+            });
+
+            // Polls the status endpoint while a code is displayed. When the
+            // addon redeems it in-game (consumed) we flip the chip to "Paired",
+            // refresh the token list, and auto-close the modal. On expiry we
+            // stop polling (the countdown already shows "expired").
+            function startStatusPoll(lsId, code) {
+                if (pairStatusTimer) clearInterval(pairStatusTimer);
+                pairStatusTimer = setInterval(function () {
+                    fetch('/api/addon/management/pairing-code/status?linkshellId=' + lsId
+                            + '&code=' + encodeURIComponent(code), {
+                        credentials: 'same-origin'
+                    }).then(function (res) {
+                        return res.ok ? res.json() : null;
+                    }).then(function (s) {
+                        if (!s) return;
+                        if (s.consumed) {
+                            clearInterval(pairStatusTimer); pairStatusTimer = null;
+                            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+                            if (addonPairStatusTag) addonPairStatusTag.className = 'tag success';
+                            if (addonPairStatusText) addonPairStatusText.textContent = 'Paired';
+                            loadTokens();
+                            setTimeout(function () { closeModal('addonPairModal'); }, 3000);
+                        } else if (s.expired || s.found === false) {
+                            clearInterval(pairStatusTimer); pairStatusTimer = null;
+                        }
+                    }).catch(function () { /* transient; keep polling */ });
+                }, 2000);
+            }
+
+            document.getElementById('addonPairModal').addEventListener('click', function (e) {
+                if (e.target.dataset && e.target.dataset.mtClose === '1') {
+                    resetPairModalUi();
+                    loadTokens();
+                }
+            });
+
+            loadTokens();
+        })();
+    </script>
+}

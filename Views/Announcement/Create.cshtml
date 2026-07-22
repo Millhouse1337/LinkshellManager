@@ -23,6 +23,8 @@
                 <span asp-validation-for="AnnouncementTitle" class="text-danger"></span>
             </div>
 
+            <partial name="_CategoryField" model="@Model.Category" />
+
             <div class="field" style="grid-column:1/-1">
                 <label asp-for="AnnouncementDetails"></label>
                 <textarea asp-for="AnnouncementDetails" class="form-control" rows="5" maxlength="4000"></textarea>

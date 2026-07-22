@@ -33,6 +33,10 @@ public class ManageItemViewModel
 
     public DateTime CreatedAt { get; set; }
 
+    public bool IsSold { get; set; }
+    public long? SoldPrice { get; set; }
+    public string? SoldByCharacterName { get; set; }
+
     public bool CanManage { get; set; }
 
     public List<Linkshell> Linkshells { get; set; } = new();

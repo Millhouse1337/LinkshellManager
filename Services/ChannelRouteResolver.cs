@@ -40,6 +40,7 @@ public sealed class ChannelRouteResolver
             ChannelPostTypes.Auctions => query.Where(route => route.PostAuctions),
             ChannelPostTypes.Attendance => query.Where(route => route.PostAttendance),
             ChannelPostTypes.TodBoard => query.Where(route => route.PostTodBoard),
+            ChannelPostTypes.DkpSheet => query.Where(route => route.PostDkpSheet),
             _ => query.Where(_ => false),
         };
         return await query.OrderBy(route => route.Id).FirstOrDefaultAsync(cancellationToken);
@@ -75,9 +76,12 @@ public sealed class ChannelRouteResolver
         if (string.Equals(matchType, "HNM", StringComparison.OrdinalIgnoreCase))
         {
             var monster = (monsterName ?? string.Empty).Trim();
+            // A combined "Base/Stronger" name (e.g. "Adamantoise/Aspidochelone") matches a
+            // route filtering EITHER half; single names split to one segment.
+            var monsterSegments = HnmConfig.MonsterSegments(monster);
             var hnmRoutes = rows.Where(route => FilterContains(route.EventTypeFilter, "HNM")).ToList();
-            var hnmMatch = monster.Length > 0
-                ? hnmRoutes.FirstOrDefault(route => FilterContains(route.HnmMonsterFilter, monster))
+            var hnmMatch = monsterSegments.Length > 0
+                ? hnmRoutes.FirstOrDefault(route => monsterSegments.Any(seg => FilterContains(route.HnmMonsterFilter, seg)))
                 : null;
             hnmMatch ??= hnmRoutes.FirstOrDefault(route => string.IsNullOrWhiteSpace(route.HnmMonsterFilter));
             hnmMatch ??= rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, "Other"));

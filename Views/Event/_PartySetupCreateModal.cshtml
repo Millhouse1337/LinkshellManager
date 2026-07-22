@@ -1,0 +1,176 @@
+@using System.Text.Json
+@model LinkshellManagerDiscordApp.ViewModels.PartySetupEditorViewModel
+@{
+    // Inline "Create New Party Setup" modal for the create/edit event form. Mirrors
+    // the Discord Activity's embedded editor: build a setup without leaving the page,
+    // then auto-select it in the linked-setup dropdown. Reuses the shared _EditorBody
+    // (same markup + party-setup.js the full Create page uses) and posts via AJAX to
+    // PartySetup/CreateInline. Rendered OUTSIDE the event <form> (no nested forms).
+    var optionsJson = JsonSerializer.Serialize(new
+    {
+        roles = Model.RoleOptions,
+        mainJobs = Model.MainJobOptions,
+        subJobs = Model.SubJobOptions
+    });
+}
+
+<div id="ps-create-modal" hidden
+     style="position:fixed;inset:0;z-index:1000;display:flex;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.55);overflow:auto;padding:32px 16px">
+    <div style="max-width:960px;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
+            <div>
+                <strong style="font-size:16px;color:var(--fg)">New Party Setup</strong>
+                <p style="margin:4px 0 0;color:var(--fg-3);font-size:12px">Plan the alliances, parties and slots you want. Each alliance can hold up to 3 parties.</p>
+            </div>
+            <button type="button" class="btn ghost sm" id="ps-create-modal-close">Close</button>
+        </div>
+
+        <form id="party-setup-form" novalidate data-options="@optionsJson" class="create-form">
+            @await Html.PartialAsync("~/Views/PartySetup/_EditorBody.cshtml", Model)
+
+            <div id="ps-create-modal-error" class="alert alert-danger" style="display:none;margin-top:14px"></div>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+                <button type="button" class="btn ghost" id="ps-create-modal-cancel">Cancel</button>
+                <button type="submit" class="btn primary" id="ps-create-modal-submit">Create Party Setup</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var modal = document.getElementById('ps-create-modal');
+        var form = document.getElementById('party-setup-form');
+        if (!modal || !form) { return; }
+
+        var container = document.getElementById('alliances-container');
+        var errorBox = document.getElementById('ps-create-modal-error');
+        var submitBtn = document.getElementById('ps-create-modal-submit');
+        var nameInput = document.getElementById('Name');
+        var notesInput = document.getElementById('Notes');
+        var monsterSelect = document.getElementById('ps-monster-select');
+        var monsterCustom = document.getElementById('ps-monster-custom');
+
+        // Pristine (empty Alliance 1 / Party 1, no slots) markup captured at parse
+        // time, before party-setup.js reindexes. Restoring it on each open gives a
+        // fresh form. We reset only the container's CHILDREN (never the container
+        // node itself) so party-setup.js's delegated listeners stay bound.
+        var pristineAlliances = container ? container.innerHTML : '';
+
+        function showErrors(errors) {
+            if (!errorBox) { return; }
+            errorBox.innerHTML = '';
+            (errors || []).forEach(function (msg) {
+                var line = document.createElement('div');
+                line.textContent = msg;
+                errorBox.appendChild(line);
+            });
+            errorBox.style.display = 'block';
+        }
+        function clearErrors() {
+            if (errorBox) { errorBox.style.display = 'none'; errorBox.innerHTML = ''; }
+        }
+
+        function resetForm() {
+            if (nameInput) { nameInput.value = ''; }
+            if (notesInput) { notesInput.value = ''; }
+            if (monsterSelect) { monsterSelect.value = ''; monsterSelect.dispatchEvent(new Event('change', { bubbles: true })); }
+            if (monsterCustom) { monsterCustom.value = ''; monsterCustom.style.display = 'none'; }
+            if (container) { container.innerHTML = pristineAlliances; }
+            // The shared _EditorBody renders an asp-validation-summary bound to the
+            // PAGE's ModelState (the event form's). It's meaningless here — AJAX
+            // errors use #ps-create-modal-error — so keep it hidden.
+            var vs = form.querySelector('.alert.alert-danger');
+            if (vs && vs.id !== 'ps-create-modal-error') { vs.style.display = 'none'; }
+            clearErrors();
+        }
+
+        function openModal() {
+            resetForm();
+            modal.removeAttribute('hidden');
+        }
+        function closeModal() {
+            modal.setAttribute('hidden', '');
+        }
+
+        // Before serializing, sync each slot's AllianceName/PartyName hidden fields
+        // from the visible name inputs (party-setup.js only refreshes these during a
+        // structural reindex, so a bare name edit could otherwise be missed). The
+        // flat Slots[] indices are already kept contiguous by party-setup.js.
+        function syncNames() {
+            container.querySelectorAll(':scope > .ps-alliance').forEach(function (allianceEl) {
+                var aEl = allianceEl.querySelector('.ps-alliance-name');
+                var aName = aEl ? aEl.value : '';
+                allianceEl.querySelectorAll('.ps-party').forEach(function (partyEl) {
+                    var pEl = partyEl.querySelector('.ps-party-name');
+                    var pName = pEl ? pEl.value : '';
+                    partyEl.querySelectorAll('.ps-slot').forEach(function (slotEl) {
+                        var a = slotEl.querySelector('[data-field="AllianceName"]');
+                        var p = slotEl.querySelector('[data-field="PartyName"]');
+                        if (a) { a.value = aName; }
+                        if (p) { p.value = pName; }
+                    });
+                });
+            });
+        }
+
+        // Drop the created setup into the event form's linked-setup dropdown and
+        // select it (turning "Do Not Include" off), dispatching the change events
+        // the _EventForm script listens for (enable + preview).
+        function selectNewSetup(data) {
+            var select = document.getElementById('PartySetupId');
+            if (!select) { return; }
+            var notSpecified = document.getElementById('party_setup_not_specified');
+            if (notSpecified && notSpecified.checked) {
+                notSpecified.checked = false;
+                notSpecified.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            var opt = document.createElement('option');
+            opt.value = String(data.id);
+            opt.textContent = data.label;
+            opt.setAttribute('data-event-type', data.eventType || '');
+            opt.selected = true;
+            select.appendChild(opt);
+            select.value = String(data.id);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        // Openers: any element with the .ps-open-create-modal hook (the button on
+        // the event form).
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('.ps-open-create-modal')) {
+                e.preventDefault();
+                openModal();
+                return;
+            }
+            if (e.target === modal) { closeModal(); return; } // backdrop click
+        });
+        document.getElementById('ps-create-modal-close').addEventListener('click', closeModal);
+        document.getElementById('ps-create-modal-cancel').addEventListener('click', closeModal);
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            clearErrors();
+            syncNames();
+            submitBtn.disabled = true;
+            fetch('/PartySetup/CreateInline', {
+                method: 'POST',
+                body: new FormData(form),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.ok) {
+                        selectNewSetup(data);
+                        closeModal();
+                    } else {
+                        showErrors((data && data.errors) || ['Could not create the party setup.']);
+                    }
+                })
+                .catch(function () { showErrors(['Something went wrong. Please try again.']); })
+                .finally(function () { submitBtn.disabled = false; });
+        });
+    })();
+</script>

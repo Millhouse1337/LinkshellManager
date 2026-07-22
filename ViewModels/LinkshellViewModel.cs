@@ -19,6 +19,8 @@ public class LinkshellCustomizeViewModel
 {
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
+    // Cache-busted banner image URL for the current linkshell, or null when none.
+    public string? BannerUrl { get; set; }
 
     [Required, MaxLength(16)]
     public string? LinkshellType { get; set; } = LinkshellTypes.Both;
@@ -56,9 +58,17 @@ public class LinkshellCustomizeViewModel
     // from the party board. Backed by a placeholder member, so they DO earn DKP + tracked.
     public bool OutsidePartySignupEnabled { get; set; } = false;
 
+    // "Fill earlier alliances first" signup nudge (default on; no-op on single-alliance boards).
+    public bool FillAlliancesInOrder { get; set; } = true;
+
     // HNM Outside Sign Up: independent gate for HNM boards (event type + account-less
     // HNM-board signups). Roster memory only — HNM signups earn no DKP and no tracking.
     public bool HnmOutsideSignupEnabled { get; set; } = false;
+
+    // Experimental: post Discord event boards as Components V2 (wide media-gallery card)
+    // instead of the classic image-in-embed. Off by default; only affects boards posted
+    // after it's turned on.
+    public bool UseComponentsV2Boards { get; set; } = false;
 
     public bool CanManageRoles { get; set; }
 
@@ -84,6 +94,14 @@ public class LinkshellCustomizeViewModel
     public string? DiscordChannelGuildId { get; set; }
     public List<DiscordChannelOption> AvailableChannels { get; set; } = new();
     public List<ChannelRouteInput> ChannelRoutes { get; set; } = new();
+
+    // ---- DKP pools ----
+    //
+    // The officer's pools, plus one assignment row per assignable event type. The assignments bind
+    // by POOL INDEX rather than pool id, so a new pool (which has no id yet) can be created and have
+    // event types moved into it in the same save.
+    public List<DkpPoolInput> DkpPools { get; set; } = new();
+    public List<DkpPoolAssignmentInput> DkpPoolAssignments { get; set; } = new();
 
     // Optional channel where post-event discussion comments are mirrored.
     public string? DiscussionChannelId { get; set; }
@@ -134,6 +152,7 @@ public sealed class ChannelRouteInput
     public bool PostAuctions { get; set; }
     public bool PostAttendance { get; set; }
     public bool PostTodBoard { get; set; }
+    public bool PostDkpSheet { get; set; }
 
     public List<string> EventTypeFilter { get; set; } = new();
     // Per-monster narrowing for an HNM route (only used when EventTypeFilter includes HNM).
@@ -152,3 +171,35 @@ public class TodMonsterGroup
     }
 }
 
+
+// One DKP pool row on the Customize page's "DKP pools" card. Id is 0 for a pool the officer just
+// added — DkpPoolEditor treats that as "create".
+public sealed class DkpPoolInput
+{
+    public int Id { get; set; }
+
+    [MaxLength(64)]
+    public string? Name { get; set; }
+
+    public bool IsDefault { get; set; }
+
+    [MaxLength(16)]
+    public string? Accent { get; set; }
+}
+
+// One event type and the pool it's assigned to, bound by the pool's INDEX in the DkpPools list (not
+// its id — new pools don't have one yet). This shape is what makes the partition
+// unrepresentable-if-invalid: an event type has exactly one <select>, so it cannot end up in two
+// pools no matter what the officer does.
+public sealed class DkpPoolAssignmentInput
+{
+    [MaxLength(256)]
+    public string EventType { get; set; } = string.Empty;
+
+    // -1 (or out of range) = unassigned, which means it falls through to the default pool.
+    public int PoolIndex { get; set; } = -1;
+
+    // Display-only, repopulated server-side on every render.
+    public double EarnedTotal { get; set; }
+    public bool IsCustom { get; set; }
+}

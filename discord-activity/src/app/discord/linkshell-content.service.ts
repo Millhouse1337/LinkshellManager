@@ -30,7 +30,7 @@ export class LinkshellContentService {
   readonly busyRevenueId = signal<number | null>(null);
 
   // ----- Rules -----
-  async createRule(linkshellId: number, title: string, details: string): Promise<void> {
+  async createRule(linkshellId: number, title: string, details: string, category: string | null): Promise<void> {
     this.busyRuleSave.set(true);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
@@ -38,7 +38,8 @@ export class LinkshellContentService {
     try {
       await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/rules`, {
         title,
-        details
+        details,
+        category
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Rule added.');
@@ -50,7 +51,7 @@ export class LinkshellContentService {
     }
   }
 
-  async updateRule(ruleId: number, title: string, details: string): Promise<void> {
+  async updateRule(ruleId: number, title: string, details: string, category: string | null): Promise<void> {
     this.busyRuleSave.set(true);
     this.busyRuleId.set(ruleId);
     this.auth.setActionError(null);
@@ -59,7 +60,8 @@ export class LinkshellContentService {
     try {
       await this.http.postActivityAction(`/api/activity/rules/${ruleId}/update`, {
         title,
-        details
+        details,
+        category
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Rule updated.');
@@ -90,7 +92,7 @@ export class LinkshellContentService {
   }
 
   // ----- Announcements -----
-  async createAnnouncement(linkshellId: number, title: string, details: string): Promise<void> {
+  async createAnnouncement(linkshellId: number, title: string, details: string, category: string | null): Promise<void> {
     this.busyAnnouncementSave.set(true);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
@@ -98,7 +100,8 @@ export class LinkshellContentService {
     try {
       await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/announcements`, {
         title,
-        details
+        details,
+        category
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Announcement posted.');
@@ -110,7 +113,7 @@ export class LinkshellContentService {
     }
   }
 
-  async updateAnnouncement(announcementId: number, title: string, details: string): Promise<void> {
+  async updateAnnouncement(announcementId: number, title: string, details: string, category: string | null): Promise<void> {
     this.busyAnnouncementSave.set(true);
     this.busyAnnouncementId.set(announcementId);
     this.auth.setActionError(null);
@@ -119,7 +122,8 @@ export class LinkshellContentService {
     try {
       await this.http.postActivityAction(`/api/activity/announcements/${announcementId}/update`, {
         title,
-        details
+        details,
+        category
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Announcement updated.');
@@ -205,6 +209,41 @@ export class LinkshellContentService {
       this.auth.setActionMessage('Item deleted.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Deleting the item failed.'));
+      throw error;
+    } finally {
+      this.busyItemId.set(null);
+    }
+  }
+
+  // Mark an item sold for a price → records the income in Finances (server-side).
+  async markItemSold(itemId: number, salePrice: number): Promise<void> {
+    this.busyItemId.set(itemId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/items/${itemId}/mark-sold`, { salePrice });
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Item sold — added to Finances.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Selling the item failed.'));
+      throw error;
+    } finally {
+      this.busyItemId.set(null);
+    }
+  }
+
+  async unsellItem(itemId: number): Promise<void> {
+    this.busyItemId.set(itemId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/items/${itemId}/unsell`);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Sale undone.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Undoing the sale failed.'));
       throw error;
     } finally {
       this.busyItemId.set(null);

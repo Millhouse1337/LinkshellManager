@@ -123,6 +123,16 @@ export class EventsTabComponent {
     return this.lootStructureFor(linkshellId) === 'Hybrid' ? 100 : null;
   }
 
+  // What the number beside each participant actually means. On a linkshell that has split its DKP
+  // into pools, it's their spendable balance in the pool THIS event's type draws from — which is
+  // the figure the officer needs when typing a loot cost, and is usually not their grand total.
+  protected biddableTitle(event: ActivityEvent): string {
+    const pool = event.dkpPoolName;
+    return pool
+      ? `Spendable ${pool} DKP now = their ${pool} balance − bids they're winning from it − DKP spent on loot this event`
+      : "Biddable DKP now = balance − bids they're winning − DKP spent on loot this event";
+  }
+
   protected formatLootCost(
     value: number | null | undefined,
     linkshellId: number | undefined | null
@@ -372,6 +382,8 @@ export class EventsTabComponent {
       return [];
     }
 
+    const biddableByUser = this.rosterBiddableByUser(event.linkshellId);
+
     return this.eventBoardSlots(event.id)
       .filter(slot => !!slot.signedUpAppUserId || !!slot.signedUpCharacterName)
       .map(slot => ({
@@ -383,6 +395,10 @@ export class EventsTabComponent {
         jobType: slot.signedUpRole ?? slot.role ?? null,
         isQuickJoin: false,
         isVerified: true,
+        // Surface biddable for a board signup too (looked up from the roster by
+        // account) so the Active Room shows it for everyone — not only members who
+        // already have a materialized participation row carrying the value.
+        biddableDkp: slot.signedUpAppUserId ? biddableByUser.get(slot.signedUpAppUserId) : undefined,
         proctor: 'Discord channel signup',
         startTime: event.commencementStartTime ?? event.startTime ?? null,
         resumeTime: null,
@@ -392,6 +408,23 @@ export class EventsTabComponent {
         eventDkp: 0,
         statusLedger: []
       } satisfies ActivityEventParticipant));
+  }
+
+  // Roster biddable DKP keyed by app-user id, for enriching board-signup
+  // participants. Biddable is computed for the primary linkshell only, so it's
+  // returned empty for an event in another linkshell (rather than a wrong figure).
+  private rosterBiddableByUser(linkshellId: number): Map<string, number> {
+    const map = new Map<string, number>();
+    const primary = this.activity.overview()?.primaryLinkshell;
+    if (!primary || primary.id !== linkshellId) {
+      return map;
+    }
+    for (const member of primary.members ?? []) {
+      if (member.appUserId && member.biddableDkp != null) {
+        map.set(member.appUserId, member.biddableDkp);
+      }
+    }
+    return map;
   }
 
   private eventBoardSlots(eventId: number): ActivityPartySetupSlot[] {
@@ -524,6 +557,15 @@ export class EventsTabComponent {
     event: { currentParticipation?: { id: number } | null }
   ): boolean {
     return event.currentParticipation?.id === participant.id;
+  }
+
+  // True for a board-only (Discord channel / outside) signup that has no real
+  // AppUserEvent — `channelSignupParticipants` synthesizes these with a negative
+  // id (`-slot.slotId`). They can't be moderated (verify / break / undo) because
+  // those endpoints look up a participation row by id, so we hide those actions
+  // for them instead of letting the call fail with "participant was not found".
+  protected isChannelSignupOnly(participant: { id: number }): boolean {
+    return participant.id < 0;
   }
 
   protected attendanceBadgeLabel(participant: { isOnBreak?: boolean | null; isVerified?: boolean | null }): string {

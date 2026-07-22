@@ -186,7 +186,7 @@
   align-items: center;
   gap: 10px;
   padding: 6px 10px 6px 6px;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: 6px;
   background: var(--surface);
   cursor: pointer;
@@ -194,7 +194,7 @@
 }
 
 .tod-file-upload:hover:not(.is-disabled) {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -322,8 +322,8 @@
 
 .tod-history-chip--loot {
   color: var(--accent);
-  border-color: rgba(124, 92, 255, 0.3);
-  background: rgba(124, 92, 255, 0.08);
+  border-color: rgba(79, 124, 255, 0.3);
+  background: var(--accent-weak);
 }
 
 .tod-history-actions {

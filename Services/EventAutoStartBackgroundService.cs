@@ -82,6 +82,12 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
         foreach (var evt in dueEvents)
         {
             evt.CommencementStartTime = nowUtc;
+            // Bring party-slot signups (Discord post / Activity) into the live event as
+            // pending attendees — exactly what the manual "Start" does. Without this the
+            // signups never become real AppUserEvents, so the client falls back to
+            // synthesizing them as verified phantoms that land in the Active Room instead
+            // of the Lobby (and can't be moderated — they have no participation row).
+            await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(db, evt, cancellationToken);
             foreach (var participation in evt.AppUserEvents)
             {
                 participation.StartTime ??= nowUtc;

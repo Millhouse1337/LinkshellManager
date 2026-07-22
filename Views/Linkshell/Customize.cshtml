@@ -6,14 +6,6 @@
     var savedMessage = TempData["CustomizeSaved"] as string;
     var errorMessage = TempData["CustomizeError"] as string;
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
-    var canManageRolesValue = Model.CanManageRoles.ToString().ToLowerInvariant();
-    // Only greet a fresh arrival with the "Which linkshell?" modal. Suppress it
-    // on reloads we caused ourselves: after a save (saved/error message / POST
-    // re-render) or a linkshell switch (?switched=1).
-    var skipEntryModal = !string.IsNullOrEmpty(savedMessage)
-        || !string.IsNullOrEmpty(errorMessage)
-        || string.Equals(Context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase)
-        || Context.Request.Query.ContainsKey("switched");
 }
 
 <div class="page-head fade d1">
@@ -57,30 +49,59 @@
     <div class="alert alert-danger fade d2" style="margin-bottom:16px">@errorMessage</div>
 }
 
-<div class="card fade d2" style="margin-bottom:16px">
+<!-- Dashboard banner: officer-uploaded image shown atop the dashboard on both
+     the web app and the Discord Activity. Kept as the first section here (and on
+     the Activity Configurations tab). Stored in the LinkshellBanner table; served
+     anonymously so the <img> works inside the Discord iframe. -->
+<div class="card fade d2" id="bannerCard" style="margin-bottom:16px">
     <div class="card-head">
-        <div class="card-title">Linkshell</div>
+        <div class="card-title">🖼 Dashboard Banner</div>
     </div>
-    <form method="get" asp-action="Customize" style="padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select class="form-select" name="id" style="min-width:240px;flex:1 1 240px">
-            @foreach (var linkshell in Model.ManageableLinkshells)
-            {
-                if (linkshell.Id == Model.LinkshellId)
-                {
-                    <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                }
-                else
-                {
-                    <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                }
-            }
-        </select>
-        @* Tells the reloaded page this was a deliberate switch, so the
-           "Which linkshell?" modal stays closed. *@
-        <input type="hidden" name="switched" value="1" />
-        <button class="btn primary sm" type="submit" style="white-space:nowrap">Switch Linkshell</button>
-    </form>
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;width:100%">
+        <div style="font-size:12px;color:var(--fg-3)">
+            Shown at the top of the dashboard (web and Discord Activity). Recommended size
+            <strong>1200 × 200</strong> px — it displays full-width at 200&nbsp;px tall and is cropped to fit.
+        </div>
+        @if (!string.IsNullOrEmpty(Model.BannerUrl))
+        {
+            <img class="lsm-dash-banner" src="@Model.BannerUrl" alt="Current banner" />
+        }
+        <form method="post" asp-action="UploadBanner" enctype="multipart/form-data"
+              style="display:flex;flex-direction:column;gap:10px">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <input type="file" name="bannerFile" id="banner-file"
+                       accept="image/png,image/jpeg,image/webp,image/gif"
+                       style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0" />
+                <label for="banner-file" class="btn sm" style="cursor:pointer">Choose image</label>
+                <span id="banner-file-name" style="font-size:12px;color:var(--fg-3)">No file chosen</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button type="submit" class="btn primary sm">Upload banner</button>
+            </div>
+        </form>
+        @if (!string.IsNullOrEmpty(Model.BannerUrl))
+        {
+            <form method="post" asp-action="RemoveBanner" class="lsm-confirm-form">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+                <button type="submit" class="btn ghost sm">Remove banner</button>
+            </form>
+        }
+    </div>
 </div>
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var input = document.getElementById('banner-file');
+        var label = document.getElementById('banner-file-name');
+        if (input && label) {
+            input.addEventListener('change', function () {
+                label.textContent = input.files && input.files.length ? input.files[0].name : 'No file chosen';
+            });
+        }
+    })();
+</script>
 
 <form asp-action="Customize" method="post" class="fade d2" id="customizeForm">
     @Html.AntiForgeryToken()
@@ -95,22 +116,22 @@
             <label style="display:flex;gap:10px;align-items:flex-start">
                 <input type="radio" asp-for="LinkshellType" value="SkySeaDynamis" />
                 <span>
-                    <strong>Sky/Sea/Dynamis etc..</strong>
-                    <div style="color:var(--fg-3);font-size:12px">Timed-event experience only. Addon shows Create Event, timed presets, Queued &amp; Active events. No HNM presets; website hides the Attendance / Window Events nav.</div>
+                    <strong>Timed Events Only</strong>
+                    <div style="color:var(--fg-3);font-size:12px">Timed-event experience only.</div>
                 </span>
             </label>
             <label style="display:flex;gap:10px;align-items:flex-start">
                 <input type="radio" asp-for="LinkshellType" value="HnmOnly" />
                 <span>
-                    <strong>HNM Only</strong>
-                    <div style="color:var(--fg-3);font-size:12px">HNM snapshot sessions only. Addon hides Create Event, Queued &amp; Active, and shows only HNM presets. Website hides the Event System nav.</div>
+                    <strong>Snapshot Only</strong> <span style="color:var(--fg-3);font-size:12px">(requires addon)</span>
+                    <div style="color:var(--fg-3);font-size:12px">Snapshot sessions only</div>
                 </span>
             </label>
             <label style="display:flex;gap:10px;align-items:flex-start">
                 <input type="radio" asp-for="LinkshellType" value="Both" />
                 <span>
                     <strong>Both</strong>
-                    <div style="color:var(--fg-3);font-size:12px">Everything — timed events and HNM. Default.</div>
+                    <div style="color:var(--fg-3);font-size:12px">timed events and snapshots. Default.</div>
                 </span>
             </label>
             <div style="display:flex;justify-content:flex-end;margin-top:8px">
@@ -130,8 +151,8 @@
                     <label style="display:flex;gap:10px;align-items:flex-start">
                         <input type="radio" asp-for="LootStructure" value="Dkp" id="loot-dkp" />
                         <span>
-                            <strong>DKP</strong>
-                            <div style="color:var(--fg-3);font-size:12px">Time-based DKP earned per event, spent on loot.</div>
+                            <strong>DKP Based</strong>
+                            <div style="color:var(--fg-3);font-size:12px">DKP earned per event, spent on loot.</div>
                         </span>
                     </label>
                     <label style="display:flex;gap:10px;align-items:flex-start">
@@ -162,15 +183,17 @@
                     <div class="card-title" style="font-size:14px">Feature Toggles</div>
                     <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px">
-                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableEndgame" /> Endgame tab</label>
+                        @* Charts and Missions aren't built yet: locked off + (TBA). Restore asp-for
+                           (and the nav gate in _Sidebar) when they ship. *@
+                        <label style="display:flex;gap:8px;align-items:center;opacity:.55;cursor:not-allowed" title="Not developed yet — coming soon."><input type="checkbox" class="switch" disabled /> Charts tab <span style="color:var(--fg-3)">(TBA)</span></label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableHnmSection" /> HNM tab</label>
-                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableMissions" /> Missions tab</label>
+                        <label style="display:flex;gap:8px;align-items:center;opacity:.55;cursor:not-allowed" title="Not developed yet — coming soon."><input type="checkbox" class="switch" disabled /> Missions tab <span style="color:var(--fg-3)">(TBA)</span></label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableAuctions" /> Auctions tab</label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableToDs" /> ToDs tab</label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableEvents" /> Events tab</label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableDkp" /> DKP tab</label>
-                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableItems" /> Items tile on dashboard</label>
-                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableRevenue" /> Revenue tile on dashboard</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableItems" /> Items</label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableRevenue" /> Revenue</label>
                     </div>
 
                     <div class="card-title" style="font-size:14px;margin-top:14px">Member Activity Tracking</div>
@@ -191,24 +214,53 @@
                         </label>
                     </div>
 
-                    <div class="card-title" style="font-size:14px;margin-top:14px">Outside Party Signup</div>
-                    <div style="font-size:12px;color:var(--fg-3)">
-                        Let Discord-server members who have <strong>never launched the app</strong> sign up for
-                        events straight from the party board, identified by their Discord account. Their first signup
-                        adds them to your roster as a placeholder member, so they <strong>earn DKP and count toward
-                        attendance</strong> like anyone else (and aren't re-asked for their name next time).
-                    </div>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="OutsidePartySignupEnabled" /> Allow outside (non-account) Discord signups</label>
+                    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px">
+                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                            <div class="card-title" style="font-size:14px">Outside Party Signup</div>
+                            <div style="font-size:12px;color:var(--fg-3)">
+                                Let Discord-server members who have <strong>never launched the app</strong> sign up for
+                                events straight from the party board, identified by their Discord account. Their first signup
+                                adds them to your roster as a placeholder member, so they <strong>earn DKP and count toward
+                                attendance</strong> like anyone else (and aren't re-asked for their name next time).
+                            </div>
+                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="OutsidePartySignupEnabled" /> Allow outside (non-account) Discord signups</label>
+                        </div>
 
-                    <div class="card-title" style="font-size:14px;margin-top:14px">HNM Outside Sign Up</div>
-                    <div style="font-size:12px;color:var(--fg-3)">
-                        A separate switch for <strong>HNM signup boards</strong> (managed in the Discord Activity).
-                        When on, the HNM event type becomes available and outside Discord members can sign up to HNM
-                        boards. HNM is <strong>roster memory only</strong> — players are remembered so they don't retype
-                        their name, but HNM signups earn <strong>no DKP and no attendance credit</strong>. Works
-                        independently of Outside Party Signup above.
+                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                            <div class="card-title" style="font-size:14px">Fill alliances in order</div>
+                            <div style="font-size:12px;color:var(--fg-3)">
+                                When someone signs up for a later alliance while an open slot their job can fill is
+                                still free in an earlier alliance, they're warned and offered that earlier slot first.
+                                Soft nudge (they can still sign up where they chose) and only fires when an earlier slot
+                                actually fits their job. No effect on single-alliance events.
+                            </div>
+                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="FillAlliancesInOrder" /> Nudge members to fill earlier alliances first</label>
+                        </div>
+
+                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                            <div class="card-title" style="font-size:14px">HNM Outside Sign Up</div>
+                            <div style="font-size:12px;color:var(--fg-3)">
+                                A separate switch for <strong>HNM signup boards</strong> (managed in the Discord Activity).
+                                When on, the HNM event type becomes available and outside Discord members can sign up to HNM
+                                boards. HNM is <strong>roster memory only</strong> — players are remembered so they don't retype
+                                their name, but HNM signups earn <strong>no DKP and no attendance credit</strong>. Works
+                                independently of Outside Party Signup above.
+                            </div>
+                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="HnmOutsideSignupEnabled" /> Allow HNM outside sign-ups (roster only — no DKP)</label>
+                        </div>
+
+                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                            <div class="card-title" style="font-size:14px">Components V2 boards <span style="font-size:11px;color:var(--fg-3)">(experimental)</span></div>
+                            <div style="font-size:12px;color:var(--fg-3)">
+                                Post Discord event sign-up boards as Discord <strong>Components V2</strong> messages: the
+                                rendered board sits in a <strong>full-width media gallery</strong> (no embed frame) and is
+                                drawn on a <strong>wider canvas</strong>, so it reads larger. Same buttons and signup flow.
+                                Discord won't let a board switch modes once posted, so this only affects boards posted
+                                <strong>after</strong> you turn it on.
+                            </div>
+                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="UseComponentsV2Boards" /> Use Components V2 event boards</label>
+                        </div>
                     </div>
-                    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="HnmOutsideSignupEnabled" /> Allow HNM outside sign-ups (roster only — no DKP)</label>
                 </div>
             </div>
 
@@ -279,6 +331,81 @@
 
 </form>
 
+<!-- Import DKP: a migrating linkshell uploads an Excel/CSV (fit to the export
+     template) to bring its existing DKP in. Matched members are updated; unknown
+     names are created as unsynced placeholders that carry their DKP until that
+     person first launches the app and claims it. Two steps: upload → preview →
+     confirm (on the preview page). Standalone multipart form. -->
+<div class="card fade d2" id="dkpImportCard" style="margin-bottom:16px">
+    <div class="card-head">
+        <div class="card-title">📥 Import DKP</div>
+        <div class="page-actions">
+            <a class="btn sm" asp-controller="Linkshell" asp-action="DownloadDkpTemplate">⬇ Download template</a>
+        </div>
+    </div>
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;width:100%">
+        <div style="font-size:12px;color:var(--fg-3)">
+            Bringing a linkshell over from another tracker? Upload a spreadsheet of your existing
+            DKP. Members already in the app are updated; names we don't recognize are created as
+            unsynced members that keep their DKP until that person first opens the app and claims it.
+            You'll review everything before anything changes.
+        </div>
+        <div style="font-size:12px;color:var(--fg-3)">
+            Your sheet needs these columns: <strong>Member Name</strong>, <strong>Alt 1</strong>,
+            <strong>Alt 2</strong>, <strong>Current DKP</strong>, <strong>Total DKP</strong>,
+            <strong>Total DKP Spent</strong>. Download the template (top-right) to see the exact format.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn ghost sm" asp-controller="DkpSheet" asp-action="ExportExcel" asp-route-linkshellId="@Model.LinkshellId">Export current DKP</a>
+        </div>
+        <form method="post" asp-action="PreviewDkpImport" enctype="multipart/form-data"
+              style="display:flex;flex-direction:column;gap:10px">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <input type="file" name="importFile" id="dkp-import-file"
+                       accept=".xlsx,.csv"
+                       style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0" />
+                <label for="dkp-import-file" class="btn sm" style="cursor:pointer">Choose file</label>
+                <span id="dkp-import-name" style="font-size:12px;color:var(--fg-3)">No file chosen</span>
+            </div>
+            <!-- Hidden until a correctly-typed (.xlsx/.csv) file is chosen — see script below. -->
+            <div id="dkp-preview-wrap" style="display:none">
+                <button type="submit" class="btn primary sm">Preview import</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var input = document.getElementById('dkp-import-file');
+        var label = document.getElementById('dkp-import-name');
+        var previewWrap = document.getElementById('dkp-preview-wrap');
+        if (!input || !label) { return; }
+        // Only reveal "Preview import" once a correctly-typed file is selected.
+        var allowed = /\.(xlsx|csv)$/i;
+        input.addEventListener('change', function () {
+            var hasFile = input.files && input.files.length;
+            if (!hasFile) {
+                label.textContent = 'No file chosen';
+                label.style.color = 'var(--fg-3)';
+                if (previewWrap) { previewWrap.style.display = 'none'; }
+                return;
+            }
+            var name = input.files[0].name;
+            if (allowed.test(name)) {
+                label.textContent = name;
+                label.style.color = 'var(--fg-3)';
+                if (previewWrap) { previewWrap.style.display = ''; }
+            } else {
+                label.textContent = name + ' — choose a .xlsx or .csv file';
+                label.style.color = 'var(--danger)';
+                if (previewWrap) { previewWrap.style.display = 'none'; }
+            }
+        });
+    })();
+</script>
+
 <!-- Discord Server: associate the linkshell with a server (roster/invites/
      channels) and, separately, optionally lock viewing access to it. Standalone
      card with its own POST forms, not tied to the main customize save. -->
@@ -287,10 +414,24 @@
         <div class="card-title">Discord Server</div>
     </div>
     <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;width:100%">
-        <div style="font-size:12px;color:var(--fg-3)">
-            Associate this linkshell with a Discord server to power the member roster, invites,
-            and channel posting. Setting a server does <strong>not</strong> restrict who can view
-            the linkshell — that's the separate lock below.
+        <!-- Set up the bot -->
+        <div style="display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border);padding-bottom:14px">
+            <div style="font-weight:500;color:var(--fg)">Set up the bot</div>
+            <div style="font-size:12px;color:var(--fg-3)">
+                The LSM bot allows linkshell info to be posted in your Discord server's channels.
+            </div>
+            <ol style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--fg-3);line-height:1.5">
+                <li><strong>Add the bot to your server</strong> — click the button, choose your server, authorize (you must own the server or have the <em>Manage Server</em> Discord permission).</li>
+                <li><strong>Give your bot the following permissions</strong> — <strong>Send Messages</strong>, <strong>Embed Links</strong>, and <strong>Attach Files</strong>.</li>
+            </ol>
+            <div style="margin-top:4px">
+                <a class="btn primary" href="https://discord.com/oauth2/authorize?client_id=1320463503848636568" target="_blank" rel="noopener noreferrer">Add the LSM bot to Discord ↗</a>
+            </div>
+        </div>
+
+        <div style="font-weight:500;color:var(--fg)">Server</div>
+        <div style="font-size:12px;color:var(--fg-3);margin-top:-8px">
+            Set your server here, then run <strong>/lsm</strong> in Discord to drop a "Join" button for members to launch the app.
         </div>
 
         @if (!string.IsNullOrWhiteSpace(Model.DiscordGuildId))
@@ -387,7 +528,7 @@
 <!-- Post-event discussion mirror: the bot reposts each new event-history comment
      to this channel so the discussion shows up in Discord too. -->
 <div class="card" style="margin-bottom:16px">
-    <div class="card-head"><div class="card-title">💬 Post-event discussion channel</div></div>
+    <div class="card-head"><div class="card-title">💬 After-event discussion channel</div></div>
     <div style="padding:8px 16px 14px">
         <p style="margin-top:0;font-size:13px;color:var(--fg-3)">
             Optional. New comments on a completed event are mirrored to this channel. Leave blank to keep discussion in-app only.
@@ -425,58 +566,66 @@
 
     async Task RouteRow(int i, LinkshellManagerDiscordApp.ViewModels.ChannelRouteInput r, bool isTemplate)
     {
-        <div class="route-row" style="border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px">
+        var showEvents = !isTemplate && r.PostEvents;
+        <div class="route-row@(showEvents ? "" : " is-compact")">
             <input type="hidden" data-field="Id" name="channelRoutes[@i].Id" value="@r.Id" />
             <input type="hidden" data-field="Name" name="channelRoutes[@i].Name" value="@r.Name" />
-            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-                <label class="field" style="flex:1 1 200px">
-                    <span>Channel</span>
-                    @if (availableChannels.Count > 0)
-                    {
-                        <select class="form-select" data-field="ChannelId" name="channelRoutes[@i].ChannelId">
-                            <option value="">— pick a channel —</option>
-                            @foreach (var channel in availableChannels)
-                            {
-                                <option value="@channel.Id" selected="@(!isTemplate && channel.Id == r.ChannelId)">#@channel.Name</option>
-                            }
-                        </select>
-                    }
-                    else
-                    {
-                        <input class="input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="20"
-                               placeholder="Channel ID" autocomplete="off"
-                               data-field="ChannelId" name="channelRoutes[@i].ChannelId" value="@r.ChannelId" />
-                    }
-                </label>
-                <button type="button" class="btn ghost sm route-remove" style="margin-bottom:2px">Remove</button>
-            </div>
 
-            <div style="display:flex;gap:8px 16px;flex-wrap:wrap">
-                @foreach (var (prop, label, on) in new[]
-                {
-                    ("PostEvents", "Event posts", r.PostEvents),
-                    ("PostLoot", "Loot posts", r.PostLoot),
-                    ("PostAuctions", "Auction posts", r.PostAuctions),
-                    ("PostAttendance", "Attendance posts", r.PostAttendance),
-                    ("PostTodBoard", "ToD board", r.PostTodBoard),
-                })
-                {
-                    <label style="display:flex;align-items:center;gap:6px">
-                        <input type="checkbox" value="true" data-field="@prop" name="channelRoutes[@i].@prop"
-                               checked="@(!isTemplate && on)"
-                               @(prop == "PostEvents" ? "data-events-toggle" : "") />
-                        <input type="hidden" data-field="@prop" name="channelRoutes[@i].@prop" value="false" />
-                        <span>@label</span>
+            <div class="route-main">
+                <div class="route-top">
+                    <label class="field route-channel">
+                        <span>Channel</span>
+                        @if (availableChannels.Count > 0)
+                        {
+                            <select class="form-select" data-field="ChannelId" name="channelRoutes[@i].ChannelId">
+                                <option value="">— pick a channel —</option>
+                                @foreach (var channel in availableChannels)
+                                {
+                                    <option value="@channel.Id" selected="@(!isTemplate && channel.Id == r.ChannelId)">#@channel.Name</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input class="input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="20"
+                                   placeholder="Channel ID" autocomplete="off"
+                                   data-field="ChannelId" name="channelRoutes[@i].ChannelId" value="@r.ChannelId" />
+                        }
                     </label>
-                }
+                    <button type="button" class="btn ghost sm route-remove">Remove</button>
+                </div>
+
+                <div class="route-group">
+                    <h4>Choose What to Post</h4>
+                    <div class="chip-grid post-types">
+                        @foreach (var (prop, label, on) in new[]
+                        {
+                            ("PostEvents", "Events", r.PostEvents),
+                            ("PostLoot", "Loot", r.PostLoot),
+                            ("PostAuctions", "Auctions", r.PostAuctions),
+                            ("PostAttendance", "Attendance", r.PostAttendance),
+                            ("PostTodBoard", "ToD", r.PostTodBoard),
+                            ("PostDkpSheet", "DKP", r.PostDkpSheet),
+                        })
+                        {
+                            <label class="chip">
+                                <input type="checkbox" value="true" data-field="@prop" name="channelRoutes[@i].@prop"
+                                       checked="@(!isTemplate && on)"
+                                       @(prop == "PostEvents" ? "data-events-toggle" : "") />
+                                <input type="hidden" data-field="@prop" name="channelRoutes[@i].@prop" value="false" />
+                                <span>@label</span>
+                            </label>
+                        }
+                    </div>
+                </div>
             </div>
 
-            <div class="route-event-types" style="@(!isTemplate && r.PostEvents ? "" : "display:none;")flex-direction:column;gap:4px">
-                <span style="font-size:12px;color:var(--fg-3)">Event types:</span>
-                <div style="display:flex;gap:6px 14px;flex-wrap:wrap">
+            <div class="route-event-types route-group" style="@(showEvents ? "" : "display:none")">
+                <h4>Choose what Event Type</h4>
+                <div class="chip-grid event-grid">
                     @foreach (var et in eventTypes)
                     {
-                        <label style="display:flex;align-items:center;gap:5px">
+                        <label class="chip">
                             <input type="checkbox" value="@et" data-field="EventTypeFilter" name="channelRoutes[@i].EventTypeFilter"
                                    checked="@(!isTemplate && r.EventTypeFilter.Contains(et))" />
                             <span>@et</span>
@@ -487,16 +636,101 @@
         </div>
     }
 }
+
+<!-- Chip-style route cards (mirrors the Discord Activity Configurations tab):
+     two-column layout, bordered toggle chips, divider between columns. -->
+<style>
+    /* A single centered column: Channel → Choose What to Post → Event types → HNM monsters. */
+    #discordChannelsCard .route-row {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 18px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+    }
+    #discordChannelsCard .route-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; width: 100%; align-items: center; }
+    #discordChannelsCard .route-top { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; justify-content: center; }
+    #discordChannelsCard .route-channel { flex: 1 1 280px; min-width: 0; max-width: 360px; }
+    #discordChannelsCard .route-remove { margin-bottom: 2px; white-space: nowrap; }
+    #discordChannelsCard .route-event-types {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        width: 100%;
+        border-top: 1px solid var(--border);
+        padding-top: 16px;
+    }
+    #discordChannelsCard .route-group { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    #discordChannelsCard .route-group h4 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--fg-1);
+    }
+    #discordChannelsCard .chip-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    #discordChannelsCard .chip {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 38px;
+        padding: 8px 12px;
+        border-radius: 9px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--fg-1);
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+    }
+    #discordChannelsCard .chip:hover { border-color: var(--accent); }
+    #discordChannelsCard .chip span { line-height: 1.2; }
+    #discordChannelsCard .chip:has(input[type="checkbox"]:checked) {
+        color: var(--fg);
+        background: rgba(99, 135, 255, 0.16);
+        border-color: var(--accent);
+    }
+    #discordChannelsCard .chip input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 17px;
+        height: 17px;
+        margin: 0;
+        flex-shrink: 0;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        position: relative;
+    }
+    #discordChannelsCard .chip input[type="checkbox"]:checked {
+        border-color: var(--accent);
+        background: var(--accent);
+    }
+    #discordChannelsCard .chip input[type="checkbox"]:checked::after {
+        content: "✓";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #07101e;
+        font-size: 12px;
+        font-weight: 800;
+    }
+</style>
 <div class="card fade d2" id="discordChannelsCard" style="margin-bottom:16px">
     <div class="card-head">
         <div class="card-title">Discord channel routes</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:760px;margin:0 auto;width:100%">
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:920px;margin:0 auto;width:100%">
         <div style="font-size:12px;color:var(--fg-3)">
-            Add a route for each channel the bot should post to, then tick which kinds of post it
-            receives. Combine several into one channel, or give each its own. Event posts go only to
-            the event types you check (use "Other" for anything not listed). Requires the
-            bot to be in your server with permission to send messages in the chosen channels.
+            Select a channel for the bot to post to.
         </div>
 
         @if (string.IsNullOrWhiteSpace(Model.DiscordChannelGuildId))
@@ -532,6 +766,250 @@
     </div>
 </div>
 
+@{
+    // Group-colour name → theme token (web --*-main). Keys mirror DkpPoolAccents.All; the JS
+    // map in the script below must stay in sync. Unknown / legacy keys fall back to blue.
+    string SwatchColor(string? key) => (key ?? "").Trim().ToLowerInvariant() switch
+    {
+        "green" => "var(--green-main)",
+        "red" => "var(--red-main)",
+        "orange" => "var(--orange-main)",
+        "gold" => "var(--gold-main)",
+        "purple" => "var(--purple-main)",
+        "cyan" => "var(--cyan-main)",
+        "gray" => "var(--fg-3)",
+        _ => "var(--blue-main)",
+    };
+
+    async Task PoolRow(int index, LinkshellManagerDiscordApp.ViewModels.DkpPoolInput pool)
+    {
+        <div class="dkp-pool-row@(pool.IsDefault ? " is-default" : "")"
+             style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface-2);border-radius:8px">
+            <input type="hidden" data-field="Id" name="dkpPools[@index].Id" value="@pool.Id" />
+            @if (pool.IsDefault)
+            {
+                @* The default group is permanent: the catch-all every unassigned event type, plus
+                   adjustments and imports, land in. It can't be renamed or removed, so the name is
+                   read-only text with a hidden input to carry the value on save. *@
+                <input type="hidden" data-field="Name" name="dkpPools[@index].Name" value="@pool.Name" />
+                <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px"
+                     title="The catch-all group: every event type you don't assign, plus adjustments and imports, land here. It can't be renamed or removed.">
+                    <span style="font-size:13px">@pool.Name</span>
+                </div>
+            }
+            else
+            {
+                <input type="text" data-field="Name" name="dkpPools[@index].Name" value="@pool.Name"
+                       maxlength="64" placeholder="Enter a Group Name" style="flex:1;min-width:0"
+                       title="What to call this group. Members see this name (e.g. Endgame, Sky/Sea)." />
+            }
+            <div style="flex:0 0 150px;display:flex;align-items:center;gap:8px"
+                 title="A colour to tell this group apart at a glance.">
+                <span data-accent-swatch
+                      style="width:14px;height:14px;border-radius:4px;flex:0 0 auto;border:1px solid var(--border);background:@SwatchColor(pool.Accent)"></span>
+                <select data-field="Accent" name="dkpPools[@index].Accent" style="flex:1;min-width:0">
+                    @foreach (var accent in LinkshellManagerDiscordApp.Models.DkpPoolAccents.All)
+                    {
+                        <option value="@accent" selected="@(string.Equals(pool.Accent, accent, StringComparison.OrdinalIgnoreCase))">@accent</option>
+                    }
+                </select>
+            </div>
+            @if (pool.IsDefault)
+            {
+                @* No Remove for the default group. Keep the column width so rows stay aligned. *@
+                <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
+            }
+            else
+            {
+                <button type="button" class="btn ghost sm dkp-pool-remove" style="flex:0 0 auto" title="Remove this group">Remove</button>
+            }
+        </div>
+    }
+}
+<div class="card fade d2" id="dkpPoolsCard" style="margin-bottom:16px">
+    <div class="card-head">
+        <div class="card-title">DKP grouping</div>
+    </div>
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:920px;margin:0 auto;width:100%">
+        <div style="font-size:12px;color:var(--fg-3)">
+            Create a DKP Group. Customize what event categories are grouped together so that DKP
+            earned and DKP spent can be separated based on event type.
+        </div>
+
+        <form method="post" asp-action="SaveDkpPools" class="lsm-confirm-form"
+              style="display:flex;flex-direction:column;gap:14px">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
+            @* The default group is the first row and can't be moved or removed, so its index is
+               fixed. Post it explicitly rather than leaning on the controller's parameter default. *@
+            <input type="hidden" name="dkpPoolDefaultIndex" value="@Math.Max(0, Model.DkpPools.FindIndex(p => p.IsDefault))" />
+
+            <div style="font-size:12px;color:var(--fg-3)">
+                Every event type starts in the <em>Default</em> group, so all event DKP is pooled
+                together until you create another group and move event types into it.
+            </div>
+
+            <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-top:4px">Groups</div>
+            @* Column headers for the group rows below — aligned to the row's flex columns. *@
+            <div style="display:flex;align-items:center;gap:10px;padding:0 10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-4)">
+                <div style="flex:1;min-width:0">Group Name</div>
+                <div style="flex:0 0 150px">Group Color</div>
+                <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
+            </div>
+            <div id="dkpPoolRows" style="display:flex;flex-direction:column;gap:8px">
+                @for (var i = 0; i < Model.DkpPools.Count; i++)
+                {
+                    await PoolRow(i, Model.DkpPools[i]);
+                }
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
+                <button type="button" class="btn ghost sm" id="dkpPoolAdd">+ Add New Group</button>
+            </div>
+
+            <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-top:4px">Event types</div>
+            <div style="font-size:12px;color:var(--fg-3)">
+                Anything left on <em>Default</em> earns into the Default group. That includes event
+                types you haven't run yet, and any custom name typed into the event form's "Other"
+                field.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+                @for (var i = 0; i < Model.DkpPoolAssignments.Count; i++)
+                {
+                    var assignment = Model.DkpPoolAssignments[i];
+                    <div class="dkp-assign-row"
+                         style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--surface-2);border-radius:8px">
+                        <input type="hidden" name="dkpPoolAssignments[@i].EventType" value="@assignment.EventType" />
+                        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px">
+                            <span style="font-size:13px">@assignment.EventType</span>
+                            @if (assignment.IsCustom)
+                            {
+                                <span class="tag" style="font-size:10px;font-weight:400">custom</span>
+                            }
+                            @if (assignment.EarnedTotal > 0)
+                            {
+                                <span style="font-size:11px;color:var(--fg-4)">@assignment.EarnedTotal.ToString("0.##") DKP earned</span>
+                            }
+                        </div>
+                        <select name="dkpPoolAssignments[@i].PoolIndex" data-pool-select style="min-width:170px"
+                                title="Which group this event type earns into — and pays its loot out of. Leave on Default to use the default group.">
+                            <option value="-1" selected="@(assignment.PoolIndex < 0)">Default</option>
+                            @for (var p = 0; p < Model.DkpPools.Count; p++)
+                            {
+                                @* The default group is the "Default" (-1) option above — never a numbered one. *@
+                                @if (!Model.DkpPools[p].IsDefault)
+                                {
+                                    <option value="@p" selected="@(assignment.PoolIndex == p)">@Model.DkpPools[p].Name</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+
+            <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
+                <button class="btn primary" type="submit">Save DKP grouping</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<template id="dkpPoolRowTemplate">
+    @{ await PoolRow(0, new LinkshellManagerDiscordApp.ViewModels.DkpPoolInput { Accent = LinkshellManagerDiscordApp.Models.DkpPoolAccents.Default }); }
+</template>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var rows = document.getElementById('dkpPoolRows');
+        var addBtn = document.getElementById('dkpPoolAdd');
+        var tpl = document.getElementById('dkpPoolRowTemplate');
+        var card = document.getElementById('dkpPoolsCard');
+        if (!rows || !addBtn || !tpl || !card) { return; }
+
+        // Renumber every row's field names to its live DOM position. The default group is always
+        // the first row and never moves (it can't be removed and new rows append after it), so its
+        // index — and the dkpPoolDefaultIndex the controller reads — stays 0.
+        function reindex() {
+            var list = rows.querySelectorAll('.dkp-pool-row');
+            for (var i = 0; i < list.length; i++) {
+                list[i].querySelectorAll('[data-field]').forEach(function (el) {
+                    el.setAttribute('name', 'dkpPools[' + i + '].' + el.getAttribute('data-field'));
+                });
+            }
+            syncPoolOptions();
+            syncSwatches();
+        }
+
+        // Colour name → theme token. Must mirror SwatchColor() in the Razor helper above.
+        var SWATCH = {
+            green: 'var(--green-main)', red: 'var(--red-main)', orange: 'var(--orange-main)',
+            gold: 'var(--gold-main)', purple: 'var(--purple-main)', cyan: 'var(--cyan-main)',
+            gray: 'var(--fg-3)'
+        };
+        function syncSwatches() {
+            rows.querySelectorAll('.dkp-pool-row').forEach(function (row) {
+                var sel = row.querySelector('[data-field="Accent"]');
+                var swatch = row.querySelector('[data-accent-swatch]');
+                if (sel && swatch) {
+                    swatch.style.background = SWATCH[(sel.value || '').toLowerCase()] || 'var(--blue-main)';
+                }
+            });
+        }
+
+        // Rebuild every event type's <select> from the live pool rows, preserving the current
+        // choice by index. A <select> per event type is what makes double-assignment impossible.
+        // The default group is represented by the "Default" (-1) option, so it's skipped here
+        // rather than listed as its own numbered option.
+        function syncPoolOptions() {
+            var pools = [];
+            rows.querySelectorAll('.dkp-pool-row').forEach(function (row, i) {
+                if (row.classList.contains('is-default')) { return; }
+                var input = row.querySelector('[data-field="Name"]');
+                pools.push({ index: i, name: (input && input.value.trim()) || 'Unnamed group' });
+            });
+            card.querySelectorAll('[data-pool-select]').forEach(function (select) {
+                var previous = select.value;
+                select.innerHTML = '';
+                var none = document.createElement('option');
+                none.value = '-1';
+                none.textContent = 'Default';
+                select.appendChild(none);
+                pools.forEach(function (pool) {
+                    var opt = document.createElement('option');
+                    opt.value = String(pool.index);
+                    opt.textContent = pool.name;
+                    select.appendChild(opt);
+                });
+                // A pool that was removed leaves its event types on Default rather than silently
+                // re-pointing them at whatever pool happens to now hold that index.
+                var stillExists = pools.some(function (pool) { return String(pool.index) === previous; });
+                select.value = stillExists ? previous : '-1';
+            });
+        }
+
+        addBtn.addEventListener('click', function () {
+            rows.appendChild(tpl.content.firstElementChild.cloneNode(true));
+            reindex();
+        });
+
+        rows.addEventListener('click', function (evt) {
+            if (!evt.target.closest('.dkp-pool-remove')) { return; }
+            if (rows.querySelectorAll('.dkp-pool-row').length <= 1) { return; }
+            evt.target.closest('.dkp-pool-row').remove();
+            reindex();
+        });
+
+        rows.addEventListener('input', function (evt) {
+            if (evt.target.getAttribute('data-field') === 'Name') { syncPoolOptions(); }
+        });
+
+        rows.addEventListener('change', function (evt) {
+            if (evt.target.getAttribute('data-field') === 'Accent') { syncSwatches(); }
+        });
+
+        reindex();
+    })();
+</script>
+
 <template id="routeRowTemplate">
     @{ await RouteRow(0, new LinkshellManagerDiscordApp.ViewModels.ChannelRouteInput(), true); }
 </template>
@@ -554,12 +1032,17 @@
             }
         }
 
-        // Show/hide a row's event-type picker with its "Event posts" checkbox.
+        // Show/hide a row's event-type picker with its "Event posts" checkbox, and
+        // collapse the card to a single column when the picker is hidden.
         function bindEventsToggle(row) {
             var toggle = row.querySelector('[data-events-toggle]');
             var picker = row.querySelector('.route-event-types');
             if (!toggle || !picker) { return; }
-            var sync = function () { picker.style.display = toggle.checked ? 'flex' : 'none'; };
+            var sync = function () {
+                var on = toggle.checked;
+                picker.style.display = on ? 'flex' : 'none';
+                row.classList.toggle('is-compact', !on);
+            };
             toggle.addEventListener('change', sync);
             sync();
         }
@@ -582,166 +1065,7 @@
     })();
 </script>
 
-<div class="card fade d2 permissions-config-card" id="permissionsConfigCard" style="margin-top:16px"
-     data-linkshellid="@Model.LinkshellId"
-     data-can-manage-roles="@canManageRolesValue"
-     data-csrf-header="@antiforgeryTokens.HeaderName"
-     data-csrf-token="@antiforgeryTokens.RequestToken">
-    <div class="card-head">
-        <div class="card-title">Permissions</div>
-        <div class="page-actions">
-            <span id="permissionsStatus" class="permissions-status">Loading roles...</span>
-            @if (Model.CanManageRoles)
-            {
-                <button type="button" class="btn primary sm" id="permissionsNewRoleBtn" style="white-space:nowrap">+ New Role</button>
-            }
-        </div>
-    </div>
-    <div id="permissionsError" class="alert alert-danger permissions-error" style="display:none"></div>
-    <div class="permissions-table-wrap" id="permissionsTableWrap">
-        <div class="empty">Loading roles...</div>
-    </div>
 
-    @if (Model.CanManageRoles)
-    {
-        <form id="roleEditForm" class="role-edit-form" style="display:none">
-            <div class="role-edit-form__header">
-                <strong id="roleEditTitle">Edit role</strong>
-                <button type="button" class="btn ghost sm" id="roleEditCancelBtn">Cancel</button>
-            </div>
-            <label class="field">
-                <span>Role name</span>
-                <input type="text" class="form-control" id="roleEditName" maxlength="64" required />
-            </label>
-            <div class="role-edit-form__permissions" id="rolePermissionFields"></div>
-            <div class="role-edit-form__actions">
-                <button type="submit" class="btn primary" id="roleEditSaveBtn">Save changes</button>
-                <button type="button" class="btn ghost" id="roleEditCancelBtnBottom">Cancel</button>
-            </div>
-        </form>
-    }
-</div>
-
-<!-- Game Addon (att) pairing card. Lives outside the customize form because tokens
-     are managed via separate XHR endpoints (no full-form post). Hidden entirely
-     while a super admin has globally disabled the addon. -->
-@if (!Model.AddonGloballyDisabled)
-{
-<div class="card fade d2" id="addonTokenCard" style="margin-top:16px"
-     data-linkshellid="@Model.LinkshellId"
-     data-csrf-header="@antiforgeryTokens.HeaderName"
-     data-csrf-token="@antiforgeryTokens.RequestToken">
-    <div class="card-head">
-        <div>
-            <div class="card-title">Game Addon (att)</div>
-            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
-                Generate a one-time pairing code, then in FFXI type
-                <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/lsm link &lt;code&gt;</code>
-                to connect the addon to this linkshell.
-            </div>
-        </div>
-        <div class="page-actions">
-            <button type="button" class="btn primary sm" id="addonGenerateBtn">+ Generate pairing code</button>
-        </div>
-    </div>
-    <div id="addonTokensWrapper" style="padding:0 4px 4px">
-        <div id="addonTokensEmpty" class="empty" style="display:none">No active addon tokens. Generate one to get started.</div>
-        <table class="table themed" id="addonTokensTable" style="display:none">
-            <thead>
-                <tr>
-                    <th>Token</th>
-                    <th>Created</th>
-                    <th>Last used</th>
-                    <th style="text-align:right">Actions</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
-</div>
-
-<div class="mt-modal" id="addonPairModal" role="dialog" aria-modal="true">
-    <div class="mt-modal__backdrop" data-mt-close="1"></div>
-    <div class="mt-modal__dialog">
-        <div class="mt-modal__content">
-            <div class="mt-modal__header">
-                <h5 class="mt-modal__title">Pairing code</h5>
-                <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
-            </div>
-            <div class="mt-modal__body">
-                @* Lets the leader pick which linkshell the code is for without
-                   leaving the Customize page. *@
-                <div class="field" style="margin-bottom:14px">
-                    <label for="addonPairLinkshell">Linkshell</label>
-                    <select id="addonPairLinkshell" class="form-select" style="margin-top:6px;width:100%">
-                        @foreach (var linkshell in Model.ManageableLinkshells)
-                        {
-                            if (linkshell.Id == Model.LinkshellId)
-                            {
-                                <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                            }
-                            else
-                            {
-                                <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                            }
-                        }
-                    </select>
-                </div>
-                <div id="addonPairCodeWrapper" style="display:none">
-                    <div style="text-align:center;margin:12px 0">
-                        <div style="font-size:32px;letter-spacing:6px;font-family:monospace;font-weight:700" id="addonPairCode"></div>
-                        <div style="margin-top:10px">
-                            <span class="tag warning" id="addonPairStatusTag">Status: <span id="addonPairStatusText">Unpaired</span></span>
-                        </div>
-                        <div style="color:var(--fg-3);font-size:12px;margin-top:6px">
-                            Expires in <span id="addonPairCountdown">10:00</span>
-                        </div>
-                    </div>
-                    <div style="color:var(--fg-2);font-size:13px;line-height:1.5;margin-top:10px">
-                        Enter this code in your FFXI client as
-                        <code id="addonPairCmd1">/lsm link &lt;code&gt;</code>
-                        to connect the addon to <strong id="addonPairLsName">this linkshell</strong>.
-                        This window closes automatically once the code is linked.
-                    </div>
-                </div>
-                <div id="addonPairError" style="color:#e05a5a;font-size:13px;margin-top:8px;display:none"></div>
-            </div>
-            <div class="mt-modal__footer">
-                <button type="button" class="btn ghost" data-mt-close="1">Close</button>
-                <button type="button" class="btn primary" id="addonPairCreateBtn">Generate</button>
-            </div>
-        </div>
-    </div>
-</div>
-}
-
-<!-- Entry modal: confirm/choose which linkshell the leader is about to edit. -->
-<div class="mt-modal" id="customizeTargetModal" role="dialog" aria-modal="true">
-    <div class="mt-modal__backdrop"></div>
-    <div class="mt-modal__dialog">
-        <div class="mt-modal__content">
-            <div class="mt-modal__header">
-                <h5 class="mt-modal__title">Which linkshell do you wish to make changes to?</h5>
-            </div>
-            <div class="mt-modal__body">
-                <div class="field">
-                    <select id="customizeTargetSelect" class="form-select" style="width:100%">
-                        @foreach (var linkshell in Model.ManageableLinkshells)
-                        {
-                            <option value="@linkshell.Id" selected="@(linkshell.Id == Model.LinkshellId)">@linkshell.LinkshellName</option>
-                        }
-                    </select>
-                    <div style="color:var(--fg-3);font-size:12px;margin-top:8px">
-                        You're editing settings for the linkshell selected here. Choosing a different one reloads this page for it.
-                    </div>
-                </div>
-            </div>
-            <div class="mt-modal__footer">
-                <button type="button" class="btn primary" id="customizeTargetContinue">Continue</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Confirm modal: reused by every save action on this page. -->
 <div class="mt-modal" id="customizeConfirmModal" role="dialog" aria-modal="true">
@@ -771,8 +1095,6 @@
         // every save action on this page (window.lsmConfirmChange). Defined first
         // so the permissions/addon scripts below can call it.
         (function () {
-            var CUR_ID = @Model.LinkshellId;
-
             function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('mt-modal--open'); }
             function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('mt-modal--open'); }
 
@@ -793,11 +1115,8 @@
             if (yes) yes.addEventListener('click', function () { settle(true); });
             if (no) no.addEventListener('click', function () { settle(false); });
 
-            // Suppress the entry modal on self-caused reloads (save / switch);
-            // only a fresh arrival should be greeted.
-            var SKIP_ENTRY = @(skipEntryModal ? "true" : "false");
-            // Drop the one-shot ?switched flag so a later manual reload behaves
-            // normally (and the URL stays clean).
+            // Drop the one-shot ?switched flag (set by the inline linkshell switcher)
+            // so a later manual reload behaves normally and the URL stays clean.
             if (window.history && window.history.replaceState) {
                 try {
                     var cleanUrl = new URL(window.location.href);
@@ -806,21 +1125,6 @@
                         window.history.replaceState({}, '', cleanUrl.toString());
                     }
                 } catch (e) { /* no-op */ }
-            }
-
-            // Entry modal — establishes/confirms the target linkshell on open.
-            var entrySelect = document.getElementById('customizeTargetSelect');
-            var entryContinue = document.getElementById('customizeTargetContinue');
-            if (entrySelect && entryContinue) {
-                if (!SKIP_ENTRY) { openModal('customizeTargetModal'); }
-                entryContinue.addEventListener('click', function () {
-                    var chosen = parseInt(entrySelect.value, 10);
-                    if (chosen && chosen !== CUR_ID) {
-                        window.location.href = '?id=' + chosen + '&switched=1';
-                    } else {
-                        closeModal('customizeTargetModal');
-                    }
-                });
             }
 
             // Gate the main customize form (loot structure, linkshell type,
@@ -868,559 +1172,5 @@
         })();
     </script>
 
-    <script nonce="@Html.CspNonce()">
-        (function () {
-            var card = document.getElementById('permissionsConfigCard');
-            if (!card) return;
 
-            var linkshellId = parseInt(card.dataset.linkshellid, 10);
-            var canManageRoles = card.dataset.canManageRoles === 'true';
-            var antiforgeryHeader = card.dataset.csrfHeader || '';
-            var antiforgeryToken = card.dataset.csrfToken || '';
-            var tableWrap = document.getElementById('permissionsTableWrap');
-            var statusEl = document.getElementById('permissionsStatus');
-            var errorEl = document.getElementById('permissionsError');
-            var newRoleBtn = document.getElementById('permissionsNewRoleBtn');
-            var form = document.getElementById('roleEditForm');
-            var formTitle = document.getElementById('roleEditTitle');
-            var nameInput = document.getElementById('roleEditName');
-            var fieldsWrap = document.getElementById('rolePermissionFields');
-            var saveBtn = document.getElementById('roleEditSaveBtn');
-            var roles = [];
-            var editingRoleId = null;
-
-            var permissions = [
-                { key: 'canManageRoles', label: 'Manage roles & permissions' },
-                { key: 'canManageMembers', label: 'Manage members (invite, rank, status)' },
-                { key: 'canManageEvents', label: 'Manage events (create, edit, start, end, cancel)' },
-                { key: 'canModerateLiveEvent', label: 'Moderate live events (verify attendance, break room)' },
-                { key: 'canAddLoot', label: 'Add event loot entries' },
-                { key: 'canManageInventory', label: 'Manage inventory (items)' },
-                { key: 'canManageTreasury', label: 'Manage treasury (revenue)' },
-                { key: 'canManageRules', label: 'Manage rules' },
-                { key: 'canManageAnnouncements', label: 'Manage announcements' },
-                { key: 'canManageTods', label: 'Manage ToDs' },
-                { key: 'canAuditDkp', label: 'Audit DKP' },
-                { key: 'canManageAuctions', label: 'Manage auctions' },
-                { key: 'canLockAuctions', label: 'Lock auctions (bid freeze)' },
-                { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' }
-            ];
-
-            var escapeHtml = window.escapeHtml || function (value) {
-                return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
-                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-                });
-            };
-
-            function withCsrf(headers) {
-                headers = headers || {};
-                if (antiforgeryHeader && antiforgeryToken) {
-                    headers[antiforgeryHeader] = antiforgeryToken;
-                }
-                return headers;
-            }
-
-            function setBusy(isBusy) {
-                if (newRoleBtn) newRoleBtn.disabled = isBusy;
-                if (saveBtn) saveBtn.disabled = isBusy;
-                card.querySelectorAll('[data-role-action]').forEach(function (button) {
-                    button.disabled = isBusy;
-                });
-                if (statusEl) statusEl.textContent = isBusy ? 'Saving...' : '';
-            }
-
-            function setError(message) {
-                errorEl.textContent = message || '';
-                errorEl.style.display = message ? 'block' : 'none';
-            }
-
-            function readError(response, fallback) {
-                return response.text().then(function (text) {
-                    if (!text) return fallback;
-                    try {
-                        var payload = JSON.parse(text);
-                        return payload && payload.error ? payload.error : fallback;
-                    } catch (e) {
-                        return text;
-                    }
-                });
-            }
-
-            function renderTable() {
-                if (!roles.length) {
-                    tableWrap.innerHTML = '<div class="empty">No roles found.</div>';
-                    return;
-                }
-
-                var head = '<tr><th>Permission</th>' + roles.map(function (role) {
-                    var actions = '';
-                    if (canManageRoles) {
-                        actions =
-                            '<div class="permissions-matrix__role-actions">' +
-                            '<button type="button" class="btn ghost sm" data-role-action="edit" data-role-id="' + role.id + '">Edit</button>' +
-                            (role.isSystem ? '' : '<button type="button" class="btn ghost sm" data-role-action="delete" data-role-id="' + role.id + '">Delete</button>') +
-                            '</div>';
-                    }
-                    return '<th><div class="permissions-matrix__role">' +
-                        '<strong>' + escapeHtml(role.name) + '</strong>' +
-                        (role.isSystem ? '<span class="tag">System</span>' : '') +
-                        actions +
-                        '</div></th>';
-                }).join('') + '</tr>';
-
-                var body = permissions.map(function (permission) {
-                    return '<tr><td>' + escapeHtml(permission.label) + '</td>' +
-                        roles.map(function (role) {
-                            return '<td class="permissions-matrix__cell">' +
-                                (role[permission.key] ? '<span class="perm-yes">✓</span>' : '<span class="perm-no">-</span>') +
-                                '</td>';
-                        }).join('') +
-                        '</tr>';
-                }).join('');
-
-                tableWrap.innerHTML =
-                    '<table class="table themed permissions-matrix">' +
-                    '<thead>' + head + '</thead>' +
-                    '<tbody>' + body + '</tbody>' +
-                    '</table>';
-            }
-
-            function renderPermissionFields() {
-                if (!fieldsWrap) return;
-                fieldsWrap.innerHTML = permissions.map(function (permission) {
-                    return '<label class="role-edit-form__perm">' +
-                        '<input type="checkbox" data-role-permission="' + permission.key + '" />' +
-                        '<span>' + escapeHtml(permission.label) + '</span>' +
-                        '</label>';
-                }).join('');
-            }
-
-            function openForm(role) {
-                if (!form) return;
-                editingRoleId = role ? role.id : null;
-                formTitle.textContent = role ? 'Edit role' : 'New role';
-                nameInput.value = role ? role.name : '';
-                nameInput.disabled = !!(role && role.isSystem);
-                fieldsWrap.querySelectorAll('[data-role-permission]').forEach(function (input) {
-                    var key = input.dataset.rolePermission;
-                    input.checked = role ? role[key] === true : false;
-                });
-                form.style.display = '';
-                if (newRoleBtn) newRoleBtn.style.display = 'none';
-                nameInput.focus();
-            }
-
-            function closeForm() {
-                editingRoleId = null;
-                if (form) form.style.display = 'none';
-                if (newRoleBtn) newRoleBtn.style.display = '';
-            }
-
-            function buildPayload() {
-                var payload = { name: nameInput.value.trim() || null };
-                fieldsWrap.querySelectorAll('[data-role-permission]').forEach(function (input) {
-                    payload[input.dataset.rolePermission] = input.checked;
-                });
-                return payload;
-            }
-
-            function loadRoles() {
-                setError('');
-                if (statusEl) statusEl.textContent = 'Loading roles...';
-                return fetch('/api/activity/linkshells/' + linkshellId + '/roles', {
-                    cache: 'no-store',
-                    credentials: 'same-origin'
-                }).then(function (response) {
-                    if (!response.ok) {
-                        return readError(response, 'Loading roles failed.').then(function (message) {
-                            throw new Error(message);
-                        });
-                    }
-                    return response.json();
-                }).then(function (data) {
-                    roles = data.roles || [];
-                    renderTable();
-                    if (statusEl) statusEl.textContent = '';
-                }).catch(function (error) {
-                    setError(error.message || 'Loading roles failed.');
-                    tableWrap.innerHTML = '<div class="empty">Roles could not be loaded.</div>';
-                    if (statusEl) statusEl.textContent = '';
-                });
-            }
-
-            function saveRole() {
-                var payload = buildPayload();
-                if (!payload.name) {
-                    setError('A role name is required.');
-                    nameInput.focus();
-                    return;
-                }
-                if (window.lsmConfirmChange && !saveRole._confirmed) {
-                    window.lsmConfirmChange().then(function (ok) {
-                        if (!ok) return;
-                        saveRole._confirmed = true;
-                        try { saveRole(); } finally { saveRole._confirmed = false; }
-                    });
-                    return;
-                }
-
-                var path = editingRoleId == null
-                    ? '/api/activity/linkshells/' + linkshellId + '/roles'
-                    : '/api/activity/linkshells/' + linkshellId + '/roles/' + editingRoleId + '/update';
-
-                setBusy(true);
-                setError('');
-                fetch(path, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: withCsrf({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify(payload)
-                }).then(function (response) {
-                    if (!response.ok) {
-                        return readError(response, 'Saving the role failed.').then(function (message) {
-                            throw new Error(message);
-                        });
-                    }
-                    closeForm();
-                    return loadRoles();
-                }).catch(function (error) {
-                    setError(error.message || 'Saving the role failed.');
-                }).finally(function () {
-                    setBusy(false);
-                });
-            }
-
-            function deleteRole(role) {
-                if (!role || role.isSystem) return;
-                if (window.lsmConfirmChange && !deleteRole._confirmed) {
-                    window.lsmConfirmChange().then(function (ok) {
-                        if (!ok) return;
-                        deleteRole._confirmed = true;
-                        try { deleteRole(role); } finally { deleteRole._confirmed = false; }
-                    });
-                    return;
-                }
-
-                setBusy(true);
-                setError('');
-                fetch('/api/activity/linkshells/' + linkshellId + '/roles/' + role.id + '/delete', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: withCsrf()
-                }).then(function (response) {
-                    if (!response.ok) {
-                        return readError(response, 'Deleting the role failed.').then(function (message) {
-                            throw new Error(message);
-                        });
-                    }
-                    closeForm();
-                    return loadRoles();
-                }).catch(function (error) {
-                    setError(error.message || 'Deleting the role failed.');
-                }).finally(function () {
-                    setBusy(false);
-                });
-            }
-
-            if (newRoleBtn) {
-                newRoleBtn.addEventListener('click', function () { openForm(null); });
-            }
-            if (form) {
-                renderPermissionFields();
-                form.addEventListener('submit', function (event) {
-                    event.preventDefault();
-                    saveRole();
-                });
-                document.getElementById('roleEditCancelBtn').addEventListener('click', closeForm);
-                document.getElementById('roleEditCancelBtnBottom').addEventListener('click', closeForm);
-            }
-            card.addEventListener('click', function (event) {
-                var button = event.target.closest('[data-role-action]');
-                if (!button) return;
-                var roleId = parseInt(button.dataset.roleId, 10);
-                var role = roles.find(function (item) { return item.id === roleId; });
-                if (!role) return;
-                if (button.dataset.roleAction === 'edit') openForm(role);
-                if (button.dataset.roleAction === 'delete') deleteRole(role);
-            });
-
-            loadRoles();
-        })();
-    </script>
-
-    <script nonce="@Html.CspNonce()">
-        // Addon-pairing card UX. Self-contained so this view doesn't depend on
-        // manage-team.js (which has been retired alongside the old card location).
-        (function () {
-            var addonCard = document.getElementById('addonTokenCard');
-            if (!addonCard) return;
-
-            // Read CSRF header/token from data-* attributes so the token never
-            // gets interpolated as a JS string literal — the runtime parses it
-            // as plain text from the DOM, which keeps it out of the script body
-            // and is safe under the strict CSP nonce policy.
-            var antiforgeryHeader = addonCard.dataset.csrfHeader || '';
-            var antiforgeryToken = addonCard.dataset.csrfToken || '';
-            function withCsrf(headers) {
-                headers = headers || {};
-                if (antiforgeryHeader && antiforgeryToken) {
-                    headers[antiforgeryHeader] = antiforgeryToken;
-                }
-                return headers;
-            }
-
-            function openModal(id) {
-                var el = document.getElementById(id);
-                if (el) { el.classList.add('mt-modal--open'); document.body.style.overflow = 'hidden'; }
-            }
-            function closeModal(id) {
-                var el = document.getElementById(id);
-                if (el) { el.classList.remove('mt-modal--open'); document.body.style.overflow = ''; }
-            }
-            document.querySelectorAll('[data-mt-close]').forEach(function (el) {
-                el.addEventListener('click', function () {
-                    var modal = el.closest('.mt-modal');
-                    if (modal) closeModal(modal.id);
-                });
-            });
-
-            var addonLinkshellId = parseInt(addonCard.dataset.linkshellid, 10);
-            var addonGenerateBtn = document.getElementById('addonGenerateBtn');
-            var addonPairCreateBtn = document.getElementById('addonPairCreateBtn');
-            var addonPairCodeWrapper = document.getElementById('addonPairCodeWrapper');
-            var addonPairCode = document.getElementById('addonPairCode');
-            var addonPairCountdown = document.getElementById('addonPairCountdown');
-            var addonPairError = document.getElementById('addonPairError');
-            var addonPairStatusTag = document.getElementById('addonPairStatusTag');
-            var addonPairStatusText = document.getElementById('addonPairStatusText');
-            var addonPairCmd1 = document.getElementById('addonPairCmd1');
-            var addonPairLsName = document.getElementById('addonPairLsName');
-            var addonTokensTable = document.getElementById('addonTokensTable');
-            var addonTokensEmpty = document.getElementById('addonTokensEmpty');
-            var countdownTimer = null;
-            var pairStatusTimer = null;
-
-            // Restores the modal to its pre-generate state: Generate button
-            // visible, code/instructions hidden, both timers stopped. Called
-            // on open (fresh start) and on close (so the next open is clean).
-            function resetPairModalUi() {
-                if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-                if (pairStatusTimer) { clearInterval(pairStatusTimer); pairStatusTimer = null; }
-                addonPairCodeWrapper.style.display = 'none';
-                addonPairCode.textContent = '';
-                addonPairCreateBtn.style.display = '';
-                addonPairCreateBtn.disabled = false;
-                if (addonPairStatusTag) {
-                    addonPairStatusTag.className = 'tag warning';
-                }
-                if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
-            }
-
-            var escapeHtml = window.escapeHtml;
-
-            function setAddonPairError(msg) {
-                addonPairError.textContent = msg || '';
-                addonPairError.style.display = msg ? 'block' : 'none';
-            }
-
-            function renderTokens(tokens) {
-                var tbody = addonTokensTable.querySelector('tbody');
-                tbody.innerHTML = '';
-                if (!tokens || tokens.length === 0) {
-                    addonTokensTable.style.display = 'none';
-                    addonTokensEmpty.style.display = 'block';
-                    return;
-                }
-                addonTokensEmpty.style.display = 'none';
-                addonTokensTable.style.display = '';
-                tokens.forEach(function (t) {
-                    var tr = document.createElement('tr');
-                    var lastUsed = t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '—';
-                    var created = new Date(t.createdAt).toLocaleString();
-                    tr.innerHTML =
-                        '<td><code>' + escapeHtml(t.prefix) + '…</code></td>' +
-                        '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(created) + '</td>' +
-                        '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(lastUsed) + '</td>' +
-                        '<td style="text-align:right"><button type="button" class="btn warn sm" data-revoke="' + t.id + '">Revoke</button></td>';
-                    tbody.appendChild(tr);
-                });
-                tbody.querySelectorAll('button[data-revoke]').forEach(function (btn) {
-                    btn.addEventListener('click', function () {
-                        var id = parseInt(btn.dataset.revoke, 10);
-                        if (!id) return;
-                        var doRevoke = function () {
-                            btn.disabled = true;
-                            fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
-                                method: 'POST',
-                                credentials: 'same-origin',
-                                headers: withCsrf()
-                            }).then(function (res) {
-                                if (!res.ok) { btn.disabled = false; return; }
-                                loadTokens();
-                            }).catch(function () { btn.disabled = false; });
-                        };
-                        if (window.lsmConfirmChange) {
-                            window.lsmConfirmChange().then(function (ok) { if (ok) doRevoke(); });
-                        } else {
-                            doRevoke();
-                        }
-                    });
-                });
-            }
-
-            function loadTokens() {
-                fetch('/api/addon/management/tokens?linkshellId=' + addonLinkshellId, {
-                    credentials: 'same-origin'
-                }).then(function (res) {
-                    if (!res.ok) return null;
-                    return res.json();
-                }).then(function (data) {
-                    if (!data) return;
-                    renderTokens(data.tokens || []);
-                });
-            }
-
-            function startCountdown(totalSeconds) {
-                if (countdownTimer) clearInterval(countdownTimer);
-                var remaining = totalSeconds;
-                function tick() {
-                    if (remaining <= 0) {
-                        addonPairCountdown.textContent = 'expired';
-                        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-                        // An expired code can't be redeemed; stop polling and
-                        // flag the chip so the state is unambiguous.
-                        if (pairStatusTimer) { clearInterval(pairStatusTimer); pairStatusTimer = null; }
-                        if (addonPairStatusTag) addonPairStatusTag.className = 'tag danger';
-                        if (addonPairStatusText) addonPairStatusText.textContent = 'Expired';
-                        return;
-                    }
-                    var m = Math.floor(remaining / 60);
-                    var s = remaining % 60;
-                    addonPairCountdown.textContent = m + ':' + (s < 10 ? '0' : '') + s;
-                    remaining--;
-                }
-                tick();
-                countdownTimer = setInterval(tick, 1000);
-            }
-
-            addonGenerateBtn.addEventListener('click', function () {
-                setAddonPairError('');
-                // Fresh state every open: Generate button back, code +
-                // instructions hidden, any prior poll/countdown stopped.
-                resetPairModalUi();
-                // Re-enable the linkshell picker the previous generation may
-                // have locked.
-                var lsSelect = document.getElementById('addonPairLinkshell');
-                if (lsSelect) {
-                    lsSelect.disabled = false;
-                    // Reset to the current page's linkshell each time the
-                    // modal opens; user can change it before generating.
-                    lsSelect.value = String(addonLinkshellId);
-                }
-                openModal('addonPairModal');
-            });
-
-            addonPairCreateBtn.addEventListener('click', function () {
-                setAddonPairError('');
-                addonPairCreateBtn.disabled = true;
-                // The picker lets leaders generate codes for any linkshell
-                // they manage without leaving this page; fall back to the page
-                // LS if the dropdown was somehow cleared.
-                var lsSelect = document.getElementById('addonPairLinkshell');
-                var lsId = lsSelect && lsSelect.value ? parseInt(lsSelect.value, 10) : addonLinkshellId;
-                if (!lsId) {
-                    setAddonPairError('Pick a linkshell to generate a code for.');
-                    addonPairCreateBtn.disabled = false;
-                    return;
-                }
-                fetch('/api/addon/management/pairing-code', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: withCsrf({ 'Content-Type': 'application/json' }),
-                    body: JSON.stringify({ linkshellId: lsId })
-                }).then(function (res) {
-                    if (!res.ok) {
-                        return res.text().then(function (txt) {
-                            var msg = 'Could not generate pairing code.';
-                            try { var j = JSON.parse(txt); if (j && j.error) msg = j.error; } catch (e) {}
-                            setAddonPairError(msg);
-                            return null;
-                        });
-                    }
-                    return res.json();
-                }).then(function (data) {
-                    if (!data) return;
-                    addonPairCode.textContent = data.code;
-
-                    // Resolve the chosen linkshell's display name from the
-                    // (now-locked) dropdown for the instruction text.
-                    var lsName = 'this linkshell';
-                    if (lsSelect && lsSelect.options && lsSelect.selectedIndex >= 0) {
-                        lsName = lsSelect.options[lsSelect.selectedIndex].text || lsName;
-                    }
-                    if (addonPairLsName) addonPairLsName.textContent = lsName;
-                    if (addonPairCmd1) addonPairCmd1.textContent = '/lsm link ' + data.code;
-                    if (addonPairStatusTag) addonPairStatusTag.className = 'tag warning';
-                    if (addonPairStatusText) addonPairStatusText.textContent = 'Unpaired';
-
-                    addonPairCodeWrapper.style.display = 'block';
-                    // The code is issued — replace the Generate button with
-                    // the live "waiting to be linked" state. It comes back
-                    // via resetPairModalUi() on next open / close.
-                    addonPairCreateBtn.style.display = 'none';
-                    // Lock the linkshell selection once a code is issued so the
-                    // displayed code can't drift from the LS saved on the token.
-                    var lockedLs = document.getElementById('addonPairLinkshell');
-                    if (lockedLs) lockedLs.disabled = true;
-                    startCountdown((data.expiresInMinutes || 10) * 60);
-                    startStatusPoll(lsId, data.code);
-                }).catch(function () {
-                    setAddonPairError('Network error generating pairing code.');
-                }).finally(function () {
-                    // Only re-enable when still showing Generate; once a code
-                    // is issued the button is hidden and shouldn't flip back.
-                    if (addonPairCreateBtn.style.display !== 'none') {
-                        addonPairCreateBtn.disabled = false;
-                    }
-                });
-            });
-
-            // Polls the status endpoint while a code is displayed. When the
-            // addon redeems it in-game (consumed) we flip the chip to "Paired",
-            // refresh the token list, and auto-close the modal. On expiry we
-            // stop polling (the countdown already shows "expired").
-            function startStatusPoll(lsId, code) {
-                if (pairStatusTimer) clearInterval(pairStatusTimer);
-                pairStatusTimer = setInterval(function () {
-                    fetch('/api/addon/management/pairing-code/status?linkshellId=' + lsId
-                            + '&code=' + encodeURIComponent(code), {
-                        credentials: 'same-origin'
-                    }).then(function (res) {
-                        return res.ok ? res.json() : null;
-                    }).then(function (s) {
-                        if (!s) return;
-                        if (s.consumed) {
-                            clearInterval(pairStatusTimer); pairStatusTimer = null;
-                            if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-                            if (addonPairStatusTag) addonPairStatusTag.className = 'tag success';
-                            if (addonPairStatusText) addonPairStatusText.textContent = 'Paired';
-                            loadTokens();
-                            setTimeout(function () { closeModal('addonPairModal'); }, 3000);
-                        } else if (s.expired || s.found === false) {
-                            clearInterval(pairStatusTimer); pairStatusTimer = null;
-                        }
-                    }).catch(function () { /* transient; keep polling */ });
-                }, 2000);
-            }
-
-            document.getElementById('addonPairModal').addEventListener('click', function (e) {
-                if (e.target.dataset && e.target.dataset.mtClose === '1') {
-                    resetPairModalUi();
-                    loadTokens();
-                }
-            });
-
-            loadTokens();
-        })();
-    </script>
 }

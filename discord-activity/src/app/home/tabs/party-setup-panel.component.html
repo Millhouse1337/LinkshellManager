@@ -1,13 +1,26 @@
 @if (detail(); as detail) {
   <div class="ps-panel" cdkDropListGroup>
-    @if (canEdit()) {
+    @if (showCharacterPicker() || canEdit()) {
       <div class="ps-edit-bar">
+        @if (showCharacterPicker()) {
+          <label class="ps-signup-as">
+            <span class="ps-signup-as__label">Sign up as</span>
+            <select class="ps-slot-char ps-signup-as__select" [ngModel]="signupCharacter()"
+              (ngModelChange)="signupCharacter.set($event)" title="Choose which character you sign up as for this event">
+              @for (c of signupCharacterOptions(); track c; let first = $first) {
+                <option [value]="first ? '' : c">{{ c }}{{ first ? ' (main)' : '' }}</option>
+              }
+            </select>
+          </label>
+        }
         @if (editing()) {
           <span class="ps-edit-hint">Drag slots to rearrange. Changes save live to the channel board.</span>
         }
-        <button type="button" class="btn sm" [class.primary]="editing()" (click)="toggleEditing()">
-          {{ editing() ? 'Done editing' : 'Edit layout' }}
-        </button>
+        @if (canEdit()) {
+          <button type="button" class="btn sm primary" (click)="toggleEditing()">
+            {{ editing() ? 'Done editing' : 'Edit layout' }}
+          </button>
+        }
       </div>
     }
 
@@ -33,6 +46,13 @@
           @if (editEnabled()) {
             <button type="button" class="btn xs ghost ps-add-party" (click)="addParty(alliance)"
               [disabled]="allianceAtCap(alliance) || partySetup.busy()" title="Add a party">+ Party</button>
+          }
+          @if (multiAlliance() && alliance.leadCharacterName) {
+            <span class="ps-alliance-lead" title="Alliance lead">👑 Alliance Lead: {{ alliance.leadCharacterName }}</span>
+          }
+          @if (canTakeAllianceLead(alliance)) {
+            <button type="button" class="btn xs ps-alliance-lead-btn" (click)="makeAllianceLead()"
+              [disabled]="partySetup.busy()" title="Take this alliance's lead">👑 Make me alliance lead</button>
           }
         </header>
 
@@ -62,7 +82,7 @@
                 @for (slot of party.slots; track slot.slotId) {
                   <div class="ps-slot" [class.is-open]="isOpen(slot)" [class.is-leader]="slot.isPartyLeader"
                        [class.ps-slot--editing]="editEnabled()"
-                       [class.ps-slot--inline]="isOpen(slot) && !needsRole(slot) && !needsMainJob(slot) && !needsSubJob(slot)"
+                       [class.ps-slot--inline]="isOpen(slot)"
                        cdkDrag [cdkDragData]="slot" [cdkDragDisabled]="!editEnabled()" [cdkDragStartDelay]="120">
                     <div class="ps-slot-req">
                       @if (editEnabled()) {
@@ -81,13 +101,6 @@
                           title="Change this slot's job">✎</button>
                         <button type="button" class="ps-slot-del-btn" (click)="deleteSlot(slot)" [disabled]="partySetup.busy()"
                           title="Remove this slot">✕</button>
-                      }
-                      @if (!templateOnly() && isOpen(slot) && !readOnly() && isEventBoard() && !editEnabled() && signupCharacterOptions().length > 1) {
-                        <select class="ps-slot-char" [ngModel]="draftFor(slot.slotId).characterName" (ngModelChange)="setDraft(slot.slotId, { characterName: $event })" title="Sign up as your main or an alt">
-                          @for (c of signupCharacterOptions(); track c; let first = $first) {
-                            <option [value]="first ? '' : c">{{ c }}{{ first ? ' (main)' : '' }}</option>
-                          }
-                        </select>
                       }
                     </div>
 
@@ -117,53 +130,63 @@
 
                     @if (!templateOnly()) {
                     @if (isOpen(slot)) {
-                      @if (readOnly() || editEnabled()) {
+                      @if ((readOnly() || editEnabled()) && editingSlotId() !== slot.slotId) {
                         <div class="ps-slot-open-readonly">Open</div>
                       } @else {
+                        <!-- Two clusters, never interleaved: every job dropdown stays together on one
+                             row, and the Leader toggle + Sign up button travel as a single unit that
+                             anchors right — so when they don't fit they wrap onto the next row still
+                             right-aligned, instead of each control wrapping wherever it runs out. -->
                         <div class="ps-signup">
-                          @if (needsRole(slot)) {
-                            <select [ngModel]="draftFor(slot.slotId).role" (ngModelChange)="setDraft(slot.slotId, { role: $event })">
-                              <option value="">Role&hellip;</option>
-                              @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
-                            </select>
-                          }
-                          @if (needsMainJob(slot)) {
-                            <select [ngModel]="draftFor(slot.slotId).mainJob" (ngModelChange)="setDraft(slot.slotId, { mainJob: $event })">
-                              <option value="">Main job&hellip;</option>
-                              @for (j of mainJobOptions(); track j) {
-                                @if (j !== (draftFor(slot.slotId).subJob || slot.subJob)) { <option [value]="j">{{ j }}</option> }
+                          @if (needsRole(slot) || needsMainJob(slot) || needsSubJob(slot)) {
+                            <span class="ps-signup__fields">
+                              @if (needsRole(slot)) {
+                                <select [ngModel]="draftFor(slot.slotId).role" (ngModelChange)="setDraft(slot.slotId, { role: $event })">
+                                  <option value="">Role&hellip;</option>
+                                  @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
+                                </select>
                               }
-                            </select>
-                          }
-                          @if (needsSubJob(slot)) {
-                            <select [ngModel]="draftFor(slot.slotId).subJob" (ngModelChange)="setDraft(slot.slotId, { subJob: $event })">
-                              <option value="">Sub job&hellip;</option>
-                              @for (j of subJobOptions(); track j) {
-                                @if (j !== (draftFor(slot.slotId).mainJob || slot.mainJob)) { <option [value]="j">{{ j }}</option> }
+                              @if (needsMainJob(slot)) {
+                                <select [ngModel]="draftFor(slot.slotId).mainJob" (ngModelChange)="setDraft(slot.slotId, { mainJob: $event })">
+                                  <option value="">Main job&hellip;</option>
+                                  @for (j of mainJobOptions(); track j) {
+                                    @if (j !== (draftFor(slot.slotId).subJob || slot.subJob)) { <option [value]="j">{{ j }}</option> }
+                                  }
+                                </select>
                               }
-                            </select>
-                          }
-                          @if (isEventBoard() && !partyHasLeader(party)) {
-                            <span class="ps-leader-toggle" title="Claim this party's leader spot">
-                              <span class="ps-leader-toggle__label">Leader</span>
-                              <span class="yesno" role="group" aria-label="Sign up as party leader">
-                                <button type="button" class="yesno__btn"
-                                  [class.is-on]="draftFor(slot.slotId).asLeader"
-                                  (click)="setDraft(slot.slotId, { asLeader: true })">Yes</button>
-                                <button type="button" class="yesno__btn"
-                                  [class.is-on]="!draftFor(slot.slotId).asLeader"
-                                  (click)="setDraft(slot.slotId, { asLeader: false })">No</button>
-                              </span>
+                              @if (needsSubJob(slot)) {
+                                <select [ngModel]="draftFor(slot.slotId).subJob" (ngModelChange)="setDraft(slot.slotId, { subJob: $event })">
+                                  <option value="">Sub job&hellip;</option>
+                                  @for (j of subJobOptions(); track j) {
+                                    @if (j !== (draftFor(slot.slotId).mainJob || slot.mainJob)) { <option [value]="j">{{ j }}</option> }
+                                  }
+                                </select>
+                              }
                             </span>
                           }
-                          <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
+                          <span class="ps-signup__actions">
+                            @if (isEventBoard() && !partyHasLeader(party)) {
+                              <span class="ps-leader-toggle" title="Claim this party's leader spot">
+                                <span class="ps-leader-toggle__label">Leader</span>
+                                <span class="yesno" role="group" aria-label="Sign up as party leader">
+                                  <button type="button" class="yesno__btn"
+                                    [class.is-on]="draftFor(slot.slotId).asLeader"
+                                    (click)="setDraft(slot.slotId, { asLeader: true })">Yes</button>
+                                  <button type="button" class="yesno__btn"
+                                    [class.is-on]="!draftFor(slot.slotId).asLeader"
+                                    (click)="setDraft(slot.slotId, { asLeader: false })">No</button>
+                                </span>
+                              </span>
+                            }
+                            <button type="button" class="btn sm primary ps-signup-btn" (click)="signUp(slot)" [disabled]="signUpDisabled(slot)">Sign up</button>
+                          </span>
                         </div>
                       }
                     } @else {
                       <div class="ps-slot-member">
                         <span class="ps-member-avatar" aria-hidden="true">{{ (slot.signedUpCharacterName || '?').charAt(0) }}</span>
                         <span class="ps-member-text">
-                          <span class="ps-name">
+                          <span class="ps-name" [title]="slot.signedUpCharacterName">
                             @if (slot.signedUpIsPartyLeader) { <span class="ps-leader-inline" title="Party leader" aria-label="Party leader">👑</span> }
                             {{ slot.signedUpCharacterName }}
                           </span>
@@ -227,6 +250,24 @@
           }
         </div>
       </section>
+    }
+
+    @if (signupNudge(); as n) {
+      <div class="ps-nudge-overlay" (click)="dismissNudge()">
+        <div class="ps-nudge-card" (click)="$event.stopPropagation()">
+          <div class="ps-nudge-title">Fill earlier alliances first</div>
+          <p class="ps-nudge-body">
+            There's still
+            <strong>{{ n.nudge.requirement === 'open' ? 'an open spot' : 'an open ' + n.nudge.requirement + ' spot' }}</strong>
+            in <strong>{{ n.nudge.location }}</strong>. Filling earlier alliances first keeps parties together —
+            take that slot, or sign up where you chose.
+          </p>
+          <div class="ps-nudge-actions">
+            <button type="button" class="btn ghost sm" [disabled]="partySetup.busy()" (click)="signUpAnyway()">Sign up here anyway</button>
+            <button type="button" class="btn primary sm" [disabled]="partySetup.busy()" (click)="takeSuggestedSlot()">Take {{ n.nudge.location }}</button>
+          </div>
+        </div>
+      </div>
     }
   </div>
 } @else {

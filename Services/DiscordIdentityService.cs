@@ -662,6 +662,47 @@ public sealed class DiscordIdentityService
                     appUser = preferredAppUser;
                 }
 
+                // First launch with no linked website account: adopt an imported /
+                // onboarded PLACEHOLDER keyed to this Discord id (set by the DKP
+                // import's optional Discord mapping, or by the board's self-service
+                // onboarding) so the person inherits their seeded DKP in place
+                // instead of getting a brand-new empty account. Promoting the
+                // placeholder (AppUserId never changes) means no ledger/membership
+                // repointing is needed.
+                if (appUser is null && preferredAppUser is null)
+                {
+                    var placeholderMemberships = await _dbContext.AppUserLinkshells
+                        .Include(membership => membership.AppUser)
+                        .Where(membership => membership.DiscordUserId == discordUser.Id
+                                             && membership.AppUser != null
+                                             && membership.AppUser.IsPlaceholder)
+                        .ToListAsync(cancellationToken);
+                    var placeholderUser = placeholderMemberships.FirstOrDefault()?.AppUser;
+                    if (placeholderUser is not null)
+                    {
+                        appUser = placeholderUser;
+                        appUser.IsPlaceholder = false;
+                        var promotedUserName = $"discord-{discordUser.Id}";
+                        appUser.UserName = promotedUserName;
+                        appUser.NormalizedUserName = _userManager.NormalizeName(promotedUserName);
+                        if (string.IsNullOrWhiteSpace(appUser.CharacterName))
+                        {
+                            appUser.CharacterName = discordUser.GlobalName ?? discordUser.Username;
+                        }
+                        // The real account now owns identity — clear the Discord-id
+                        // shortcut on the rows that pointed here.
+                        foreach (var membership in placeholderMemberships.Where(m => m.AppUserId == placeholderUser.Id))
+                        {
+                            membership.DiscordUserId = null;
+                        }
+                        var promoteResult = await _userManager.UpdateAsync(appUser);
+                        if (!promoteResult.Succeeded)
+                        {
+                            throw new InvalidOperationException(string.Join("; ", promoteResult.Errors.Select(error => error.Description)));
+                        }
+                    }
+                }
+
                 var isNewAppUser = false;
                 if (appUser is null)
                 {

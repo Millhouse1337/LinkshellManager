@@ -12,19 +12,15 @@
   </div>
 
   @if (isCreateOpen) {
-    @if (isEditingLiveEvent) {
-      <dialog #editDialog class="event-edit-modal-dialog"
-              (click)="onEditDialogClick($event)"
-              (close)="closeCreateForm()">
-        <ng-container [ngTemplateOutlet]="editFormTpl"></ng-container>
-      </dialog>
-    } @else {
+    <dialog #editDialog class="event-edit-modal-dialog"
+            (click)="onEditDialogClick($event)"
+            (close)="closeCreateForm()">
       <ng-container [ngTemplateOutlet]="editFormTpl"></ng-container>
-    }
+    </dialog>
   }
 
   <ng-template #editFormTpl>
-    <form class="create-form" [class.create-form--in-modal]="isEditingLiveEvent" (ngSubmit)="submitCreateForm()">
+    <form class="create-form create-form--in-modal" (ngSubmit)="submitCreateForm()">
       <div class="create-form__header">
         <div>
           <strong>
@@ -100,6 +96,11 @@
                   <option [value]="monster">{{ monster }}</option>
                 }
               </select>
+            </label>
+            <label>
+              <span>Day number (optional)</span>
+              <input [(ngModel)]="createModel.dayNumber" name="dayNumber" type="number" min="0" step="1"
+                placeholder="e.g. 3" title="On the sign-up board, days 1–3 show just the base monster; day 4+ shows the combined pair (e.g. Adamantoise/Aspidochelone)" />
             </label>
             @if (isOtherMonsterSelected()) {
               <label>
@@ -185,7 +186,7 @@
             </label>
             @if (createModel.repeatOnTod && canRepeatOnTod()) {
               <div style="flex:0 1 320px;min-width:0">
-                <span style="display:block;margin-bottom:4px">Recreate this long before pop</span>
+                <span style="display:block;margin-bottom:4px">Recreate another signup board post before repop</span>
                 <div style="display:flex;gap:8px">
                   <label style="flex:1 1 0;min-width:0">
                     <span class="ad-hoc-signup__hint">Hours</span>
@@ -202,9 +203,9 @@
                 </div>
               </div>
             }
-            @if (isOtherMonsterSelected()) {
+            @if (isOtherMonsterSelected() && customMonsterName.trim().length === 0) {
               <small class="ad-hoc-signup__hint" style="flex:1 1 100%">
-                Repeat-on-ToD isn't available for a custom “Other” monster — it needs an exact ToD match.
+                Enter the custom monster name above to enable “Repeat post when ToD is updated”. Recurrence then re-posts when a new ToD is logged under that exact name.
               </small>
             }
           </div>
@@ -223,9 +224,10 @@
            live board inline (drag/job/assign) on the Party Setup panel instead.
            Still shown for create + queued-event edits, where the setup is chosen. -->
       <div class="create-form__jobs">
-        <!-- Header (title + Yes/No) and the linked-setup dropdown share one
-             centered row; the hint + preview sit full-width below it. -->
-        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px 28px">
+        <!-- Header (title + Yes/No), the linked-setup dropdown and the
+             "Create New Party Setup" button share one left-aligned row; the
+             hint + preview sit full-width below it. -->
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:flex-start;gap:12px 28px">
           <div class="panel__header" style="margin:0">
             <div class="panel__header-title-row">
               <h3>Party Setup</h3>
@@ -256,13 +258,15 @@
                 }
               </select>
             </label>
+            <button type="button" class="action-button action-button--secondary"
+              (click)="openCreatePartySetup()">+ Create New Party Setup</button>
           }
         </div>
 
         @if (!partySetupNotSpecified) {
           @if (availablePartySetups().length === 0) {
-            <p class="ad-hoc-signup__hint" style="text-align:center">
-              No party setups exist for this linkshell yet. Create one from the Party Setup tab first.
+            <p class="ad-hoc-signup__hint">
+              No party setups exist for this linkshell yet. Create one with “Create New Party Setup” above.
             </p>
           }
           @if (createModel.partySetupId) {
@@ -280,13 +284,31 @@
       <div class="create-form__actions create-form__actions--end">
         <button type="submit" class="action-button action-button--success" [disabled]="isSubmittingCreate">
           @if (isSubmittingCreate) {
-            {{ editingEventId ? 'Saving...' : 'Creating...' }}
+            {{ editingEventId ? 'Updating...' : 'Creating...' }}
           } @else {
-            {{ editingEventId ? 'Save event' : 'Create event' }}
+            {{ editingEventId ? 'Update Event' : 'Create event' }}
           }
         </button>
       </div>
     </form>
+
+    <!-- Confirm dialog (window.confirm is suppressed in the Activity iframe). MUST live inside
+         the edit <dialog> so it renders in the same top layer and overlays the form — placed in
+         the normal DOM it would open hidden behind the modal dialog, silently stalling the save. -->
+    @if (confirmModalOpen()) {
+      <div style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)"
+           (click)="resolveConfirm(false)">
+        <div style="max-width:420px;width:calc(100% - 32px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)"
+             (click)="$event.stopPropagation()">
+          <strong style="display:block;margin-bottom:8px">Change party setup?</strong>
+          <p class="muted" style="margin:0 0 16px;font-size:13px">{{ confirmMessage }}</p>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button type="button" class="action-button action-button--secondary" (click)="resolveConfirm(false)">Cancel</button>
+            <button type="button" class="action-button" (click)="resolveConfirm(true)">Move to no-slot &amp; save</button>
+          </div>
+        </div>
+      </div>
+    }
   </ng-template>
 
   @if ((activity.overview()?.linkshells?.length ?? 0) === 0) {
@@ -315,7 +337,7 @@
 
             <div class="event-main">
               <h3>{{ event.name || 'Untitled event' }}</h3>
-              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
+              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}@if (event.dayNumber != null) { <span>&nbsp;·&nbsp;Day {{ event.dayNumber }}</span> }</p>
             </div>
 
             <div class="participant-box">
@@ -364,11 +386,11 @@
               }
               @if (canManageLinkshell(event.linkshellId)) {
                 @if (isAddonOnlyStart(event)) {
-                  <button type="button" class="evt-btn evt-btn--gold evt-btn--small"
+                  <button type="button" class="evt-btn evt-btn--success evt-btn--small"
                     [title]="event.hnmAwaitingRepost ? 'Edit the logged Time of Death (updates the repop + re-post time).' : 'Log the Time of Death. The board wipes signups and re-posts before the next pop.'"
                     (click)="openPostTodForm(event)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                    {{ event.hnmAwaitingRepost ? 'Edit ToD' : 'Post ToD' }}
+                    {{ event.hnmAwaitingRepost ? 'Edit ToD' : 'Post new ToD' }}
                   </button>
                 } @else {
                   <button type="button" class="evt-btn evt-btn--secondary evt-btn--small"
@@ -467,12 +489,12 @@
                       type="button"
                       class="action-button action-button--secondary manual-signup__toggle"
                       (click)="toggleManualSignupExpanded(event.id)">
-                      Sign Up Manually
+                      Sign Up (no slot)
                     </button>
                   } @else {
                     <div class="manual-signup__slot">
                       <div class="manual-signup__head">
-                        <span class="manual-signup__label">Sign Up Manually</span>
+                        <span class="manual-signup__label">Sign Up (no slot)</span>
                         <button
                           type="button"
                           class="manual-signup__close"
@@ -617,26 +639,17 @@
     </p>
   }
 
-  <!-- Confirm dialog (window.confirm is suppressed in the Activity iframe).
-       Currently used to warn that changing a queued event's party setup clears
-       its existing slot signups. -->
-  @if (confirmModalOpen()) {
-    <div style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)"
-         (click)="resolveConfirm(false)">
-      <div style="max-width:420px;width:calc(100% - 32px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)"
-           (click)="$event.stopPropagation()">
-        <strong style="display:block;margin-bottom:8px">Change party setup?</strong>
-        <p class="muted" style="margin:0 0 16px;font-size:13px">{{ confirmMessage }}</p>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <button type="button" class="action-button action-button--secondary" (click)="resolveConfirm(false)">Cancel</button>
-          <button type="button" class="action-button" (click)="resolveConfirm(true)">Move to no-slot &amp; save</button>
-        </div>
-      </div>
-    </div>
-  }
 
   <!-- Shared Log ToD form. On an HNM board the "Post ToD" button opens this; submitting
        a matching-monster ToD makes the recurring board re-post ahead of the next pop.
        Mounted at the panel root so the #todForm ref is reachable from the event buttons. -->
   <app-tod-form #todForm />
+
+  <!-- Shared party-setup editor (same dialog as the Party Setup tab). Opened by the
+       create-event form's "Create New Party Setup" button; on save we auto-select the
+       new setup. Mounted at the panel root so its ref is reachable and the <dialog>
+       escapes the create-event modal's stacking context. -->
+  <app-party-setup-editor #partySetupEditor
+    [linkshellId]="createModel.linkshellId"
+    (saved)="onPartySetupCreated($event)" />
 </article>

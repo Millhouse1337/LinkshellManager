@@ -302,7 +302,7 @@
                       <div class="participant-list__copy">
                         <strong>{{ participant.characterName || 'Unknown participant' }}
                           @if (participant.biddableDkp != null) {
-                            <span class="tag default num" title="Biddable DKP now = balance − bids they're winning − DKP spent on loot this event">{{ participant.biddableDkp }} biddable</span>
+                            <span class="tag default num" [title]="biddableTitle(event)">{{ participant.biddableDkp }} biddable{{ event.dkpPoolName ? ' · ' + event.dkpPoolName : '' }}</span>
                           }
                         </strong>
                         <span>
@@ -358,12 +358,12 @@
                         <div class="participant-list__identity">
                           <strong>{{ participant.characterName || 'Unknown participant' }}</strong>
                           @if (participant.biddableDkp != null) {
-                            <span class="tag default num" title="Biddable DKP now = balance − bids they're winning − DKP spent on loot this event">{{ participant.biddableDkp }} biddable</span>
+                            <span class="tag default num" [title]="biddableTitle(event)">{{ participant.biddableDkp }} biddable{{ event.dkpPoolName ? ' · ' + event.dkpPoolName : '' }}</span>
                           }
                           <span class="verification-badge verification-badge--approved">
                             {{ attendanceBadgeLabel(participant) }}
                           </span>
-                          @if (canManageLinkshell(event.linkshellId) && !isCurrentParticipant(participant, event)) {
+                          @if (canManageLinkshell(event.linkshellId) && !isCurrentParticipant(participant, event) && !isChannelSignupOnly(participant)) {
                             <button type="button" class="btn sm" [disabled]="activity.busyEventId() === event.id"
                               (click)="activity.resetParticipantVerification(event.id, participant.id)">Undo Attendance</button>
                           }
@@ -392,7 +392,7 @@
                               Take Break
                             </button>
                           }
-                          @if (canManageLinkshell(event.linkshellId) && !isCurrentParticipant(participant, event)) {
+                          @if (canManageLinkshell(event.linkshellId) && !isCurrentParticipant(participant, event) && !isChannelSignupOnly(participant)) {
                             @if (hasPendingReturnVerification(participant)) {
                               <ul class="pending-resume-list">
                                 @for (pending of pendingReturnLedgerEntries(participant); track pending.id) {

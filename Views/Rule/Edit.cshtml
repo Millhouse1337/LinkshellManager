@@ -32,6 +32,8 @@
                 <span asp-validation-for="RuleTitle" class="text-danger"></span>
             </div>
 
+            <partial name="_CategoryField" model="@Model.Category" />
+
             <div class="field" style="grid-column:1/-1">
                 <label asp-for="RuleDetails"></label>
                 <textarea asp-for="RuleDetails" class="form-control" rows="5" maxlength="4000"></textarea>

@@ -34,19 +34,19 @@
 }
 
 .dkp-audit-form__mode-option:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background: rgba(255, 255, 255, 0.04);
 }
 
 .dkp-audit-form__mode-option:has(input:checked) {
-  border-color: var(--accent, #7c5cff);
-  background: rgba(124, 92, 255, 0.08);
-  box-shadow: 0 0 0 1px var(--accent, #7c5cff) inset;
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  box-shadow: 0 0 0 1px var(--accent) inset;
 }
 
 .dkp-audit-form__mode-option input[type="radio"] {
   margin: 2px 0 0;
-  accent-color: var(--accent, #7c5cff);
+  accent-color: var(--accent);
   flex-shrink: 0;
 }
 
@@ -97,7 +97,7 @@
   font: inherit;
   color: var(--fg);
   background: var(--surface);
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: 6px;
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
@@ -123,15 +123,15 @@
 }
 
 .dkp-audit-form__grid select option {
-  background: var(--surface, #1f1f23);
-  color: var(--fg, #e4e4e7);
+  background: var(--surface);
+  color: var(--fg);
 }
 
 .dkp-audit-form__grid input[type="number"]:hover:not(:disabled),
 .dkp-audit-form__grid input[type="text"]:hover:not(:disabled),
 .dkp-audit-form__grid select:hover:not(:disabled),
 .dkp-audit-form__grid textarea:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background-color: rgba(255, 255, 255, 0.04);
 }
 
@@ -139,8 +139,8 @@
 .dkp-audit-form__grid input[type="text"]:focus-visible,
 .dkp-audit-form__grid select:focus-visible,
 .dkp-audit-form__grid textarea:focus-visible {
-  border-color: var(--accent, #7c5cff);
-  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .dkp-audit-form__reason {
@@ -258,7 +258,7 @@
   height: 34px;
   padding: 0 10px;
   background: var(--surface);
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: 6px;
   color: var(--fg);
   font: inherit;
@@ -267,13 +267,13 @@
 }
 
 .role-edit-form > label > input[type="text"]:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background-color: rgba(255, 255, 255, 0.04);
 }
 
 .role-edit-form > label > input[type="text"]:focus-visible {
-  border-color: var(--accent, #7c5cff);
-  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .role-edit-form > label > input[type="text"]:disabled {
@@ -326,8 +326,8 @@
   }
 
   &:checked {
-    background: var(--accent, #7c5cff);
-    border-color: var(--accent, #7c5cff);
+    background: var(--accent);
+    border-color: var(--accent);
   }
 
   &:checked::before {
@@ -335,7 +335,7 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--accent, #7c5cff);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
 }
@@ -377,10 +377,12 @@
 }
 .tod-form__row--monster { grid-template-columns: 1fr; }
 .tod-form__row--monster.tod-form__row--split { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
+.tod-form__row--monster.tod-form__row--monster-day { grid-template-columns: minmax(0, 1fr) minmax(0, 120px); }
 .tod-form__row--cooldown { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .tod-form__row--cooldown.tod-form__row--split { grid-template-columns: minmax(0, 180px) minmax(0, 180px) minmax(0, 1fr); }
 @media (max-width: 720px) {
   .tod-form__row--monster.tod-form__row--split,
+  .tod-form__row--monster.tod-form__row--monster-day,
   .tod-form__row--cooldown,
   .tod-form__row--cooldown.tod-form__row--split { grid-template-columns: 1fr; }
 }
@@ -436,7 +438,7 @@
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 8px;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: 6px;
   cursor: pointer;
   outline: none;
@@ -444,18 +446,18 @@
 }
 
 .customize-form__field select:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
   background-color: rgba(255, 255, 255, 0.04);
 }
 
 .customize-form__field select:focus-visible {
-  border-color: var(--accent, #7c5cff);
-  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .customize-form__field select option {
-  background: var(--surface, #1f1f23);
-  color: var(--fg, #e4e4e7);
+  background: var(--surface);
+  color: var(--fg);
 }
 
 .customize-form__toggles {
@@ -505,8 +507,8 @@
   }
 
   &:checked {
-    background: var(--accent, #7c5cff);
-    border-color: var(--accent, #7c5cff);
+    background: var(--accent);
+    border-color: var(--accent);
   }
 
   &:checked::before {
@@ -514,7 +516,7 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--accent, #7c5cff);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
 }
@@ -673,7 +675,7 @@
   border: 1px solid var(--accent);
   border-radius: var(--r-sm);
   background: var(--accent);
-  color: #000;
+  color: var(--bg);
   cursor: pointer;
   font: inherit;
   font-weight: 500;
@@ -731,11 +733,13 @@
 // promoted to the browser's top layer — escaping the .panel-tab.fade ancestor
 // that would otherwise clip the modal behind the sticky tab bar.
 .event-edit-modal-dialog {
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-md, 8px);
   color: var(--fg);
-  width: min(720px, calc(100vw - 32px));
+  // Wide enough that the embedded party-setup preview lays its parties out 3-across
+  // (.ps-party-grid is auto-fit minmax(320px,1fr) → ~1000px inner for 3 columns).
+  width: min(1200px, calc(100vw - 32px));
   max-width: none;
   max-height: 85vh;
   padding: 16px;
@@ -874,7 +878,7 @@
 .ad-hoc-signup select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 // Custom chevron + non-native appearance for the form selects so they don't
@@ -904,8 +908,8 @@
 .late-join-form select option,
 .invite-search select option,
 .ad-hoc-signup select option {
-  background: var(--surface, #1f1f23);
-  color: var(--fg, #e4e4e7);
+  background: var(--surface);
+  color: var(--fg);
 }
 
 .create-form__full {
@@ -927,7 +931,7 @@
 }
 
 .form-error {
-  color: var(--danger, #ff6b6b);
+  color: var(--danger);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -938,7 +942,7 @@
 .yesno-toggle {
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border-2);
   border-radius: var(--r-md);
   background: var(--bg-elev);
   overflow: hidden;
@@ -959,7 +963,7 @@
 }
 
 .yesno-toggle__btn + .yesno-toggle__btn {
-  border-left: 1px solid var(--border-2, rgba(255, 255, 255, 0.12));
+  border-left: 1px solid var(--border-2);
 }
 
 .yesno-toggle__btn:hover:not(.is-active) {
@@ -1039,7 +1043,7 @@
   padding: 4px 8px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--danger, #ff6b6b);
+  color: var(--danger);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border-radius: var(--r-sm, 6px);
@@ -1047,7 +1051,7 @@
 
   &:hover {
     background: rgba(255, 107, 107, 0.08);
-    color: var(--danger, #ff6b6b);
+    color: var(--danger);
   }
 }
 
@@ -1097,9 +1101,9 @@
   padding: 0 8px;
   font: inherit;
   font-size: 12px;
-  color: var(--fg, #fafafa);
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border-2, rgba(255, 255, 255, 0.14));
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
   border-radius: 6px;
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
@@ -1112,13 +1116,13 @@
   margin: 0;
 }
 .bid-input::placeholder {
-  color: var(--fg-3, #a1a1aa);
+  color: var(--fg-3);
   opacity: 1;
 }
 .bid-input:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: var(--border-hot);
 }
 .bid-input:focus-visible {
-  border-color: var(--accent, #7c5cff);
-  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }

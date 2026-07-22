@@ -7,6 +7,8 @@ public class DashboardViewModel
     public string? SelectedLinkshellName { get; set; }
     public List<Linkshell> Linkshells { get; set; } = new();
     public int? SelectedLinkshellId { get; set; }
+    // Cache-busted banner image URL for the selected linkshell, or null when none.
+    public string? BannerUrl { get; set; }
     public List<AppUserLinkshell> Members { get; set; } = new();
     public List<Event> Events { get; set; } = new();
     public int TotalMembers { get; set; }

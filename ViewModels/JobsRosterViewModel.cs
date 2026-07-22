@@ -83,5 +83,10 @@ public class MemberProfileViewModel
 
     public string? LinkshellName { get; set; }
 
+    // The viewed member's AppUser id (null for an unsynced/placeholder member). When
+    // set, the page fetches peer job-ratings ("what the linkshell thinks") for it via
+    // the Activity job-ratings API; null = no peer section.
+    public string? TargetAppUserId { get; set; }
+
     public IReadOnlyList<string> JobCatalog { get; } = EventJobCatalog.MainJobOptions;
 }

@@ -66,7 +66,8 @@ public sealed record ActivityLinkshellDto(
     string? Details,
     ActivityPermissionsDto? Permissions,
     ActivityLinkshellSettingsDto Settings,
-    bool AuctionsLocked = false);
+    bool AuctionsLocked = false,
+    string? BannerUrl = null);
 
 public sealed record ActivityLinkshellSettingsDto(
     string LootStructure,
@@ -109,10 +110,15 @@ public sealed record ActivityLinkshellSettingsDto(
     // Allow Discord members with no LSM account to sign up for NON-HNM events from
     // the party board. Backed by a placeholder member, so they DO earn DKP + are tracked.
     bool OutsidePartySignupEnabled,
+    // "Fill earlier alliances first" signup nudge (default on; no-op on single-alliance boards).
+    bool FillAlliancesInOrder,
     // HNM Outside Sign Up: gates the HNM event type in the create dropdown + account-less
     // Discord signups onto HNM boards. Independent of OutsidePartySignupEnabled.
     // Roster memory only — HNM signups earn no DKP and no active/absent credit.
     bool HnmOutsideSignupEnabled,
+    // Experimental: post event boards as Components V2 (wide media-gallery card) instead
+    // of the classic image-in-embed. Only affects boards posted after it's turned on.
+    bool UseComponentsV2Boards,
     // Discord channel id new post-event discussion comments are mirrored to, or
     // null to keep discussion in-app only.
     string? DiscussionChannelId = null);
@@ -167,7 +173,10 @@ public sealed record ActivityItemDto(
     string? CreatedByAppUserId,
     string? CreatedByCharacterName,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    bool IsSold = false,
+    long? SoldPrice = null,
+    string? SoldByCharacterName = null);
 
 public sealed record ActivityRevenueEntryDto(
     int Id,
@@ -187,11 +196,14 @@ public sealed record ActivityUpdateItemRequest(string ItemName, string? ItemType
 
 public sealed record ActivityCreateRevenueRequest(string EntryType, string? Category, long Value, string? Details, DateTime? OccurredAt);
 
+public sealed record ActivityMarkItemSoldRequest(long SalePrice);
+
 public sealed record ActivityRuleDto(
     int Id,
     int LinkshellId,
     string Title,
     string Details,
+    string? Category,
     string? CreatedByAppUserId,
     string? CreatedByCharacterName,
     DateTime CreatedAt);
@@ -201,13 +213,14 @@ public sealed record ActivityAnnouncementDto(
     int LinkshellId,
     string Title,
     string Details,
+    string? Category,
     string? CreatedByAppUserId,
     string? CreatedByCharacterName,
     DateTime CreatedAt);
 
-public sealed record ActivityCreateRuleRequest(string Title, string Details);
+public sealed record ActivityCreateRuleRequest(string Title, string Details, string? Category = null);
 
-public sealed record ActivityCreateAnnouncementRequest(string Title, string Details);
+public sealed record ActivityCreateAnnouncementRequest(string Title, string Details, string? Category = null);
 
 public sealed record ActivityLinkshellDetailDto(
     int Id,
@@ -241,7 +254,13 @@ public sealed record ActivityMemberDto(
     bool IsPlaceholder = false,
     // Spendable DKP right now = LinkshellDkp − bid locks − pending live-event loot spend.
     // Shown next to the committed balance so officers see real bidding power.
-    double BiddableDkp = 0);
+    double BiddableDkp = 0,
+    // True when the member has actually opened/synced the Discord Activity at least
+    // once (a DiscordActivityUser row points at their AppUserId). Distinguishes real
+    // app users from members who only ever interacted via the outside sign-up board
+    // (who get an AppUserId without ever opening the Activity). Drives the roster's
+    // "App Sync" badge + filter.
+    bool HasSyncedActivity = false);
 
 // "Jobs Roster" — every member's leveled jobs (the levels they entered on their
 // Profile), for the linkshell's main + alt characters. JobCatalog is the job
@@ -305,6 +324,8 @@ public sealed record ActivityEventDto(
     // The event's own HNM monster (Event.AssignedMonsterName), for manually-created
     // HNM boards. Used to pre-fill the "Post ToD" form. Null for non-HNM events.
     string? AssignedMonsterName,
+    // Optional "Day N" label for HNM boards (round-trips into the edit form + shown on the board).
+    int? DayNumber,
     // HNM "defeated / awaiting re-post" state: true once the ToD is logged from the board.
     // StartTime is the predicted repop; HnmRepostAt is when the board auto-re-posts (null if
     // Repeat-on-ToD is off). SourceTodId is the logged ToD, so "Edit ToD" can pre-fill it.
@@ -319,7 +340,10 @@ public sealed record ActivityEventDto(
     int WindowCount,
     IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows,
     string? CreatorCharacterName,
-    string? StarterCharacterName);
+    string? StarterCharacterName,
+    // The DKP pool this event earns into and pays its loot out of. Null when the linkshell has only
+    // one pool — the client's cue to render the loot UI exactly as it did before pools existed.
+    string? DkpPoolName = null);
 
 public sealed record ActivityAttendanceWindowDto(
     int Id,
@@ -487,6 +511,46 @@ public sealed record ActivityDkpHistoryMemberDto(
     // pending deduction; already removed from biddable power so it can't be double-spent.
     double PendingLootSpend = 0);
 
+// ---- DKP pools (the Configurations tab's "DKP Pools" card) ----
+
+public sealed record ActivityDkpPoolsDto(
+    IReadOnlyList<ActivityDkpPoolDto> Pools,
+    // Every event type assignable in this linkshell: the built-in vocabulary plus any custom
+    // string their own events have actually used. EarnedTotal makes a remap legible ("Sea moves
+    // 980 DKP") and drives the unmapped-earners warning.
+    IReadOnlyList<ActivityDkpPoolEventTypeDto> AssignableEventTypes,
+    IReadOnlyList<string> Accents);
+
+public sealed record ActivityDkpPoolDto(
+    int Id,
+    string Name,
+    bool IsDefault,
+    int SortOrder,
+    string Accent,
+    IReadOnlyList<string> EventTypes);
+
+public sealed record ActivityDkpPoolEventTypeDto(string Key, bool IsCustom, double EarnedTotal, bool InUse);
+
+public sealed record ActivitySaveDkpPoolsRequest(IReadOnlyList<ActivityDkpPoolInput>? Pools);
+
+// Id is null for a new pool. EventTypes is the COMPLETE set assigned to it — the save is a full
+// replace, so anything left out falls back to the default pool.
+public sealed record ActivityDkpPoolInput(
+    int? Id,
+    string? Name,
+    bool IsDefault,
+    string? Accent,
+    IReadOnlyList<string>? EventTypes);
+
+public sealed record ActivityDkpPoolPreviewDto(
+    IReadOnlyList<ActivityDkpPoolMoveDto> Moves,
+    int AffectedLedgerRows,
+    int AffectedMembers,
+    IReadOnlyList<string> Warnings);
+
+public sealed record ActivityDkpPoolMoveDto(
+    string EventType, string FromPool, string ToPool, double EarnedTotal, int LedgerRows);
+
 public sealed record ActivityDkpAuditRequest(
     int LinkshellId,
     string TargetAppUserId,
@@ -494,7 +558,10 @@ public sealed record ActivityDkpAuditRequest(
     int? RelatedLedgerEntryId,
     int? SourceWindowEventId,
     double Amount,
-    string Reason);
+    string Reason,
+    // Which DKP pool a "Misc" audit lands in. Ignored for Adjust/Add, which inherit the pool of the
+    // entry they correct. Null falls back to the linkshell's default pool.
+    int? DkpPoolId = null);
 
 public sealed record ActivityDkpLedgerEntryDto(
     int Id,
@@ -533,13 +600,17 @@ public sealed record ActivityAuctionDto(
     // creator marks as delivered.
     bool CanClose,
     IReadOnlyList<ActivityAuctionItemDto> Items,
-    // The viewer's available DKP in this auction's linkshell (total minus
-    // DKP locked by bids they're currently winning). Null when not computed
+    // The viewer's available DKP for THIS auction — the balance in the pool the auction draws
+    // from, minus DKP locked by bids they're currently winning on it. Null when not computed
     // (single-auction action responses); the list endpoint always sets it.
     double? AvailableDkp = null,
     // True when leadership has frozen bidding for the linkshell (set on the list
     // endpoint). Drives the "Locked" badge + disabled bid inputs in the client.
-    bool AuctionsLocked = false);
+    bool AuctionsLocked = false,
+    // The DKP pool bids are drawn from. Name is null when the linkshell has only one pool, which
+    // is the client's cue to hide the pool chip entirely.
+    int? DkpPoolId = null,
+    string? DkpPoolName = null);
 
 public sealed record ActivityAuctionItemDto(
     int Id,
@@ -633,7 +704,11 @@ public sealed record ActivityTodDto(
     string? Interval,
     int LootCount,
     IReadOnlyList<ActivityTodLootDto> LootDetails,
-    string? ImagePath);
+    string? ImagePath,
+    // Whether the kill was HQ (shown in the ToD list).
+    bool Hq = false,
+    // Extra seconds folded into RepopTime, so the Log ToD form round-trips on edit.
+    int AdditionalSeconds = 0);
 
 public sealed record ActivityTodLootDto(
     int Id,
@@ -694,7 +769,9 @@ public sealed record ActivityCreateEventRequest(
     bool RepeatOnTod = false,
     // Lead time before the pop to re-post, in fractional hours (the form enters it as
     // hours/minutes/seconds and combines them, e.g. 1.5 = 1h30m).
-    double? RepeatLeadHours = null);
+    double? RepeatLeadHours = null,
+    // HNM signup board only: optional "Day N" label shown on the board.
+    int? DayNumber = null);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 
@@ -728,8 +805,12 @@ public sealed record ActivityUpdateLinkshellRequest(
     string? EventBoardTheme = null,
     // null = leave unchanged. Allow account-less Discord party-board signups (non-HNM).
     bool? OutsidePartySignupEnabled = null,
+    // null = leave unchanged. "Fill earlier alliances first" signup nudge.
+    bool? FillAlliancesInOrder = null,
     // null = leave unchanged. Gate HNM (event type + account-less HNM-board signups).
-    bool? HnmOutsideSignupEnabled = null);
+    bool? HnmOutsideSignupEnabled = null,
+    // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
+    bool? UseComponentsV2Boards = null);
 
 // Set/clear the post-event discussion mirror channel. ChannelId blank = clear
 // (discussion stays in-app); a non-empty value must be a numeric Discord channel id.
@@ -781,7 +862,9 @@ public sealed record ActivityCreateTodRequest(
     string? Interval,
     bool NoLoot,
     IReadOnlyList<ActivityCreateTodLootRequest> LootDetails,
-    string? ImagePath);
+    string? ImagePath,
+    bool Hq = false,
+    int AdditionalSeconds = 0);
 
 public sealed record ActivityUpdateTodRequest(
     string? MonsterName,
@@ -793,7 +876,9 @@ public sealed record ActivityUpdateTodRequest(
     string? Interval,
     bool NoLoot,
     IReadOnlyList<ActivityCreateTodLootRequest> LootDetails,
-    string? ImagePath);
+    string? ImagePath,
+    bool Hq = false,
+    int AdditionalSeconds = 0);
 
 public sealed record ActivityCreateTodLootRequest(
     string? ItemName,
@@ -809,7 +894,9 @@ public sealed record ActivityPostBoardTodRequest(
     string? Interval,
     int? DayNumber,
     // Tri-state: true=Claimed, false=Unclaimed, null=Not Specified.
-    bool? Claim);
+    bool? Claim,
+    bool Hq = false,
+    int AdditionalSeconds = 0);
 
 public sealed record ActivityUpdateMemberRoleRequest(string Role);
 
@@ -879,6 +966,7 @@ public sealed record ActivityChannelRouteInput(
     bool PostAuctions,
     bool PostAttendance,
     bool PostTodBoard,
+    bool PostDkpSheet,
     IReadOnlyList<string>? EventTypeFilter,
     // Per-monster narrowing for an HNM route (only used when EventTypeFilter includes HNM).
     IReadOnlyList<string>? HnmMonsterFilter = null);
@@ -900,7 +988,10 @@ public sealed record ActivityCreateAuctionRequest(
     string Title,
     string? StartTimeLocal,
     string? EndTimeLocal,
-    IReadOnlyList<ActivityAuctionItemInput> Items);
+    IReadOnlyList<ActivityAuctionItemInput> Items,
+    // Which DKP pool bids are drawn from. An auction has no event type, so unlike event loot this
+    // can't be derived — the officer picks it. Null = the linkshell's default pool.
+    int? DkpPoolId = null);
 
 public sealed record ActivityAuctionBidRequest(int BidAmount);
 

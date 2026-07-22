@@ -152,10 +152,17 @@ public partial class EventController
         ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
         ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
         ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
-        // Biddable DKP per member (committed − bid locks − pending live-event loot spend),
-        // shown next to each live participant (matches the Activity live event view).
-        ViewBag.BiddableDkp = await AuctionDkpService.ComputeBiddableDkpByUserAsync(
-            _context, eventToStart.LinkshellId, HttpContext.RequestAborted);
+        // Biddable DKP per member, shown next to each live participant (matches the Activity live
+        // event view). Scoped to the pool THIS event's type earns into and pays loot out of — so on
+        // a Sky event, a member with Sky+Sea+Dynamis pooled together sees the whole pooled total,
+        // which is the number the officer needs when they type a loot cost.
+        var eventPoolMap = await _dkpPools.GetMapAsync(eventToStart.LinkshellId, HttpContext.RequestAborted);
+        var eventPoolId = eventPoolMap.Resolve(eventToStart.EventType);
+        ViewBag.BiddableDkp = await AuctionDkpService.ComputePoolBiddableDkpByUserAsync(
+            _context, _dkpPoolBalances, eventToStart.LinkshellId, eventPoolId, HttpContext.RequestAborted);
+        // Null unless the linkshell actually has multiple pools — that's the view's cue to keep the
+        // tag reading exactly as it did before pools existed.
+        ViewBag.EventPoolName = eventPoolMap.HasMultiplePools ? eventPoolMap.NameFor(eventPoolId) : null;
 
         return View(model);
     }

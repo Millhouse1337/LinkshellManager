@@ -104,6 +104,11 @@ public class Event
     // signups and advances this. 1 for every other event; reset to 1 on board re-post.
     public int HnmWindowNumber { get; set; } = 1;
 
+    // Optional "Day N" label for an HNM signup board — set on the create-event form and
+    // shown on the board (Activity + Discord). Free-form day counter (e.g. which day of
+    // the camp); null = not shown. Distinct from HnmWindowNumber (the spawn-window cycle).
+    public int? DayNumber { get; set; }
+
     // Optional link to a pre-built PartySetup (alliances → parties → slots,
     // monster-tagged, per-linkshell). Replaces the old inline "Minimal Party
     // Setup" job rows. SetNull on PartySetup delete so an event isn't

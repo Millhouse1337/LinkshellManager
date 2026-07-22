@@ -66,6 +66,13 @@ public sealed class DiscordEventChannelPublisher
                 return;
             }
 
+            // Components V2 board mode for this linkshell (experimental). Read once and
+            // threaded through every post/edit for this board so the V2 flag stays
+            // consistent across the board's whole lifecycle (Discord rejects toggling it
+            // on edit). Flipping the linkshell toggle mid-lifecycle of a live board is
+            // unsupported — it only takes effect for boards posted afterwards.
+            var useV2 = ev.Linkshell?.UseComponentsV2Boards ?? false;
+
             // HNM board marked "defeated / awaiting re-post" (its ToD was just logged):
             // replace the board with the "monster down" note instead of rendering signups.
             // Making the publisher the single renderer means the save-hook re-render that
@@ -73,7 +80,7 @@ public sealed class DiscordEventChannelPublisher
             // the board was never posted (nothing to edit in Discord).
             if (ev.HnmDefeatedAt != null)
             {
-                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, cancellationToken);
+                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, useV2, cancellationToken);
                 _logger.LogInformation("Event {EventId} board set to defeated note (message {MessageId}).",
                     eventId, ev.DiscordMessageId);
                 return;
@@ -93,7 +100,7 @@ public sealed class DiscordEventChannelPublisher
                 {
                     return;
                 }
-                await _poster.EditAsync(ev.DiscordChannelId, ev.DiscordMessageId, ev, signups, slotSignups, cancellationToken, ev.Linkshell?.EventBoardTheme);
+                await _poster.EditAsync(ev.DiscordChannelId, ev.DiscordMessageId, ev, signups, slotSignups, cancellationToken, ev.Linkshell?.EventBoardTheme, useV2);
                 _logger.LogInformation(
                     "Event {EventId} board updated in place (message {MessageId}).",
                     eventId, ev.DiscordMessageId);
@@ -111,7 +118,7 @@ public sealed class DiscordEventChannelPublisher
                 return;
             }
 
-            var messageId = await _poster.PostAsync(channelId, ev, signups, slotSignups, cancellationToken, ev.Linkshell?.EventBoardTheme);
+            var messageId = await _poster.PostAsync(channelId, ev, signups, slotSignups, cancellationToken, ev.Linkshell?.EventBoardTheme, useV2);
             if (string.IsNullOrEmpty(messageId))
             {
                 _logger.LogWarning(

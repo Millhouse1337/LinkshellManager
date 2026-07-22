@@ -27,6 +27,9 @@
                 <div class="tod-head-left">
                   <div class="tod-mob-name">{{ group.latest.monsterName }}</div>
                   <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
+                  @if (group.latest.hq) {
+                    <span class="tag accent">HQ</span>
+                  }
                   @if (group.history.length > 0) {
                     <span class="tag default num">{{ group.history.length + 1 }}</span>
                   }

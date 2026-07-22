@@ -4,7 +4,7 @@
 :host { display: block; }
 
 .we-tab {
-  --we-gold: #d6a93f;
+  --we-gold: var(--gold);
   --we-purple-pill: rgba(139, 92, 246, 0.18);
   --we-purple-fg: #cbb8ff;
   --we-purple-border: rgba(139, 92, 246, 0.45);
@@ -25,9 +25,9 @@
 /* Crystal */
 .we-crystal {
   width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; flex: 0 0 auto;
-  background: linear-gradient(135deg, #a9c0ff, var(--accent));
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
   border: 1px solid rgba(180, 200, 255, 0.7);
-  box-shadow: 0 0 10px rgba(124, 92, 255, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 10px rgba(79, 124, 255, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.4);
 }
 
 /* Cards */
@@ -44,6 +44,10 @@
 
 /* Instructions */
 .instructions-card { border-left: 3px solid var(--accent); }
+.instructions-summary { cursor: pointer; list-style: none; user-select: none; }
+.instructions-summary::-webkit-details-marker { display: none; }
+.instructions-card[open] .we-snapshot__caret { transform: rotate(90deg); }
+.instructions-card:not([open]) .card-head { border-bottom: none; }
 .instructions-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 11px; font-size: 13px; color: var(--muted); }
 .instruction-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .instruction-line strong { color: var(--fg); }
@@ -66,9 +70,9 @@
 
 /* Event card */
 .we-card {
-  border: 1px solid rgba(124, 92, 255, 0.45); border-radius: 16px; overflow: hidden;
+  border: 1px solid rgba(79, 124, 255, 0.45); border-radius: 16px; overflow: hidden;
   background: var(--surface);
-  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.1), 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 34px -12px rgba(124, 92, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(79, 124, 255, 0.1), 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 34px -12px rgba(79, 124, 255, 0.5);
   margin-bottom: 14px;
 }
 .we-card--closed { border-color: var(--border); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); }
@@ -112,7 +116,7 @@
   font-family: inherit; outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.we-tab .input:hover, .we-tab .form-select:hover { border-color: rgba(255, 255, 255, 0.22); }
+.we-tab .input:hover, .we-tab .form-select:hover { border-color: var(--border-hot); }
 .we-tab .input:focus, .we-tab .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
 .we-tab .form-select option { background: var(--surface); color: var(--fg); }
 
@@ -185,7 +189,7 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .we-typeahead input[type="text"]::placeholder { color: var(--muted); }
-.we-typeahead input[type="text"]:hover { border-color: rgba(255, 255, 255, 0.22); }
+.we-typeahead input[type="text"]:hover { border-color: var(--border-hot); }
 .we-typeahead input[type="text"]:focus {
   outline: none;
   border-color: var(--accent);
@@ -203,7 +207,7 @@
   list-style: none;
   max-height: 200px;
   overflow-y: auto;
-  background: var(--surface, #1f1f23);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -246,18 +250,18 @@
 .we-tab .btn svg { width: 14px; height: 14px; flex: 0 0 auto; }
 
 .we-tab .btn.primary {
-  color: #fff; border-color: rgba(160, 130, 255, 0.55);
-  background: linear-gradient(180deg, var(--accent), #4f37b3);
-  box-shadow: 0 4px 14px rgba(124, 92, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: #fff; border-color: rgba(120, 160, 255, 0.55);
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 4px 14px rgba(79, 124, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
-.we-tab .btn.primary:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 20px rgba(124, 92, 255, 0.5); }
+.we-tab .btn.primary:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 20px rgba(79, 124, 255, 0.5); }
 
 /* Snapshots */
 .we-snapshots { display: flex; flex-direction: column; gap: 10px; padding: 0 18px 18px; }
 .we-snapshots--unlinked { padding: 14px 18px; }
 .we-snapshot {
   background: var(--bg-elev); border: 1px solid var(--border);
-  border-left: 3px solid rgba(124, 92, 255, 0.55); border-radius: 12px; overflow: hidden;
+  border-left: 3px solid rgba(79, 124, 255, 0.55); border-radius: 12px; overflow: hidden;
 }
 .we-snapshot__head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; list-style: none; }
 .we-snapshot__head::-webkit-details-marker { display: none; }

@@ -156,6 +156,26 @@ else
                         <input type="number" step="0.01" id="auditAmount" class="form-control" placeholder="e.g. 45" />
                     </div>
 
+                    @* A free-standing adjustment has no event type to follow, so the officer says which
+                       wallet it lands in. Only Misc — "Correct" and "Add" inherit the pool of the entry
+                       they're correcting, which is the only answer that keeps the correction with the
+                       thing it corrects under a later remap. Hidden entirely on a single-pool linkshell. *@
+                    @if (Model.HasMultiplePools)
+                    {
+                        <div class="field" id="auditPoolField" style="margin-bottom:12px;display:none">
+                            <label for="auditPool">DKP pool</label>
+                            <select id="auditPool" class="form-select">
+                                @foreach (var pool in Model.Pools)
+                                {
+                                    <option value="@pool.Id" selected="@(pool.Id == Model.DefaultPoolId)">@pool.Name</option>
+                                }
+                            </select>
+                            <div style="color:var(--fg-3);font-size:12px;margin-top:4px">
+                                Which pool this adjustment is added to or taken from.
+                            </div>
+                        </div>
+                    }
+
                     <div class="field" style="margin-bottom:4px">
                         <label for="auditReason">Reason</label>
                         <textarea id="auditReason" class="form-control" rows="3" placeholder="Explain why this audit is being recorded"></textarea>

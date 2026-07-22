@@ -9,6 +9,9 @@
     var jobTypeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
     var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     var biddableDkp = ViewBag.BiddableDkp as Dictionary<string, double> ?? new Dictionary<string, double>();
+    // The DKP pool this event earns into and buys its loot from. Null when the linkshell hasn't
+    // split its DKP — every pool-aware label below then renders exactly as it always has.
+    var eventPoolName = ViewBag.EventPoolName as string;
     string ToLocalIso(DateTime? value) => value?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty;
     // HNM-typed events get the multi-window roster card and a slimmer Participants table
     // (Timer + Progress columns are not meaningful per-spawn-window).
@@ -50,6 +53,9 @@
     .event-ps-alliance-title {
         font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
         color: var(--accent); margin: 14px 0 8px;
+    }
+    .event-ps-alliance-lead {
+        font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--fg);
     }
     .event-ps-party-grid {
         display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
@@ -379,7 +385,12 @@
                                         @participant.CharacterName
                                         @if (participant.AppUserId != null && biddableDkp.TryGetValue(participant.AppUserId, out var pBid))
                                         {
-                                            <span class="tag" style="font-size:11px;font-weight:400" title="Biddable DKP now = balance − bids they're winning − DKP spent on loot this event">@pBid.ToString("0.##") biddable</span>
+                                            var biddableTitle = eventPoolName is null
+                                                ? "Biddable DKP now = balance − bids they're winning − DKP spent on loot this event"
+                                                : $"Spendable {eventPoolName} DKP now = their {eventPoolName} balance − bids they're winning from it − DKP spent on loot this event";
+                                            <span class="tag" style="font-size:11px;font-weight:400" title="@biddableTitle">
+                                                @pBid.ToString("0.##") biddable@(eventPoolName is null ? "" : $" · {eventPoolName}")
+                                            </span>
                                         }
                                     </div>
                                     <div style="color:var(--fg-4);font-size:11px">@(participant.StartTime?.ToString("g") ?? "Pending")</div>

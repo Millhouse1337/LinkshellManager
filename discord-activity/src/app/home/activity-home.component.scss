@@ -10,10 +10,10 @@
   width: 22px;
   height: 22px;
   border-radius: 5px;
-  background: linear-gradient(135deg, var(--accent, #7c5cff) 0%, #6366f1 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
   display: grid;
   place-items: center;
-  color: #0a0a0b;
+  color: var(--bg);
   font-weight: 700;
   font-size: 12px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset;
@@ -23,12 +23,12 @@
 .brand-bar__name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--fg, #fafafa);
+  color: var(--fg);
   letter-spacing: -0.01em;
 }
 
 .identity-divider {
-  color: var(--fg-3, #a1a1aa);
+  color: var(--fg-3);
   font-size: 13px;
   margin: 0 2px;
 }
@@ -40,9 +40,9 @@
   font-size: 32px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: var(--accent, #7c5cff);
-  background: rgba(124, 92, 255, 0.08);
-  border: 1px dashed rgba(124, 92, 255, 0.5);
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px dashed rgba(79, 124, 255, 0.5);
   border-radius: 10px;
 }
 
@@ -58,8 +58,8 @@
   padding: 16px;
 }
 .addon-modal-dialog {
-  background: var(--surface, #1f1f23);
-  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   width: 100%;
   max-width: 420px;
@@ -84,9 +84,32 @@
   letter-spacing: 4px;
   font-weight: 700;
 }
-.addon-modal-error { color: #e05a5a; font-size: 12px; }
+.addon-modal-error { color: var(--danger); font-size: 12px; }
 .addon-modal-footer {
   display: flex; justify-content: flex-end; gap: 8px;
-  border-top: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-top: 1px solid var(--border);
   padding-top: 12px;
 }
+
+/* "Claim your DKP" prompt — accent-washed banner above the tabs. */
+.claim-banner {
+  margin: 0 0 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.claim-banner__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 8px; color: var(--fg);
+}
+.claim-banner__dismiss {
+  border: none; background: transparent; color: var(--fg-3);
+  cursor: pointer; font-size: 13px; line-height: 1; padding: 4px;
+}
+.claim-banner__dismiss:hover { color: var(--fg); }
+.claim-banner__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.claim-banner__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.claim-banner__text { color: var(--fg); font-size: 13px; }
