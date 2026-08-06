@@ -9,7 +9,7 @@ import type { ActivityPartySetupListRow } from '../../discord/discord-activity.t
 import { PartySetupService } from '../../discord/party-setup.service';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
 import { TodFormComponent } from './tod-form.component';
-import { formatElapsed, parseDate } from '../activity-home.helpers';
+import { TOD_NOT_ENTERED, isTodReady, todCountdownLabel, todSortKey } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-tods-tab',
@@ -124,23 +124,11 @@ export class TodsTabComponent {
 
   protected selectedDashboardTods() {
     const selectedId = this.selectedDashboardLinkshellId();
-    // Per-linkshell hidden-mob list, configured in the Customize form.
-    // Names are compared case-insensitively after trimming so the user
-    // doesn't have to match casing exactly when typing them in.
-    const hidden = new Set(
-      (this.linkshellSettingsFor(selectedId)?.hiddenTodMonsters ?? [])
-        .map(name => name.trim().toLowerCase())
-    );
     return [...(this.activity.overview()?.recentTods ?? [])]
       .filter(tod => tod.linkshellId === selectedId)
-      // Visibility is controlled per-mob by the linkshell's "Hide ToD Mobs"
-      // setting (matches the web tracker, which shows every monster).
-      .filter(tod => !hidden.has((tod.monsterName ?? '').trim().toLowerCase()))
-      .sort((left, right) => {
-        const leftTime = left.time ? new Date(left.time).getTime() : 0;
-        const rightTime = right.time ? new Date(right.time).getTime() : 0;
-        return rightTime - leftTime;
-      });
+      // Newest first on time ?? timeStamp, so a ToD that was never entered still sorts as the
+      // monster's latest instead of sinking below the pop it superseded.
+      .sort((left, right) => todSortKey(right) - todSortKey(left));
   }
 
   private linkshellSettingsFor(linkshellId: number): ActivityLinkshellSettings | null {
@@ -198,22 +186,16 @@ export class TodsTabComponent {
     this.expandedTodLoot.set(next);
   }
 
+  // Countdown / ready state / the "Not entered" label all live in activity-home.helpers so this
+  // tab and the dashboard tab can't drift apart — they render the same card from the same data.
+  protected readonly notEntered = TOD_NOT_ENTERED;
+
   protected todCountdownLabel(tod: { repopTime?: string | null }): string {
-    const remainingMilliseconds = this.remainingMs(tod.repopTime);
-    return remainingMilliseconds <= 0 ? 'Ready' : formatElapsed(remainingMilliseconds);
+    return todCountdownLabel(tod.repopTime, this.now());
   }
 
   protected isTodReady(tod: { repopTime?: string | null }): boolean {
-    return this.remainingMs(tod.repopTime) <= 0;
-  }
-
-  private remainingMs(targetValue?: string | null): number {
-    const targetTime = parseDate(targetValue);
-    if (!targetTime) {
-      return 0;
-    }
-
-    return Math.max(0, targetTime - this.now());
+    return isTodReady(tod.repopTime, this.now());
   }
 
   protected deleteTod(todId: number, monsterName: string): void {

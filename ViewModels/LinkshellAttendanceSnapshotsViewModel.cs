@@ -51,7 +51,7 @@ public sealed class AttendanceSnapshotRow
 
 public sealed class AttendanceSnapshotEntryRow
 {
-    // AttendanceSnapshotEntry.Id — lets the Attendance Events UI target a
+    // AttendanceSnapshotEntry.Id — lets the HNM Events UI target a
     // specific person for removal. 0 when the row isn't backed by a saved
     // entry (read-only contexts that don't set it).
     public int Id { get; set; }
@@ -62,4 +62,8 @@ public sealed class AttendanceSnapshotEntryRow
     public string? SubJob { get; set; }
     public int? SubJobLevel { get; set; }
     public string? Zone { get; set; }
+
+    // Typed in by an officer rather than scanned by the addon. Sorts to the bottom of the snapshot
+    // and tints the row, so a hand-asserted name never reads as captured evidence.
+    public bool AddedManually { get; set; }
 }

@@ -99,9 +99,10 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         ApplicationDbContext db, HnmRecurringBoard board, DateTime nowUtc, CancellationToken cancellationToken)
     {
         var monster = board.MonsterName.Trim();
-        // A board may be keyed on a combined "Base/Stronger" name; match a ToD for EITHER
-        // half (single names yield one segment).
-        var names = HnmConfig.MonsterSegments(monster).Select(seg => seg.ToLower()).ToList();
+        // A board may be keyed on a combined "Base/Stronger" name, and the ToD logged from
+        // that board records the same combined name — so match on every spelling of the
+        // spawn (the combined label AND either half), not just the segments.
+        var names = HnmConfig.MonsterMatchNamesLower(monster);
 
         // Latest ToD for this monster that has a predicted pop time.
         var tod = names.Count == 0 ? null : await db.Tods
@@ -136,6 +137,14 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         var windowStart = repopUtc.AddMinutes(-10);
         var windowEnd = repopUtc.AddMinutes(10);
 
+        // The re-posted board is for the NEXT pop, so it advances the day cycle: day N becomes
+        // N+1, and an HQ kill resets to day 1. On a combined "Base/Stronger" board day 1 already
+        // renders as the base half; a board keyed on the bare stronger name needs the swap
+        // spelled out, since "Nidhogg" killed means the next spawn is Fafnir. The TEMPLATE's
+        // MonsterName is left alone — it's the stable key for this spawn's standing board.
+        var nextDay = HnmConfig.NextDayNumber(tod.DayNumber, tod.Hq);
+        var nextMonster = tod.Hq ? HnmConfig.BaseMonsterName(monster)! : monster;
+
         // Idempotency / addon coexistence: reuse an existing not-yet-ended event that
         // was created from this exact ToD, or a same-named event within ±10 min of the
         // pop (covers the addon's auto-event, whose composed name may differ).
@@ -164,7 +173,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                 EventLocation = string.IsNullOrWhiteSpace(board.EventLocation)
                     ? HnmConfig.ZoneFor(monster)
                     : board.EventLocation,
-                AssignedMonsterName = monster,
+                AssignedMonsterName = nextMonster,
                 CreatorUserId = creatorUserId ?? board.CreatedByAppUserId,
                 StartTime = repopUtc,
                 CommencementStartTime = null,
@@ -173,10 +182,12 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                 AutoStart = false,
                 Details = board.Details,
                 PartySetupId = board.PartySetupId,
-                WindowCountOverride = HnmConfig.GetWindowCount(monster),
                 SourceTodId = tod.Id,
+                DayNumber = nextDay,
                 TimeStamp = nowUtc,
             };
+            // Seed window count (per-linkshell override or HnmConfig fallback) + Manual Check In stamp.
+            await HnmEventSeeder.SeedHnmEventAsync(db, newEvent, null, monster, cancellationToken);
             db.Events.Add(newEvent);
             _logger.LogInformation(
                 "HNM recurring board posted: event '{EventName}' (linkshell {LinkshellId}, monster '{Monster}') from tod {TodId}, repop {Repop:o}, lead {Lead}h.",
@@ -194,12 +205,13 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
             // of creating a new event: clearing the flag re-renders a fresh, empty board.
             // The DbContext save-hook re-posts it to Discord (it edits the existing message,
             // since the event keeps its message id), the same way new boards are posted.
+            //
+            // The reset itself is shared with HnmAutoEventService, so a board revived by the
+            // addon's ToD post and one revived here come out identical.
             if (existing.HnmDefeatedAt != null)
             {
-                existing.HnmDefeatedAt = null;
-                existing.HnmRepostAt = null;
-                existing.StartTime = repopUtc;
-                existing.HnmWindowNumber = 1; // new pop cycle → back to Window 1
+                await HnmEventSeeder.ReviveForNewPopAsync(
+                    db, existing, repopUtc, nextDay, nextMonster, tod.Id, cancellationToken);
                 _logger.LogInformation(
                     "HNM board reactivated: event '{EventName}' ({EventId}, linkshell {LinkshellId}, monster '{Monster}') from tod {TodId}, repop {Repop:o}.",
                     existing.EventName, existing.Id, board.LinkshellId, monster, tod.Id, repopUtc);

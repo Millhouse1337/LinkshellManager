@@ -43,6 +43,15 @@ public partial class EventController
             return Forbid();
         }
 
+        // Both feed the per-window DKP column below. The close is resolved against what has been
+        // posted SO FAR, exactly as HnmStandardCampFinalizer would if the camp ended right now.
+        var startLinkshell = await _context.Linkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == eventToStart.LinkshellId);
+        var startCloseWindow = LinkshellManagerDiscordApp.Services.HnmStandardCampFinalizer.ResolveCloseWindow(
+            eventToStart.AttendanceWindows.Select(w => w.SequenceNumber).Distinct().ToList(),
+            eventToStart.HnmWindowNumber);
+
         var model = new EventViewModel
         {
             Event = new Event
@@ -108,15 +117,29 @@ public partial class EventController
             EventLootDetails = eventToStart.EventLootDetails.OrderByDescending(item => item.Id).ToList(),
             LinkshellMembers = eventToStart.AppUserEvents.Select(item => item.CharacterName ?? string.Empty).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().OrderBy(name => name).ToList(),
             CommencementStartTime = ConvertUtcToUserTimeZone(eventToStart.CommencementStartTime, user.TimeZone),
-            WindowCount = eventToStart.WindowCountOverride ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventToStart.EventName),
+            // The POST count — this page's only use of it is the Attendance Windows card, whose
+            // tabs are roster reads, so a Standard king/dragon reads "1 of 2" rather than "1 of 7".
+            // Not the raw override, which on an app-made HNM camp holds the SPAWN count.
+            WindowCount = LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder.AttendancePostCount(eventToStart),
+            SupportsBreakRoom = LinkshellManagerDiscordApp.Services.EventBreakPolicy.SupportsBreakRoom(eventToStart),
             AttendanceWindows = eventToStart.AttendanceWindows
                 .OrderBy(window => window.SequenceNumber)
                 .Select(window => new EventAttendanceWindowViewModel
                 {
                     Id = window.Id,
                     SequenceNumber = window.SequenceNumber,
-                    Label = window.Label,
+                    // Same fallback the Activity DTO applies: a row written while the label was
+                    // derived from the spawn count carries none at all (GetDefaultWindowLabel only
+                    // names a 2-post camp), and would render as "Window 1" on a camp whose windows
+                    // are an Open and a Close. A stored label still wins.
+                    Label = LinkshellManagerDiscordApp.Services.HnmConfig.NormalizeWindowLabel(window.Label)
+                        ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetDefaultWindowLabel(
+                            eventToStart.EventName,
+                            window.SequenceNumber,
+                            LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder.AttendancePostCount(eventToStart)),
                     PostedAt = ConvertUtcToUserTimeZone(window.PostedAt, user.TimeZone) ?? window.PostedAt,
+                    DkpAmount = LinkshellManagerDiscordApp.Services.HnmCampPricing.WindowValueFor(
+                        eventToStart, startLinkshell, window.SequenceNumber, startCloseWindow, window.DkpAmount),
                     Attendees = window.Attendees
                         .OrderBy(att => att.AppUserEvent != null ? att.AppUserEvent.CharacterName : string.Empty)
                         .Select(att => new AttendanceWindowAttendeeViewModel
@@ -410,6 +433,11 @@ public partial class EventController
             return BadRequest("Break status is only available after the event has started.");
         }
 
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+        {
+            return BadRequest(EventBreakPolicy.WindowedRejectionMessage);
+        }
+
         var participation = await _context.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == user.Id);
 
@@ -647,6 +675,11 @@ public partial class EventController
         if (!eventEntity.CommencementStartTime.HasValue)
         {
             return BadRequest("Break status is only available after the event has started.");
+        }
+
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+        {
+            return BadRequest(EventBreakPolicy.WindowedRejectionMessage);
         }
 
         var participation = await _context.AppUserEvents

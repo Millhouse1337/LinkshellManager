@@ -19,7 +19,8 @@ import type {
   ActivityLinkshellDetail,
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
-  ActivityLootStructure
+  ActivityLootStructure,
+  ActivityTodMonsterTiming
 } from './discord-activity.types';
 
 @Injectable({ providedIn: 'root' })
@@ -101,6 +102,7 @@ export class LinkshellService {
       activeAfterAttendances?: number | null;
       // null = leave unchanged; [] = clear; [...names] = replace.
       hiddenTodMonsters?: string[] | null;
+        todMonsterTimings?: ActivityTodMonsterTiming[] | null;
       // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
       linkshellType?: string | null;
       // null = leave unchanged; "" = clear association; digits = associate with
@@ -116,6 +118,22 @@ export class LinkshellService {
       hnmOutsideSignupEnabled?: boolean | null;
       // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
       useComponentsV2Boards?: boolean | null;
+      // Manual Check In HNM attendance (null = leave unchanged). Mode: 'Standard' | 'Wd'.
+      hnmAttendanceMode?: string | null;
+      wdDkpPerWindow?: number | null;
+      wdClaimBonus?: number | null;
+      wdKillBonus?: number | null;
+      wdOpenBonus?: number | null;
+      wdCloseBonus?: number | null;
+      // Standard-mode HNM bonuses (null = leave unchanged).
+      hnmStandardOpenBonus?: number | null;
+      hnmStandardCloseBonus?: number | null;
+      hnmStandardClaimBonus?: number | null;
+      hnmStandardKillBonus?: number | null;
+      hnmStandardWindowBonus?: number | null;
+      // Automatic per-window attendance snapshots (both modes; null = leave unchanged).
+      hnmAutoSnapshotEnabled?: boolean | null;
+      hnmAutoSnapshotDelaySeconds?: number | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -141,13 +159,27 @@ export class LinkshellService {
         inactiveAfterAbsences: input.inactiveAfterAbsences ?? null,
         activeAfterAttendances: input.activeAfterAttendances ?? null,
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
+          todMonsterTimings: input.todMonsterTimings ?? null,
         linkshellType: input.linkshellType ?? null,
         discordGuildId: input.discordGuildId ?? null,
         eventBoardTheme: input.eventBoardTheme ?? null,
         outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
         fillAlliancesInOrder: input.fillAlliancesInOrder ?? null,
         hnmOutsideSignupEnabled: input.hnmOutsideSignupEnabled ?? null,
-        useComponentsV2Boards: input.useComponentsV2Boards ?? null
+        useComponentsV2Boards: input.useComponentsV2Boards ?? null,
+        hnmAttendanceMode: input.hnmAttendanceMode ?? null,
+        wdDkpPerWindow: input.wdDkpPerWindow ?? null,
+        wdClaimBonus: input.wdClaimBonus ?? null,
+        wdKillBonus: input.wdKillBonus ?? null,
+        wdOpenBonus: input.wdOpenBonus ?? null,
+        wdCloseBonus: input.wdCloseBonus ?? null,
+        hnmStandardOpenBonus: input.hnmStandardOpenBonus ?? null,
+        hnmStandardCloseBonus: input.hnmStandardCloseBonus ?? null,
+        hnmStandardClaimBonus: input.hnmStandardClaimBonus ?? null,
+        hnmStandardKillBonus: input.hnmStandardKillBonus ?? null,
+        hnmStandardWindowBonus: input.hnmStandardWindowBonus ?? null,
+        hnmAutoSnapshotEnabled: input.hnmAutoSnapshotEnabled ?? null,
+        hnmAutoSnapshotDelaySeconds: input.hnmAutoSnapshotDelaySeconds ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');
@@ -380,10 +412,10 @@ export class LinkshellService {
     try {
       await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/primary`);
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Primary linkshell updated.');
+      this.auth.setActionMessage('Selected linkshell updated.');
     } catch (error) {
       this.auth.setActionError(
-        formatActionError(error, 'Updating the primary linkshell failed.')
+        formatActionError(error, 'Updating the selected linkshell failed.')
       );
     } finally {
       this.busyLinkshellId.set(null);

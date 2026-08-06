@@ -129,12 +129,15 @@ public class LootHistoryController : Controller
         // One lightweight backing ToD per submission so the loot flows through
         // the existing ToD-loot DKP deduction + ManualPoints per-day pipeline
         // and shows in history (Source = ToD) with full edit support.
+        // Time stays null: nobody logged a Time of Death here, this row only exists to carry the
+        // loot. Stamping "now" made it the newest row for its monster, so a manual loot entry with
+        // Context = "Fafnir" would hijack that monster's ToD Tracker card with a time nobody
+        // entered. TimeStamp still records when the row was written.
         var tod = new Tod
         {
             LinkshellId = linkshellId.Value,
             MonsterName = string.IsNullOrWhiteSpace(model.Context) ? "Manual Loot" : model.Context!.Trim(),
             Claim = true,
-            Time = nowUtc,
             TimeStamp = nowUtc,
             TotalClaims = 1
         };

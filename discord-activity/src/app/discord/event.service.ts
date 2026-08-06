@@ -124,8 +124,12 @@ export class EventService {
         countsTowardActive: input.countsTowardActive ?? true,
         monsterName: input.monsterName ?? null,
         repeatOnTod: input.repeatOnTod ?? false,
-        repeatLeadHours: input.repeatLeadHours ?? null,
-        dayNumber: input.dayNumber ?? null
+        dayNumber: input.dayNumber ?? null,
+        hnmOpenBonusOverride: input.hnmOpenBonusOverride ?? null,
+        hnmCloseBonusOverride: input.hnmCloseBonusOverride ?? null,
+        hnmClaimBonusOverride: input.hnmClaimBonusOverride ?? null,
+        hnmKillBonusOverride: input.hnmKillBonusOverride ?? null,
+        hnmPerWindowOverride: input.hnmPerWindowOverride ?? null
       });
 
       await this.auth.refreshOverview();
@@ -156,8 +160,12 @@ export class EventService {
         countsTowardActive: input.countsTowardActive ?? true,
         monsterName: input.monsterName ?? null,
         repeatOnTod: input.repeatOnTod ?? false,
-        repeatLeadHours: input.repeatLeadHours ?? null,
-        dayNumber: input.dayNumber ?? null
+        dayNumber: input.dayNumber ?? null,
+        hnmOpenBonusOverride: input.hnmOpenBonusOverride ?? null,
+        hnmCloseBonusOverride: input.hnmCloseBonusOverride ?? null,
+        hnmClaimBonusOverride: input.hnmClaimBonusOverride ?? null,
+        hnmKillBonusOverride: input.hnmKillBonusOverride ?? null,
+        hnmPerWindowOverride: input.hnmPerWindowOverride ?? null
       });
 
       await this.auth.refreshOverview();
@@ -213,6 +221,25 @@ export class EventService {
       this.auth.setActionMessage('Event canceled.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Canceling the event failed.'));
+    } finally {
+      this.busyEventId.set(null);
+    }
+  }
+
+  // Hard-delete an HNM camp outright — no ToD row at all, and the pop cycle keeps no record of it.
+  // (End Camp accepts a blank ToD too, but that still logs a "Not entered" row for the camp.)
+  // Works on a live camp too, unlike cancelEvent. Server enforces officer + HNM-only.
+  async deleteEvent(eventId: number): Promise<void> {
+    this.busyEventId.set(eventId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/events/${eventId}/delete`);
+      await this.auth.refreshOverview();
+      this.auth.setActionMessage('Camp deleted.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting the camp failed.'));
     } finally {
       this.busyEventId.set(null);
     }
@@ -612,6 +639,41 @@ export class EventService {
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Removing the attendee failed.'));
+      return false;
+    }
+  }
+
+  // Prices ONE posted attendance window: what it pays each attendee, replacing the camp's default
+  // open / close bonus for that window. `null` clears the price and puts the window back on the
+  // default — a real instruction, which is why it is sent rather than omitted.
+  //
+  // Same route family and the same bearer + cookie shape as the remove above; the server refuses
+  // camps that don't pay off this column (Manual Check In, timed events) and returns the reason,
+  // which formatActionError surfaces verbatim.
+  async setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const response = await fetch(`/api/addon/management/attendance-windows/${windowId}/dkp`, {
+        method: 'PATCH',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ dkpAmount })
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const payload = JSON.parse(text || '{}') as { error?: string };
+          throw new Error(payload.error || `Update failed (HTTP ${response.status}).`);
+        } catch {
+          throw new Error(text || `Update failed (HTTP ${response.status}).`);
+        }
+      }
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, "Setting this window's DKP failed."));
       return false;
     }
   }

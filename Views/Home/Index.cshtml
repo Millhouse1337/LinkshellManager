@@ -3,10 +3,37 @@
     Layout = "_Layout";
 }
 
-<div class="auth-shell" style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 40px);padding:32px 16px">
+@* align-items:flex-start, not center: this page is taller than the viewport, and centering it
+   parked the wordmark a few hundred pixels down with dead space above it. Top-aligned, the name
+   is the first thing on the page. min-height is kept so a short viewport still fills. *@
+<div class="auth-shell" style="display:flex;align-items:flex-start;justify-content:center;min-height:calc(100vh - 40px);padding:32px 16px">
     <div style="max-width:960px;width:100%">
+        @* The wordmark leads the page — set as TEXT, not art. It replaced a banner image that
+           stacked two illustrated bands on top of each other and read as clutter.
+
+           Font stack, not a webfont: the site self-hosts Geist and loads nothing from a CDN, so
+           this borrows the display serifs that already ship with the OS — Cinzel/Trajan where
+           they exist, then Optima, then the Palatino/Book Antiqua/Georgia chain that covers
+           Windows and macOS. Every fallback is a classical serif, so the wordmark keeps its
+           character wherever it lands rather than dropping to the body sans.
+
+           The gold gradient is painted through the glyphs (background-clip:text + transparent
+           fill), which is why the glow is a filter on the WRAPPER and not a text-shadow: a shadow
+           behind transparent glyphs shows through the letterforms and muddies them. `color` is
+           set first so a browser without background-clip:text still renders gold, not nothing. *@
+        <div class="fade d1" style="text-align:center;margin:0 0 28px;filter:drop-shadow(0 0 28px rgba(129,140,248,0.28))">
+            <div style="font-family:'Cinzel','Trajan Pro','Optima','Palatino Linotype','Book Antiqua',Georgia,'Times New Roman',serif;font-size:clamp(34px,6.6vw,66px);font-weight:600;letter-spacing:0.055em;line-height:1.08;color:#e9cd8a;background:linear-gradient(180deg,#fffaf0 0%,#f0d494 42%,#c9963c 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
+                Linkshell Manager
+            </div>
+            @* Hairline under the wordmark, fading out at both ends so it reads as part of the
+               lettering rather than as a section divider. *@
+            <div style="height:1px;margin:14px auto 0;max-width:420px;background:linear-gradient(90deg,transparent 0%,rgba(201,150,60,0.55) 50%,transparent 100%)"></div>
+        </div>
+
+        @* Decorative: the wordmark above already carries the name, so this one is alt="" rather
+           than announcing "LinkshellManager" a second time to a screen reader. *@
         <div class="card fade d1" style="padding:0;margin-bottom:24px;overflow:hidden;line-height:0">
-            <img src="~/images/LSM_Image.png" asp-append-version="true" alt="LinkshellManager"
+            <img src="~/images/LSM_Image.png" asp-append-version="true" alt=""
                  style="display:block;width:100%;height:auto" />
         </div>
 
@@ -15,8 +42,10 @@
                 <div>
                     <div style="font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px">LinkshellManager</div>
                     <h1 style="font-size:36px;font-weight:600;color:var(--fg);line-height:1.15;margin:0 0 14px">Website and Discord Activity, on the same app.</h1>
-                    <p style="font-size:15px;color:var(--fg-3);margin:0 0 24px;max-width:52ch">
-                        Use Discord as the single identity for both the website and the embedded Activity, so the same
+                    @* No max-width here on purpose — this line is meant to run the full width of the
+                       card as a single line at desktop size. A measure cap put it on two. *@
+                    <p style="font-size:15px;color:var(--fg-3);margin:0 0 24px">
+                        Use Discord as the login for both the website and the Discord Activity, so the same
                         account and data follow you in both places.
                     </p>
                     <div style="display:flex;flex-wrap:wrap;gap:8px">
@@ -37,9 +66,9 @@
             </div>
             <div class="card" style="padding:20px">
                 <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px">Discord Activity</div>
-                <h2 style="font-size:16px;font-weight:600;color:var(--fg);margin:0 0 8px">Live in-channel controls</h2>
+                <h2 style="font-size:16px;font-weight:600;color:var(--fg);margin:0 0 8px">Run app inside Discord</h2>
                 <p style="font-size:13px;color:var(--fg-3);margin:0">
-                    Launch inside Discord for event signups, attendance verification, loot, and membership - all in the iframe.
+                    Launch from inside a voice channel, nothing to install and no separate login.
                 </p>
             </div>
             <div class="card" style="padding:20px">

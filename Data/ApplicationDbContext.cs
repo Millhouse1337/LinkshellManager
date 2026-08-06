@@ -772,11 +772,105 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // INV-2: every JournalEntry's lines sum to zero. That is what makes "gil on hand" provable
+        // rather than asserted — the balance is a single SUM over one column, and an entry that
+        // moved gil out of nowhere cannot exist. TreasuryJournalWriter upholds it by construction;
+        // this catches anyone who bypasses the writer and hand-builds an entry.
+        //
+        // ChangeTracker-only, no DB read. [Conditional("DEBUG")] to match INV-1: a release-mode
+        // throw inside SaveChanges would add a new failure surface to every save in the whole app,
+        // and the DB CHECK constraints already cover the cases a corrupt row could reach.
+        [System.Diagnostics.Conditional("DEBUG")]
+        private void AssertTreasuryEntriesBalance()
+        {
+            var touched = new HashSet<JournalEntry>();
+            foreach (var line in ChangeTracker.Entries<JournalEntryLine>())
+            {
+                if (line.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                {
+                    continue;
+                }
+                var header = line.Entity.JournalEntry;
+                if (header is not null)
+                {
+                    touched.Add(header);
+                }
+            }
+            foreach (var entry in ChangeTracker.Entries<JournalEntry>())
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    touched.Add(entry.Entity);
+                }
+            }
+
+            foreach (var header in touched)
+            {
+                // A zero-gil entry (a legacy sale recorded at 0) carries a single zero line rather
+                // than a pair, and sums to zero either way.
+                var sum = header.Lines.Sum(line => line.Amount);
+                System.Diagnostics.Debug.Assert(
+                    sum == 0L,
+                    $"INV-2 violated: treasury entry {header.EntryNumber} (id {header.Id}) has lines summing to "
+                    + $"{sum} instead of 0. Every entry must be built through TreasuryJournalWriter.");
+            }
+        }
+
+        // INV-3: a Confirmed entry is never updated or deleted. A wrong entry is fixed by recording
+        // an opposite one, so what was believed and when survives — that is the whole reason this
+        // replaced RevenueEntries.Remove().
+        //
+        // Deletes are checked for MODIFICATION only, not blocked outright: deleting a linkshell
+        // legitimately cascades its treasury away, and EF cascades tracked dependents itself, so a
+        // blanket "no deletes" assert would fire on a legitimate linkshell deletion.
+        [System.Diagnostics.Conditional("DEBUG")]
+        private void AssertConfirmedTreasuryEntriesAreImmutable()
+        {
+            foreach (var entry in ChangeTracker.Entries<JournalEntry>())
+            {
+                if (entry.State != EntityState.Modified)
+                {
+                    continue;
+                }
+                // Draft -> Confirmed is the one legal transition, and it stamps the confirmer.
+                var wasDraft = JournalEntryStatuses.IsDraft(
+                    entry.Property(nameof(JournalEntry.Status)).OriginalValue as string);
+                if (wasDraft)
+                {
+                    continue;
+                }
+
+                var changed = entry.Properties
+                    .Where(property => property.IsModified)
+                    .Select(property => property.Metadata.Name)
+                    .ToArray();
+                System.Diagnostics.Debug.Assert(
+                    changed.Length == 0,
+                    $"INV-3 violated: confirmed treasury entry {entry.Entity.EntryNumber} (id {entry.Entity.Id}) "
+                    + $"was modified ({string.Join(", ", changed)}). Record a reversal or a correction instead.");
+            }
+
+            foreach (var line in ChangeTracker.Entries<JournalEntryLine>())
+            {
+                if (line.State != EntityState.Modified)
+                {
+                    continue;
+                }
+                var status = line.Entity.JournalEntry?.Status;
+                System.Diagnostics.Debug.Assert(
+                    status is null || JournalEntryStatuses.IsDraft(status),
+                    $"INV-3 violated: a half of confirmed treasury entry {line.Entity.JournalEntryId} was modified. "
+                    + "Record a reversal or a correction instead.");
+            }
+        }
+
         public override async Task<int> SaveChangesAsync(
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
             AssertDkpLedgerInvariant();
+            AssertTreasuryEntriesBalance();
+            AssertConfirmedTreasuryEntriesAreImmutable();
             var affected = CollectChangedTodLinkshellIds();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
@@ -807,6 +901,8 @@ namespace LinkshellManagerDiscordApp.Data
         {
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
             AssertDkpLedgerInvariant();
+            AssertTreasuryEntriesBalance();
+            AssertConfirmedTreasuryEntriesAreImmutable();
             var affected = CollectChangedTodLinkshellIds();
             var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
@@ -850,6 +946,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<AppUserEventHistory> AppUserEventHistories => Set<AppUserEventHistory>();
         public DbSet<EventLootDetail> EventLootDetails => Set<EventLootDetail>();
         public DbSet<EventPartySlotSignup> EventPartySlotSignups => Set<EventPartySlotSignup>();
+        public DbSet<EventWindowRosterSnapshot> EventWindowRosterSnapshots => Set<EventWindowRosterSnapshot>();
         public DbSet<Tod> Tods => Set<Tod>();
         public DbSet<TodLootDetail> TodLootDetails => Set<TodLootDetail>();
         public DbSet<PartySetup> PartySetups => Set<PartySetup>();
@@ -861,6 +958,10 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<Announcement> Announcements => Set<Announcement>();
         public DbSet<Item> Items => Set<Item>();
         public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
+        public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
+        public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+        public DbSet<JournalEntryLine> JournalEntryLines => Set<JournalEntryLine>();
+        public DbSet<LedgerPeriod> LedgerPeriods => Set<LedgerPeriod>();
         public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
         public DbSet<JobRating> JobRatings => Set<JobRating>();
         public DbSet<EventComment> EventComments => Set<EventComment>();
@@ -884,6 +985,9 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
         public DbSet<LinkshellChannelRoute> LinkshellChannelRoutes => Set<LinkshellChannelRoute>();
         public DbSet<HnmRecurringBoard> HnmRecurringBoards => Set<HnmRecurringBoard>();
+        public DbSet<ChartPopItem> ChartPopItems => Set<ChartPopItem>();
+        public DbSet<ChartPopItemCredit> ChartPopItemCredits => Set<ChartPopItemCredit>();
+        public DbSet<ChartBossProgress> ChartBossProgresses => Set<ChartBossProgress>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -1320,6 +1424,28 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.EventId, item.DiscordUserId });
             });
 
+            builder.Entity<EventWindowRosterSnapshot>(entity =>
+            {
+                entity.ToTable("EventWindowRosterSnapshots");
+                entity.Property(item => item.AllianceName).HasMaxLength(64);
+                entity.Property(item => item.PartyName).HasMaxLength(64);
+                entity.Property(item => item.SlotLabel).HasMaxLength(64);
+                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.Property(item => item.CharacterName).HasMaxLength(256);
+                entity.Property(item => item.Role).HasMaxLength(16);
+                entity.Property(item => item.MainJob).HasMaxLength(8);
+                entity.Property(item => item.SubJob).HasMaxLength(8);
+                // Cascade is right here (unlike AppUserEventWindow's SetNull): a snapshot must
+                // outlive the SIGNUPS it was taken from, but it's meaningless once the camp itself
+                // is gone. There is deliberately NO FK to the party setup tree — see the model.
+                entity.HasOne(item => item.Event)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // The only read path: "the roster for event E, window N", newest window first.
+                entity.HasIndex(item => new { item.EventId, item.WindowNumber });
+            });
+
             builder.Entity<Rule>(entity =>
             {
                 entity.ToTable("Rules");
@@ -1382,6 +1508,120 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.LinkshellId, item.OccurredAt });
             });
 
+            // --- Gil treasury: categories, transactions, their two halves, and the lock. ---
+            // RevenueEntry above is the shape these replace. It stays in place, readable and
+            // unmodified, for a full release after the conversion so a binary rollback is a
+            // non-event; RemoveRevenueEntries is a later migration.
+
+            builder.Entity<LedgerAccount>(entity =>
+            {
+                entity.ToTable("LedgerAccounts");
+                entity.Property(item => item.Name).HasMaxLength(96).IsRequired();
+                entity.Property(item => item.Description).HasMaxLength(512);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.AccountNumber }).IsUnique();
+                entity.HasIndex(item => new { item.LinkshellId, item.SortOrder });
+                // Exactly one gil-on-hand category per linkshell — the same partial-unique trick
+                // as IX_DkpPools_LinkshellId_Default. Its balance IS the treasury balance, so two
+                // of them would make "how much gil do we have" ambiguous again.
+                entity.HasIndex(item => item.LinkshellId)
+                    .HasDatabaseName("IX_LedgerAccounts_LinkshellId_Cash")
+                    .IsUnique()
+                    .HasFilter("\"IsCash\" = TRUE");
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_LedgerAccounts_AccountNumber_Range",
+                    $"\"AccountNumber\" BETWEEN {LedgerAccountClasses.MinAccountNumber} AND {LedgerAccountClasses.MaxAccountNumber}"));
+            });
+
+            builder.Entity<JournalEntry>(entity =>
+            {
+                entity.ToTable("JournalEntries");
+                entity.Property(item => item.LinkshellName).HasMaxLength(256);
+                entity.Property(item => item.EntryNumber).HasMaxLength(24).IsRequired();
+                entity.Property(item => item.Status).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Kind).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Source).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.TransactionKind).HasMaxLength(48);
+                entity.Property(item => item.Memo).HasMaxLength(1024);
+                entity.Property(item => item.CorrectionReason).HasMaxLength(512);
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.ConfirmedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.ConfirmedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.LegacyEntryType).HasMaxLength(32);
+                entity.Property(item => item.LegacyCategory).HasMaxLength(128);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(item => new { item.LinkshellId, item.TransactionDate });
+                entity.HasIndex(item => new { item.LinkshellId, item.Sequence }).IsUnique();
+                entity.HasIndex(item => new { item.LinkshellId, item.EntryNumber }).IsUnique();
+                // Powers the indexed EXISTS behind "has this been reversed?", which is how the
+                // reversal state is read without ever updating a confirmed row.
+                entity.HasIndex(item => item.ReversesJournalEntryId);
+                // Makes the one-time conversion replayable: if it aborts halfway, re-run it rather
+                // than restoring a snapshot.
+                entity.HasIndex(item => item.LegacyRevenueEntryId)
+                    .HasDatabaseName("IX_JournalEntries_LegacyRevenueEntryId")
+                    .IsUnique()
+                    .HasFilter("\"LegacyRevenueEntryId\" IS NOT NULL");
+                // An entry that says an earlier one was wrong has to say why.
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_JournalEntries_ReasonRequiredForFixes",
+                    "\"Kind\" NOT IN ('Reversal', 'Correction')"
+                    + " OR (\"CorrectionReason\" IS NOT NULL AND length(btrim(\"CorrectionReason\")) > 0)"));
+            });
+
+            builder.Entity<JournalEntryLine>(entity =>
+            {
+                entity.ToTable("JournalEntryLines");
+                entity.Property(item => item.AccountName).HasMaxLength(96).IsRequired();
+                entity.Property(item => item.LineMemo).HasMaxLength(256);
+                entity.Property(item => item.CounterpartyAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CounterpartyCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.JournalEntry)
+                    .WithMany(header => header.Lines)
+                    .HasForeignKey(item => item.JournalEntryId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Restrict, not Cascade: a category with history can be retired but never deleted,
+                // because deleting it would silently rewrite what those entries meant.
+                entity.HasOne(item => item.LedgerAccount)
+                    .WithMany()
+                    .HasForeignKey(item => item.LedgerAccountId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                // LinkshellId is deliberately a plain indexed int with no relationship: a second
+                // cascade path from Linkshells into this table is something Postgres will refuse.
+                entity.HasIndex(item => new { item.LinkshellId, item.LedgerAccountId, item.TransactionDate });
+                entity.HasIndex(item => new { item.LinkshellId, item.TransactionDate });
+                entity.HasIndex(item => item.JournalEntryId);
+                // Deliberately NO "Amount <> 0" constraint: a sale genuinely recorded at 0 gil
+                // exists in production (both mark-sold paths clamp a negative price to 0), and
+                // dropping those rows would lose the fact that a sale happened at all. They convert
+                // to an entry whose two halves are both zero, which still sums to zero.
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_JournalEntryLines_LineNumber_Positive", "\"LineNumber\" >= 1"));
+            });
+
+            builder.Entity<LedgerPeriod>(entity =>
+            {
+                entity.ToTable("LedgerPeriods");
+                entity.Property(item => item.LockedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.LockedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.UnlockedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.UnlockedByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.UnlockReason).HasMaxLength(512);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // At most one row per linkshell; no row at all means nothing is locked.
+                entity.HasIndex(item => item.LinkshellId).IsUnique();
+            });
+
             builder.Entity<LinkshellRole>(entity =>
             {
                 entity.ToTable("LinkshellRoles");
@@ -1391,6 +1631,70 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.Name }).IsUnique();
+            });
+
+            // --- Charts: the pop items a linkshell is sitting on, and who farmed each one. ---
+            // One set of tables for every board (Sky, Sea, later Dynamis / Limbus): same rows, same
+            // per-item credit, same derived ledger. Board + Boss say which card a row appears on.
+            builder.Entity<ChartPopItem>(entity =>
+            {
+                entity.ToTable("ChartPopItems");
+                entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Boss).HasMaxLength(64).IsRequired();
+                entity.Property(item => item.ItemName).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.HeldByCharacterName).HasMaxLength(256);
+                entity.Property(item => item.Notes).HasMaxLength(512);
+                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Covers the one read this feature has: every row for a linkshell's board, grouped
+                // by boss, in the order the officers put them in.
+                entity.HasIndex(item => new { item.LinkshellId, item.Board, item.Boss, item.SortOrder });
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_ChartPopItems_Quantity_NonNegative", "\"Quantity\" >= 0"));
+            });
+
+            builder.Entity<ChartPopItemCredit>(entity =>
+            {
+                entity.ToTable("ChartPopItemCredits");
+                entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.Detail).HasMaxLength(256);
+                entity.Property(item => item.CreditedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.CreditedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.ChartPopItem)
+                    .WithMany(row => row.Credits)
+                    .HasForeignKey(item => item.ChartPopItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // LinkshellId is deliberately a plain indexed int with no relationship: a second
+                // cascade path from Linkshells into this table is something Postgres will refuse.
+                // Same reason as JournalEntryLine. Rows still die with the linkshell, via
+                // ChartPopItems.
+                entity.HasIndex(item => new { item.LinkshellId, item.MembershipId });
+                entity.HasIndex(item => item.ChartPopItemId);
+                // Deliberately NO unique index on (item, person): credits are written set-wise — the
+                // whole list for a row is deleted and re-inserted in one SaveChanges — so a duplicate
+                // cannot survive a write, and a unique index would only add a normalized-name column
+                // to maintain.
+            });
+
+            builder.Entity<ChartBossProgress>(entity =>
+            {
+                entity.ToTable("ChartBossProgresses");
+                entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Boss).HasMaxLength(64).IsRequired();
+                entity.Property(item => item.ProgressNote).HasMaxLength(128);
+                entity.Property(item => item.UpdatedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.UpdatedByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // At most one note per boss per linkshell; no row at all means no note, which is the
+                // normal state.
+                entity.HasIndex(item => new { item.LinkshellId, item.Board, item.Boss }).IsUnique();
             });
 
             builder.Entity<AddonApiToken>(entity =>
@@ -1447,10 +1751,17 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("AppUserEventWindows");
                 entity.Property(item => item.VerifiedBy).HasMaxLength(256);
                 entity.Property(item => item.Zone).HasMaxLength(64);
+                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.Property(item => item.CharacterName).HasMaxLength(256);
+                // SetNull, NOT Cascade. The wyrm camps clear their roster every window, and while
+                // this cascaded it deleted that window's attendance record along with the
+                // participation — see the comment on AppUserEventWindow.AppUserEventId. The
+                // denormalized AppUserId / CharacterName are what keep an orphaned row meaningful.
                 entity.HasOne(item => item.AppUserEvent)
                     .WithMany(aue => aue.AttendedWindows)
                     .HasForeignKey(item => item.AppUserEventId)
-                    .OnDelete(DeleteBehavior.Cascade);
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => new { item.EventAttendanceWindowId, item.AppUserId });
                 entity.HasOne(item => item.EventAttendanceWindow)
                     .WithMany(window => window.Attendees)
                     .HasForeignKey(item => item.EventAttendanceWindowId)
@@ -1491,8 +1802,18 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasDefaultValue(WindowEventStatuses.Open);
                 entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
                 entity.Property(item => item.Notes).HasMaxLength(1024);
+                entity.Property(item => item.CampEventType).HasMaxLength(64);
+                entity.Property(item => item.CampEventLocation).HasMaxLength(256);
                 entity.HasIndex(item => new { item.LinkshellId, item.Status, item.NormalizedName });
                 entity.HasIndex(item => new { item.LinkshellId, item.LastCapturedAtUtc });
+                // SetNull, not Cascade: a camp Event is recycled for the next pop and can be
+                // deleted outright by an officer. Neither must destroy a review row whose DKP
+                // hasn't been posted yet — the Camp* columns keep it self-sufficient.
+                entity.HasOne(item => item.SourceEvent)
+                    .WithMany()
+                    .HasForeignKey(item => item.SourceEventId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => item.SourceEventId);
             });
             builder.Entity<WindowEventMemberDkp>(entity =>
             {
@@ -1526,7 +1847,15 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithOne(member => member.Capture)
                     .HasForeignKey(member => member.CaptureId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // SetNull, not Cascade: the capture is an audit record of a real
+                // lottery. Deleting the camp it happened during must not erase it.
+                entity.HasOne(item => item.Event)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
+                // The Activity loads captures per event; without this that's a scan.
+                entity.HasIndex(item => item.EventId);
             });
 
             builder.Entity<ClaimShieldCaptureMember>(entity =>
@@ -1534,6 +1863,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("ClaimShieldCaptureMembers");
                 entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
                 entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.Property(item => item.ActionMessage).HasMaxLength(512);
                 entity.HasIndex(item => item.CaptureId);
             });
 

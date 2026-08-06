@@ -12,7 +12,7 @@
   </div>
 
   @if (isCreateOpen) {
-    <dialog #editDialog class="event-edit-modal-dialog"
+    <dialog #editDialog class="event-edit-modal-dialog event-edit-modal-dialog--flush"
             (click)="onEditDialogClick($event)"
             (close)="closeCreateForm()">
       <ng-container [ngTemplateOutlet]="editFormTpl"></ng-container>
@@ -20,19 +20,22 @@
   }
 
   <ng-template #editFormTpl>
-    <form class="create-form create-form--in-modal" (ngSubmit)="submitCreateForm()">
-      <div class="create-form__header">
-        <div>
-          <strong>
-            @if (isEditingLiveEvent) {
-              Edit live event
-            } @else if (editingEventId) {
-              Edit event
-            } @else {
-              Create event
-            }
-          </strong>
-          <p>
+    <form class="cem" (ngSubmit)="submitCreateForm()">
+      <header class="cem__header">
+        <div class="cem__heading">
+          <div class="cem__title-row">
+            <span class="cem__dot" aria-hidden="true"></span>
+            <h2 class="cem__title">
+              @if (isEditingLiveEvent) {
+                Edit live event
+              } @else if (editingEventId) {
+                Edit event
+              } @else {
+                Create event
+              }
+            </h2>
+          </div>
+          <p class="cem__subtitle">
             @if (isEditingLiveEvent) {
               Update a live event in progress. Linkshell and party setup are locked while the event is running.
             } @else if (editingEventId) {
@@ -42,254 +45,314 @@
             }
           </p>
         </div>
-        <button type="button" class="action-button action-button--secondary" (click)="closeCreateForm()">Close</button>
-      </div>
 
-      <div class="create-form__section">
-        <div class="create-form__section-title">Event details</div>
-        <div class="create-form__grid">
-          <label>
-            <span>Linkshell</span>
-            <input type="text" [value]="createLinkshellName()" readonly
-              title="Set by the active linkshell — switch it in Configurations" />
-          </label>
+        <!-- Linkshell is never editable here (it follows the active linkshell), so it reads as a
+             header chip rather than a disabled input in the Event details grid. -->
+        <div class="cem__linkshell" title="Set by the active linkshell — switch it in Configurations">
+          <span class="cem__linkshell-label">Linkshell</span>
+          <span class="cem__linkshell-sep" aria-hidden="true"></span>
+          <span class="cem__linkshell-name">{{ createLinkshellName() }}</span>
+        </div>
 
-          <label>
-            <span>Event name</span>
-            <input [(ngModel)]="createModel.eventName" name="eventName" required />
-          </label>
+        <button type="button" class="cem__close" aria-label="Close the form" (click)="closeCreateForm()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
 
-          <label>
-            <span>Event type</span>
-            <div class="tod-day-number-row">
-              <select [ngModel]="eventTypeSelection" (ngModelChange)="onEventTypeSelectionChange($event)"
-                name="eventTypeSelection" required>
-                <option value="" disabled>Select event type</option>
-                @for (option of eventTypeOptionsForForm(); track option) {
-                  <option [value]="option">{{ option }}</option>
-                }
-                <option value="Other">Other</option>
-              </select>
-              @if (eventTypeSelection === 'Other') {
-                <input [(ngModel)]="createModel.eventType" name="eventType"
-                  placeholder="Specify event type" required />
+      <div class="cem__body">
+        <section class="cem__section">
+          <div class="cem__section-head">
+            <span class="cem__section-title">01 — Event details</span>
+            <span class="cem__rule"></span>
+          </div>
+
+          <div class="cem__grid">
+            <label class="cem__field">
+              <span class="cem__label">Event name</span>
+              <input class="cem__input" [(ngModel)]="createModel.eventName" name="eventName"
+                placeholder="e.g. Dynamis — Xarcabard" required />
+            </label>
+
+            <label class="cem__field">
+              <span class="cem__label">Location <em>optional</em></span>
+              <input class="cem__input" [(ngModel)]="createModel.eventLocation" name="eventLocation"
+                placeholder="Zone or meetup point" />
+            </label>
+          </div>
+
+          <!-- Chips instead of a dropdown: the option list is short enough to show at
+               once, so picking a type is one tap rather than open-scroll-select. -->
+          <div class="cem__field">
+            <span class="cem__label">Event type</span>
+            <div class="cem__chips">
+              @for (option of eventTypeOptionsForForm(); track option) {
+                <button type="button" class="cem__chip" [class.is-active]="eventTypeSelection === option"
+                  (click)="onEventTypeSelectionChange(option)">{{ option }}</button>
               }
+              <button type="button" class="cem__chip" [class.is-active]="eventTypeSelection === 'Other'"
+                (click)="onEventTypeSelectionChange('Other')">Other</button>
             </div>
-            @if (eventTypeError) {
-              <small class="form-error">Event type is required.</small>
+            @if (eventTypeSelection === 'Other') {
+              <input class="cem__input" [(ngModel)]="createModel.eventType" name="eventType"
+                placeholder="Specify event type" required />
             }
-          </label>
-
-          <label>
-            <span>Location</span>
-            <input [(ngModel)]="createModel.eventLocation" name="eventLocation" />
-          </label>
+            @if (eventTypeError) {
+              <small class="cem__error">Event type is required.</small>
+            }
+          </div>
 
           @if (isHnmSelected()) {
-            <label>
-              <span>Monster</span>
-              <select [value]="createModel.monsterName ?? ''"
-                      (change)="onMonsterSelect($any($event.target).value)"
-                      name="monsterName" required>
-                <option value="">Select a monster</option>
-                @for (monster of monsterOptions(); track monster) {
-                  <option [value]="monster">{{ monster }}</option>
+            <div class="cem__grid">
+              <label class="cem__field">
+                <span class="cem__label">Monster</span>
+                <select class="cem__select" [value]="createModel.monsterName ?? ''"
+                        (change)="onMonsterSelect($any($event.target).value)"
+                        name="monsterName" required>
+                  <option value="">Select a monster</option>
+                  @for (monster of monsterOptions(); track monster) {
+                    <option [value]="monster">{{ monster }}</option>
+                  }
+                </select>
+              </label>
+              <!-- Day number belongs to the HNM tier only: it exists to walk the three NQ/HQ
+                   families through their pop cycle, and no NM has one. -->
+              @if (!isNmTierSelected()) {
+                <label class="cem__field">
+                  <span class="cem__label">Day number <em>optional</em></span>
+                  <input class="cem__input" [(ngModel)]="createModel.dayNumber" name="dayNumber" type="number" min="0" step="1"
+                    placeholder="e.g. 3" title="On the sign-up board, days 1–3 show just the base monster; day 4+ shows the combined pair (e.g. Adamantoise/Aspidochelone)" />
+                </label>
+              }
+              @if (isOtherMonsterSelected()) {
+                <label class="cem__field">
+                  <span class="cem__label">Monster name</span>
+                  <input class="cem__input" [(ngModel)]="customMonsterName" name="customMonsterName"
+                    placeholder="Enter the monster's name" required />
+                </label>
+              }
+            </div>
+          }
+        </section>
+
+        <section class="cem__section">
+          <div class="cem__section-head">
+            <span class="cem__section-title">02 — Schedule</span>
+            <span class="cem__rule"></span>
+          </div>
+
+          <div class="cem__grid">
+            <label class="cem__field">
+              <span class="cem__label">Starts</span>
+              <input class="cem__input cem__input--mono" [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal"
+                type="datetime-local" step="1" (ngModelChange)="onStartTimeChange()" />
+            </label>
+
+            @if (!isHnmSelected()) {
+              <label class="cem__field">
+                <span class="cem__label">Ends</span>
+                @if (!endTimeNotSpecified) {
+                  <input class="cem__input cem__input--mono" [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal"
+                    type="datetime-local" step="1" (ngModelChange)="onEndTimeChange()" />
+                } @else {
+                  <input class="cem__input cem__input--mono" value="Open-ended" disabled />
                 }
-              </select>
-            </label>
-            <label>
-              <span>Day number (optional)</span>
-              <input [(ngModel)]="createModel.dayNumber" name="dayNumber" type="number" min="0" step="1"
-                placeholder="e.g. 3" title="On the sign-up board, days 1–3 show just the base monster; day 4+ shows the combined pair (e.g. Adamantoise/Aspidochelone)" />
-            </label>
-            @if (isOtherMonsterSelected()) {
-              <label>
-                <span>Monster name</span>
-                <input [(ngModel)]="customMonsterName" name="customMonsterName"
-                  placeholder="Enter the monster's name" required />
               </label>
             }
-          }
-        </div>
-      </div>
-
-      <div class="create-form__section">
-        <div class="create-form__section-title">Schedule</div>
-
-        <!-- Start / End on one row. Flex (not the 2-col grid) so they sit together
-             on desktop and wrap cleanly on a narrow iframe; the N/A toggle aligns to
-             the inputs' baseline via align-items:flex-end. -->
-        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-          <label style="flex:1 1 180px;min-width:0">
-            <span>Start</span>
-            <input [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal" type="datetime-local" step="1"
-              (ngModelChange)="onStartTimeChange()" />
-          </label>
+          </div>
 
           @if (!isHnmSelected()) {
-            <label style="flex:1 1 180px;min-width:0">
-              <span>End</span>
-              <div class="tod-day-number-row">
-                @if (!endTimeNotSpecified) {
-                  <input [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal" type="datetime-local" step="1"
-                    (ngModelChange)="onEndTimeChange()" />
-                } @else {
-                  <input value="N/A" disabled />
-                }
-                <label class="tod-toggle">
-                  <input type="checkbox" [ngModel]="endTimeNotSpecified"
-                    (ngModelChange)="onEndTimeNotSpecifiedChange($event)" name="endTimeNotSpecified" />
-                  <span>N/A</span>
-                </label>
-              </div>
-            </label>
+            <!-- Duration is derived from Start + End, so it reads out here instead of
+                 being a field. The button next to it is the old N/A toggle: an event
+                 with no end time runs until it's closed by hand. -->
+            <div class="cem__summary">
+              <span class="cem__summary-key">Duration</span>
+              <span class="cem__summary-val">{{ endTimeNotSpecified ? 'Open-ended' : durationLabel() }}</span>
+              <span class="cem__spacer"></span>
+              <button type="button" class="cem__chip cem__chip--sm" [class.is-active]="endTimeNotSpecified"
+                (click)="onEndTimeNotSpecifiedChange(!endTimeNotSpecified)">
+                {{ endTimeNotSpecified ? 'Open-ended' : 'Set open-ended' }}
+              </button>
+            </div>
           }
-        </div>
+        </section>
 
-        @if (!isHnmSelected()) {
-          <!-- Duration (derived from Start + End, read-only) / DKP / Auto Start /
-               Active-Inactive Tracking. Hidden for HNM signup boards. -->
-          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:12px">
-            <label style="flex:1 1 180px;min-width:0">
-              <span>Duration</span>
-              <input [value]="durationLabel()" name="durationDisplay" disabled />
-            </label>
-
-            @if (isDkpModeForSelectedLinkshell()) {
-              <label style="flex:1 1 180px;min-width:0">
-                <span>DKP/hour</span>
-                <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" />
-              </label>
-            }
-
-            <label class="tod-toggle" style="flex:0 0 auto;padding-bottom:7px;white-space:nowrap">
-              <input type="checkbox" [(ngModel)]="createModel.autoStart" name="autoStart" />
-              <span>Auto Start</span>
-            </label>
-
-            <label class="tod-toggle" style="flex:0 0 auto;padding-bottom:7px;white-space:nowrap">
-              <input type="checkbox" [(ngModel)]="createModel.countsTowardActive" name="countsTowardActive" />
-              <span>Active/Inactive Tracking</span>
-            </label>
+        <section class="cem__section">
+          <div class="cem__section-head">
+            <span class="cem__section-title">03 — {{ isHnmSelected() ? 'Camp DKP' : 'Points &amp; automation' }}</span>
+            <span class="cem__rule"></span>
           </div>
-        }
 
-        @if (isHnmSelected()) {
-          <!-- HNM signup board: no DKP/duration. Optionally re-post the board before
-               the next predicted pop when a new ToD for the monster is recorded. -->
-          <div style="display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;margin-top:12px">
-            <label class="tod-toggle" style="flex:0 0 auto;padding-bottom:7px;white-space:nowrap"
-              [style.opacity]="canRepeatOnTod() ? 1 : 0.5">
-              <input type="checkbox" [(ngModel)]="createModel.repeatOnTod" name="repeatOnTod"
-                [disabled]="!canRepeatOnTod()" />
-              <span>Repeat post when ToD is updated</span>
-            </label>
-            @if (createModel.repeatOnTod && canRepeatOnTod()) {
-              <div style="flex:0 1 320px;min-width:0">
-                <span style="display:block;margin-bottom:4px">Recreate another signup board post before repop</span>
-                <div style="display:flex;gap:8px">
-                  <label style="flex:1 1 0;min-width:0">
-                    <span class="ad-hoc-signup__hint">Hours</span>
-                    <input [(ngModel)]="repeatLeadH" name="repeatLeadH" type="number" min="0" max="168" />
+          @if (isHnmSelected()) {
+            <!-- What the camp pays, in whichever shape the linkshell's attendance mode uses
+                 (Standard: open/close/claim/kill — Manual Check In: per window/claim/kill).
+                 The amounts come from the linkshell's HNM settings; "Change DKP" prices this
+                 ONE camp without moving that setting. -->
+            @if (!hnmDkpOverrideOpen) {
+              <div class="cem__bonus-row">
+                @for (field of hnmBonusFields(); track field.key) {
+                  <div class="cem__bonus" [title]="field.hint">
+                    <span class="cem__bonus-val">{{ hnmEffectiveBonus(field.key) }}</span>
+                    <span class="cem__bonus-key">{{ field.suffix }}</span>
+                  </div>
+                }
+                <span class="cem__spacer"></span>
+                <button type="button" class="cem__btn cem__btn--dashed"
+                  (click)="openHnmDkpOverride()">Change DKP</button>
+              </div>
+              <small class="cem__hint">Linkshell defaults. DKP is credited when an officer posts the camp for review.</small>
+            } @else {
+              <!-- ngModel rather than [value]: a [value] binding rewrites the box on every
+                   keystroke, so clearing one to retype would snap it back to the default.
+                   An emptied box is null = "use the linkshell default for this amount". -->
+              <div class="cem__bonus-grid">
+                @for (field of hnmBonusFields(); track field.key) {
+                  <label class="cem__field">
+                    <span class="cem__label">{{ field.label }} <em>{{ field.hint }}</em></span>
+                    <input class="cem__input" type="number" min="0" step="0.25"
+                      [name]="field.key" [(ngModel)]="createModel[field.key]"
+                      [placeholder]="hnmLinkshellBonus(field.key)" />
                   </label>
-                  <label style="flex:1 1 0;min-width:0">
-                    <span class="ad-hoc-signup__hint">Minutes</span>
-                    <input [(ngModel)]="repeatLeadM" name="repeatLeadM" type="number" min="0" max="59" />
-                  </label>
-                  <label style="flex:1 1 0;min-width:0">
-                    <span class="ad-hoc-signup__hint">Seconds</span>
-                    <input [(ngModel)]="repeatLeadS" name="repeatLeadS" type="number" min="0" max="59" />
-                  </label>
+                }
+              </div>
+              <div class="cem__bonus-row">
+                <small class="cem__hint">This camp only — the linkshell's own settings are unchanged.</small>
+                <span class="cem__spacer"></span>
+                <button type="button" class="cem__btn cem__btn--dashed"
+                  (click)="resetHnmDkpOverride()">Use linkshell defaults</button>
+              </div>
+            }
+          } @else {
+            <div class="cem__automation">
+              @if (isDkpModeForSelectedLinkshell()) {
+                <div class="cem__field">
+                  <span class="cem__label">DKP / hour</span>
+                  <div class="cem__stepper">
+                    <button type="button" (click)="adjustDkpPerHour(-1)" aria-label="Decrease DKP per hour">&minus;</button>
+                    <input [(ngModel)]="createModel.dkpPerHour" name="dkpPerHour" type="number" min="0" step="1"
+                      aria-label="DKP per hour" />
+                    <button type="button" (click)="adjustDkpPerHour(1)" aria-label="Increase DKP per hour">+</button>
+                  </div>
+                </div>
+              }
+
+              <div class="cem__field">
+                <span class="cem__label">Options</span>
+                <div class="cem__switches">
+                  <button type="button" class="cem__switch" [class.is-on]="createModel.autoStart"
+                    [attr.aria-pressed]="createModel.autoStart"
+                    (click)="createModel.autoStart = !createModel.autoStart">
+                    <span class="cem__track"><span class="cem__knob"></span></span>
+                    <span class="cem__switch-text">
+                      <span class="cem__switch-title">Auto start</span>
+                      <span class="cem__switch-hint">Starts the event at the scheduled time</span>
+                    </span>
+                  </button>
+
+                  <button type="button" class="cem__switch" [class.is-on]="createModel.countsTowardActive"
+                    [attr.aria-pressed]="createModel.countsTowardActive"
+                    (click)="createModel.countsTowardActive = !createModel.countsTowardActive">
+                    <span class="cem__track"><span class="cem__knob"></span></span>
+                    <span class="cem__switch-text">
+                      <span class="cem__switch-title">Counts toward active / inactive</span>
+                      <span class="cem__switch-hint">Attendees get an active credit, no-shows an inactive one</span>
+                    </span>
+                  </button>
                 </div>
               </div>
-            }
-            @if (isOtherMonsterSelected() && customMonsterName.trim().length === 0) {
-              <small class="ad-hoc-signup__hint" style="flex:1 1 100%">
-                Enter the custom monster name above to enable “Repeat post when ToD is updated”. Recurrence then re-posts when a new ToD is logged under that exact name.
-              </small>
-            }
+            </div>
+          }
+        </section>
+
+        <section class="cem__section">
+          <div class="cem__section-head">
+            <span class="cem__section-title">04 — Details</span>
+            <span class="cem__rule"></span>
           </div>
-        }
-      </div>
+          <!-- Not a <label> wrapper: the formatting buttons are interactive, and a
+               label would re-route their clicks to the textarea. -->
+          <div class="cem__field">
+            <span class="cem__label">Notes <em>shown on the signup card</em></span>
+            <app-markdown-textarea
+              [(value)]="createModel.details"
+              ariaLabel="Event notes"
+              placeholder="Loot rules, required jobs, meetup instructions…" />
+          </div>
+        </section>
 
-      <div class="create-form__section">
-        <div class="create-form__section-title">Details</div>
-        <label class="create-form__full">
-          <textarea [(ngModel)]="createModel.details" name="details" rows="3"></textarea>
-        </label>
-      </div>
+        @if (!isEditingLiveEvent) {
+          <!-- Party setup is OMITTED while editing a LIVE event: officers edit the
+               live board inline (drag/job/assign) on the Party Setup panel instead.
+               Still shown for create + queued-event edits, where the setup is chosen. -->
+          <section class="cem__section">
+            <div class="cem__section-head">
+              <span class="cem__section-title">05 — Party setup</span>
+              <span class="cem__rule"></span>
+            </div>
 
-      @if (!isEditingLiveEvent) {
-      <!-- Party setup is OMITTED while editing a LIVE event: officers edit the
-           live board inline (drag/job/assign) on the Party Setup panel instead.
-           Still shown for create + queued-event edits, where the setup is chosen. -->
-      <div class="create-form__jobs">
-        <!-- Header (title + Yes/No), the linked-setup dropdown and the
-             "Create New Party Setup" button share one left-aligned row; the
-             hint + preview sit full-width below it. -->
-        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:flex-start;gap:12px 28px">
-          <div class="panel__header" style="margin:0">
-            <div class="panel__header-title-row">
-              <h3>Party Setup</h3>
-              <div class="yesno-toggle" role="radiogroup" aria-label="Use a party setup">
-                <button type="button" class="yesno-toggle__btn"
+            <div class="cem__party-row">
+              <div class="cem__segment" role="radiogroup" aria-label="Use a party setup">
+                <button type="button" role="radio"
                   [class.is-active]="!partySetupNotSpecified"
                   [attr.aria-checked]="!partySetupNotSpecified"
-                  role="radio"
-                  (click)="onPartySetupNotSpecifiedChange(false)">Yes</button>
-                <button type="button" class="yesno-toggle__btn"
+                  (click)="onPartySetupNotSpecifiedChange(false)">Linked</button>
+                <button type="button" role="radio"
                   [class.is-active]="partySetupNotSpecified"
                   [attr.aria-checked]="partySetupNotSpecified"
-                  role="radio"
-                  (click)="onPartySetupNotSpecifiedChange(true)">No</button>
+                  (click)="onPartySetupNotSpecifiedChange(true)">None</button>
               </div>
+
+              @if (!partySetupNotSpecified) {
+                <select class="cem__select cem__party-select" [(ngModel)]="createModel.partySetupId"
+                  name="partySetupId" aria-label="Linked party setup">
+                  <option [ngValue]="null">— Select party setup —</option>
+                  @for (setup of availablePartySetups(); track setup.id) {
+                    <option [ngValue]="setup.id">
+                      {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
+                    </option>
+                  }
+                </select>
+                <button type="button" class="cem__btn cem__btn--dashed"
+                  (click)="openCreatePartySetup()">+ New setup</button>
+              }
             </div>
-          </div>
 
-          @if (!partySetupNotSpecified) {
-            <label class="job-editor__details" style="min-width:260px;max-width:360px;margin:0">
-              <span>Linked party setup</span>
-              <select [(ngModel)]="createModel.partySetupId" name="partySetupId">
-                <option [ngValue]="null">— Select party setup —</option>
-                @for (setup of availablePartySetups(); track setup.id) {
-                  <option [ngValue]="setup.id">
-                    {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
-                  </option>
-                }
-              </select>
-            </label>
-            <button type="button" class="action-button action-button--secondary"
-              (click)="openCreatePartySetup()">+ Create New Party Setup</button>
-          }
-        </div>
-
-        @if (!partySetupNotSpecified) {
-          @if (availablePartySetups().length === 0) {
-            <p class="ad-hoc-signup__hint">
-              No party setups exist for this linkshell yet. Create one with “Create New Party Setup” above.
-            </p>
-          }
-          @if (createModel.partySetupId) {
-            <!-- Template preview of the chosen setup's parties/slots (no names —
-                 sign-ups happen on the event once it's created). -->
-            <app-party-setup-panel
-              [setupId]="createModel.partySetupId"
-              [linkshellId]="createModel.linkshellId"
-              [templateOnly]="true" />
-          }
+            @if (!partySetupNotSpecified) {
+              @if (availablePartySetups().length === 0) {
+                <p class="cem__hint">
+                  No party setups exist for this linkshell yet. Create one with “+ New setup” above.
+                </p>
+              }
+              @if (createModel.partySetupId) {
+                <!-- Template preview of the chosen setup's parties/slots (no names —
+                     sign-ups happen on the event once it's created). -->
+                <app-party-setup-panel
+                  [setupId]="createModel.partySetupId"
+                  [linkshellId]="createModel.linkshellId"
+                  [templateOnly]="true" />
+              }
+            }
+          </section>
         }
       </div>
-      }
 
-      <div class="create-form__actions create-form__actions--end">
-        <button type="submit" class="action-button action-button--success" [disabled]="isSubmittingCreate">
+      <footer class="cem__footer">
+        <span class="cem__footer-note">
+          @if (editingEventId) {
+            Changes apply to the queued event right away.
+          } @else {
+            The event is queued as soon as it is created.
+          }
+        </span>
+        <span class="cem__spacer"></span>
+        <button type="button" class="cem__btn cem__btn--ghost" (click)="closeCreateForm()">Cancel</button>
+        <button type="submit" class="cem__btn cem__btn--go" [disabled]="isSubmittingCreate">
           @if (isSubmittingCreate) {
             {{ editingEventId ? 'Updating...' : 'Creating...' }}
           } @else {
-            {{ editingEventId ? 'Update Event' : 'Create event' }}
+            {{ editingEventId ? 'Update event' : 'Create event' }}
           }
         </button>
-      </div>
+      </footer>
     </form>
 
     <!-- Confirm dialog (window.confirm is suppressed in the Activity iframe). MUST live inside
@@ -430,21 +493,32 @@
             </div>
           </div>
 
-          <!-- HNM "defeated / awaiting re-post" banner: shown after a ToD is logged from
-               the board. Signups are wiped; the board re-posts before the next pop. -->
+          <!-- HNM "defeated / awaiting re-post" banner: shown after the camp is ended from the
+               board. Signups are wiped. Two shapes, because a camp can end WITHOUT a ToD: with
+               one we know the next pop and can re-post against it; without one there is no repop
+               at all, and startTime still points at the pop that just passed — so that branch
+               must never render a "Will repop" line off it. -->
           @if (event.hnmAwaitingRepost) {
             <div class="event-action-bar queue-card__belowrow">
               <div class="event-action-copy">
-                <strong>💀 {{ event.assignedMonsterName || event.name }} defeated</strong>
-                <span>
-                  Will repop {{ activity.formatDateTime(event.startTime) || 'soon' }}.
-                  @if (event.hnmRepostAt) {
-                    Sign-up board automatically re-posts in the Discord channel
-                    {{ activity.formatDateTime(event.hnmRepostAt) }}@if (repostLeadLabel(event)) { ({{ repostLeadLabel(event) }} before the first window)}.
-                  } @else {
-                    Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.
-                  }
-                </span>
+                @if (event.hnmTodRecorded === false) {
+                  <strong>🏁 {{ event.assignedMonsterName || event.name }} camp ended</strong>
+                  <span>
+                    No Time of Death was entered, so there's no repop to predict and the board
+                    won't auto-re-post. Log a ToD to restart the cycle.
+                  </span>
+                } @else {
+                  <strong>💀 {{ event.assignedMonsterName || event.name }} defeated</strong>
+                  <span>
+                    Will repop {{ activity.formatDateTime(event.startTime) || 'soon' }}.
+                    @if (event.hnmRepostAt) {
+                      Sign-up board automatically re-posts in the Discord channel
+                      {{ activity.formatDateTime(event.hnmRepostAt) }}@if (repostLeadLabel(event)) { ({{ repostLeadLabel(event) }} before the first window)}.
+                    } @else {
+                      Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.
+                    }
+                  </span>
+                }
               </div>
             </div>
           }

@@ -31,7 +31,11 @@ public sealed partial class ActivityDataController
         IReadOnlyList<ActivityWindowCombinedMemberDto> CombinedMembers,
         double? DkpAmount,
         string? EntryType,
-        DateTime? PostedToSheetUtc);
+        DateTime? PostedToSheetUtc,
+        // Non-null when this row came from ending an HNM camp rather than an addon "/lsm now"
+        // capture. Drives the "Camp" tag so officers can tell the two apart — a camp row already
+        // carries per-member amounts, a snapshot row doesn't.
+        int? SourceEventId);
 
     public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
 
@@ -72,7 +76,15 @@ public sealed partial class ActivityDataController
         double? DkpAmountOverride,
         double? EffectiveDkpAmount);
 
-    public sealed record ActivityAttachWindowSnapshotRequest(int? WindowEventId, string? Name);
+    // WindowEventId attaches to an existing attendance event; Name find-or-creates one.
+    // LinkedEventId is orthogonal to both: it records WHICH CAMP the snapshot belongs to,
+    // so the camp's own card can show it. Sent when the officer picks a live camp from the
+    // unlinked-snapshot dropdown, which does both at once — the name groups it for payroll,
+    // the link puts it on the camp.
+    // CreateNew forces a brand-new attendance event instead of folding into an open one of the
+    // same name — what the "Create New Event" button means, as opposed to the dropdown's attach.
+    public sealed record ActivityAttachWindowSnapshotRequest(
+        int? WindowEventId, string? Name, int? LinkedEventId = null, bool CreateNew = false);
     public sealed record ActivityWindowEventRenameRequest(string? Name);
     public sealed record ActivityWindowSnapshotStatusRequest(string Status);
     public sealed record ActivityAddSnapshotEntryRequest(
@@ -162,9 +174,13 @@ public sealed partial class ActivityDataController
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
-        windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
-        windowEvent.Value.EntryType = request.EntryType;
-        ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        // Both fields are gone from the UI; keep whatever the event already carries when the
+        // client omits them — see WindowEventDkp.Resolve / WindowEventEntryTypes.Resolve.
+        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.Value.DkpAmount);
+        windowEvent.Value.DkpAmount = resolvedDkp;
+        windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
+            request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
+        ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -188,9 +204,13 @@ public sealed partial class ActivityDataController
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
-        windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
-        windowEvent.Value.EntryType = request.EntryType;
-        ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        // Both fields are gone from the UI; keep whatever the event already carries when the
+        // client omits them — see WindowEventDkp.Resolve / WindowEventEntryTypes.Resolve.
+        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.Value.DkpAmount);
+        windowEvent.Value.DkpAmount = resolvedDkp;
+        windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
+            request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
+        ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
         windowEvent.Value.PostedToSheetAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -218,9 +238,13 @@ public sealed partial class ActivityDataController
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
-        windowEvent.Value.DkpAmount = request.DkpAmount!.Value;
-        windowEvent.Value.EntryType = request.EntryType;
-        ApplyActivityMemberDkpOverrides(windowEvent.Value, request.DkpAmount.Value, request.MemberDkp);
+        // Both fields are gone from the UI; keep whatever the event already carries when the
+        // client omits them — see WindowEventDkp.Resolve / WindowEventEntryTypes.Resolve.
+        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.Value.DkpAmount);
+        windowEvent.Value.DkpAmount = resolvedDkp;
+        windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
+            request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
+        ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _windowEventDkpLedger.ReconcilePostedWindowEventLedgerAsync(windowEvent.Value.Id, cancellationToken);
@@ -330,6 +354,7 @@ public sealed partial class ActivityDataController
             SubJob = TrimToNull(request.SubJob, 8),
             SubJobLevel = request.SubJobLevel,
             Zone = TrimToNull(request.Zone, 128),
+            AddedManually = true, // typed in by an officer, not scanned — sorts last and renders tinted
         });
         snapshot.EntryCount = snapshot.Entries.Count;
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -338,14 +363,16 @@ public sealed partial class ActivityDataController
 
     private static string? ValidateWindowEventDkp(ActivityWindowEventDkpRequest request)
     {
-        if (!request.DkpAmount.HasValue || request.DkpAmount.Value < 0)
+        // A NEGATIVE amount is still a client bug worth rejecting; a MISSING one is now normal —
+        // the Default DKP input is gone (DKP is set per snapshot), so callers run it through
+        // WindowEventDkp.Resolve, which keeps the stored baseline.
+        if (request.DkpAmount is { } dkp && dkp < 0)
         {
-            return "DKP amount is required and must be zero or greater.";
+            return "DKP amount must be zero or greater.";
         }
-        if (!WindowEventEntryTypes.IsValid(request.EntryType))
-        {
-            return $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
-        }
+        // Entry Type is deliberately NOT validated either: it's auto-tagged from the monster at
+        // creation, and each caller runs it through WindowEventEntryTypes.Resolve, which always
+        // produces a valid tag.
         if (request.MemberDkp is not null)
         {
             foreach (var input in request.MemberDkp)
@@ -479,11 +506,26 @@ public sealed partial class ActivityDataController
                 snapshot.CapturedAtUtc,
                 snapshot.CapturedByCharacterName,
                 DateTime.UtcNow,
-                cancellationToken);
+                cancellationToken,
+                forceNew: request.CreateNew);
             snapshot.Name ??= name;
         }
 
         if (windowEvent is null) return NotFound(new { error = "Window Event not found." });
+
+        // Camp association, when the officer picked one. Verified against the snapshot's own
+        // linkshell because it arrives from the client; an id that doesn't belong is dropped
+        // rather than rejected, so a stale pick still completes the attach it was really for.
+        if (request.LinkedEventId is int linkedEventId && linkedEventId > 0)
+        {
+            var campOwned = await _dbContext.Events
+                .AsNoTracking()
+                .AnyAsync(e => e.Id == linkedEventId && e.LinkshellId == snapshot.LinkshellId, cancellationToken);
+            if (campOwned)
+            {
+                snapshot.LinkedEventId = linkedEventId;
+            }
+        }
 
         snapshot.WindowEventId = windowEvent.Id;
         snapshot.SnapshotStatus = AttendanceSnapshotStatuses.Active;
@@ -561,25 +603,36 @@ public sealed partial class ActivityDataController
         return null;
     }
 
+    // `forceNew` skips the reuse lookup and always mints a fresh event.
+    //
+    // Reuse is right when the name is a routing hint — an addon post, or an officer typing the
+    // monster to file this snapshot with the rest of that camp's. It is WRONG when the officer
+    // pressed a button that says "Create New Event": silently folding into a 20-hour-old event
+    // of the same name is the opposite of what they asked for, and on a repeat camp the same
+    // monster name comes round often.
     private async Task<WindowEvent> FindOrCreateActivityWindowEventAsync(
         int linkshellId,
         string name,
         DateTime capturedAtUtc,
         string? capturedByCharacterName,
         DateTime nowUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceNew = false)
     {
         var normalized = NormalizeWindowName(name)!;
-        var staleCutoff = capturedAtUtc.AddHours(-24);
-        var existing = await _dbContext.WindowEvents
-            .Where(e =>
-                e.LinkshellId == linkshellId &&
-                e.Status == WindowEventStatuses.Open &&
-                e.NormalizedName == normalized &&
-                e.LastCapturedAtUtc >= staleCutoff)
-            .OrderByDescending(e => e.LastCapturedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (existing is not null) return existing;
+        if (!forceNew)
+        {
+            var staleCutoff = capturedAtUtc.AddHours(-24);
+            var existing = await _dbContext.WindowEvents
+                .Where(e =>
+                    e.LinkshellId == linkshellId &&
+                    e.Status == WindowEventStatuses.Open &&
+                    e.NormalizedName == normalized &&
+                    e.LastCapturedAtUtc >= staleCutoff)
+                .OrderByDescending(e => e.LastCapturedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existing is not null) return existing;
+        }
 
         var windowEvent = new WindowEvent
         {
@@ -678,7 +731,8 @@ public sealed partial class ActivityDataController
             combined,
             item.DkpAmount,
             item.EntryType,
-            item.PostedToSheetAt);
+            item.PostedToSheetAt,
+            item.SourceEventId);
     }
 
     private static ActivityWindowSnapshotDto MapActivityWindowSnapshot(AttendanceSnapshot snapshot)

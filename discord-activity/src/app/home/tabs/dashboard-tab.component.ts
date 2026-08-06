@@ -2,8 +2,20 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
-import { formatAlts, formatElapsed, memberAvatarClass, memberInitials, memberStatusClass, parseDate } from '../activity-home.helpers';
-import { HNM_NAMES, type TabName } from '../activity-home.types';
+import type { ActivityEvent } from '../../discord/discord-activity.types';
+import {
+  TOD_NOT_ENTERED,
+  formatAlts,
+  isTodReady,
+  memberAvatarClass,
+  memberInitials,
+  memberStatusClass,
+  parseDate,
+  todCountdownLabel,
+  todSortKey
+} from '../activity-home.helpers';
+import { isHnmMonsterName, type TabName } from '../activity-home.types';
+import { JobsRosterStore } from '../jobs-roster.store';
 import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
 
 @Component({
@@ -14,6 +26,9 @@ import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-
 })
 export class DashboardTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  // Shared with the Manage Team roster: whichever "Show Jobs" is switched on first
+  // fetches the jobs roster, and the other reads it from the same cache.
+  private readonly jobs = inject(JobsRosterStore);
   protected readonly formatAlts = formatAlts;
   // Shared roster helpers (avatar initials/color, status tag) — single source in
   // activity-home.helpers so every roster renders members identically. `initials`
@@ -37,13 +52,22 @@ export class DashboardTabComponent {
   protected get dashboardRosterSearch(): string { return this.rosterSearchValue; }
   protected set dashboardRosterSearch(value: string) { this.rosterSearchChange(value); }
 
-  // App Sync filter: limits the dashboard roster to members who have actually
-  // opened/synced the Discord Activity (member.hasSyncedActivity). NOT the same as
-  // having an account — outside-sign-up-board members get an appUserId without ever
-  // opening the Activity. Status stays visible but is never part of the filter.
-  protected readonly appSyncOnly = signal(false);
-  protected toggleAppSync(value: boolean): void {
-    this.appSyncOnly.set(value);
+  // "Show Jobs" switches the dashboard roster into a jobs view: Rank/DKP/Status
+  // give way to each member's leveled jobs (main + alts), the same toggle the
+  // Manage Team roster has. The data is lazy-loaded and shared between them.
+  protected readonly showJobs = signal(false);
+  protected async toggleShowJobs(value: boolean): Promise<void> {
+    this.showJobs.set(value);
+    if (value) await this.jobs.ensure(this.selectedDashboardLinkshellId());
+  }
+
+  protected readonly jobsBusy = this.jobs.busy;
+  protected readonly leveledJobs = this.jobs.leveledJobs.bind(this.jobs);
+  protected readonly pillTitle = this.jobs.pillTitle.bind(this.jobs);
+
+  // Main + alts for a roster row's Jobs cell (empty when the member has no entry).
+  protected jobsCharacters(memberId: number) {
+    return this.jobs.charactersFor(this.selectedDashboardLinkshellId(), memberId);
   }
 
   public constructor() {
@@ -94,18 +118,17 @@ export class DashboardTabComponent {
 
   protected filteredDashboardMembers() {
     const term = this.dashboardRosterSearch.trim().toLowerCase();
-    const appSyncOnly = this.appSyncOnly();
     const members = this.selectedDashboardMembers();
+    if (!term) {
+      return members;
+    }
+
     return members.filter(member => {
-      if (appSyncOnly) {
-        if (!member.hasSyncedActivity) return false;
-      }
-      if (term) {
-        const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
-        const rankMatch = (member.rank ?? '').toLowerCase().includes(term);
-        if (!nameMatch && !rankMatch) return false;
-      }
-      return true;
+      const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
+      const rankMatch = (member.rank ?? '').toLowerCase().includes(term);
+      if (nameMatch || rankMatch) return true;
+      // With the jobs view on, the search also reaches alt names and job names/levels.
+      return this.showJobs() && this.jobs.matchesSearch(this.selectedDashboardLinkshellId(), member.id, term);
     });
   }
 
@@ -294,20 +317,63 @@ export class DashboardTabComponent {
       .slice(0, 4);
   }
 
-  // Maps an event type/category (Sky, Sea, Dynamis, Limbus, ...) to a themed
+  // Maps an event type/category (Sky, Sea, Dynamis, Limbus, HENM, ...) to a themed
   // FFXI thumbnail served from the Activity's public folder. Types without a
-  // dedicated image (HNM, HENM, NM, BCNM, KSNM, blanks) return null so the
-  // caller falls back to the plain placeholder box.
+  // dedicated image (NM, BCNM, KSNM, blanks) return null so the caller falls back
+  // to the plain placeholder box. HNM is absent on purpose — there is no single
+  // "HNM" picture; those rows resolve per-monster below.
   private static readonly EVENT_TYPE_IMAGES: Record<string, string> = {
     sky: 'ffxi_assets/Other/Sky.jpg',
     sea: 'ffxi_assets/Other/Sea.jpg',
     dynamis: 'ffxi_assets/Other/Dynamis.jpg',
-    limbus: 'ffxi_assets/Other/Limbus.jpg'
+    limbus: 'ffxi_assets/Other/Limbus.jpg',
+    // One shared image for every HENM row — unlike HNM, these aren't per-monster.
+    henm: 'ffxi_assets/HENM/HENM.png'
+  };
+
+  // Per-monster HNM art from public/ffxi_assets/HNM. Keyed on the monster name
+  // lower-cased with spaces stripped, because the files are unspaced PascalCase
+  // ("King Behemoth" -> KingBehemoth.jpg). Bahamut and the Goblin testing
+  // presets have no art in that folder and fall through to the placeholder.
+  private static readonly HNM_MONSTER_IMAGES: Record<string, string> = {
+    adamantoise: 'ffxi_assets/HNM/Adamantoise.jpg',
+    aspidochelone: 'ffxi_assets/HNM/Aspidochelone.jpg',
+    behemoth: 'ffxi_assets/HNM/Behemoth.jpg',
+    cerberus: 'ffxi_assets/HNM/Cerberus.jpg',
+    fafnir: 'ffxi_assets/HNM/Fafnir.jpg',
+    hydra: 'ffxi_assets/HNM/Hydra.jpg',
+    jormungand: 'ffxi_assets/HNM/Jormungand.jpg',
+    khimaira: 'ffxi_assets/HNM/Khimaira.jpg',
+    kingbehemoth: 'ffxi_assets/HNM/KingBehemoth.jpg',
+    nidhogg: 'ffxi_assets/HNM/Nidhogg.jpg',
+    simurgh: 'ffxi_assets/HNM/Simurgh.jpg',
+    tiamat: 'ffxi_assets/HNM/Tiamat.jpg',
+    vrtra: 'ffxi_assets/HNM/Vrtra.jpg'
   };
 
   protected eventTypeImage(type?: string | null): string | null {
     const key = (type ?? '').trim().toLowerCase();
     return DashboardTabComponent.EVENT_TYPE_IMAGES[key] ?? null;
+  }
+
+  // A combined "Base/Stronger" label ("Fafnir/Nidhogg") resolves to the first
+  // half that has art, matching how the board names the day-1..3 spawn.
+  private monsterImage(name?: string | null): string | null {
+    for (const segment of (name ?? '').split('/')) {
+      const key = segment.trim().toLowerCase().replace(/\s+/g, '');
+      const image = DashboardTabComponent.HNM_MONSTER_IMAGES[key];
+      if (image) { return image; }
+    }
+    return null;
+  }
+
+  // Thumbnail for an Upcoming Events row. The monster wins over the event type:
+  // an HNM board carries its own AssignedMonsterName, and matching on type alone
+  // meant every HNM row fell through to the blank grey box.
+  protected eventThumbImage(event: ActivityEvent): string | null {
+    return this.monsterImage(event.assignedMonsterName)
+      ?? this.monsterImage(event.partySetupAssignedMonsterName)
+      ?? this.eventTypeImage(event.type);
   }
 
   protected eventRelativeLabel(value?: string | null): string {
@@ -347,11 +413,13 @@ export class DashboardTabComponent {
   protected dashboardHnmClaims(): { monsterName: string; count: number; percent: number; colorClass: string }[] {
     // Restrict the donut to true HNMs (Fafnir / Nidhogg / Behemoth / Tiamat
     // / Bahamut / etc.) — Sky farm pops, ground NMs, HENMs, and Sea NMs are
-    // tracked elsewhere and would otherwise dominate the chart.
+    // tracked elsewhere and would otherwise dominate the chart. isHnmMonsterName
+    // matches either half of a combined "Base/Stronger" label, which is how HNM
+    // boards record the name.
     const tods = (this.activity.overview()?.recentTods ?? [])
       .filter(tod => tod.linkshellId === this.selectedDashboardLinkshellId()
                   && tod.claim
-                  && HNM_NAMES.has((tod.monsterName ?? '').trim()));
+                  && isHnmMonsterName(tod.monsterName));
 
     const cutoffMs = this.dashboardHnmWindow === 'all'
       ? 0
@@ -670,21 +738,11 @@ export class DashboardTabComponent {
 
   protected selectedDashboardTods() {
     const selectedId = this.selectedDashboardLinkshellId();
-    // Per-linkshell hidden-mob list, configured in the Customize form.
-    // Names compared case-insensitively after trimming so casing in the
-    // textarea doesn't have to be exact.
-    const link = this.activity.overview()?.linkshells?.find(l => l.id === selectedId);
-    const hidden = new Set(
-      (link?.settings?.hiddenTodMonsters ?? []).map(name => name.trim().toLowerCase())
-    );
     return [...(this.activity.overview()?.recentTods ?? [])]
       .filter(tod => tod.linkshellId === selectedId)
-      .filter(tod => !hidden.has((tod.monsterName ?? '').trim().toLowerCase()))
-      .sort((left, right) => {
-        const leftTime = left.time ? new Date(left.time).getTime() : 0;
-        const rightTime = right.time ? new Date(right.time).getTime() : 0;
-        return rightTime - leftTime;
-      });
+      // Newest first on time ?? timeStamp, so a ToD that was never entered still sorts as the
+      // monster's latest instead of sinking below the pop it superseded.
+      .sort((left, right) => todSortKey(right) - todSortKey(left));
   }
 
   protected upcomingDashboardAuctionsCount(): number {
@@ -756,22 +814,16 @@ export class DashboardTabComponent {
     this.expandedTodLoot.set(next);
   }
 
+  // Countdown / ready state / the "Not entered" label all live in activity-home.helpers so this
+  // tab and the ToDs tab can't drift apart — they render the same card from the same data.
+  protected readonly notEntered = TOD_NOT_ENTERED;
+
   protected todCountdownLabel(tod: { repopTime?: string | null }): string {
-    const remainingMilliseconds = this.remainingMs(tod.repopTime);
-    return remainingMilliseconds <= 0 ? 'Ready' : formatElapsed(remainingMilliseconds);
+    return todCountdownLabel(tod.repopTime, this.now());
   }
 
   protected isTodReady(tod: { repopTime?: string | null }): boolean {
-    return this.remainingMs(tod.repopTime) <= 0;
-  }
-
-  private remainingMs(targetValue?: string | null): number {
-    const targetTime = parseDate(targetValue);
-    if (!targetTime) {
-      return 0;
-    }
-
-    return Math.max(0, targetTime - this.now());
+    return isTodReady(tod.repopTime, this.now());
   }
 
   // ----- Roster rank editing (only used here in the dashboard's read-only roster?

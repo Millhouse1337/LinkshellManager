@@ -1,0 +1,30 @@
+<div class="section-head">
+  <div>
+    <div class="section-label">Content</div>
+    <div class="section-title">Charts</div>
+  </div>
+</div>
+
+<div class="chart-subnav" role="tablist" aria-label="Chart boards">
+  @for (option of sections; track option.key) {
+    <button type="button" role="tab"
+            class="btn sm"
+            [class.primary]="option.ready && section() === option.key"
+            [class.ghost]="!option.ready || section() !== option.key"
+            [disabled]="!option.ready"
+            [attr.aria-disabled]="!option.ready"
+            [attr.aria-selected]="section() === option.key"
+            (click)="setSection(option)">
+      {{ option.label }}
+      @if (!option.ready) {
+        <span class="chart-subnav__soon">Soon</span>
+      }
+    </button>
+  }
+</div>
+
+@if (linkshellId() !== null) {
+  <app-chart-board-section [linkshellId]="linkshellId()" [board]="section()" />
+} @else {
+  <div class="empty-state">Join a linkshell to track pop items.</div>
+}

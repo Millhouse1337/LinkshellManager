@@ -1,0 +1,152 @@
+<div class="panel-tab fade">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">💰 DKP grouping</div>
+      @if (activeLinkshellName(); as activeName) {
+        <span class="tag accent">{{ activeName }}</span>
+      }
+    </div>
+
+    @if (!canCustomize()) {
+      <div class="card-body">
+        <p class="muted" style="font-size:12px;margin:0">
+          You need the Customize Linkshell permission to change DKP grouping.
+        </p>
+      </div>
+    } @else {
+      <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+        <p class="muted" style="font-size:12px;margin:0">
+          Create a DKP Group. Customize what event categories are grouped together so that DKP
+          earned and DKP spent can be separated based on event type.
+        </p>
+
+        <p class="muted" style="font-size:12px;margin:0">
+          Every event type starts in the <em>Default</em> group, so all event DKP is pooled
+          together until you create another group and move event types into it.
+        </p>
+
+        <div class="pool-section-label">Groups</div>
+        <!-- Column headers, aligned to the .pool-row flex columns below. -->
+        <div class="pool-row-head">
+          <div style="flex:1;min-width:0">Group Name</div>
+          <div style="flex:0 0 150px">Group Color</div>
+          <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          @for (pool of poolDrafts; track $index) {
+            <div class="pool-row">
+              @if (pool.isDefault) {
+                <!-- The default group is permanent: the catch-all every unassigned event type,
+                     plus adjustments and imports, land in. It can't be renamed or removed. -->
+                <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px"
+                  title="The catch-all group: every event type you don't assign, plus adjustments and imports, land here. It can't be renamed or removed.">
+                  <span>{{ pool.name }}</span>
+                </div>
+              } @else {
+                <input type="text" [(ngModel)]="pool.name" (ngModelChange)="markPoolsDirty()"
+                  maxlength="64" placeholder="Enter a Group Name" style="flex:1;min-width:0"
+                  title="What to call this group. Members see this name (e.g. Endgame, Sky/Sea)." />
+              }
+              <div style="flex:0 0 150px;display:flex;align-items:center;gap:8px"
+                title="A colour to tell this group apart at a glance.">
+                <span style="width:14px;height:14px;border-radius:4px;flex:0 0 auto;border:1px solid var(--border)"
+                  [style.background]="poolSwatchColor(pool.accent)"></span>
+                <select [(ngModel)]="pool.accent" (ngModelChange)="markPoolsDirty()" style="flex:1;min-width:0">
+                  @for (accent of poolAccents(); track accent) {
+                    <option [value]="accent">{{ accent }}</option>
+                  }
+                </select>
+              </div>
+              @if (pool.isDefault) {
+                <!-- No Remove for the default group. Keep the column width so rows stay aligned. -->
+                <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
+              } @else {
+                <button type="button" class="btn ghost sm" style="flex:0 0 auto" (click)="removePool($index)"
+                  title="Remove this group">Remove</button>
+              }
+            </div>
+          }
+        </div>
+        <div style="display:flex;justify-content:flex-end">
+          <button type="button" class="btn ghost sm" (click)="addPool()">+ Add New Group</button>
+        </div>
+
+        <div class="pool-section-label">Event types</div>
+        <p class="muted" style="font-size:12px;margin:0">
+          Anything left on <em>Default</em> earns into the Default group — including event types you
+          haven't run yet, and any custom name typed into the event form's "Other" field.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          @for (type of poolEventTypes(); track type.key) {
+            <div class="pool-assign-row">
+              <div class="pool-assign-name">
+                <span>{{ type.key }}</span>
+                @if (type.isCustom) {
+                  <span class="tag" style="font-size:10px;font-weight:400">custom</span>
+                }
+                @if (type.earnedTotal > 0) {
+                  <span class="muted" style="font-size:11px">{{ type.earnedTotal | number:'1.0-2' }} DKP earned</span>
+                }
+              </div>
+              <!-- [ngModel]/[ngValue], not [value]: a plain [value] on a native <select> doesn't
+                   reliably reflect the -1 ("Default") selection, so the control renders blank. -->
+              <select [ngModel]="poolByEventType[type.key]"
+                (ngModelChange)="setPoolForEventType(type.key, $event)"
+                style="min-width:170px"
+                title="Which group this event type earns into — and pays its loot out of. Leave on Default to use the default group.">
+                <option [ngValue]="-1">Default</option>
+                @for (pool of poolDrafts; track $index) {
+                  @if (!pool.isDefault) {
+                    <option [ngValue]="$index">{{ pool.name || 'Unnamed group' }}</option>
+                  }
+                }
+              </select>
+            </div>
+          }
+        </div>
+
+        <!-- The preview is a SUMMARY, not a per-member before/after table. Pool balances are
+             derived from the ledger, so re-partitioning it can move DKP between pools but
+             provably cannot change anyone's total — a table of unchanged totals would only
+             imply otherwise. What matters is where the DKP moves, and which pools end up unable
+             to pay for the loot they're charged for. -->
+        @if (poolPreview(); as preview) {
+          <div class="pool-preview">
+            @if (preview.moves.length === 0) {
+              <div style="font-size:12px">No DKP moves between groups.</div>
+            } @else {
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px">
+                {{ preview.affectedLedgerRows }} ledger rows across {{ preview.affectedMembers }} members move.
+                Nobody's total DKP changes.
+              </div>
+              @for (move of preview.moves; track move.eventType) {
+                <div style="font-size:12px" class="muted">
+                  {{ move.eventType }} ({{ move.earnedTotal | number:'1.0-2' }} DKP earned):
+                  {{ move.fromPool }} → {{ move.toPool }}
+                </div>
+              }
+            }
+            @for (warning of preview.warnings; track warning) {
+              <div class="pool-warning">⚠ {{ warning }}</div>
+            }
+          </div>
+        }
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn ghost sm" (click)="previewDkpPools()"
+            [disabled]="activity.busyDkpPools() || !!dkpPoolsError()"
+            title="See what this would move before committing to it">
+            Preview changes
+          </button>
+          <button type="button" class="btn primary" (click)="saveDkpPools()"
+            [disabled]="activity.busyDkpPools() || !!dkpPoolsError()">
+            {{ activity.busyDkpPools() ? 'Saving…' : 'Save DKP grouping' }}
+          </button>
+          @if (dkpPoolsError(); as err) {
+            <span class="pool-error">{{ err }}</span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

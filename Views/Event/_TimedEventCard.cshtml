@@ -1,0 +1,519 @@
+@model EventViewModel
+@using LinkshellManagerDiscordApp.Models
+@{
+    // One timed-event card, shared by the Current Field Activity and Pending Events sections —
+    // the card already branches on `isLive` for its own action button and controls, so the two
+    // sections differ only in which list they feed it. Extracted from Views/Event/Index.cshtml
+    // when that page grew its three sections.
+    //
+    // Viewer context comes from ViewData, set once by Index.cshtml (Html.PartialAsync shares the
+    // caller's dictionary). The `as … ?? fallback` shape matches how Index.cshtml read the
+    // ViewBag equivalents.
+    var currentCharacter = ViewData["CurrentCharacterName"] as string;
+    var currentAppUserId = ViewData["CurrentAppUserId"] as string;
+    var mainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions;
+    var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;
+    var jobTypeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
+    var signUpRoleOptions = ViewData["SignUpRoleOptions"] as List<string> ?? jobTypeOptions.ToList();
+    var signUpMainOptions = ViewData["SignUpMainJobOptions"] as List<string> ?? mainJobOptions.ToList();
+    var signUpSubOptions = ViewData["SignUpSubJobOptions"] as List<string> ?? subJobOptions.ToList();
+    var signupCharacters = ViewData["SignupCharacters"] as List<string> ?? new List<string>();
+    var eventIndexUrl = ViewData["EventIndexUrl"] as string ?? "/Event";
+
+    string RelativeTime(DateTime? when)
+    {
+        if (!when.HasValue) return "TBD";
+        var delta = when.Value - DateTime.UtcNow;
+        var abs = delta.Duration();
+        var prefix = delta.TotalSeconds < 0 ? "" : "in ";
+        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
+        if (abs.TotalMinutes < 60) return $"{prefix}{(int)abs.TotalMinutes}m{suffix}";
+        if (abs.TotalHours < 24) return $"{prefix}{(int)abs.TotalHours}h{suffix}";
+        if (abs.TotalDays < 14) return $"{prefix}{(int)abs.TotalDays}d{suffix}";
+        return when.Value.ToString("MMM d");
+    }
+
+    var item = Model;
+    var signedUp = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter);
+    var isLive = item.Event.CommencementStartTime.HasValue;
+}
+
+<div class="card">
+    <div class="card-head">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1">
+            <div class="card-title">
+                @item.Event.EventName
+                @if (!string.IsNullOrWhiteSpace(item.Event.EventType))
+                {
+                    <span class="tag">@item.Event.EventType</span>
+                }
+                @if (isLive)
+                {
+                    <span class="tag success">Live</span>
+                }
+            </div>
+            <div style="font-size:12px;color:var(--fg-3)">
+                @if (!string.IsNullOrWhiteSpace(item.Event.EventLocation))
+                {
+                    <span>@item.Event.EventLocation</span>
+                    <span class="dot"> · </span>
+                }
+                <span>@(item.Event.StartTime?.ToString("ddd MMM d, HH:mm") ?? "Start TBD")</span>
+                <span class="dot"> · </span>
+                <span>@RelativeTime(item.Event.StartTime)</span>
+                <span class="dot"> · </span>
+                <span>by @(item.CreatorCharacterName ?? "Unknown")</span>
+            </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+            @if (isLive)
+            {
+                <a class="btn primary sm" asp-action="Start" asp-route-eventId="@item.Event.Id">View</a>
+            }
+            else if (string.Equals((item.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+            {
+                @* HNM signup boards aren't "started" — logging the monster's Time
+                   of Death is what drives the board (re-post + repop). Mirrors the
+                   Activity's "Post ToD" / "Edit ToD" button. Opens the shared modal
+                   on Index.cshtml, pre-filled with this board's monster. *@
+                var awaitingRepost = item.Event.HnmDefeatedAt is not null;
+                var prefill = item.BoardTod;
+                var claimAttr = prefill?.Claim == true ? "true" : (prefill?.Claim == false ? "false" : "");
+                <button class="btn primary sm event-tod-open" type="button"
+                        data-event-id="@item.Event.Id"
+                        data-monster="@item.Event.AssignedMonsterName"
+                        data-editing="@(awaitingRepost ? "true" : "false")"
+                        data-tod-time="@prefill?.TimeLocal"
+                        data-cooldown="@prefill?.Cooldown"
+                        data-interval="@prefill?.Interval"
+                        data-day="@(item.Event.DayNumber?.ToString())"
+                        data-hq="@(prefill?.Hq == true ? "true" : "false")"
+                        data-claim="@claimAttr"
+                        data-killed="@(prefill?.Killed == false ? "false" : "true")"
+                        data-repost="@(item.BoardRepostEnabled ? "true" : "false")"
+                        data-repost-lead="@(item.BoardRepostLeadHours?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))"
+                        title="@(awaitingRepost ? "Edit the logged Time of Death (updates the repop + re-post time)." : "Log the Time of Death. The board wipes signups and re-posts before the next pop.")">
+                    @(awaitingRepost ? "Edit ToD" : "Post ToD")
+                </button>
+            }
+            else
+            {
+                <form asp-action="StartEvent" method="post" style="display:inline">
+                    <input type="hidden" name="eventId" value="@item.Event.Id" />
+                    <button class="btn primary sm" type="submit">Start</button>
+                </form>
+            }
+            <a class="btn ghost sm" asp-action="Edit" asp-route-id="@item.Event.Id">Edit</a>
+            @* Delete is hidden while an event is live so an officer
+               can't wipe an active run mid-flight; the run has to
+               be ended (or archived via End event) first. *@
+            @if (!isLive)
+            {
+                <a class="btn ghost sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
+            }
+        </div>
+    </div>
+
+    <div>
+    @* HNM "defeated / awaiting re-post" banner — shown after a ToD is logged from
+       this board. Signups are wiped; the board re-posts before the next pop.
+       Mirrors the Discord Activity's queue-card banner. *@
+    @if (item.Event.HnmDefeatedAt is not null)
+    {
+        var monsterLabel = string.IsNullOrWhiteSpace(item.Event.AssignedMonsterName)
+            ? item.Event.EventName : item.Event.AssignedMonsterName;
+        string? leadLabel = null;
+        if (item.Event.StartTime is DateTime repop && item.Event.HnmRepostAt is DateTime repost && repop > repost)
+        {
+            var lead = repop - repost;
+            var parts = new List<string>();
+            if ((int)lead.TotalHours > 0) { parts.Add($"{(int)lead.TotalHours}h"); }
+            if (lead.Minutes > 0) { parts.Add($"{lead.Minutes}m"); }
+            if (parts.Count == 0) { parts.Add($"{lead.Seconds}s"); }
+            leadLabel = string.Join(" ", parts);
+        }
+        <div style="margin:0 16px 12px;padding:12px 14px;border:1px solid var(--accent);border-radius:8px;background:var(--surface-2)">
+            <div style="font-weight:600;color:var(--fg)">💀 @monsterLabel defeated</div>
+            <div style="color:var(--fg-2);font-size:13px;margin-top:2px">
+                Will repop @(item.Event.StartTime?.ToString("ddd MMM d, HH:mm:ss") ?? "soon").
+                @if (item.Event.HnmRepostAt is not null)
+                {
+                    <text>Sign-up board automatically re-posts @item.Event.HnmRepostAt?.ToString("ddd MMM d, HH:mm:ss")@(leadLabel is not null ? $" ({leadLabel} before the first window)" : "").</text>
+                }
+                else
+                {
+                    <text>Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.</text>
+                }
+            </div>
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(item.Event.Details))
+    {
+        <div style="padding:0 16px 12px;color:var(--fg-3);font-size:13px">@item.Event.Details</div>
+    }
+
+    @{
+        var hasLinkedBoard = item.LinkedPartySetupBoard != null;
+        var setupPanelId = $"event-ps-panel-{item.Event.Id}";
+        var manualFormId = $"event-manual-form-{item.Event.Id}";
+        var userOwnsSlot = item.CurrentUserOwnsLinkedPartySetupSlot;
+        // Per-event returnUrl with a fragment so the PartySetup
+        // controller's redirect lands back here AND re-opens the
+        // matching event's panel (page-load JS reads the hash).
+        var returnUrl = $"{eventIndexUrl}#{setupPanelId}";
+        // "Also attending" = participants with no party slot (e.g. Join no-slot).
+        var slotNames = item.LinkedPartySetupBoard?.Alliances
+            .SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+            .Where(s => !string.IsNullOrWhiteSpace(s.SignedUpCharacterName))
+            .Select(s => s.SignedUpCharacterName!.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var alsoAttending = item.AppUserEvents
+            .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName) && !slotNames.Contains(p.CharacterName!.Trim()))
+            .ToList();
+    }
+
+    @if (hasLinkedBoard)
+    {
+        var board = item.LinkedPartySetupBoard!;
+        <div class="event-ps-row">
+            <div class="event-ps-row__label">
+                <span>Linked party setup:</span>
+                <strong>@(item.LinkedPartySetupName ?? "(unnamed setup)")</strong>
+                @if (!string.IsNullOrWhiteSpace(item.LinkedPartySetupMonsterName))
+                {
+                    <span class="tag" style="margin-left:6px">@item.LinkedPartySetupMonsterName</span>
+                }
+            </div>
+            <button type="button" class="btn ghost sm event-ps-toggle"
+                    data-target="@setupPanelId">
+                View &amp; Sign Up
+            </button>
+        </div>
+
+        @* Inline party setup tree. Hidden by default; the toggle
+           button above flips [hidden] off. Slot signup/withdraw
+           posts go through PartySetupController and return to this
+           page via the returnUrl. *@
+        <div id="@setupPanelId" class="event-ps-panel" hidden>
+            @if (!board.Alliances.Any())
+            {
+                <div class="event-ps-empty">This party setup has no alliances yet.</div>
+            }
+            @{ var multiAllianceBoard = board.Alliances.Count > 1; }
+            @foreach (var alliance in board.Alliances)
+            {
+                @* Alliance lead is the party leaders' rung, so the button only
+                   shows to someone already leading a party in this alliance. *@
+                var iLeadAPartyHere = !string.IsNullOrEmpty(currentAppUserId)
+                    && alliance.Parties.SelectMany(p => p.Slots)
+                        .Any(s => s.SignedUpAppUserId == currentAppUserId && s.SignedUpIsPartyLeader);
+                var iAmAllianceLead = !string.IsNullOrEmpty(currentAppUserId) && alliance.LeadAppUserId == currentAppUserId;
+                <div class="event-ps-alliance-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <span>@alliance.Name</span>
+                    @if (multiAllianceBoard && !string.IsNullOrEmpty(alliance.LeadCharacterName))
+                    {
+                        <span class="event-ps-alliance-lead" title="Alliance lead">👑 Alliance Lead: @alliance.LeadCharacterName</span>
+                    }
+                    @if (multiAllianceBoard && iLeadAPartyHere && !iAmAllianceLead)
+                    {
+                        <form asp-controller="Event" asp-action="MakeAllianceLead" method="post" style="display:inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="eventId" value="@item.Event.Id" />
+                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                            <button type="submit" class="btn xs" title="Take this alliance's lead">👑 Make me alliance lead</button>
+                        </form>
+                    }
+                </div>
+                <div class="event-ps-party-grid">
+                    @foreach (var party in alliance.Parties)
+                    {
+                        <div class="event-ps-party">
+                            <div class="event-ps-party__head">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;color:var(--accent)">
+                                    <path d="M16 11a4 4 0 1 0-4-4"/><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M2 20c0-3 2.5-5 6-5s6 2 6 5"/><path d="M14 15c3 0 6 1.6 6 5"/>
+                                </svg>
+                                <span>@party.Name</span>
+                                <span class="event-ps-party__count">@party.Slots.Count</span>
+                            </div>
+                            @{ var partyHasLeader = party.Slots.Any(s => s.SignedUpIsPartyLeader); }
+                            @foreach (var slot in party.Slots)
+                            {
+                                var mine = !slot.IsOpen && slot.SignedUpAppUserId == currentAppUserId;
+                                var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
+                                var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
+                                var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
+                                <div class="event-ps-slot @(slot.IsPartyLeader ? "event-ps-slot--leader" : null)">
+                                    <div class="event-ps-slot__label">
+                                        @if (slot.IsPartyLeader)
+                                        {
+                                            <span class="event-ps-leader-tag" title="Party leader">
+                                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5l4.6 3.2L12 3.5l4.9 7.2 4.6-3.2-1.9 11.5H4.4L2.5 7.5z"/></svg>
+                                                Leader
+                                            </span>
+                                        }
+                                        <span>@slot.Display</span>
+                                    </div>
+                                    @if (slot.IsOpen)
+                                    {
+                                        <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@item.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                            @if (signupCharacters.Count > 1)
+                                            {
+                                                <select name="selectedCharacter" class="form-select" title="Sign up as">
+                                                    @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                                </select>
+                                            }
+                                            @if (!slotRequiresRole)
+                                            {
+                                                <select name="role" required class="form-select">
+                                                    <option value="">Role…</option>
+                                                    @foreach (var r in signUpRoleOptions) { <option value="@r">@r</option> }
+                                                </select>
+                                            }
+                                            @if (!slotRequiresMain)
+                                            {
+                                                <select name="mainJob" required class="form-select">
+                                                    <option value="">Main…</option>
+                                                    @foreach (var j in signUpMainOptions) { <option value="@j">@j</option> }
+                                                </select>
+                                            }
+                                            @if (!slotRequiresSub)
+                                            {
+                                                <select name="subJob" class="form-select">
+                                                    <option value="">Sub (opt)</option>
+                                                    @foreach (var j in signUpSubOptions) { <option value="@j">@j</option> }
+                                                </select>
+                                            }
+                                            <button type="submit" name="asLeader" value="false" class="btn primary sm">Sign up</button>
+                                            @if (!partyHasLeader)
+                                            {
+                                                <button type="submit" name="asLeader" value="true" class="btn sm" title="Claim this party's leader spot">👑 Leader</button>
+                                            }
+                                        </form>
+                                    }
+                                    else if (mine)
+                                    {
+                                        <div class="event-ps-slot__controls">
+                                            <span class="event-ps-chip event-ps-chip--mine">
+                                                @if (slot.SignedUpIsPartyLeader) { <span title="Party leader">👑</span> }
+                                                @slot.SignedUpCharacterName (you)
+                                                @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                {
+                                                    <span class="muted">· @slot.SignedUpJobsDisplay</span>
+                                                }
+                                            </span>
+                                            <form asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@item.Event.Id" method="post" style="display:inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="returnUrl" value="@returnUrl" />
+                                                <button type="submit" class="btn ghost sm" style="color:var(--danger)">Withdraw</button>
+                                            </form>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="event-ps-slot__controls">
+                                            <span class="event-ps-chip">
+                                                @if (slot.SignedUpIsPartyLeader) { <span title="Party leader">👑</span> }
+                                                @slot.SignedUpCharacterName
+                                                @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
+                                                {
+                                                    <span class="muted">· @slot.SignedUpJobsDisplay</span>
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (!party.Slots.Any())
+                            {
+                                <div class="event-ps-empty">No slots.</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (alsoAttending.Count > 0)
+            {
+                <div class="event-ps-alliance-title" style="margin-top:8px">Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 8px">
+                    @foreach (var a in alsoAttending)
+                    {
+                        <span class="event-ps-chip @(a.CharacterName == currentCharacter ? "event-ps-chip--mine" : null)">
+                            @a.CharacterName@(a.CharacterName == currentCharacter ? " (you)" : "")
+                            @if (!string.IsNullOrEmpty(a.JobName))
+                            {
+                                <span class="muted">· @a.JobName@(string.IsNullOrEmpty(a.SubJobName) ? "" : "/" + a.SubJobName)</span>
+                            }
+                        </span>
+                    }
+                </div>
+            }
+
+            @* Sign Up Manually toggle, mirroring the Discord Activity:
+               hidden when the viewer already owns a slot above. *@
+            @if (!isLive && !signedUp)
+            {
+                <div class="event-manual">
+                    @if (userOwnsSlot)
+                    {
+                        <div class="event-manual__locked">
+                            You're signed up to a slot above. Withdraw from it first if you want to sign up as a different job.
+                        </div>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn ghost sm event-manual__toggle"
+                                data-target="@manualFormId">
+                            Sign Up Manually
+                        </button>
+                        @* Quick general join: on the attendance roster without a
+                           party slot or a job pick (mirrors the Discord "Join (no slot)"). *@
+                        <form asp-action="SignUp" method="post" style="display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle">
+                            <input type="hidden" name="eventId" value="@item.Event.Id" />
+                            @if (signupCharacters.Count > 1)
+                            {
+                                <select name="characterName" class="form-select" title="Sign up as">
+                                    @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                </select>
+                            }
+                            <button class="btn sm" type="submit"
+                                    title="Join the roster without claiming a party slot">Join (no slot)</button>
+                        </form>
+                        <div id="@manualFormId" class="event-manual__form" hidden>
+                            <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
+                                Sign up as a job that isn't in the party setup above.
+                            </div>
+                            <form asp-action="SignUp" method="post">
+                                <input type="hidden" name="eventId" value="@item.Event.Id" />
+                                @if (signupCharacters.Count > 1)
+                                {
+                                    <div class="field" style="margin-bottom:8px">
+                                        <label>Character</label>
+                                        <select class="form-select" name="characterName">
+                                            @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                                        </select>
+                                    </div>
+                                }
+                                <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                                    <div class="field">
+                                        <label>Role</label>
+                                        <select class="form-select" name="jobType" required>
+                                            <option value="">Select role</option>
+                                            @foreach (var jobTypeOption in jobTypeOptions) { <option value="@jobTypeOption">@jobTypeOption</option> }
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label>Main job</label>
+                                        <select class="form-select" name="jobName" required>
+                                            <option value="">Select main job</option>
+                                            @foreach (var jobOption in mainJobOptions) { <option value="@jobOption">@jobOption</option> }
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label>Sub job</label>
+                                        <select class="form-select" name="subJobName" required>
+                                            <option value="">Select sub job</option>
+                                            @foreach (var jobOption in subJobOptions) { <option value="@jobOption">@jobOption</option> }
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                                    <button class="btn primary sm" type="submit">Sign up</button>
+                                </div>
+                            </form>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @* For events with NO linked party setup, keep the original
+       bare-bones ad-hoc signup form so members can still join. *@
+    @if (!hasLinkedBoard && !isLive && !signedUp)
+    {
+        <div style="padding:12px 16px;border-top:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
+                Pick the job you'll bring and sign up.
+            </div>
+            <form asp-action="SignUp" method="post">
+                <input type="hidden" name="eventId" value="@item.Event.Id" />
+                @if (signupCharacters.Count > 1)
+                {
+                    <div class="field" style="margin-bottom:8px">
+                        <label>Character</label>
+                        <select class="form-select" name="characterName">
+                            @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
+                        </select>
+                    </div>
+                }
+                <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+                    <div class="field">
+                        <label>Role</label>
+                        <select class="form-select" name="jobType" required>
+                            <option value="">Select role</option>
+                            @foreach (var jobTypeOption in jobTypeOptions)
+                            {
+                                <option value="@jobTypeOption">@jobTypeOption</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Main job</label>
+                        <select class="form-select" name="jobName" required>
+                            <option value="">Select main job</option>
+                            @foreach (var jobOption in mainJobOptions)
+                            {
+                                <option value="@jobOption">@jobOption</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Sub job</label>
+                        <select class="form-select" name="subJobName" required>
+                            <option value="">Select sub job</option>
+                            @foreach (var jobOption in subJobOptions)
+                            {
+                                <option value="@jobOption">@jobOption</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:8px">
+                    <button class="btn primary sm" type="submit">Sign up</button>
+                </div>
+            </form>
+        </div>
+    }
+    else if (!isLive && signedUp)
+    {
+        var ownSignup = item.AppUserEvents.FirstOrDefault(entry => entry.CharacterName == currentCharacter);
+        <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="font-size:12px;color:var(--fg-3)">
+                @if (string.IsNullOrWhiteSpace(ownSignup?.JobName))
+                {
+                    <text>On the roster <strong style="color:var(--fg)">(no slot)</strong></text>
+                }
+                else
+                {
+                    <text>Signed up as <strong style="color:var(--fg)">@(ownSignup!.JobName)/@(ownSignup.SubJobName ?? "?")</strong></text>
+                    @if (!string.IsNullOrWhiteSpace(ownSignup.JobType))
+                    {
+                        <span class="tag" style="margin-left:6px">@ownSignup.JobType</span>
+                    }
+                }
+            </div>
+            <form asp-action="Unsign" method="post" style="display:inline">
+                <input type="hidden" name="eventId" value="@item.Event.Id" />
+                <button class="btn ghost sm" type="submit">Leave</button>
+            </form>
+        </div>
+    }
+
+    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--fg-3)">
+        <span><span class="num">@item.AppUserEvents.Count</span> participants @(signedUp ? "· you are signed up" : "")</span>
+    </div>
+    </div> <!-- /event-card-collapsible__body -->
+</div>

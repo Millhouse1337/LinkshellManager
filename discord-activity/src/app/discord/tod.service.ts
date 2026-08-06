@@ -28,6 +28,7 @@ export class TodService {
         linkshellId: input.linkshellId,
         monsterName: input.monsterName,
         dayNumber: input.dayNumber ?? null,
+        popWindow: input.popWindow ?? null,
         hq: input.hq,
         additionalSeconds: input.additionalSeconds,
         claim: input.claim,
@@ -63,6 +64,7 @@ export class TodService {
       await this.http.postActivityAction(`/api/activity/tods/${input.todId}/update`, {
         monsterName: input.monsterName,
         dayNumber: input.dayNumber ?? null,
+        popWindow: input.popWindow ?? null,
         hq: input.hq,
         additionalSeconds: input.additionalSeconds,
         claim: input.claim,
@@ -98,6 +100,16 @@ export class TodService {
     claim: boolean | null;
     hq: boolean;
     additionalSeconds: number;
+    // End Camp only: the window it popped on (caps credit) + whether it was killed. null = current
+    // window / server default.
+    popWindow?: number | null;
+    killed?: boolean | null;
+    // End Camp only: re-post the board before the next pop? (null = leave standing config alone) and
+    // how many hours before the pop.
+    repost?: boolean | null;
+    repostLeadHours?: number | null;
+    // End Camp only: the optional kill screenshot. null/omitted leaves any existing image alone.
+    imagePath?: string | null;
   }): Promise<void> {
     this.busyTodSave.set(true);
     this.auth.setActionError(null);
@@ -111,7 +123,12 @@ export class TodService {
         dayNumber: fields.dayNumber ?? null,
         claim: fields.claim,
         hq: fields.hq,
-        additionalSeconds: fields.additionalSeconds
+        additionalSeconds: fields.additionalSeconds,
+        popWindow: fields.popWindow ?? null,
+        killed: fields.killed ?? null,
+        repost: fields.repost ?? null,
+        repostLeadHours: fields.repostLeadHours ?? null,
+        imagePath: fields.imagePath ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Time of Death posted — the board re-posts automatically before the next pop.');

@@ -110,6 +110,8 @@ var tables = new[]
     "Announcements",
     "Items",
     "RevenueEntries",
+    // Treasury: halves before entries (FK), and categories last since entries point at them.
+    "JournalEntryLines", "JournalEntries", "LedgerAccounts", "LedgerPeriods",
     "LinkshellRoles",
     "AddonApiTokens", "AddonPairingCodes",
     "EventAttendanceWindows", "AppUserEventWindows",
@@ -239,6 +241,14 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("DkpLedgerEntries", "DELETE FROM \"DkpLedgerEntries\" WHERE \"LinkshellId\" = @ls"),
         ("Items", "DELETE FROM \"Items\" WHERE \"LinkshellId\" = @ls"),
         ("RevenueEntries", "DELETE FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
+
+        // --- Gil treasury ---
+        // Order matters: halves first (they FK to both entries and categories), then entries, then the
+        // categories themselves. Without these four the wipe would silently leave the treasury behind.
+        ("JournalEntryLines", "DELETE FROM \"JournalEntryLines\" WHERE \"LinkshellId\" = @ls"),
+        ("JournalEntries", "DELETE FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls"),
+        ("LedgerAccounts", "DELETE FROM \"LedgerAccounts\" WHERE \"LinkshellId\" = @ls"),
+        ("LedgerPeriods", "DELETE FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Addon tokens (user chose to revoke/delete) ---
         ("AddonPairingCodes", "DELETE FROM \"AddonPairingCodes\" WHERE \"LinkshellId\" = @ls"),

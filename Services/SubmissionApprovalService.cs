@@ -232,7 +232,10 @@ public sealed class SubmissionApprovalService
             {
                 EventId = pending.EventId,
                 SequenceNumber = pending.WindowIndex,
-                Label = HnmConfig.GetDefaultWindowLabel(pending.Event.EventName, pending.WindowIndex, pending.Event.WindowCountOverride ?? HnmConfig.GetWindowCount(pending.Event.EventName)),
+                // The POST count names the window (2 = Open/Close). Not the raw override, which on
+                // an app-made HNM camp holds the SPAWN count and would number a king/dragon's
+                // windows here while the addon's own posts on the same camp read Open / Close.
+                Label = HnmConfig.GetDefaultWindowLabel(pending.Event.EventName, pending.WindowIndex, DiscordEventMessageBuilder.AttendancePostCount(pending.Event)),
                 PostedAt = nowUtc,
                 PostedBySource = "approval"
             };
@@ -260,14 +263,15 @@ public sealed class SubmissionApprovalService
                 .Where(ue => ue.EventId == pending.EventId && memberships.Select(m => m.AppUserId).Contains(ue.AppUserId))
                 .ToDictionaryAsync(ue => ue.AppUserId!, cancellationToken);
 
-        var existingWindowCreditPairs = existingParticipations.Count == 0
-            ? new HashSet<int>()
-            : (await _db.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindowId == attendanceWindow.Id
-                            && existingParticipations.Values.Select(v => v.Id).Contains(w.AppUserEventId))
-                .Select(w => w.AppUserEventId)
+        // Keyed on the DENORMALIZED AppUserId rather than the participation id: a cleared roster
+        // replaces a member's AppUserEvent while their snapshots survive, so participation-keying
+        // would let the same person be credited twice for one window. Mirrors the addon's
+        // PostAttendanceAsync.
+        var existingWindowAppUserIds = (await _db.AppUserEventWindows
+                .Where(w => w.EventAttendanceWindowId == attendanceWindow.Id && w.AppUserId != null)
+                .Select(w => w.AppUserId!)
                 .ToListAsync(cancellationToken))
-                .ToHashSet();
+                .ToHashSet(StringComparer.Ordinal);
 
         var matched = 0;
         foreach (var member in pending.Members)
@@ -302,12 +306,15 @@ public sealed class SubmissionApprovalService
                 }
             }
 
-            if (participation.Id != 0 && existingWindowCreditPairs.Contains(participation.Id)) continue;
+            if (!existingWindowAppUserIds.Add(membership.AppUserId)) continue;
 
             _db.AppUserEventWindows.Add(new AppUserEventWindow
             {
                 AppUserEvent = participation,
                 EventAttendanceWindow = attendanceWindow,
+                // Denormalized so the snapshot outlives a cleared roster — see AppUserEventWindow.
+                AppUserId = membership.AppUserId,
+                CharacterName = participation.CharacterName ?? membership.CharacterName,
                 VerifiedAt = nowUtc,
                 VerifiedBy = "approval",
             });

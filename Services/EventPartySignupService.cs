@@ -107,10 +107,29 @@ public static class EventPartySignupService
                      && s.IsPartyLeader
                      && s.PartySetupSlot!.PartySetupPartyId == slot.PartySetupPartyId,
                 cancellationToken);
-            existing.IsPartyLeader = !partyHasOtherLeader;
+            if (partyHasOtherLeader) { ClearLeadership(existing); }
+            else { existing.IsPartyLeader = true; }
         }
 
         return new ClaimResult(true, null);
+    }
+
+    // Takes BOTH crowns off a signup.
+    //
+    // The alliance crown rides on the party crown: an alliance lead is always the
+    // leader of their own party (that's what MakeAllianceLeaderAsync requires). So
+    // every path that removes the party crown has to remove the alliance crown with
+    // it — otherwise the board keeps naming an alliance lead who no longer leads a
+    // party, and the ex-leader silently keeps a designation nobody can see they hold.
+    //
+    // The alliance is deliberately left WITHOUT a lead rather than handing it to the
+    // incoming party leader: alliance lead is never auto-assigned, it's always an
+    // explicit claim, and quietly promoting someone to lead all 18 slots is a much
+    // bigger move than the party-lead change that triggered it.
+    public static void ClearLeadership(EventPartySlotSignup signup)
+    {
+        signup.IsPartyLeader = false;
+        signup.IsAllianceLeader = false;
     }
 
     // "Make Me Party Lead": the member — who must already hold a slot in this event
@@ -153,7 +172,9 @@ public static class EventPartySignupService
         }
 
         // Move the crown: clear it from any current holder(s) in this party, set it on
-        // me. `mine` isn't a leader (checked above), so it's never in this set.
+        // me. `mine` isn't a leader (checked above), so it's never in this set. The
+        // outgoing leader also drops the alliance crown if they held it — see
+        // ClearLeadership.
         var currentLeaders = await db.EventPartySlotSignups
             .Where(s => s.EventId == eventId
                         && s.PartySetupSlot!.PartySetupPartyId == partyId
@@ -161,7 +182,7 @@ public static class EventPartySignupService
             .ToListAsync(cancellationToken);
         foreach (var leader in currentLeaders)
         {
-            leader.IsPartyLeader = false;
+            ClearLeadership(leader);
         }
         mine.IsPartyLeader = true;
 
@@ -201,6 +222,14 @@ public static class EventPartySignupService
         if (mine.IsAllianceLeader)
         {
             return new ClaimResult(false, "You're already this alliance's lead 👑.");
+        }
+        // Alliance lead is the party leaders' rung: you lead your party, and one of
+        // the party leaders leads the alliance. Without this a plain member could
+        // crown themselves over three party leaders, and the crown would then have
+        // to survive on someone the party-lead paths have no reason to touch.
+        if (!mine.IsPartyLeader)
+        {
+            return new ClaimResult(false, "Only a party leader can take the alliance lead — make yourself party lead first 👑.");
         }
 
         // Move the crown: clear it from any current holder(s) in this alliance, set it on
@@ -243,6 +272,9 @@ public static class EventPartySignupService
             return new ClaimResult(false, "They're already this party's leader 👑.");
         }
 
+        // As in MakePartyLeaderAsync, the outgoing leader drops the alliance crown
+        // along with the party one — an officer reassigning party lead is exactly
+        // the case where the old lead would otherwise keep a stale alliance crown.
         var currentLeaders = await db.EventPartySlotSignups
             .Where(s => s.EventId == eventId
                         && s.PartySetupSlot!.PartySetupPartyId == partyId
@@ -250,7 +282,7 @@ public static class EventPartySignupService
             .ToListAsync(cancellationToken);
         foreach (var leader in currentLeaders)
         {
-            leader.IsPartyLeader = false;
+            ClearLeadership(leader);
         }
         target.IsPartyLeader = true;
 
@@ -297,6 +329,69 @@ public static class EventPartySignupService
         }
         target.StayNextWindow = !target.StayNextWindow;
         return (true, null, target.StayNextWindow, target.CharacterName);
+    }
+
+    // Clears a windowed camp's roster for a window turnover: every slot signup and every no-slot
+    // attendee goes, EXCEPT rows a member (or officer) pinned with "🔒 Stay Next Window", whose
+    // AppUserEvent participation is spared too. StayNextWindow is deliberately NOT reset — the
+    // lock persists into the next window until the member unlocks, withdraws, or is removed.
+    //
+    // `closingWindow` is the window the roster being wiped BELONGED to (the one that just ended,
+    // not the one now open). Everything seated is copied into EventWindowRosterSnapshot under that
+    // number first, which is what "View Previous Window" reads back — so the capture can never
+    // drift from the wipe, because it happens here or not at all. Pass a number below 1 to skip the
+    // snapshot (a caller with no meaningful window to attribute it to).
+    //
+    // Called by the automatic window advance; the caller decides WHETHER a clear applies (wyrms
+    // only, Standard mode) and owns SaveChanges.
+    public static async Task ClearWindowRosterAsync(
+        ApplicationDbContext db, int eventId, int closingWindow, CancellationToken cancellationToken)
+    {
+        // Walk to the alliance so the snapshot can copy the grouping labels: the party setup is a
+        // reusable template whose slots are REBUILT on edit, so ids captured here would rot.
+        var slotSignups = await db.EventPartySlotSignups
+            .Include(s => s.PartySetupSlot!).ThenInclude(slot => slot.Party!).ThenInclude(p => p.Alliance)
+            .Where(s => s.EventId == eventId)
+            .ToListAsync(cancellationToken);
+
+        if (closingWindow >= 1 && slotSignups.Count > 0)
+        {
+            var capturedAt = DateTime.UtcNow;
+            db.EventWindowRosterSnapshots.AddRange(slotSignups.Select(s => new EventWindowRosterSnapshot
+            {
+                EventId = eventId,
+                WindowNumber = closingWindow,
+                CapturedAtUtc = capturedAt,
+                AllianceName = s.PartySetupSlot?.Party?.Alliance?.Name,
+                AllianceSortOrder = s.PartySetupSlot?.Party?.Alliance?.SortOrder ?? 0,
+                PartyName = s.PartySetupSlot?.Party?.Name,
+                PartySortOrder = s.PartySetupSlot?.Party?.SortOrder ?? 0,
+                SlotSortOrder = s.PartySetupSlot?.SortOrder ?? 0,
+                SlotLabel = s.PartySetupSlot?.Label,
+                AppUserId = s.AppUserId,
+                CharacterName = s.CharacterName,
+                Role = s.Role,
+                MainJob = s.MainJob,
+                SubJob = s.SubJob,
+                IsPartyLeader = s.IsPartyLeader,
+                IsAllianceLeader = s.IsAllianceLeader,
+                WasLocked = s.StayNextWindow,
+            }));
+        }
+
+        var keptSignups = slotSignups.Where(s => s.StayNextWindow).ToList();
+        db.EventPartySlotSignups.RemoveRange(slotSignups.Where(s => !s.StayNextWindow));
+
+        // Spare the participation of anyone whose slot is staying (locked outside/Discord-only
+        // signups have no AppUserEvent, so in practice this only ever keeps account rows).
+        var keptAppUserIds = keptSignups.Where(s => s.AppUserId != null).Select(s => s.AppUserId!).ToHashSet();
+        var keptDiscordIds = keptSignups.Where(s => s.DiscordUserId != null).Select(s => s.DiscordUserId!).ToHashSet();
+        var attendees = await db.AppUserEvents
+            .Where(p => p.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        db.AppUserEvents.RemoveRange(attendees.Where(p =>
+            !(p.AppUserId != null && keptAppUserIds.Contains(p.AppUserId))
+            && !(p.DiscordUserId != null && keptDiscordIds.Contains(p.DiscordUserId))));
     }
 
     // Releases whatever slot the member holds in this event. Returns the party id

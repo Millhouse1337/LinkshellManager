@@ -10,17 +10,28 @@
     // HNM signup boards are roster-only / no-DKP. Offer "HNM" as a create option when the
     // linkshell has opted into HNM Outside Sign Up (parity with the Discord Activity). Always
     // keep it selectable when editing an existing HNM event so its type round-trips on save.
+    // "NM" rides in beside "HNM" and is NOT a separate event type: picking it posts
+    // EventType "HNM" (see the picker JS) and only re-cuts the monster list to the NMs.
+    // The same split the addon's preset panel draws between "HNMS" and "NMS", and the same
+    // one it files both of under EventType "HNM".
     if ((Model.HnmOutsideSignupEnabled
             || string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase))
         && !eventTypeOptions.Contains("HNM"))
     {
         eventTypeOptions.Insert(2, "HNM");
+        eventTypeOptions.Insert(3, "NM");
     }
     var isHnmEvent = string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase);
+    // Which of the two the picker opens on when EDITING an existing camp. The stored type is
+    // "HNM" either way, so the monster is the only thing that can tell them apart -- an
+    // unassigned monster falls to HNM, the tier that owns the plain "HNM" label.
+    var isNmTierEvent = isHnmEvent
+        && !string.IsNullOrWhiteSpace(Model.Event.AssignedMonsterName)
+        && !LinkshellManagerDiscordApp.Services.HnmConfig.IsHnmTierMonster(Model.Event.AssignedMonsterName);
     var isKnownEventType = eventTypeOptions.Any(option =>
         string.Equals(option, currentEventType, StringComparison.OrdinalIgnoreCase));
     var initialPickerValue = string.IsNullOrEmpty(currentEventType) ? string.Empty
-        : (isKnownEventType ? currentEventType : "Other");
+        : (isNmTierEvent ? "NM" : (isKnownEventType ? currentEventType : "Other"));
     var initialOtherValue = isKnownEventType ? string.Empty : currentEventType;
 
     // Edit-mode auto-tick: if we're editing a saved event (Id > 0) and the field is null,
@@ -119,9 +130,12 @@
         <div style="display:flex;gap:8px">
             <select class="form-select" id="hnm-monster-picker" style="flex:1;min-width:0">
                 <option value="" disabled selected="@(string.IsNullOrEmpty(monsterPickerValue))">Select a monster</option>
+                @* data-tier is what the HNM / NM buttons filter on: "hnm" for the wyrms and
+                   the three NQ/HQ families, "nm" for everything else. *@
                 @foreach (var m in Model.MonsterOptions)
                 {
-                    <option value="@m" selected="@(string.Equals(m, monsterPickerValue, StringComparison.OrdinalIgnoreCase))">@m</option>
+                    var tier = LinkshellManagerDiscordApp.Services.HnmConfig.IsHnmTierMonster(m) ? "hnm" : "nm";
+                    <option value="@m" data-tier="@tier" selected="@(string.Equals(m, monsterPickerValue, StringComparison.OrdinalIgnoreCase))">@m</option>
                 }
                 <option value="Other" selected="@(monsterPickerValue == "Other")">Other</option>
             </select>
@@ -208,12 +222,14 @@
     </div>
 
     @{
-        var repeatLeadValue = Model.RepeatLeadHours ?? 1;
         var monsterIsOther = monsterPickerValue == "Other";
     }
     @* HNM signup board: optionally re-post the board before the next predicted pop
        when a new ToD for the monster is recorded. Disabled for a free-text "Other"
-       monster (recurrence needs an exact ToD match). Revealed by the JS for HNM. *@
+       monster (recurrence needs an exact ToD match). Revealed by the JS for HNM.
+       HOW FAR ahead it re-posts is NOT asked here — that's set on the End Camp /
+       Post ToD form, where the officer actually knows the next pop. Asking in both
+       places meant two answers for one setting. *@
     <div class="field" id="hnm-repeat-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column;grid-column:1/-1">
         <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg-2);margin:0">
             <input type="checkbox" name="RepeatOnTod" value="true" id="hnm-repeat-toggle" @(Model.RepeatOnTod ? "checked" : null) />
@@ -221,9 +237,8 @@
             Repeat post when ToD is updated
         </label>
         <span style="font-size:11px;color:var(--fg-4);margin-top:2px">When a new ToD for this monster is recorded, re-post the signup board ahead of the next pop.</span>
-        <div id="hnm-lead-field" style="@(Model.RepeatOnTod ? "display:flex" : "display:none");flex-direction:column;gap:6px;margin-top:8px;max-width:320px">
-            <label for="RepeatLeadHours" style="font-size:12px;color:var(--fg-3);margin:0">Recreate this many hours before pop</label>
-            <input class="form-control" type="number" min="0" max="168" step="1" name="RepeatLeadHours" id="RepeatLeadHours" value="@repeatLeadValue" />
+        <div id="hnm-lead-field" style="@(Model.RepeatOnTod ? "display:block" : "display:none");margin-top:6px">
+            <span style="font-size:11px;color:var(--fg-4)">Set how many hours before the pop it re-posts on the End Camp / Post ToD form.</span>
         </div>
         <small id="hnm-repeat-other-note" style="font-size:11px;color:var(--fg-4);margin-top:6px;@(monsterIsOther ? string.Empty : "display:none")">
             Enter the custom monster name above to enable this. Recurrence re-posts when a new ToD is logged under that exact name.
@@ -304,10 +319,33 @@
             syncRepeatLead();
         }
 
+        // Narrow the monster list to the tier the picker names. Options carry data-tier;
+        // the ones from the other tier are hidden AND disabled, so a keyboard user can't
+        // land on one either. A selection left over from the other tier is cleared rather
+        // than posted -- picking NM must not be able to submit a Behemoth.
+        function filterMonstersByTier(tier) {
+            if (!monsterPicker) return;
+            var cleared = false;
+            for (var i = 0; i < monsterPicker.options.length; i++) {
+                var opt = monsterPicker.options[i];
+                var t = opt.getAttribute('data-tier');
+                if (!t) continue; // the placeholder and the "Other" sentinel belong to both
+                var show = (t === tier);
+                opt.hidden = !show;
+                opt.disabled = !show;
+                if (!show && opt.selected) { opt.selected = false; cleared = true; }
+            }
+            if (cleared) { monsterPicker.value = ''; if (monsterHidden) monsterHidden.value = ''; }
+        }
+
         function applyHnm(isHnm) {
+            var isNmTier = picker.value === 'NM';
             setShown(monsterField, isHnm);
-            setShown(dayField, isHnm);
+            // Day walks the three NQ/HQ families through their pop cycle, so it belongs to
+            // the HNM tier only -- no NM has one.
+            setShown(dayField, isHnm && !isNmTier);
             setShown(repeatField, isHnm);
+            if (isHnm) filterMonstersByTier(isNmTier ? 'nm' : 'hnm');
             // These are hidden for HNM (the server nulls/zeros them server-side).
             setShown(endField, !isHnm);
             setShown(durField, !isHnm);
@@ -323,6 +361,13 @@
             if (picker.value === 'Other') {
                 other.style.display = '';
                 hidden.value = other.value;
+            } else if (picker.value === 'NM') {
+                // NM is a tier, not a type: the camp is stored as "HNM" like every other
+                // one. A stored "NM" would fall out of every HNM path at once -- the board's
+                // window controls, the timed window auto-advance, the HNM DKP pool, and any
+                // Discord channel route filtered on HNM.
+                other.style.display = 'none';
+                hidden.value = 'HNM';
             } else {
                 other.style.display = 'none';
                 hidden.value = picker.value;

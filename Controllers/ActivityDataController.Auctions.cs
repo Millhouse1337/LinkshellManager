@@ -221,9 +221,7 @@ public sealed partial class ActivityDataController
             .Sum(item => item.GilAmount!.Value);
         if (requestedGil > 0)
         {
-            var availableGil = await _dbContext.RevenueEntries
-                .Where(entry => entry.LinkshellId == request.LinkshellId)
-                .SumAsync(entry => entry.EntryType == "Expense" ? -entry.Value : entry.Value, cancellationToken);
+            var availableGil = await _treasury.GetCashOnHandAsync(request.LinkshellId, cancellationToken);
             if (availableGil <= 0)
             {
                 return BadRequest(new { error = "This linkshell has no gil in its treasury to auction." });
@@ -490,13 +488,19 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = $"Bid amount cannot exceed {MaxBidAmount:N0}." });
         }
 
-        // Starting bid is a suggested opening, not a floor: the first bid is
-        // accepted at any positive amount. After that, each bid must beat the
-        // current high by at least 1.
+        // Starting bid is the floor — no bid may come in under it. After that, each
+        // bid must also beat the current high by at least 1.
         var currentHigh = auctionItem.CurrentHighestBid ?? 0;
-        if (currentHigh > 0 && bidAmount <= currentHigh)
+        var startingBid = auctionItem.StartingBidDkp ?? 0;
+        var minimumBid = Math.Max(startingBid, currentHigh + 1);
+        if (bidAmount < minimumBid)
         {
-            return BadRequest(new { error = $"Bid amount must be greater than the current high bid of {currentHigh}." });
+            return BadRequest(new
+            {
+                error = currentHigh > 0 && minimumBid == currentHigh + 1
+                    ? $"Bid amount must be greater than the current high bid of {currentHigh}."
+                    : $"Bid amount must be at least the starting bid of {startingBid} DKP."
+            });
         }
 
         // Available = the balance in the auction's DKP pool, minus DKP locked by bids the user is
@@ -696,23 +700,28 @@ public sealed partial class ActivityDataController
                     SourceAuctionHistory: history),
                 cancellationToken);
 
-            // Gil auctions pay out of the treasury: record the listed gil as a
-            // negative RevenueEntry so it appears in revenue and lowers the total.
+            // Gil auctions pay out of the treasury. The amount is POSITIVE and the direction lives in
+            // which categories the two halves name — the old row stored a negative value and an
+            // "Auction Payout" type, a third vocabulary in a column that already held two.
+            //
+            // The winner goes on the counterparty of the gil-paid-to-members half, which is where
+            // "who did we pay" belongs. The old row put the winner's name in CreatedByCharacterName,
+            // conflating the person paid with the person who recorded it.
             if (item.GilAmount.HasValue && item.GilAmount.Value > 0)
             {
-                _dbContext.RevenueEntries.Add(new RevenueEntry
-                {
-                    LinkshellId = auction.LinkshellId,
-                    LinkshellName = auction.Linkshell?.LinkshellName,
-                    EntryType = "Auction Payout",
-                    Category = "Gil",
-                    Value = -item.GilAmount.Value,
-                    Details = $"Gil auction: {item.ItemName} won by {winnerMembership.CharacterName} for {winningBid} DKP.",
-                    OccurredAt = closedAt,
-                    CreatedByAppUserId = appUser.Id,
-                    CreatedByCharacterName = winnerMembership.CharacterName,
-                    CreatedAt = closedAt
-                });
+                await _treasuryJournal.RecordAsync(
+                    auction.LinkshellId,
+                    new TreasuryEntryRequest(
+                        TreasuryTransactionKinds.PaidGilToMember,
+                        item.GilAmount.Value,
+                        closedAt,
+                        Memo: $"Gil auction: {item.ItemName} won by {winnerMembership.CharacterName} for {winningBid} DKP.",
+                        CounterpartyAppUserId: winnerMembership.AppUserId,
+                        CounterpartyCharacterName: winnerMembership.CharacterName,
+                        Source: JournalEntrySources.GilAuction,
+                        SourceAuctionItemId: item.Id),
+                    new TreasuryActor(appUser.Id, appUser.CharacterName),
+                    cancellationToken);
             }
         }
 

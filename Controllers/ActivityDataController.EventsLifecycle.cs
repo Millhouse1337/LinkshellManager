@@ -107,12 +107,20 @@ public sealed partial class ActivityDataController
             {
                 eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);
             }
-            eventEntity.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+            // Seed the built-in per-monster window count + Manual Check In stamp.
+            await HnmEventSeeder.SeedHnmEventAsync(_dbContext, eventEntity, null, monsterName, cancellationToken);
             eventEntity.EndTime = null;
             eventEntity.Duration = null;
             eventEntity.DkpPerHour = 0;
             eventEntity.AutoStart = false;
             eventEntity.CountsTowardActive = false;
+            // Per-camp bonus overrides are HNM-only, so they're stamped here rather than in the
+            // initializer above — a non-HNM event can't carry them even if a client sends them.
+            eventEntity.HnmOpenBonusOverride = NormalizeBonusOverride(request.HnmOpenBonusOverride);
+            eventEntity.HnmCloseBonusOverride = NormalizeBonusOverride(request.HnmCloseBonusOverride);
+            eventEntity.HnmClaimBonusOverride = NormalizeBonusOverride(request.HnmClaimBonusOverride);
+            eventEntity.HnmKillBonusOverride = NormalizeBonusOverride(request.HnmKillBonusOverride);
+            eventEntity.HnmPerWindowOverride = NormalizeBonusOverride(request.HnmPerWindowOverride);
         }
 
         _dbContext.Events.Add(eventEntity);
@@ -121,9 +129,11 @@ public sealed partial class ActivityDataController
         // Repeat-on-ToD: persist/refresh the recurring-board template so the board
         // re-posts before the next predicted pop. Works for a custom monster too —
         // recurrence keys on the (case-insensitive) AssignedMonsterName the ToD records.
+        // Lead is null on purpose: this form only toggles recurrence, and UpsertAsync keeps
+        // whatever lead the End Camp / Post ToD form last set.
         if (isHnm && request.RepeatOnTod)
         {
-            await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, request.RepeatLeadHours, appUser.Id, cancellationToken);
+            await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, null, appUser.Id, cancellationToken);
         }
         else if (isHnm && !request.RepeatOnTod)
         {
@@ -261,7 +271,7 @@ public sealed partial class ActivityDataController
             if (!string.IsNullOrWhiteSpace(monsterName))
             {
                 eventEntity.AssignedMonsterName = monsterName;
-                eventEntity.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+                eventEntity.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
                 if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
                 {
                     eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);
@@ -273,6 +283,13 @@ public sealed partial class ActivityDataController
             eventEntity.DkpPerHour = 0;
             eventEntity.AutoStart = false;
             eventEntity.CountsTowardActive = false;
+            // Sent on every edit (the form round-trips them), so a null here means the user
+            // closed "Change DKP" and wants the linkshell default back, not "leave as-is".
+            eventEntity.HnmOpenBonusOverride = NormalizeBonusOverride(request.HnmOpenBonusOverride);
+            eventEntity.HnmCloseBonusOverride = NormalizeBonusOverride(request.HnmCloseBonusOverride);
+            eventEntity.HnmClaimBonusOverride = NormalizeBonusOverride(request.HnmClaimBonusOverride);
+            eventEntity.HnmKillBonusOverride = NormalizeBonusOverride(request.HnmKillBonusOverride);
+            eventEntity.HnmPerWindowOverride = NormalizeBonusOverride(request.HnmPerWindowOverride);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -285,7 +302,7 @@ public sealed partial class ActivityDataController
         {
             if (request.RepeatOnTod)
             {
-                await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, request.RepeatLeadHours, appUser.Id, cancellationToken);
+                await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, null, appUser.Id, cancellationToken);
             }
             else
             {
@@ -327,17 +344,15 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // HNM events run on the in-game addon's window timing — start events
-        // for them must come from the addon (POST /api/addon/events/{id}/start),
-        // never the Activity / web app, otherwise the post-by-window roster
-        // workflow gets out of sync. Reject up front with a clear message the
-        // UI can surface.
-        if (string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        // HNM camps auto-start at their scheduled window-1 pop (EventAutoStartBackgroundService),
+        // but an officer may also start one early by hand here — the window advancer keys off the
+        // scheduled anchor either way, and the addon's own start (CommencementStartTime ??=) stays
+        // a no-op once we've commenced. Stamp the window anchor from the scheduled time so an early
+        // manual start doesn't shift the cadence.
+        var isHnmEvent = string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        if (isHnmEvent)
         {
-            return BadRequest(new
-            {
-                error = "HNM events are started with the in-game addon. Use the Att launcher to start this event."
-            });
+            eventEntity.WindowAnchorAt ??= eventEntity.StartTime;
         }
 
         var absentIds = request?.AbsentParticipantIds;
@@ -399,6 +414,18 @@ public sealed partial class ActivityDataController
         if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
             return Forbid();
+        }
+
+        // Manual Check In camps end through the camp path — a normal end pays HNM boards 0 DKP and
+        // would discard the check-in credit. Hands the roster to the Event System page's attendance sections for review
+        // (an officer's Post is what credits DKP) and recycles the board.
+        if (string.Equals(eventEntity.AttendanceMode, HnmAttendanceModes.Wd, StringComparison.OrdinalIgnoreCase)
+            && eventEntity.WdFinalizedAt is null)
+        {
+            var finalized = HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))
+                    is HnmCampReviewHandoffService handoff
+                && await handoff.HandOffAndRecycleAsync(eventEntity.Id, cancellationToken);
+            return Ok(new { success = true, finalized });
         }
 
         // Can't end while attendees are still pending confirmation (IsVerified == null).
@@ -465,6 +492,31 @@ public sealed partial class ActivityDataController
         // The event's type decides which DKP pool it pays INTO and which pool its loot is paid
         // OUT of — resolved once, not per participant. Mirrors the web EndEventCoreAsync.
         var eventPool = DkpPoolRef.Derived(eventEntity.EventType);
+        // Windowed events (HNM Style / Claim/Kill) award DKP per WINDOW ATTENDED, not per hour of
+        // presence: DkpPerHour is reused as DkpPerWindow when WindowCount > 1. Counted once up
+        // front so the loop below can read from a dictionary.
+        //
+        // This block is a deliberate mirror of EventController.EndEventCoreAsync — including its
+        // window-count expression, which is the CREDIT chain (WindowCountOverride ?? EventName).
+        // Do not swap it for the display chain or for EventBreakPolicy.GatingWindowCount: the two
+        // end-event paths must agree exactly, and a third variant is how they drifted apart in the
+        // first place. This endpoint had no windowed branch at all, so a windowed camp closed from
+        // the Activity's "End event" button was paid durationHours × DkpPerWindow — a figure with
+        // no relation to windows attended, and the one place in the app where break state still
+        // moved windowed DKP.
+        var windowCount = eventEntity.WindowCountOverride
+            ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventEntity.EventName);
+        var isWindowed = windowCount > 1;
+        // AppUserEventId is nullable since snapshots outlive a cleared roster (see
+        // AppUserEventWindow); orphans can't be credited through a participation. Same filter as
+        // EventController.EndEventCoreAsync — keep the two identical.
+        Dictionary<int, int> windowsAttendedByParticipationId = isWindowed
+            ? await _dbContext.AppUserEventWindows
+                .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id && w.AppUserEventId != null)
+                .GroupBy(w => w.AppUserEventId!.Value)
+                .Select(g => new { ParticipationId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.ParticipationId, x => x.Count, cancellationToken)
+            : new Dictionary<int, int>();
         // One account = one history/ledger row. There is no DB uniqueness on AppUserEvent, so
         // an account can hold two participations for an event (e.g. a website join under the
         // main name + an addon post under an alt). Emitting a history row per participation
@@ -488,10 +540,22 @@ public sealed partial class ActivityDataController
             }
 
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
-            // Pay DKP for the ACTUAL time present, snapping the DKP value (not the
-            // duration) to the linkshell's increment. Rounding the duration first
-            // floored sub-quarter-hour events to 0h and paid present members 0 DKP.
-            var eventDkp = isLootCouncil ? 0 : DkpRounding.Round(durationHours * (eventEntity.DkpPerHour ?? 0), roundingStep);
+            // Timed events pay for the ACTUAL time present, snapping the DKP value (not the
+            // duration) to the linkshell's increment. Rounding the duration first floored
+            // sub-quarter-hour events to 0h and paid present members 0 DKP.
+            //
+            // Windowed events pay per window attended instead — durationHours is still stamped
+            // onto the history row below for display, but it must not reach the payout, or break
+            // state (which CalculateAccumulatedDurationHours honours) would move windowed DKP.
+            // Matches EventController.EndEventCoreAsync exactly.
+            var eventDkp = isLootCouncil
+                ? 0
+                : EventAttendanceDkpCalculator.Compute(
+                    isWindowed,
+                    windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0),
+                    durationHours,
+                    eventEntity.DkpPerHour ?? 0,
+                    roundingStep);
 
             participation.Duration = durationHours;
             participation.EventDkp = eventDkp;
@@ -712,5 +776,69 @@ public sealed partial class ActivityDataController
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
+    }
+
+    // Hard-deletes an HNM camp outright — no ToD, no repop, no history, no DKP. This is the "discard
+    // this board" path the Activity's live camp card exposes: End Camp requires a Time of Death, this
+    // doesn't. Unlike Cancel it also works on a LIVE camp (Cancel refuses commenced events). Officer-
+    // gated and scoped to HNM so a real event's DKP/history can't be silently thrown away. Mirrors
+    // Cancel's cleanup: participants + loot details are removed explicitly (loot is SetNull on Event
+    // delete, so it must be); removing the Event cascades slot signups, attendance windows, and
+    // status-ledger rows. (The posted Discord board message, if any, is left inert — same as Cancel.)
+    [HttpPost("events/{eventId:int}/delete")]
+    public async Task<IActionResult> DeleteEventAsync(int eventId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to delete events."
+            });
+        }
+
+        var eventEntity = await _dbContext.Events
+            .Include(evt => evt.AppUserEvents)
+            .Include(evt => evt.EventLootDetails)
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                error = "Only HNM camps can be deleted here. Use Cancel (queued) or End (live) for other events."
+            });
+        }
+
+        _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
+        _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
+        _dbContext.Events.Remove(eventEntity);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // A per-camp HNM bonus override as it should be stored: null (use the linkshell default)
+    // or a non-negative amount. Clamping here rather than trusting the client keeps
+    // HnmStandardCampFinalizer's Math.Max from being the only thing standing between a
+    // negative payload and a camp that DEDUCTS DKP.
+    private static double? NormalizeBonusOverride(double? value)
+    {
+        if (value is null || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+        {
+            return null;
+        }
+        return Math.Max(0d, value.Value);
     }
 }

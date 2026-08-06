@@ -7,10 +7,13 @@
         <div class="section-head-right">
           <span class="tag default">{{ liveEvents().length }} live</span>
           <span class="tag default">{{ queuedEvents().length }} queued</span>
+          @if (liveAttendanceEvents().length > 0) {
+            <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
+          }
         </div>
       </div>
 
-      @if (liveEvents().length === 0) {
+      @if (showNoLiveActivity()) {
         <div class="card">
           <div class="empty-state">
             <div class="empty-state-icon">
@@ -20,8 +23,12 @@
             <div class="empty-state-desc">Start a queued event or create a new one below to begin.</div>
           </div>
         </div>
-      } @else {
-        @for (event of liveEvents(); track event.id) {
+      }
+
+      <!-- Camps first (they're the ticking surface), then attendance events (review work). This loop
+           is UNCONDITIONAL rather than the @else of the empty state above: attendance cards have to
+           render when there are zero live camps, which is the common case between pops. -->
+      @for (event of liveEvents(); track event.id) {
           <article class="event-card event-card--live"
                    [class.event-card--collapsed]="isLiveEventCollapsed(event.id)">
             <div class="event-card__hero">
@@ -31,7 +38,7 @@
                   <span class="tag success">Live</span>
                 </div>
                 <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
-                @if (activity.formatDateTime(event.commencementStartTime || event.startTime); as liveStart) {
+                @if (activity.formatDateTime(isHnmEvent(event) ? (event.startTime || event.commencementStartTime) : (event.commencementStartTime || event.startTime)); as liveStart) {
                   <p class="event-card__when">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                     Started {{ liveStart }}
@@ -44,19 +51,52 @@
                   <p class="event-card__actor"><span class="event-card__actor-label">Event Starter:</span> {{ event.starterCharacterName }}</p>
                 }
               </div>
-              <div class="event-card__global-timer">
-                <span class="event-card__global-timer-label">Global timer</span>
-                <span class="num event-card__global-timer-value">{{ liveEventTimerLabel(event) }}</span>
-              </div>
+              @if (isHnmEvent(event)) {
+                <div class="event-card__global-timer">
+                  <span class="event-card__global-timer-label">{{ campWindowLabel(event) }}</span>
+                  <span class="num event-card__global-timer-value">{{ campWindowStatus(event) }}</span>
+                </div>
+              } @else {
+                <div class="event-card__global-timer">
+                  <span class="event-card__global-timer-label">Global timer</span>
+                  <span class="num event-card__global-timer-value">{{ liveEventTimerLabel(event) }}</span>
+                </div>
+              }
               <div class="event-card__meta">
                 <span class="event-card__metric">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                   {{ event.participantCount }} participants
                 </span>
-                <span class="event-card__metric num">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  {{ event.dkpPerHour ?? 0 }} DKP/hour
-                </span>
+                @if (!isHnmEvent(event)) {
+                  <span class="event-card__metric num">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    {{ event.dkpPerHour ?? 0 }} DKP/hour
+                  </span>
+                }
+                @if (isHnmEvent(event) && canManageLinkshell(event.linkshellId)) {
+                  <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                    [disabled]="activity.busyEventId() === event.id"
+                    (click)="openEndCamp(event)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4M4 4h13l-2 4 2 4H4"/></svg>
+                    🏁 End Camp/Post ToD
+                  </button>
+                }
+                @if (isHnmEvent(event) && canManageLinkshell(event.linkshellId)) {
+                  @if (pendingDeleteEventId() === event.id) {
+                    <span style="font-size:12px;color:var(--fg-2)">Delete this camp entirely? No ToD, no history — the board and its sign-ups are removed.</span>
+                    <button type="button" class="btn danger-fill sm"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="confirmDeleteCamp(event.id)">Confirm delete</button>
+                    <button type="button" class="btn ghost sm" (click)="abortDeleteCamp()">Keep</button>
+                  } @else {
+                    <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                      [disabled]="activity.busyEventId() === event.id"
+                      (click)="requestDeleteCamp(event.id)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      🗑 Delete Camp
+                    </button>
+                  }
+                }
                 @if (canManageLinkshell(event.linkshellId)) {
                   <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                     [disabled]="activity.busyEventId() === event.id"
@@ -71,7 +111,12 @@
                     {{ isAddMemberExpanded(event.id) ? 'Hide Add Member' : 'Add a Member' }}
                   </button>
                 }
-                @if (isParticipant(event)) {
+                <!-- Withdraw parks a LIVE member in the Break Room, which a windowed camp has no
+                     concept of — so it's hidden once such a camp starts. Pre-start it's still
+                     offered (cancelling a signup is safe and useful). Plain-removing them instead
+                     is not an option: AppUserEventWindow cascade-deletes with the participation
+                     row, which would destroy the window credit they already earned. -->
+                @if (isParticipant(event) && (supportsBreakRoom(event) || !event.commencementStartTime)) {
                   @if (pendingWithdrawEventId() === event.id) {
                     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:480px">
                       <span style="font-size:12px;color:var(--fg-2)">{{ event.commencementStartTime
@@ -207,84 +252,327 @@
             }
 
             @if (event.windowCount > 1) {
+              <!-- Leftover break state from a build before windowed camps refused break-creating
+                   actions. Undo-only and self-erasing: it disappears once the last row is cleared,
+                   and there is no way from here to put anyone back on break. Reuses the existing
+                   force-resume endpoint, which stays callable on windowed events precisely so this
+                   can rescue them. -->
+              @if (canManageLinkshell(event.linkshellId) && stuckBreakParticipants(event).length > 0) {
+                <section class="event-section">
+                  <div class="event-section__header">
+                    <h3>Stuck break state</h3>
+                    <span class="tag default num">{{ stuckBreakParticipants(event).length }}</span>
+                  </div>
+                  <p class="notice">
+                    These members are stuck in a Break Room state left over from an earlier build.
+                    Windowed camps credit per posted window and have no breaks — clearing this is
+                    safe and doesn't affect their attendance.
+                  </p>
+                  <ul class="participant-list">
+                    @for (participant of stuckBreakParticipants(event); track participant.id) {
+                      <li>
+                        <div class="participant-list__copy">
+                          <strong>{{ participant.characterName || 'Unknown member' }}</strong>
+                          <span>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</span>
+                        </div>
+                        <button type="button" class="btn ghost sm"
+                          [disabled]="activity.busyEventId() === event.id"
+                          (click)="activity.resumeParticipantFromBreak(event.id, participant.id)">
+                          Clear break state
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+
               <section class="event-section">
                 <div class="event-section__header">
                   <h3>Attendance Windows</h3>
-                  <span class="tag default num">{{ attendanceWindowsFor(event).length }} of {{ event.windowCount }}</span>
+                  <!-- Counted against the POST count, not the spawn count: these tabs are roster
+                       reads, so a Standard king/dragon is "1 of 2", not "1 of 7". -->
+                  <span class="tag default num">{{ attendanceWindowsFor(event).length }} of {{ postCount(event) }}</span>
                 </div>
+
+                <!-- Manual Check In credits from Check In / Check Out only; WdCampFinalizer never
+                     reads these rows. Say so, or an officer reasonably assumes a missing snapshot
+                     cost someone DKP. -->
+                @if (isWdCamp(event)) {
+                  <p class="notice">
+                    Informational only — DKP comes from Check In / Check Out. These snapshots record
+                    who was actually at camp each window, so you can correct a bad check-in by hand.
+                  </p>
+                }
 
                 @if (!hasAttendanceWindows(event)) {
                   <p class="notice">Tabs will appear here as windows are posted from the lsm addon.</p>
                 } @else {
+                  <!-- One tab per window the camp has SAT THROUGH. A window that was reached but
+                       never posted is dimmed rather than dropped: the gap is what tells an officer
+                       to go back and file one, and hiding it made a half-covered camp read as a
+                       complete one. -->
                   <ul class="attendance-window-tabs">
-                    @for (window of attendanceWindowsFor(event); track window.id) {
+                    @for (tab of attendanceWindowTabs(event); track tab.sequenceNumber) {
                       <li>
                         <button type="button"
                                 class="attendance-window-tab"
-                                [class.is-active]="isActiveAttendanceWindow(event, window)"
-                                (click)="setActiveAttendanceWindow(event.id, window.sequenceNumber)">
-                          {{ attendanceWindowLabel(window) }}
-                          <span class="tag default num">{{ window.attendees.length }}</span>
+                                [class.is-active]="isActiveAttendanceWindow(event, tab)"
+                                [class.is-missed]="!tab.window"
+                                (click)="setActiveAttendanceWindow(event.id, tab.sequenceNumber)">
+                          {{ tab.label }}
+                          <span class="tag default num">{{ tab.attendeeCount }}</span>
                         </button>
                       </li>
                     }
                   </ul>
 
+                  @if (activeAttendanceWindowTab(event); as activeTab) {
+                    @if (!activeTab.window) {
+                      <div class="attendance-window-pane">
+                        <p class="notice">
+                          No roster was posted for {{ activeTab.label }} — this window came and went
+                          without a snapshot. Post it from the lsm addon's window tab to record who
+                          was there.
+                        </p>
+                      </div>
+                    }
+                  }
+
                   @if (activeAttendanceWindow(event); as activeWindow) {
                     <div class="attendance-window-pane">
                       <div class="attendance-window-pane__meta">
                         Posted {{ activeWindow.postedAt | date:'short' }}
+                        <!-- Price ONE window by hand, for when the camp's open / close bonuses
+                             aren't the right answer for it ("we sat this window two hours and the
+                             pop was a no-show"). Standard camps only: WdCampFinalizer credits the
+                             check-in range and never reads this column, which is what the notice
+                             at the top of this card already tells the officer. -->
+                        @if (canManageLinkshell(event.linkshellId) && !isWdCamp(event)) {
+                          <span class="window-dkp-edit">
+                            <label [attr.for]="'window-dkp-' + activeWindow.id">DKP this window</label>
+                            <input type="number" step="0.25" min="0" class="input num"
+                                   [id]="'window-dkp-' + activeWindow.id"
+                                   [value]="windowDkpDraft(activeWindow)"
+                                   (input)="setWindowDkpDraft(activeWindow, $event)"
+                                   placeholder="default" />
+                            <button type="button" class="btn ghost sm" [disabled]="windowDkpSaving()"
+                                    (click)="saveWindowDkp(activeWindow)">Apply</button>
+                            @if (activeWindow.dkpAmount != null) {
+                              <button type="button" class="btn ghost sm" [disabled]="windowDkpSaving()"
+                                      (click)="clearWindowDkp(activeWindow)">Use default</button>
+                            }
+                          </span>
+                        }
                       </div>
                       @if (activeWindow.attendees.length === 0) {
                         <p class="notice">No attendees recorded for this window.</p>
                       } @else {
-                        <ul class="participant-list">
-                          @for (attendee of activeWindow.attendees; track attendee.id) {
-                            <li>
-                              <div class="participant-list__copy">
-                                <strong>{{ attendee.characterName || 'Unknown attendee' }}</strong>
-                                <span>{{ attendee.jobName || 'Job' }}/{{ attendee.subJobName || 'Sub' }}</span>
-                                <div class="live-metrics">
-                                  <span class="tag default num">Verified {{ attendee.verifiedAt | date:'shortTime' }}</span>
-                                  @if (attendee.verifiedBy) {
-                                    <span class="tag default">by {{ attendee.verifiedBy }}</span>
-                                  }
-                                </div>
-                              </div>
-                              @if (canManageLinkshell(event.linkshellId)) {
-                                <div class="participant-list__actions">
-                                  @if (pendingRemoveAttendeeId() === attendee.id) {
-                                    <button type="button" class="btn danger-fill sm"
-                                      (click)="confirmRemoveAttendee(attendee.id)">
-                                      Confirm
-                                    </button>
-                                    <button type="button" class="btn ghost sm"
-                                      (click)="abortRemoveAttendee()"
-                                      style="margin-left:6px">
-                                      Keep
-                                    </button>
-                                  } @else {
-                                    <button type="button" class="btn ghost sm"
-                                      (click)="requestRemoveAttendee(attendee.id)">
-                                      Remove
-                                    </button>
-                                  }
-                                </div>
+                        <!-- Character / Jobs / Zone, matching how a snapshot renders in the
+                             Event System. The two are the same roster seen from two sides, so
+                             reading them in two different shapes made comparing them work. -->
+                        <div class="roster-table__scroll">
+                          <table class="roster-table">
+                            <thead>
+                              <tr>
+                                <th>Character</th>
+                                <th>Jobs</th>
+                                <th>Zone</th>
+                                <th class="num">DKP</th>
+                                <th class="num"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (attendee of activeWindow.attendees; track attendee.id) {
+                                <tr>
+                                  <td><strong>{{ attendee.characterName || 'Unknown attendee' }}</strong></td>
+                                  <td>
+                                    @if (attendee.jobName) {
+                                      <span class="job-pill">{{ attendee.jobName }}</span>
+                                    }
+                                    @if (attendee.subJobName) {
+                                      <span class="job-pill job-pill--sub">{{ attendee.subJobName }}</span>
+                                    }
+                                    @if (!attendee.jobName && !attendee.subJobName) {
+                                      <span class="roster-muted">Anon</span>
+                                    }
+                                  </td>
+                                  <td>
+                                    <ng-container *ngTemplateOutlet="zoneCell; context: { zone: attendee.zone }" />
+                                  </td>
+                                  <!-- What this window paid THIS attendee. Null (an em dash) is a real
+                                       answer here, not missing data: a middle window on a Standard camp
+                                       pays nobody, and a scanned player who never checked in on a Manual
+                                       Check In camp is paid nothing for standing there. -->
+                                  <td class="num">{{ attendanceWindowDkpLabel(event, activeWindow, attendee) }}</td>
+                                  <td class="num">
+                                    @if (canManageLinkshell(event.linkshellId)) {
+                                      @if (pendingRemoveAttendeeId() === attendee.id) {
+                                        <button type="button" class="btn danger-fill sm"
+                                          (click)="confirmRemoveAttendee(attendee.id)">
+                                          Confirm
+                                        </button>
+                                        <button type="button" class="btn ghost sm"
+                                          (click)="abortRemoveAttendee()"
+                                          style="margin-left:6px">
+                                          Keep
+                                        </button>
+                                      } @else {
+                                        <button type="button" class="btn ghost sm"
+                                          (click)="requestRemoveAttendee(attendee.id)">
+                                          Remove
+                                        </button>
+                                      }
+                                    }
+                                  </td>
+                                </tr>
                               }
-                            </li>
+                            </tbody>
+                          </table>
+                        </div>
+                        <!-- Without this the DKP column is a bare number with no stated rule behind
+                             it. Says which gate the window pays on, what it totals, and that the
+                             claim / kill bonuses aren't in there — those land at End Camp. -->
+                        <p class="muted late-join-foot">
+                          {{ attendanceWindowDkpNote(event, activeWindow) }} ·
+                          <strong>{{ attendanceWindowDkpTotal(event, activeWindow) | number:'1.0-2' }} DKP</strong>
+                          this window
+                          <br />
+                          Claim and kill bonuses are added at End Camp and aren't included above.
+                        </p>
+                        <div class="attendance-window-pane__meta">
+                          Verified {{ activeWindow.attendees[0].verifiedAt | date:'shortTime' }}
+                          @if (activeWindow.attendees[0].verifiedBy) {
+                            · by {{ activeWindow.attendees[0].verifiedBy }}
                           }
-                        </ul>
+                        </div>
                       }
                     </div>
                   }
+                }
+
+                <!-- Snapshots an officer attached to this camp from the Event System's
+                     unlinked list. Read-only here: the link is presentational, and the
+                     roster it pays out of is still edited over there. -->
+                @if (linkedSnapshotsFor(event).length > 0) {
+                  <div class="linked-snapshots">
+                    <div class="linked-snapshots__header">
+                      <h4>Linked Snapshots</h4>
+                      <span class="tag default num">{{ linkedSnapshotsFor(event).length }}</span>
+                    </div>
+                    @for (snapshot of linkedSnapshotsFor(event); track snapshot.id) {
+                      <div class="linked-snapshots__item">
+                        <div class="linked-snapshots__meta">
+                          @if (snapshot.windowLabel) {
+                            <span class="tag default">{{ snapshot.windowLabel }}</span>
+                          }
+                          <strong>{{ snapshot.capturedAtUtc | date:'short' }}</strong>
+                          <span class="roster-muted">
+                            · posted by {{ snapshot.capturedByCharacterName || '-' }}
+                            · {{ snapshot.entries.length }}
+                            {{ snapshot.entries.length === 1 ? 'member' : 'members' }}
+                          </span>
+                          @if (snapshot.snapshotStatus !== 'Active') {
+                            <span class="tag warning">{{ snapshot.snapshotStatus }}</span>
+                          }
+                        </div>
+                        <div class="roster-table__scroll">
+                          <table class="roster-table">
+                            <thead>
+                              <tr>
+                                <th>Character</th>
+                                <th>Jobs</th>
+                                <th>Zone</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (entry of snapshot.entries; track entry.id) {
+                                <!-- Tinted: a name an officer asserted must never read as one
+                                     the addon actually scanned. -->
+                                <tr [class.roster-row--manual]="entry.addedManually">
+                                  <td><strong>{{ entry.characterName }}</strong></td>
+                                  <td>
+                                    @if (entry.mainJob) {
+                                      <span class="job-pill">{{ entry.mainJob }}{{ entry.mainJobLevel ? ' ' + entry.mainJobLevel : '' }}</span>
+                                    }
+                                    @if (entry.subJob) {
+                                      <span class="job-pill job-pill--sub">{{ entry.subJob }}{{ entry.subJobLevel ? ' ' + entry.subJobLevel : '' }}</span>
+                                    }
+                                    @if (!entry.mainJob && !entry.subJob && !entry.addedManually) {
+                                      <span class="roster-muted">Anon</span>
+                                    }
+                                  </td>
+                                  <td>
+                                    <ng-container *ngTemplateOutlet="zoneCell; context: { zone: entry.zone }" />
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- Claim shield: who from the linkshell actually landed an action
+                     on the mob before the lottery resolved. Sits at the BOTTOM of
+                     this card, after the windows, because it is evidence about the
+                     same camp — and its timestamp comes from the game, so it dates
+                     the window rather than the other way round. -->
+                @if (claimShieldsFor(event).length > 0) {
+                  <div class="claim-shield">
+                    <div class="claim-shield__header">
+                      <h4>Claim Shield</h4>
+                      <span class="tag default num">{{ claimShieldsFor(event).length }}</span>
+                    </div>
+                    @for (capture of claimShieldsFor(event); track capture.id) {
+                      <div class="claim-shield__capture">
+                        <div class="claim-shield__result">
+                          <span class="tag" [class.success]="capture.won" [class.danger]="!capture.won">
+                            {{ capture.won ? 'WON' : 'LOST' }}
+                          </span>
+                          <strong>{{ capture.monsterName }}</strong>
+                          <span class="claim-shield__meta">
+                            {{ capture.capturedAtUtc | date:'short' }}
+                            · {{ capture.members.length }} of ours
+                            · {{ capture.totalPlayers }} in the lottery
+                          </span>
+                          @if (capture.nearestWindowSequence !== null) {
+                            <span class="tag default num">{{ claimWindowLabel(event, capture) }}</span>
+                          }
+                        </div>
+                        @if (capture.members.length === 0) {
+                          <p class="notice">No linkshell member landed an action before the lottery resolved.</p>
+                        } @else {
+                          <ul class="claim-shield__members">
+                            @for (member of capture.members; track member.characterName) {
+                              <li>
+                                <!-- The sentence IS the record. Falling back to the bare
+                                     name only happens on captures from before actions
+                                     were stored. -->
+                                <span class="claim-shield__action">
+                                  {{ member.actionMessage || member.characterName }}
+                                </span>
+                                @if (!member.matched) {
+                                  <span class="tag default">not on roster</span>
+                                }
+                              </li>
+                            }
+                          </ul>
+                        }
+                      </div>
+                    }
+                  </div>
                 }
               </section>
             }
 
             <!-- Attendance / Active Room / Break Room are sign-up + verify-cycle UX
                  that doesn't apply to HNM-style events; the Attendance Windows card
-                 above is the source of truth for those. -->
-            @if (event.windowCount <= 1) {
+                 above is the source of truth for those. Gated on the SERVER's
+                 EventBreakPolicy rather than a local windowCount test, so this can't
+                 render a break control the endpoints would reject. -->
+            @if (supportsBreakRoom(event)) {
             <section class="event-section">
               <div class="event-section__header">
                 <h3>Lobby</h3>
@@ -559,6 +847,85 @@
               }
             </section>
 
+            <!-- Manual Check In camps use this section for a different job: who checked in
+                 after the camp opened, and what they have earned so far. Members self-serve
+                 their own check-in there, so a join form would be the wrong control. -->
+            @if (isWdCamp(event)) {
+            <section class="event-section event-section--late-join">
+              <div class="event-section__header">
+                <div>
+                  <h3>Late Join</h3>
+                  <p class="muted">
+                    Members who checked in after the camp opened. DKP shown is what each has
+                    earned so far and rises as windows pass.
+                  </p>
+                </div>
+                <span class="tag default num">{{ wdLateArrivals(event).length }}</span>
+              </div>
+
+              @if (wdLateArrivals(event).length === 0) {
+                <p class="notice">
+                  No late arrivals — everyone checked in at the open.
+                </p>
+              } @else {
+                <div class="roster-table__scroll">
+                  <table class="roster-table">
+                    <thead>
+                      <tr>
+                        <th>Character</th>
+                        <th>Jobs</th>
+                        <th>Joined</th>
+                        <th class="num">Windows</th>
+                        <th class="num">DKP so far</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (participant of wdLateArrivals(event); track participant.id) {
+                        <tr>
+                          <td><strong>{{ participant.characterName || 'Unknown' }}</strong></td>
+                          <td>
+                            @if (participant.jobName) {
+                              <span class="job-pill">{{ participant.jobName }}</span>
+                            }
+                            @if (participant.subJobName) {
+                              <span class="job-pill job-pill--sub">{{ participant.subJobName }}</span>
+                            }
+                            @if (!participant.jobName && !participant.subJobName) {
+                              <span class="roster-muted">Anon</span>
+                            }
+                          </td>
+                          <td>
+                            <span class="tag default">{{ wdArrivalLabel(event, participant) }}</span>
+                            @if (participant.wdDepartureWindow) {
+                              <!-- Checked out: credit stopped there, so say so rather than let
+                                   a frozen DKP figure look like a bug. -->
+                              <span class="roster-muted">· left W{{ participant.wdDepartureWindow }}</span>
+                            }
+                          </td>
+                          <td class="num">{{ wdWindowsCredited(event, participant) }}</td>
+                          <td class="num">{{ wdDkpSoFar(event, participant) | number:'1.0-2' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <p class="muted late-join-foot">
+                  {{ wdPerWindowRate(event) | number:'1.0-2' }} DKP per window ·
+                  currently on window {{ event.hnmWindowNumber ?? 1 }}
+                  @if (wdOnTimeCount(event) > 0) {
+                    · {{ wdOnTimeCount(event) }} checked in at the open
+                  }
+                  <br />
+                  Open, close, claim and kill bonuses are added at End Camp and aren't included above.
+                </p>
+              }
+            </section>
+            }
+
+            <!-- Standard camps and ordinary events keep the join form. Hidden once you're on
+                 the roster: dropping just the "you are already attached" line would have left
+                 a heading and a description promising an action with nothing underneath. -->
+            @if (!isWdCamp(event) && !event.currentParticipation) {
             <section class="event-section event-section--late-join">
               <div class="event-section__header">
                 <div>
@@ -573,7 +940,6 @@
                 </div>
               </div>
 
-              @if (!event.currentParticipation) {
                 <form class="late-join-form" (ngSubmit)="submitQuickJoin(event.id)">
                   @if (activity.signupCharacterOptions().length > 1) {
                     <select [(ngModel)]="getQuickJoinDraft(event.id).characterName" [name]="'quickJoinCharacter' + event.id" title="Sign up as">
@@ -608,22 +974,50 @@
                     {{ activity.busyEventId() === event.id ? 'Updating...' : 'Late join' }}
                   </button>
                 </form>
-              } @else {
-                <p class="notice notice--subtle">
-                  You are already attached as {{ event.currentParticipation.jobType || 'Unassigned' }} /
-                  {{ event.currentParticipation.jobName || 'Job' }} /
-                  {{ event.currentParticipation.subJobName || 'Sub' }}.
-                </p>
-              }
             </section>
+            } <!-- /Late Join, hidden when already on the roster -->
             } <!-- /event card body collapsed -->
           </article>
         }
+
+      <!-- Open attendance events — the alliance-wide snapshot rosters posted from the addon, and the
+           review rows an ended camp hands off. Each one is an unposted payout, so it belongs on the
+           live board rather than behind its own tab. Mounted OUTSIDE the camp loop above: the camp
+           cards contain <form> elements and this markup drives bare [(ngModel)] with no form. -->
+      @if (attendanceVisible()) {
+        <app-attendance-sections section="live" />
       }
 
       <!-- Queue / Create event -->
       <app-activity-queue-panel />
 
+      <!-- Unlinked snapshots + closed attendance events. Below the queue because this is archive and
+           triage work, not the live board. -->
+      @if (attendanceVisible()) {
+        <app-attendance-sections section="archive" />
+      }
+
       <!-- Past events: browse + (officer) edit metadata / DKP / attendees -->
       <app-event-history-panel [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />
+
+      <!-- Shared ToD dialog, opened in "End Camp" mode from a live HNM camp's End Camp button. -->
+      <app-tod-form #todForm />
     </div>
+
+<!-- ===== Zone cell with map-pin icon =====
+     Mirrors the same template in attendance-sections so a zone reads identically in the camp
+     card and in the Event System. Kept as a local copy rather than shared: Angular templates
+     don't cross component boundaries, and a one-icon cell isn't worth a component of its own. -->
+<ng-template #zoneCell let-zone="zone">
+  @if (zone) {
+    <span class="roster-zone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+        <circle cx="12" cy="10" r="3"/>
+      </svg>
+      {{ zone.split('_').join(' ') }}
+    </span>
+  } @else {
+    <span class="roster-muted">-</span>
+  }
+</ng-template>

@@ -48,6 +48,7 @@ import type {
   ActivityLinkshellRolesResponse,
   ActivityLootInput,
   ActivityLootStructure,
+  ActivityTodMonsterTiming,
   ActivityQuickJoinInput,
   ActivityRevenueInput,
   ActivityStatus,
@@ -694,7 +695,13 @@ export class DiscordActivityService {
     }).format(date);
   }
 
-  toViewerLocalInputValue(value?: string | null): string {
+  // Formats an instant for a `<input type="datetime-local">` in the viewer's zone.
+  //
+  // includeSeconds must be true wherever the input carries `step="1"` (the event form): without
+  // it the value comes back minute-resolution, so opening the edit dialog silently rewrote the
+  // seconds to :00 and saving stored that. Inputs left at the default step (the auction form)
+  // pass false — a seconds-bearing value would be step-mismatched there.
+  toViewerLocalInputValue(value?: string | null, includeSeconds = false): string {
     if (!value) {
       return '';
     }
@@ -711,13 +718,15 @@ export class DiscordActivityService {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      ...(includeSeconds ? { second: '2-digit' as const } : {}),
       hour12: false
     }).formatToParts(date);
 
     const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
       parts.find(part => part.type === type)?.value ?? '';
 
-    return `${lookup('year')}-${lookup('month')}-${lookup('day')}T${lookup('hour')}:${lookup('minute')}`;
+    const hhmm = `${lookup('year')}-${lookup('month')}-${lookup('day')}T${lookup('hour')}:${lookup('minute')}`;
+    return includeSeconds ? `${hhmm}:${lookup('second') || '00'}` : hhmm;
   }
 
   // Local re-export of the helper so we don't have to import it into every
@@ -737,7 +746,7 @@ export class DiscordActivityService {
   // --- AddonTokenService ---
   loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> { return this.addonTokenService.loadAddonTokens(linkshellId); }
   createAddonPairingCode(linkshellId: number): Promise<ActivityAddonPairingCodeResponse | null> { return this.addonTokenService.createAddonPairingCode(linkshellId); }
-  revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> { return this.addonTokenService.revokeAddonToken(tokenId, linkshellId); }
+  revokeAddonToken(tokenId: number): Promise<boolean> { return this.addonTokenService.revokeAddonToken(tokenId); }
 
   // --- DkpService ---
   loadDkpHistory(linkshellId?: number | null, appUserId?: string | null): Promise<ActivityDkpHistory | null> { return this.dkpService.loadDkpHistory(linkshellId, appUserId); }
@@ -763,7 +772,7 @@ export class DiscordActivityService {
   // --- TodService ---
   createTod(input: ActivityCreateTodInput): Promise<void> { return this.todService.createTod(input); }
   updateTod(input: ActivityUpdateTodInput): Promise<void> { return this.todService.updateTod(input); }
-  postBoardTod(eventId: number, fields: { timeLocal: string; cooldown: string | null; interval: string | null; dayNumber: number | null; claim: boolean | null; hq: boolean; additionalSeconds: number }): Promise<void> { return this.todService.postBoardTod(eventId, fields); }
+  postBoardTod(eventId: number, fields: { timeLocal: string; cooldown: string | null; interval: string | null; dayNumber: number | null; claim: boolean | null; hq: boolean; additionalSeconds: number; popWindow?: number | null; killed?: boolean | null; repost?: boolean | null; repostLeadHours?: number | null; imagePath?: string | null }): Promise<void> { return this.todService.postBoardTod(eventId, fields); }
   deleteTod(todId: number): Promise<void> { return this.todService.deleteTod(todId); }
   uploadTodImage(file: File): Promise<string | null> { return this.todService.uploadTodImage(file); }
 
@@ -841,7 +850,7 @@ export class DiscordActivityService {
   loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
   clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
-  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; linkshellType?: string | null; discordGuildId?: string | null; eventBoardTheme?: string | null; outsidePartySignupEnabled?: boolean | null; fillAlliancesInOrder?: boolean | null; hnmOutsideSignupEnabled?: boolean | null; useComponentsV2Boards?: boolean | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
+  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; todMonsterTimings?: ActivityTodMonsterTiming[] | null; linkshellType?: string | null; discordGuildId?: string | null; eventBoardTheme?: string | null; outsidePartySignupEnabled?: boolean | null; fillAlliancesInOrder?: boolean | null; hnmOutsideSignupEnabled?: boolean | null; useComponentsV2Boards?: boolean | null; hnmAttendanceMode?: string | null; wdDkpPerWindow?: number | null; wdClaimBonus?: number | null; wdKillBonus?: number | null; wdOpenBonus?: number | null; wdCloseBonus?: number | null; hnmStandardOpenBonus?: number | null; hnmStandardCloseBonus?: number | null; hnmStandardClaimBonus?: number | null; hnmStandardKillBonus?: number | null; hnmStandardWindowBonus?: number | null; hnmAutoSnapshotEnabled?: boolean | null; hnmAutoSnapshotDelaySeconds?: number | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
   loadEligibleGuilds(): Promise<ActivityGuildOption[]> { return this.linkshellService.loadEligibleGuilds(); }
   setLinkshellGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.setLinkshellGuild(linkshellId, guildId, guildName); }
@@ -885,6 +894,7 @@ export class DiscordActivityService {
   startEvent(eventId: number, absentParticipantIds?: number[]): Promise<void> { return this.eventService.startEvent(eventId, absentParticipantIds); }
   endEvent(eventId: number): Promise<void> { return this.eventService.endEvent(eventId); }
   cancelEvent(eventId: number): Promise<void> { return this.eventService.cancelEvent(eventId); }
+  deleteEvent(eventId: number): Promise<void> { return this.eventService.deleteEvent(eventId); }
   takeBreak(eventId: number): Promise<void> { return this.eventService.takeBreak(eventId); }
   returnFromBreak(eventId: number): Promise<void> { return this.eventService.returnFromBreak(eventId); }
   sendParticipantToBreak(eventId: number, participantId: number): Promise<void> { return this.eventService.sendParticipantToBreak(eventId, participantId); }
@@ -896,6 +906,7 @@ export class DiscordActivityService {
   addLoot(eventId: number, input: ActivityLootInput): Promise<void> { return this.eventService.addLoot(eventId, input); }
   quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> { return this.eventService.quickJoinLiveEvent(eventId, input); }
   removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> { return this.eventService.removeAttendanceWindowAttendee(attendeeId); }
+  setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> { return this.eventService.setAttendanceWindowDkp(windowId, dkpAmount); }
   loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> { return this.eventService.loadEventHistory(linkshellId); }
   editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> { return this.eventService.editEventHistory(id, input); }
   deleteEventHistory(id: number): Promise<boolean> { return this.eventService.deleteEventHistory(id); }

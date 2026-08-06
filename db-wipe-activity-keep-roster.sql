@@ -62,7 +62,14 @@ TRUNCATE TABLE
     "PendingAttendanceWindowSubmissions",
     "PendingAttendanceWindowMemberSubmissions",
     -- Finances (gil/treasury) + inventory
+    -- RevenueEntries is the pre-conversion shape, kept readable for one release; the four
+    -- treasury tables are the live ones. TRUNCATE takes them all in one statement, so the FK
+    -- ordering between them does not matter here (it does in DbWipe, which uses DELETE).
     "RevenueEntries",
+    "JournalEntryLines",
+    "JournalEntries",
+    "LedgerAccounts",
+    "LedgerPeriods",
     "Items"
 RESTART IDENTITY;
 
@@ -85,7 +92,10 @@ SELECT
     (SELECT count(*) FROM "Tods")              AS tods,
     (SELECT count(*) FROM "Auctions")          AS auctions,
     (SELECT count(*) FROM "DkpLedgerEntries")  AS dkp_ledger,
-    (SELECT count(*) FROM "RevenueEntries")    AS revenue,
+    (SELECT count(*) FROM "RevenueEntries")    AS revenue_legacy,
+    (SELECT count(*) FROM "JournalEntries")    AS treasury_entries,
+    (SELECT count(*) FROM "JournalEntryLines") AS treasury_halves,
+    (SELECT count(*) FROM "LedgerAccounts")    AS treasury_categories,
     (SELECT count(*) FROM "Items")             AS items,
     (SELECT count(*) FROM "AppUserLinkshells") AS roster_rows_kept,
     (SELECT count(*) FROM "PartySetups")       AS party_setups_kept;

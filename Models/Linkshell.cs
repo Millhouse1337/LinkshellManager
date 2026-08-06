@@ -23,6 +23,33 @@ public static class LinkshellTypes
         => IsValid(value) ? value! : Both;
 }
 
+// How a linkshell tracks HNM attendance + scores DKP.
+//   Standard = leader/addon-driven windowed attendance, scored from the addon's window scans
+//              (open / close / claim / kill bonuses).
+//   Wd       = "WhereDragon" style: members self-serve "x-in" via a Discord
+//              button marking the window they were first present for; DKP is
+//              Linkshell.WdDkpPerWindow per window attended + open/close/claim/kill bonuses.
+// Neither mode pays at End Camp any more — both stage a pending review row in the Attendance
+// System and an officer's Post credits DKP. See HnmCampReviewHandoffService.
+public static class HnmAttendanceModes
+{
+    public const string Standard = "Standard";
+    public const string Wd       = "Wd";
+
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        Standard, Wd,
+    };
+
+    public static bool IsValid(string? value)
+        => !string.IsNullOrEmpty(value) && All.Contains(value);
+
+    // Fail-CLOSED to Standard: an unknown/stale value must never silently turn a
+    // linkshell into a DKP-paying Manual Check In board. (Contrast LinkshellTypes, which fails open.)
+    public static string Normalize(string? value)
+        => IsValid(value) ? value! : Standard;
+}
+
 public class Linkshell
 {
     [Key]
@@ -71,8 +98,74 @@ public class Linkshell
 
     public bool EnableHnmSection { get; set; } = true;
 
-    // Disabled by default for Beta — Missions/Endgame UIs are placeholders.
-    // Linkshell admins can opt in via Customize to surface the tabs for testers.
+    // Manual Check In HNM attendance (see HnmAttendanceModes). Standard = existing behavior;
+    // Wd = self-serve per-window "x-in" + per-window/claim/kill DKP + Awaiting-Processing
+    // finalize. Fail-closed to Standard so a stale value never pays DKP unexpectedly.
+    [MaxLength(16)]
+    public string HnmAttendanceMode { get; set; } = HnmAttendanceModes.Standard;
+
+    // Manual Check In scoring (only used when HnmAttendanceMode == Wd). DkpPerHour is an int and can't
+    // hold 0.25, so the per-window rate lives here as a double. Bonuses are added once to
+    // each crediting attendee's total when the camp is scored as claimed / killed.
+    //
+    // These set the amounts a camp handoff PROPOSES. End Camp no longer pays: it stages the
+    // numbers onto a review row in the Attendance System, and an officer's Post is what credits
+    // DKP (see HnmCampReviewHandoffService). The old WdProcessingGraceMinutes "Awaiting
+    // Processing" wait is gone with it — the review step replaced the timer.
+    public double WdDkpPerWindow { get; set; } = 0.25;
+    public double WdClaimBonus { get; set; } = 0d;
+    public double WdKillBonus { get; set; } = 0d;
+
+    // Manual Check In open / close bonuses — the Wd counterparts to HnmStandardOpen/CloseBonus
+    // below, so a linkshell that pays extra for sitting the whole camp can say so in either mode.
+    // Paid ONCE on top of the per-window rate:
+    //   open  — the member's check-in covers window 1 (they were there from the start)
+    //   close — they were still checked in at the camp's last credited window (no early Check Out)
+    // Default 0, so a linkshell that never touches them pays exactly what it paid before.
+    public double WdOpenBonus { get; set; } = 0d;
+    public double WdCloseBonus { get; set; } = 0d;
+
+    // Standard-mode HNM bonuses (only used when HnmAttendanceMode == Standard). The Standard
+    // counterparts to the Wd* values above: extra DKP for being on the roster when the camp
+    // OPENS / CLOSES, plus claim / kill bonuses for the camp's outcome. Default 0 so turning
+    // nothing on changes no existing payout.
+    public double HnmStandardOpenBonus { get; set; } = 0d;
+    public double HnmStandardCloseBonus { get; set; } = 0d;
+    public double HnmStandardClaimBonus { get; set; } = 0d;
+    public double HnmStandardKillBonus { get; set; } = 0d;
+
+    // What a REGULAR window pays each member scanned in it on a Standard camp — the windows in
+    // between the open and the close, which until now were worth nothing at all unless an officer
+    // priced them one at a time from the Attendance Windows card.
+    //
+    // A BASE rate, not a fourth gate: it is added to every window, and the open / close bonuses
+    // ride on top of it, which is what makes them read as bonuses. So a wyrm camp sat for eight
+    // windows finally pays for the eight rather than for the two ends of them.
+    //
+    // Default 0, so a linkshell that never sets it keeps the open/close-only payout it has today.
+    // An officer's explicit EventAttendanceWindow.DkpAmount still REPLACES the whole thing for
+    // that one window — see HnmStandardCampFinalizer.WindowValue.
+    public double HnmStandardWindowBonus { get; set; } = 0d;
+
+    // Automatic per-window attendance snapshots. When enabled, an officer running the LSM addon
+    // can ARM auto-posting on a live camp; the addon then captures THEIR ALLIANCE and posts it as
+    // that window's snapshot ~HnmAutoSnapshotDelaySeconds after each window opens. One toggle
+    // covers both attendance modes because HnmAttendanceMode is exclusive per linkshell — but the
+    // snapshots mean different things in each: Standard pays its open/close/claim/kill bonuses
+    // from them, Manual Check In treats them as a record only (DKP still comes from Check In).
+    //
+    // Arming stays per-officer and per-camp on the addon side, never automatic — a camp can have
+    // people in the zone who must not be counted. This flag only says "officers may arm".
+    public bool HnmAutoSnapshotEnabled { get; set; } = false;
+
+    // Seconds after a window opens before the armed addon captures it. Late enough that people
+    // warping/zoning in are counted, early enough to be well inside the window. Clamped [5, 300]
+    // on save: below 5s it races the server's own 30s window-advance tick, and 300s has to stay
+    // inside the kings/dragons' 10-minute window.
+    public int HnmAutoSnapshotDelaySeconds { get; set; } = 20;
+
+    // Disabled by default for Beta — the Missions UI is still a placeholder.
+    // Linkshell admins can opt in via Customize to surface the tab for testers.
     public bool EnableMissions { get; set; } = false;
 
     public bool EnableAuctions { get; set; } = true;
@@ -84,7 +177,10 @@ public class Linkshell
 
     public bool EnableToDs { get; set; } = true;
 
-    public bool EnableEndgame { get; set; } = false;
+    // Charts (Sky Pop Item Tracker). On for new linkshells like every other shipped feature.
+    // Linkshells that already existed when Charts shipped keep whatever they had — deliberately no
+    // blanket UPDATE, because a new tab nobody asked for is not a fix.
+    public bool EnableEndgame { get; set; } = true;
 
     public bool EnableEvents { get; set; } = true;
 
@@ -151,6 +247,10 @@ public class Linkshell
     // hidden. Pipe separator avoids the comma collision risk if FFXI ever
     // grows a mob name with a comma in it. Edited from the Customize panel.
     public string HiddenTodMonsters { get; set; } = string.Empty;
+
+    // JSON array of per-monster ToD cooldown and interval overrides. Empty means
+    // use the built-in defaults. The Activity configuration editor owns this.
+    public string TodMonsterTimings { get; set; } = string.Empty;
 
     // The Discord guild (server) this linkshell is tied to. NULL/empty = not
     // tied to any server. When set it is the single source of truth for every

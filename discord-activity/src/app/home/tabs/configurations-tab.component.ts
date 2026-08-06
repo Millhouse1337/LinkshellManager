@@ -1,11 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddonToken,
-  ActivityDkpPoolEventType,
-  ActivityDkpPoolInput,
-  ActivityDkpPoolPreview,
   ActivityDkpRoundingIncrement,
   ActivityGuildOption,
   ActivityLinkshellRole,
@@ -13,15 +10,10 @@ import {
   ActivityLootStructure,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { TOD_BUILT_IN_MONSTER_GROUPS, type TabName } from '../activity-home.types';
+import { defaultTodMonsterTiming, POP_ONLY_TOD_MONSTERS, TOD_BUILT_IN_MONSTER_GROUPS, type TabName } from '../activity-home.types';
+import type { ActivityTodMonsterTiming, HnmWindowSetup } from '../../discord/discord-activity.types';
 
-// One editable DKP pool row. id is null for a pool the officer just added.
-interface PoolDraft {
-  id: number | null;
-  name: string;
-  accent: string;
-  isDefault: boolean;
-}
+// (PoolDraft moved to tabs/dkp-grouping-tab.component.ts with the editor it belongs to.)
 
 // One editable Discord channel route row. id is null for an unsaved route.
 interface RouteDraft {
@@ -55,6 +47,17 @@ interface RouteDraft {
 export class ConfigurationsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   private readonly destroyRef = inject(DestroyRef);
+  private activeConfigurationLinkshellId: number | null = null;
+  protected todTimingsOpen = false;
+  private readonly newTodMonsterDialog = viewChild<ElementRef<HTMLDialogElement>>('newTodMonsterDialog');
+  protected readonly newTodMonsterCategories = TOD_BUILT_IN_MONSTER_GROUPS.map(group => group.label);
+  protected newTodMonsterCategory = TOD_BUILT_IN_MONSTER_GROUPS[0].label;
+  protected newTodMonsterName = '';
+  protected newTodMonsterCooldownHours = 22;
+  protected newTodMonsterCooldownMinutes = 0;
+  protected newTodMonsterIntervalHours = 0;
+  protected newTodMonsterIntervalMinutes = 10;
+  protected newTodMonsterError = '';
 
   // Which section this instance renders. The parent mounts ONE component for the
   // Configurations / Permissions / Game Addon tabs and swaps this input, so state is
@@ -74,14 +77,14 @@ export class ConfigurationsTabComponent {
     this.syncCustomizeDraft();
     void this.loadDiscordChannels();
     void this.loadEligibleGuilds();
-    void this.loadDkpPools();
 
     // Re-sync customize draft + reload roles when the active (primary)
     // linkshell changes — both cards now follow the dashboard selection so
     // there's no per-card picker to invalidate.
     effect(() => {
       const id = this.selectedDashboardLinkshellId();
-      if (!id) return;
+      if (!id || id === this.activeConfigurationLinkshellId) return;
+      this.activeConfigurationLinkshellId = id;
       this.editingRoleId = null;
       this.showNewRoleForm = false;
       this.pendingDeleteRoleId = null;
@@ -91,7 +94,6 @@ export class ConfigurationsTabComponent {
       void this.loadAddonTokensForCurrent();
       void this.loadDiscordChannels();
       void this.loadEligibleGuilds();
-      void this.loadDkpPools();
     });
 
     this.destroyRef.onDestroy(() => {
@@ -252,7 +254,14 @@ export class ConfigurationsTabComponent {
     { key: 'canModerateLiveEvent', label: 'Moderate live events (verify attendance, break room)' },
     { key: 'canAddLoot', label: 'Add event loot entries' },
     { key: 'canManageInventory', label: 'Manage inventory (items)' },
-    { key: 'canManageTreasury', label: 'Manage treasury (revenue)' },
+    // Editing the Charts boards — pop items, holders and farming credit on EVERY board, not just
+    // Sky. Reads stay open to every member. Adding a key here is only half the job — saveRoleDraft
+    // below has to send it too, or the checkbox renders and its value is dropped on every save.
+    { key: 'canManageCharts', label: 'Manage Charts (pop items & credits)' },
+    // The gate for recording anything in the treasury — on both the website and here. It used to be
+    // the coarse Leader/Officer rank on the web, so an officer without this could record gil there
+    // that the Activity refused.
+    { key: 'canManageTreasury', label: 'Record treasury entries' },
     { key: 'canManageRules', label: 'Manage rules' },
     { key: 'canManageAnnouncements', label: 'Manage announcements' },
     { key: 'canManageTods', label: 'Manage ToDs' },
@@ -338,6 +347,7 @@ export class ConfigurationsTabComponent {
       canModerateLiveEvent: !!this.roleDraft.permissions['canModerateLiveEvent'],
       canAddLoot: !!this.roleDraft.permissions['canAddLoot'],
       canManageInventory: !!this.roleDraft.permissions['canManageInventory'],
+      canManageCharts: !!this.roleDraft.permissions['canManageCharts'],
       canManageTreasury: !!this.roleDraft.permissions['canManageTreasury'],
       canManageRules: !!this.roleDraft.permissions['canManageRules'],
       canManageAnnouncements: !!this.roleDraft.permissions['canManageAnnouncements'],
@@ -510,10 +520,27 @@ export class ConfigurationsTabComponent {
     hnmOutsideSignupEnabled: boolean;
     // Experimental: post event boards as Components V2 (wide media-gallery card).
     useComponentsV2Boards: boolean;
-    // Lower-cased names of monsters the linkshell wants hidden from the
-    // ToD Tracker. Lower-case for comparison stability — re-cased to the
-    // canonical built-in label on save.
-    hiddenTodMonsters: Set<string>;
+    // Manual Check In HNM attendance: mode ('Standard' | 'Wd') + scoring. Only the mode + rates
+    // matter when Wd; window counts/cadence are built in per monster (HnmConfig), not configurable.
+    hnmAttendanceMode: string;
+    wdDkpPerWindow: number;
+    wdClaimBonus: number;
+    wdKillBonus: number;
+    // Manual Check In open / close bonuses — paid once on top of the per-window rate, gated on the
+    // member.s own check-in range (open = in from window 1, close = still in at the last window).
+    wdOpenBonus: number;
+    wdCloseBonus: number;
+    // Standard-mode HNM bonuses — only meaningful when hnmAttendanceMode === 'Standard'.
+    hnmStandardOpenBonus: number;
+    hnmStandardCloseBonus: number;
+    hnmStandardClaimBonus: number;
+    hnmStandardKillBonus: number;
+    // What a REGULAR (in-between) window pays each attendee — the base the open / close ride on.
+    hnmStandardWindowBonus: number;
+    // Automatic per-window snapshots — applies to BOTH attendance modes.
+    hnmAutoSnapshotEnabled: boolean;
+    hnmAutoSnapshotDelaySeconds: number;
+    todMonsterTimings: Record<string, ActivityTodMonsterTiming>;
   } = {
     lootStructure: 'Dkp',
     enableHnmSection: true,
@@ -535,10 +562,54 @@ export class ConfigurationsTabComponent {
     fillAlliancesInOrder: true,
     hnmOutsideSignupEnabled: false,
     useComponentsV2Boards: false,
-    hiddenTodMonsters: new Set<string>()
+    hnmAttendanceMode: 'Standard',
+    wdDkpPerWindow: 0.25,
+    wdClaimBonus: 0,
+    wdKillBonus: 0,
+    wdOpenBonus: 0,
+    wdCloseBonus: 0,
+    hnmStandardOpenBonus: 0,
+    hnmStandardCloseBonus: 0,
+    hnmStandardClaimBonus: 0,
+    hnmStandardKillBonus: 0,
+    hnmStandardWindowBonus: 0,
+    hnmAutoSnapshotEnabled: false,
+    hnmAutoSnapshotDelaySeconds: 20,
+    todMonsterTimings: {}
   };
 
-  protected readonly todMonsterGroups = TOD_BUILT_IN_MONSTER_GROUPS;
+  protected todMonsterGroups(): ReadonlyArray<{ label: string; names: string[] }> {
+    const builtInNames = new Set(TOD_BUILT_IN_MONSTER_GROUPS.flatMap(group => group.names).map(name => name.toLocaleLowerCase()));
+    // A custom monster carries the category it was added under, which may name a group that
+    // no longer exists (the retired "Sea NMs" / "HENMs" headers). Fall those back to the
+    // catch-all so a stored monster is always visible — and therefore deletable — somewhere.
+    const knownLabels = new Set(TOD_BUILT_IN_MONSTER_GROUPS.map(group => group.label));
+    const groupLabelFor = (category?: string | null): string =>
+      category && knownLabels.has(category) ? category : 'Other NMs';
+    return TOD_BUILT_IN_MONSTER_GROUPS.map(group => ({
+      label: group.label,
+      names: [
+        ...group.names,
+        ...Object.values(this.customizeDraft.todMonsterTimings)
+          .filter(timing => !builtInNames.has(timing.monsterName.toLocaleLowerCase())
+            && groupLabelFor(timing.category) === group.label)
+          .map(timing => timing.monsterName)
+          .sort((left, right) => left.localeCompare(right))
+      ]
+    }));
+  }
+
+  protected isCustomTodMonster(monsterName: string): boolean {
+    return !TOD_BUILT_IN_MONSTER_GROUPS
+      .flatMap(group => group.names)
+      .some(builtInName => builtInName.localeCompare(monsterName, undefined, { sensitivity: 'accent' }) === 0);
+  }
+
+  protected deleteCustomTodMonster(monsterName: string): void {
+    if (!this.isCustomTodMonster(monsterName)) return;
+    delete this.customizeDraft.todMonsterTimings[monsterName];
+    this.onCustomizeFieldChange();
+  }
 
   // Event-board image palettes (mirrors the server-side EventBoardThemes). The
   // swatch colours are shown in the picker; the key is what gets persisted.
@@ -551,19 +622,6 @@ export class ConfigurationsTabComponent {
     { key: 'Tome', label: 'Tome', bg: '#e8d6ad', accent: '#8a3522' }
   ];
 
-  // Per-group expand/collapse state for the "Hide ToD Mobs" picker.
-  // Keyed by group.label, defaulting all sections to collapsed so the
-  // panel is compact on first open. Officers expand only the groups they
-  // care about toggling.
-  protected todHideGroupExpanded: Record<string, boolean> = {};
-
-  // The whole "Hide ToD Mobs" section is collapsed by default — most officers
-  // never touch it, so it shouldn't take up space on open.
-  protected todHideSectionOpen = false;
-
-  protected toggleTodHideGroup(label: string): void {
-    this.todHideGroupExpanded[label] = !this.todHideGroupExpanded[label];
-  }
 
   protected customizeDirty = false;
 
@@ -804,139 +862,6 @@ export class ConfigurationsTabComponent {
     route.dirty = true;
   }
 
-  // ----- DKP pools (which event types' DKP spends together) -----
-  //
-  // A pool is a wallet. Each event type earns into exactly one pool, and loot from that event type
-  // is paid out of the same pool. The partition is enforced by the UI SHAPE: every event type has
-  // exactly ONE <select>, so it cannot end up in two pools no matter what the officer does.
-  //
-  // Assignments are keyed by pool INDEX, not id — a pool the officer just added has no id yet, and
-  // they need to be able to create it and move event types into it in one save.
-  protected poolDrafts: PoolDraft[] = [];
-  protected poolByEventType: Record<string, number> = {};
-  protected readonly poolEventTypes = signal<ActivityDkpPoolEventType[]>([]);
-  protected readonly poolAccents = signal<string[]>([]);
-  protected readonly poolPreview = signal<ActivityDkpPoolPreview | null>(null);
-
-  // Group-colour name → theme token. Keys mirror the server's DkpPoolAccents; unknown / legacy
-  // keys fall back to blue. Mirrors SwatchColor() in the web Customize.cshtml.
-  private static readonly POOL_SWATCH: Record<string, string> = {
-    blue: 'var(--accent)', green: 'var(--success)', red: 'var(--danger)',
-    orange: 'var(--orange)', gold: 'var(--gold)', purple: 'var(--purple)', cyan: 'var(--cyan)',
-    gray: 'var(--fg-3)',
-  };
-  protected poolSwatchColor(accent: string | null | undefined): string {
-    return ConfigurationsTabComponent.POOL_SWATCH[(accent ?? '').toLowerCase()] ?? 'var(--accent)';
-  }
-
-  protected async loadDkpPools(): Promise<void> {
-    const id = this.customizeTargetLinkshellId();
-    if (!id || !this.canCustomizeSelectedLinkshell()) {
-      this.poolDrafts = [];
-      this.poolByEventType = {};
-      this.poolEventTypes.set([]);
-      this.poolAccents.set([]);
-      this.poolPreview.set(null);
-      return;
-    }
-    const data = await this.activity.loadDkpPools(id);
-    if (!data) { return; }
-
-    this.poolDrafts = data.pools.map(pool => ({
-      id: pool.id,
-      name: pool.name,
-      accent: pool.accent,
-      isDefault: pool.isDefault
-    }));
-    this.poolEventTypes.set(data.assignableEventTypes);
-    this.poolAccents.set(data.accents);
-    this.poolPreview.set(null);
-
-    // An event type with no mapping shows as Default (-1) rather than pre-selected onto the
-    // default pool — otherwise saving would silently materialize a mapping row for every event
-    // type in the catalog, including ones the linkshell has never run. The default group is only
-    // ever "Default" (-1) in the picker, never its own numbered option, so a type explicitly
-    // mapped to it collapses to -1 too.
-    const defaultIndex = data.pools.findIndex(pool => pool.isDefault);
-    const assignments: Record<string, number> = {};
-    for (const type of data.assignableEventTypes) {
-      const idx = data.pools.findIndex(
-        pool => pool.eventTypes.some(t => t.toLowerCase() === type.key.toLowerCase()));
-      assignments[type.key] = (idx < 0 || idx === defaultIndex) ? -1 : idx;
-    }
-    this.poolByEventType = assignments;
-  }
-
-  protected addPool(): void {
-    this.poolDrafts = [
-      ...this.poolDrafts,
-      { id: null, name: '', accent: this.poolAccents()[0] ?? 'Blue', isDefault: false }
-    ];
-    this.poolPreview.set(null);
-  }
-
-  protected removePool(index: number): void {
-    // The default group is permanent — the catch-all every unassigned event type falls into.
-    // The UI renders no Remove button for it; this guards the programmatic path too.
-    if (this.poolDrafts[index]?.isDefault) { return; }
-    this.poolDrafts = this.poolDrafts.filter((_, i) => i !== index);
-
-    // Indices SHIFT when a pool is removed. Event types pointing at the removed pool become
-    // unassigned; everything after it slides down one. Skipping this would silently re-point event
-    // types at whatever pool happens to now occupy that index — a wrong answer that looks right.
-    const remapped: Record<string, number> = {};
-    for (const [type, poolIndex] of Object.entries(this.poolByEventType)) {
-      remapped[type] = poolIndex === index ? -1 : poolIndex > index ? poolIndex - 1 : poolIndex;
-    }
-    this.poolByEventType = remapped;
-    this.poolPreview.set(null);
-  }
-
-  protected setPoolForEventType(eventType: string, value: number): void {
-    this.poolByEventType = { ...this.poolByEventType, [eventType]: value };
-    this.poolPreview.set(null);
-  }
-
-  protected markPoolsDirty(): void {
-    this.poolPreview.set(null);
-  }
-
-  private buildPoolInputs(): ActivityDkpPoolInput[] {
-    return this.poolDrafts.map((pool, index) => ({
-      id: pool.id,
-      name: pool.name.trim(),
-      isDefault: pool.isDefault,
-      accent: pool.accent,
-      eventTypes: Object.entries(this.poolByEventType)
-        .filter(([, poolIndex]) => poolIndex === index)
-        .map(([type]) => type)
-    }));
-  }
-
-  // Mirrors the server's validation so a bad save is caught before the round-trip.
-  protected dkpPoolsError(): string | null {
-    const named = this.poolDrafts.filter(pool => pool.name.trim().length > 0);
-    if (named.length === 0) { return 'Keep at least one DKP pool.'; }
-    const names = named.map(pool => pool.name.trim().toLowerCase());
-    if (new Set(names).size !== names.length) {
-      return 'Two pools have the same name — give them different names.';
-    }
-    return null;
-  }
-
-  protected async previewDkpPools(): Promise<void> {
-    const id = this.customizeTargetLinkshellId();
-    if (!id || this.dkpPoolsError()) { return; }
-    this.poolPreview.set(await this.activity.previewDkpPools(id, this.buildPoolInputs()));
-  }
-
-  protected async saveDkpPools(): Promise<void> {
-    const id = this.customizeTargetLinkshellId();
-    if (!id || this.dkpPoolsError()) { return; }
-    if (await this.activity.saveDkpPools(id, this.buildPoolInputs())) {
-      await this.loadDkpPools();
-    }
-  }
 
   // Mirrors the server's "one route per non-event post type" rule so a bad save
   // is caught before the round-trip.
@@ -982,6 +907,7 @@ export class ConfigurationsTabComponent {
     const link = this.dashboardLinkshells().find(l => l.id === id);
     const settings = link?.settings;
     if (!settings) return;
+    this.activeConfigurationLinkshellId = id;
     this.customizeDraft.lootStructure = settings.lootStructure;
     this.customizeDraft.enableHnmSection = settings.enableHnmSection;
     this.customizeDraft.enableMissions = settings.enableMissions;
@@ -1002,43 +928,150 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.fillAlliancesInOrder = settings.fillAlliancesInOrder ?? true;
     this.customizeDraft.hnmOutsideSignupEnabled = settings.hnmOutsideSignupEnabled ?? false;
     this.customizeDraft.useComponentsV2Boards = settings.useComponentsV2Boards ?? false;
-    // Rebuild the hidden-monsters Set from the persisted list. Lower-cased
-    // for compare stability — restored to canonical case on save.
-    this.customizeDraft.hiddenTodMonsters = new Set(
-      (settings.hiddenTodMonsters ?? []).map(name => name.trim().toLowerCase())
-    );
+    this.customizeDraft.hnmAttendanceMode = settings.hnmAttendanceMode || 'Standard';
+    this.customizeDraft.wdDkpPerWindow = settings.wdDkpPerWindow ?? 0.25;
+    this.customizeDraft.wdClaimBonus = settings.wdClaimBonus ?? 0;
+    this.customizeDraft.wdKillBonus = settings.wdKillBonus ?? 0;
+    this.customizeDraft.wdOpenBonus = settings.wdOpenBonus ?? 0;
+    this.customizeDraft.wdCloseBonus = settings.wdCloseBonus ?? 0;
+    this.customizeDraft.hnmStandardOpenBonus = settings.hnmStandardOpenBonus ?? 0;
+    this.customizeDraft.hnmStandardCloseBonus = settings.hnmStandardCloseBonus ?? 0;
+    this.customizeDraft.hnmStandardClaimBonus = settings.hnmStandardClaimBonus ?? 0;
+    this.customizeDraft.hnmStandardKillBonus = settings.hnmStandardKillBonus ?? 0;
+    this.customizeDraft.hnmStandardWindowBonus = settings.hnmStandardWindowBonus ?? 0;
+    this.customizeDraft.hnmAutoSnapshotEnabled = settings.hnmAutoSnapshotEnabled ?? false;
+    this.customizeDraft.hnmAutoSnapshotDelaySeconds = settings.hnmAutoSnapshotDelaySeconds ?? 20;
+    this.customizeDraft.todMonsterTimings = this.buildTodMonsterTimings(settings.todMonsterTimings ?? []);
     this.customizeDirty = false;
   }
 
-  // Per-monster toggle state. Bound through ngModel via these helpers so
-  // the template can stay declarative without leaking Set internals.
-  protected isMonsterHidden(name: string): boolean {
-    return this.customizeDraft.hiddenTodMonsters.has(name.trim().toLowerCase());
+  private buildTodMonsterTimings(saved: readonly ActivityTodMonsterTiming[]): Record<string, ActivityTodMonsterTiming> {
+    const savedByName = new Map(saved.map(timing => [timing.monsterName.toLocaleLowerCase(), timing]));
+    const timings: Record<string, ActivityTodMonsterTiming> = {};
+    for (const group of TOD_BUILT_IN_MONSTER_GROUPS) {
+      for (const monsterName of group.names) {
+        const existing = savedByName.get(monsterName.toLocaleLowerCase());
+        const fallback = defaultTodMonsterTiming(monsterName);
+        const cooldownMinutes = this.timingLabelToMinutes(fallback.cooldown);
+        const intervalMinutes = this.timingLabelToMinutes(fallback.interval);
+        timings[monsterName] = existing ?? {
+          monsterName,
+          cooldownHours: cooldownMinutes / 60,
+          intervalHours: Math.floor(intervalMinutes / 60),
+          intervalMinutes: intervalMinutes % 60,
+          category: group.label
+        };
+      }
+    }
+    for (const timing of saved) {
+      const monsterName = timing.monsterName.trim();
+      if (monsterName && !timings[monsterName]) {
+        timings[monsterName] = { ...timing, monsterName, category: timing.category || 'Other NMs' };
+      }
+    }
+    return timings;
   }
 
-  protected onMonsterHiddenChange(name: string, hidden: boolean): void {
-    const key = name.trim().toLowerCase();
-    if (hidden) {
-      this.customizeDraft.hiddenTodMonsters.add(key);
-    } else {
-      this.customizeDraft.hiddenTodMonsters.delete(key);
-    }
+  private timingLabelToMinutes(value: string): number {
+    const match = /^(\d+)\s+(Min|Hour)$/i.exec(value.trim());
+    if (!match) return 0;
+    return Number(match[1]) * (match[2].toLowerCase() === 'hour' ? 60 : 1);
+  }
+
+  protected todMonsterTiming(monsterName: string): ActivityTodMonsterTiming {
+    const existing = this.customizeDraft.todMonsterTimings[monsterName];
+    if (existing) return existing;
+
+    const fallback = defaultTodMonsterTiming(monsterName);
+    const cooldownMinutes = this.timingLabelToMinutes(fallback.cooldown);
+    const intervalMinutes = this.timingLabelToMinutes(fallback.interval);
+    return this.customizeDraft.todMonsterTimings[monsterName] = {
+      monsterName,
+      cooldownHours: cooldownMinutes / 60,
+      intervalHours: Math.floor(intervalMinutes / 60),
+      intervalMinutes: intervalMinutes % 60,
+      category: 'Other NMs'
+    };
+  }
+
+  protected todCooldownHours(monsterName: string): number {
+    return Math.floor(Math.max(0, Number(this.todMonsterTiming(monsterName).cooldownHours) || 0));
+  }
+
+  protected todCooldownMinutes(monsterName: string): number {
+    const cooldownHours = Math.max(0, Number(this.todMonsterTiming(monsterName).cooldownHours) || 0);
+    return Math.round((cooldownHours - Math.floor(cooldownHours)) * 60);
+  }
+
+  protected updateTodCooldownHours(monsterName: string, value: number): void {
+    this.updateTodCooldown(monsterName, value, this.todCooldownMinutes(monsterName));
+  }
+
+  protected updateTodCooldownMinutes(monsterName: string, value: number): void {
+    this.updateTodCooldown(monsterName, this.todCooldownHours(monsterName), value);
+  }
+
+  private updateTodCooldown(monsterName: string, hours: number, minutes: number): void {
+    this.todMonsterTiming(monsterName).cooldownHours = this.cooldownHoursFromParts(hours, minutes);
     this.onCustomizeFieldChange();
   }
 
-  // Re-emits the hidden Set as canonical-case names for the wire DTO. Walks
-  // TOD_BUILT_IN_MONSTER_GROUPS so the recasing matches whatever the addon
-  // sends as the canonical label.
-  private buildHiddenTodMonstersPayload(): string[] {
-    const out: string[] = [];
-    for (const group of TOD_BUILT_IN_MONSTER_GROUPS) {
-      for (const name of group.names) {
-        if (this.customizeDraft.hiddenTodMonsters.has(name.trim().toLowerCase())) {
-          out.push(name);
-        }
-      }
+  private cooldownHoursFromParts(hours: number, minutes: number): number {
+    const normalizedHours = Math.max(0, Math.floor(Number(hours) || 0));
+    const normalizedMinutes = Math.min(59, Math.max(0, Math.floor(Number(minutes) || 0)));
+    return Math.max(1 / 60, normalizedHours + normalizedMinutes / 60);
+  }
+
+  protected openNewTodMonsterDialog(): void {
+    this.newTodMonsterError = '';
+    this.newTodMonsterName = '';
+    this.newTodMonsterCategory = TOD_BUILT_IN_MONSTER_GROUPS[0].label;
+    this.newTodMonsterCooldownHours = 22;
+    this.newTodMonsterCooldownMinutes = 0;
+    this.newTodMonsterIntervalHours = 0;
+    this.newTodMonsterIntervalMinutes = 10;
+    this.newTodMonsterDialog()?.nativeElement.showModal();
+  }
+
+  protected closeNewTodMonsterDialog(): void {
+    this.newTodMonsterDialog()?.nativeElement.close();
+  }
+
+  protected addNewTodMonster(): void {
+    const monsterName = this.newTodMonsterName.trim();
+    if (!monsterName) {
+      this.newTodMonsterError = 'Enter a monster name.';
+      return;
     }
-    return out;
+    if (Object.values(this.customizeDraft.todMonsterTimings)
+      .some(timing => timing.monsterName.localeCompare(monsterName, undefined, { sensitivity: 'accent' }) === 0)) {
+      this.newTodMonsterError = 'That monster already exists.';
+      return;
+    }
+    // Pop-only mobs are kept out of the catalog on purpose, and the server drops any timing
+    // stored for one — so say no here rather than accept a row that silently vanishes.
+    if (POP_ONLY_TOD_MONSTERS.has(monsterName)) {
+      this.newTodMonsterError = `${monsterName} pops from an item instead of a repop timer, so it has no ToD cooldown to set.`;
+      return;
+    }
+    this.customizeDraft.todMonsterTimings[monsterName] = {
+      monsterName,
+      category: this.newTodMonsterCategory,
+      cooldownHours: this.cooldownHoursFromParts(this.newTodMonsterCooldownHours, this.newTodMonsterCooldownMinutes),
+      intervalHours: Math.max(0, Math.floor(Number(this.newTodMonsterIntervalHours) || 0)),
+      intervalMinutes: Math.min(59, Math.max(0, Math.floor(Number(this.newTodMonsterIntervalMinutes) || 0)))
+    };
+    this.onCustomizeFieldChange();
+    this.closeNewTodMonsterDialog();
+  }
+
+  protected todMonsterTimingsPayload(): ActivityTodMonsterTiming[] {
+    return Object.values(this.customizeDraft.todMonsterTimings).map(timing => ({
+      ...timing,
+      cooldownHours: Math.max(1 / 60, Number(timing.cooldownHours) || 1 / 60),
+      intervalHours: Math.max(0, Math.floor(Number(timing.intervalHours) || 0)),
+      intervalMinutes: Math.min(59, Math.max(0, Math.floor(Number(timing.intervalMinutes) || 0)))
+    }));
   }
 
   protected onCustomizeFieldChange(): void {
@@ -1070,13 +1103,27 @@ export class ConfigurationsTabComponent {
         enableActivityTracking: this.customizeDraft.enableActivityTracking,
         inactiveAfterAbsences: this.customizeDraft.inactiveAfterAbsences,
         activeAfterAttendances: this.customizeDraft.activeAfterAttendances,
-        hiddenTodMonsters: this.buildHiddenTodMonstersPayload(),
+        hiddenTodMonsters: [],
+        todMonsterTimings: this.todMonsterTimingsPayload(),
         linkshellType: this.customizeDraft.linkshellType,
         eventBoardTheme: this.customizeDraft.eventBoardTheme,
         outsidePartySignupEnabled: this.customizeDraft.outsidePartySignupEnabled,
         fillAlliancesInOrder: this.customizeDraft.fillAlliancesInOrder,
         hnmOutsideSignupEnabled: this.customizeDraft.hnmOutsideSignupEnabled,
-        useComponentsV2Boards: this.customizeDraft.useComponentsV2Boards
+        useComponentsV2Boards: this.customizeDraft.useComponentsV2Boards,
+        hnmAttendanceMode: this.customizeDraft.hnmAttendanceMode,
+        wdDkpPerWindow: this.customizeDraft.wdDkpPerWindow,
+        wdClaimBonus: this.customizeDraft.wdClaimBonus,
+        wdKillBonus: this.customizeDraft.wdKillBonus,
+        wdOpenBonus: this.customizeDraft.wdOpenBonus,
+        wdCloseBonus: this.customizeDraft.wdCloseBonus,
+        hnmStandardOpenBonus: this.customizeDraft.hnmStandardOpenBonus,
+        hnmStandardCloseBonus: this.customizeDraft.hnmStandardCloseBonus,
+        hnmStandardClaimBonus: this.customizeDraft.hnmStandardClaimBonus,
+        hnmStandardKillBonus: this.customizeDraft.hnmStandardKillBonus,
+        hnmStandardWindowBonus: this.customizeDraft.hnmStandardWindowBonus,
+        hnmAutoSnapshotEnabled: this.customizeDraft.hnmAutoSnapshotEnabled,
+        hnmAutoSnapshotDelaySeconds: this.customizeDraft.hnmAutoSnapshotDelaySeconds
         // The Discord server is set via the dedicated "Discord server" card
         // (setLinkshellGuild / clearLinkshellGuild), not the main save.
       });
@@ -1104,6 +1151,12 @@ export class ConfigurationsTabComponent {
   // Addon card is hidden (pairing endpoints reject requests anyway).
   protected addonGloballyDisabled(): boolean {
     return this.activity.overview()?.addonGloballyDisabled === true;
+  }
+
+  // Built-in per-monster window setups for the HNM Settings card's read-only list. Served
+  // from HnmConfig so the numbers can't drift from what the boards actually run.
+  protected hnmWindowSetups(): HnmWindowSetup[] {
+    return this.activity.overview()?.hnmWindowSetups ?? [];
   }
 
   protected async loadAddonTokensForCurrent(): Promise<void> {
@@ -1194,17 +1247,16 @@ export class ConfigurationsTabComponent {
   }
 
   protected async confirmRevokeAddonToken(tokenId: number): Promise<void> {
-    const id = this.customizeTargetLinkshellId();
-    if (!id) {
-      this.pendingRevokeTokenId.set(null);
-      return;
-    }
-    const ok = await this.activity.revokeAddonToken(tokenId, id);
+    const ok = await this.activity.revokeAddonToken(tokenId);
     this.pendingRevokeTokenId.set(null);
     if (ok) {
       this.addonModalLoadedFor = null;
       this.loadAddonTokensForCurrent();
     }
+  }
+
+  protected formatAddonTokenLinkshells(token: ActivityAddonToken): string {
+    return token.linkshells?.length ? token.linkshells.join(', ') : '—';
   }
 
   protected formatAddonTokenDate(value?: string | null): string {

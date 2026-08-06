@@ -1,0 +1,109 @@
+<div class="card">
+  <div class="card-head">
+    <div class="card-title">{{ boardLabel }} Pop Item Holdings</div>
+
+    <div class="card-head-right">
+      @if (!isEmpty()) {
+        <span class="tag chart-count">{{ totalHeld() }} held</span>
+      }
+    </div>
+  </div>
+
+  @if (isEmpty()) {
+    <div class="empty-state">
+      Nothing is tracked yet. Add pop items to a boss above and they are listed here.
+    </div>
+  } @else {
+    <div class="table-wrap">
+      <table class="chart-holdings">
+        <thead>
+          <tr>
+            <th>Pop Item</th>
+            <th>Held By</th>
+            <th>Qty</th>
+            <th>Farming Credit</th>
+            @if (canManage) { <th></th> }
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (row of rows(); track row.item.id) {
+            <!-- `continues` blanks the name on a repeat, so several copies of one item read as one
+                 block of holders rather than as the same word typed over and over. -->
+            <tr [class.is-continued]="row.continues">
+              <td data-label="Pop Item">
+                @if (!row.continues) {
+                  <span class="chart-holdings__item">
+                    <span class="chart-holdings__name">{{ row.item.itemName }}</span>
+                    <span class="chart-holdings__boss" [ngClass]="themeClass(row.themeKey)">{{ row.boss }}</span>
+                  </span>
+                } @else {
+                  <span class="chart-holdings__ditto" [attr.aria-label]="row.item.itemName">↳</span>
+                }
+              </td>
+
+              <td data-label="Held By">
+                @if (row.heldBy) {
+                  <strong class="chart-holdings__holder">{{ row.heldBy }}</strong>
+                } @else {
+                  <span class="chart-item__muted">Nobody yet</span>
+                }
+                @if (row.item.notes) {
+                  <span class="chart-holdings__note">{{ row.item.notes }}</span>
+                }
+              </td>
+
+              <td data-label="Qty"><span class="chart-item__qty">{{ row.item.quantity }}</span></td>
+
+              <td data-label="Farming Credit">
+                <!-- Expanding this only READS the list. Changing it is the Credits button, which is a
+                     thing an officer sets out to do. -->
+                @if (row.credits.length) {
+                  <button type="button" class="chart-holdings__toggle"
+                          (click)="toggleExpanded(row.item.id)"
+                          [attr.aria-expanded]="isExpanded(row.item.id)">
+                    <span class="chart-holdings__chevron" [class.is-open]="isExpanded(row.item.id)">›</span>
+                    {{ row.credits.length }} credited
+                  </button>
+                } @else {
+                  <span class="chart-item__muted">Nobody credited</span>
+                }
+              </td>
+
+              @if (canManage) {
+                <!-- No Credits button: the Edit form carries the farming credit picker, preloaded
+                     with this row's farmers, so there is one place a row is changed. -->
+                <td data-label="Actions">
+                  <span class="chart-item__actions">
+                    <button type="button" class="btn sm ghost" [disabled]="isBusy(row.item.id)"
+                            (click)="edit.emit(row.item)">Edit</button>
+                    <button type="button" class="btn sm danger-outline" [disabled]="isBusy(row.item.id)"
+                            (click)="removeItem(row.item)">Remove</button>
+                  </span>
+                </td>
+              }
+            </tr>
+
+            @if (isExpanded(row.item.id) && row.credits.length) {
+              <tr class="chart-holdings__drawer">
+                <td [attr.colspan]="canManage ? 5 : 4">
+                  <div class="chart-holdings__farmers">
+                    <span class="chart-holdings__farmers-label">Credited for {{ row.item.itemName }}</span>
+                    @for (farmer of row.credits; track farmer) {
+                      <span class="chart-holdings__farmer">{{ farmer }}</span>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <p class="chart-holdings__footer">
+    Credit is awarded when a member is present for the pop and remains until the NM is defeated.
+  </p>
+</div>

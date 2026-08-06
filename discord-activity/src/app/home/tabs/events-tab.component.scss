@@ -48,16 +48,242 @@
   border-color: var(--border);
 }
 
+// A window the camp reached but nobody posted a roster for. Dimmed so the strip reads at a glance
+// as "these have rosters, those don't" without needing a legend — colour only, because the whole
+// point of listing them is that they stay selectable. Mirrors the addon's dimmed missed tab.
+.attendance-window-tab.is-missed {
+  color: var(--text-muted, var(--fg-3));
+  opacity: 0.6;
+}
+
+.attendance-window-tab.is-missed:hover,
+.attendance-window-tab.is-missed.is-active {
+  opacity: 1;
+}
+
 .attendance-window-pane__meta {
   font-size: 11px;
   color: var(--fg-3);
   margin-bottom: 8px;
 }
 
+// The per-window price editor, sharing the "Posted ..." line rather than taking a row of its own:
+// it is a fact ABOUT this window, next to the other one. Wraps instead of overflowing, because the
+// Activity iframe is narrow and the Apply / Use default pair is what would fall off the edge.
+.window-dkp-edit {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 12px;
+
+  label {
+    font-size: 11px;
+    color: var(--fg-3);
+  }
+
+  input {
+    width: 76px;
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+}
+
 .participant-list--scroll {
   max-height: 460px;
   overflow-y: auto;
   padding-right: 6px;
+}
+
+// Footer under the Manual Check In late-arrivals table: the rate and window the figures
+// above were computed from, so a number nobody expected can be traced without leaving.
+.late-join-foot {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+// Roster table — used by BOTH the attendance-window pane and the linked-snapshot
+// blocks below it, which is the point: the two are the same roster seen from two
+// sides, and reading them in two different shapes made comparing them work.
+// Deliberately a local copy of the Event System's `.we-table--snapshot` rather than
+// a shared class; that one is scoped to its own component and carries editor
+// affordances (DKP column, add-row) this read-only view has no use for.
+.roster-table__scroll {
+  overflow-x: auto;
+}
+
+.roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.roster-table th {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.roster-table th.num,
+.roster-table td.num {
+  text-align: right;
+}
+
+.roster-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.05));
+  vertical-align: middle;
+}
+
+.roster-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+// A name an officer typed, not one the addon scanned. Tinted so an asserted
+// attendee can never be mistaken for an observed one.
+.roster-table tr.roster-row--manual td {
+  background: rgba(255, 196, 87, 0.06);
+}
+
+.job-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  margin-right: 4px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: rgba(140, 106, 255, 0.16);
+  color: #b9a3ff;
+}
+
+.job-pill--sub {
+  background: rgba(58, 176, 214, 0.16);
+  color: #7fd4ec;
+}
+
+.roster-muted {
+  color: var(--fg-3);
+}
+
+.roster-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.roster-zone svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  opacity: 0.7;
+}
+
+// Linked snapshots, under the window pane. Same separator treatment as Claim
+// Shield below: evidence about the camp above it, not a second subject.
+.linked-snapshots {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.linked-snapshots__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.linked-snapshots__header h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.linked-snapshots__item + .linked-snapshots__item {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.linked-snapshots__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+// Claim Shield, at the foot of the Attendance Windows card. Separated by a rule
+// rather than its own card: it is evidence about the windows above it, not a
+// second subject, and boxing it would read as unrelated.
+.claim-shield {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.claim-shield__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.claim-shield__header h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.claim-shield__capture + .claim-shield__capture {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.claim-shield__result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.claim-shield__meta {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+.claim-shield__members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.claim-shield__members > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+// The action sentence is the record, so it gets the monospace treatment the
+// rest of the app gives verbatim game text -- it reads as quoted, not authored.
+.claim-shield__action {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  color: var(--fg-2);
 }
 
 .live-add-member-form {
@@ -143,3 +369,12 @@
 }
 
 .live-party-setup-row__button:hover:not(:disabled) { filter: brightness(1.06); }
+
+/* HNM Events mounts immediately beneath the running camp cards. At the shared card spacing its
+   header sat close enough to the card above to read as part of it, rather than as the start of a
+   new section — so give it a clear break.
+ *
+ * Scoped to the LIVE instance by its static `section` attribute: the archive instance further down
+ * already follows the queue panel and needs no extra separation. Lives here rather than in
+ * attendance-sections.component.scss because that file is already over its 10 kB budget. */
+app-attendance-sections[section="live"] { display: block; margin-top: 26px; }

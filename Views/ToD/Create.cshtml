@@ -78,9 +78,18 @@ else
                 // Model is always supplied by the action; capture Tod once as
                 // non-null so the dropdown logic below stays free of null noise.
                 var tod = Model!.Tod;
-                var isCustomMonster = !string.IsNullOrWhiteSpace(tod.MonsterName)
-                    && !Model.MonsterOptions.Any(m =>
-                        string.Equals(m, tod.MonsterName, StringComparison.OrdinalIgnoreCase));
+                // The option COVERING the stored name: the one it is, or -- since the three
+                // NQ/HQ pairs are offered as one combined entry -- the one whose combined
+                // label contains it. A ToD saved before the pairs were combined holds a bare
+                // half ("Aspidochelone"); matching only on equality would leave it selecting
+                // nothing and quietly demote a curated monster to a free-text "Other".
+                var monsterOption = string.IsNullOrWhiteSpace(tod.MonsterName)
+                    ? null
+                    : Model.MonsterOptions.FirstOrDefault(m =>
+                        string.Equals(m, tod.MonsterName, StringComparison.OrdinalIgnoreCase)
+                        || m.Split('/').Any(half =>
+                            string.Equals(half.Trim(), tod.MonsterName, StringComparison.OrdinalIgnoreCase)));
+                var isCustomMonster = !string.IsNullOrWhiteSpace(tod.MonsterName) && monsterOption is null;
                 var customMonsterValue = isCustomMonster
                     ? tod.MonsterName
                     : Model.CustomMonsterName;
@@ -92,7 +101,7 @@ else
                     @foreach (var monster in Model.MonsterOptions)
                     {
                         <option value="@monster"
-                                selected="@(!isCustomMonster && string.Equals(monster, Model.Tod.MonsterName, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                                selected="@(string.Equals(monster, monsterOption, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
                             @monster
                         </option>
                     }

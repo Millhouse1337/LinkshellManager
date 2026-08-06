@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,9 +50,16 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "This HNM board has no monster assigned." });
         }
 
-        if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
+        // A blank time means the camp ended without anyone seeing it die (the window closed, or
+        // another linkshell took it): record no ToD and no repop rather than inventing "now".
+        // Only a non-blank value that won't parse is an error — a ToD is never silently guessed.
+        DateTime? todTimeUtc = null;
+        if (!string.IsNullOrWhiteSpace(request.TimeLocal))
         {
-            return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
+            if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out todTimeUtc) || !todTimeUtc.HasValue)
+            {
+                return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
+            }
         }
 
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
@@ -72,73 +80,36 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Select a valid interval." });
         }
 
-        var nowUtc = DateTime.UtcNow;
-        var additionalSeconds = Math.Max(0, request.AdditionalSeconds);
-        var repopUtc = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(additionalSeconds);
+        // Hand the validated inputs to the shared pop service, which logs (or edits) the ToD,
+        // re-points the board to the next repop, tears the camp down, and stages its roster as a
+        // pending review row in the Event System page's attendance sections (both modes). Identical to the Discord
+        // "🏁 Pop / End Camp" path, which calls the same service.
+        var popService = HttpContext.RequestServices.GetRequiredService<HnmCampPopService>();
+        var result = await popService.PopAsync(new HnmCampPopService.Request(
+            EventId: eventId,
+            TodTimeUtc: todTimeUtc,
+            Cooldown: cooldown,
+            Interval: interval,
+            DayNumber: request.DayNumber,
+            Claimed: request.Claim,
+            Killed: request.Killed,
+            PopWindow: request.PopWindow,
+            AdditionalSeconds: Math.Max(0, request.AdditionalSeconds),
+            Hq: request.Hq,
+            Repost: request.Repost,
+            RepostLeadHours: request.RepostLeadHours,
+            ImagePath: SanitizeUploadedImagePath(request.ImagePath)), cancellationToken);
 
-        // Edit the existing ToD if we're already in the defeated/awaiting state (the card's
-        // "Edit ToD" button); otherwise log a fresh ToD for this pop ("Post ToD").
-        Tod? tod = null;
-        if (eventEntity.HnmDefeatedAt != null && eventEntity.SourceTodId is { } sourceTodId)
+        if (!result.Success)
         {
-            tod = await _dbContext.Tods.FirstOrDefaultAsync(t => t.Id == sourceTodId, cancellationToken);
+            return BadRequest(new { error = result.Error ?? "Couldn't post the Time of Death." });
         }
-        if (tod is null)
-        {
-            tod = new Tod { LinkshellId = eventEntity.LinkshellId, TotalTods = 1 };
-            _dbContext.Tods.Add(tod);
-        }
-        tod.MonsterName = monsterName;
-        tod.DayNumber = request.DayNumber;
-        tod.Claim = request.Claim;
-        tod.Hq = request.Hq;
-        tod.AdditionalSeconds = additionalSeconds;
-        tod.Time = todTimeUtc;
-        tod.Cooldown = cooldown;
-        tod.RepopTime = repopUtc;
-        tod.Interval = interval;
-        tod.TimeStamp = nowUtc;
-        tod.TotalClaims = request.Claim == true ? 1 : 0;
-        await _dbContext.SaveChangesAsync(cancellationToken); // ensure tod.Id is assigned
-
-        // Re-point the event to this pop's repop time + ToD, and mark the board defeated.
-        eventEntity.StartTime = repopUtc;
-        eventEntity.SourceTodId = tod.Id;
-        eventEntity.HnmDefeatedAt = nowUtc;
-
-        // The board auto-re-posts LeadHours before the pop — but only if Repeat-on-ToD is on
-        // (an enabled recurring board exists). Otherwise there's no auto-re-post window.
-        var leadHours = await _dbContext.HnmRecurringBoards
-            .Where(b => b.LinkshellId == eventEntity.LinkshellId
-                && b.MonsterName.ToLower() == monsterName.ToLower()
-                && b.Enabled)
-            .Select(b => (double?)b.LeadHours)
-            .FirstOrDefaultAsync(cancellationToken);
-        eventEntity.HnmRepostAt = leadHours.HasValue ? repopUtc.AddHours(-leadHours.Value) : null;
-
-        // Wipe the board's signups — the pop is done. (Both the party-slot signups and the
-        // no-slot attendees.) Deliberately do NOT stamp the recurring board's LastSourceTodId
-        // here: leaving it lets the poller find this defeated event at the lead window and
-        // re-post THIS same board instead of creating a new one.
-        var slotSignups = await _dbContext.EventPartySlotSignups
-            .Where(s => s.EventId == eventId)
-            .ToListAsync(cancellationToken);
-        _dbContext.EventPartySlotSignups.RemoveRange(slotSignups);
-        var noSlotAttendees = await _dbContext.AppUserEvents
-            .Where(p => p.EventId == eventId)
-            .ToListAsync(cancellationToken);
-        _dbContext.AppUserEvents.RemoveRange(noSlotAttendees);
-
-        // The Event is now Modified with a non-null HnmDefeatedAt, so the DbContext
-        // save-hook enqueues it and DiscordEventChannelPublisher edits the posted board
-        // message into the "defeated" note (single renderer → no race with this save).
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
             success = true,
-            repopTimeUtc = repopUtc,
-            repostAtUtc = eventEntity.HnmRepostAt
+            repopTimeUtc = result.RepopTimeUtc,
+            repostAtUtc = result.RepostAtUtc
         });
     }
 }

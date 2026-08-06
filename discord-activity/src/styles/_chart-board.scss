@@ -1,0 +1,971 @@
+/* ===== Charts boards (Sky, Sea, …) =============================================================
+ *
+ * The boss cards and the Farming Credit Ledger. Lives here rather than in the components' own
+ * `styles: []` blocks for the same reason _finances.scss does: those blocks read the same :root
+ * tokens but are easy to miss in a palette sweep, and the zero-colour-literal rule covers .ts too.
+ *
+ * Per-boss theming works through ONE locally-scoped custom property. Each card sets --boss /
+ * --boss-weak from its theme class and everything below reads those, so there is a single themed
+ * block and one line per boss instead of one copy of the card per boss.
+ */
+
+/* ===== Sub-nav (Sky | Sea | Dynamis | Limbus) ===== */
+.panel-tab .chart-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 2px 12px;
+}
+.panel-tab .chart-subnav .btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.panel-tab .chart-subnav__soon {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+  margin-left: 4px;
+}
+
+/* ===== Boss theming ===== */
+.panel-tab .chart-card,
+.panel-tab .chart-ledger__boss {
+  --boss: var(--accent);
+  --boss-weak: var(--accent-weak);
+}
+
+/* Sky */
+.panel-tab .is-suzaku { --boss: var(--chart-suzaku); --boss-weak: var(--chart-suzaku-weak); }
+.panel-tab .is-genbu  { --boss: var(--chart-genbu);  --boss-weak: var(--chart-genbu-weak); }
+.panel-tab .is-seiryu { --boss: var(--chart-seiryu); --boss-weak: var(--chart-seiryu-weak); }
+.panel-tab .is-byakko { --boss: var(--chart-byakko); --boss-weak: var(--chart-byakko-weak); }
+.panel-tab .is-kirin  { --boss: var(--chart-kirin);  --boss-weak: var(--chart-kirin-weak); }
+.panel-tab .is-brigandish-blade { --boss: var(--chart-brigandish-blade); --boss-weak: var(--chart-brigandish-blade-weak); }
+.panel-tab .is-faust            { --boss: var(--chart-faust);            --boss-weak: var(--chart-faust-weak); }
+.panel-tab .is-zipacna          { --boss: var(--chart-zipacna);          --boss-weak: var(--chart-zipacna-weak); }
+.panel-tab .is-olla-grande      { --boss: var(--chart-olla-grande);      --boss-weak: var(--chart-olla-grande-weak); }
+.panel-tab .is-steam-cleaner    { --boss: var(--chart-steam-cleaner);    --boss-weak: var(--chart-steam-cleaner-weak); }
+.panel-tab .is-mother-globe     { --boss: var(--chart-mother-globe);     --boss-weak: var(--chart-mother-globe-weak); }
+.panel-tab .is-despot           { --boss: var(--chart-despot);           --boss-weak: var(--chart-despot-weak); }
+.panel-tab .is-ullikummi        { --boss: var(--chart-ullikummi);        --boss-weak: var(--chart-ullikummi-weak); }
+
+/* Sea */
+.panel-tab .is-temperance { --boss: var(--chart-temperance); --boss-weak: var(--chart-temperance-weak); }
+.panel-tab .is-faith      { --boss: var(--chart-faith);      --boss-weak: var(--chart-faith-weak); }
+.panel-tab .is-justice    { --boss: var(--chart-justice);    --boss-weak: var(--chart-justice-weak); }
+.panel-tab .is-hope       { --boss: var(--chart-hope);       --boss-weak: var(--chart-hope-weak); }
+.panel-tab .is-prudence   { --boss: var(--chart-prudence);   --boss-weak: var(--chart-prudence-weak); }
+.panel-tab .is-love       { --boss: var(--chart-love);       --boss-weak: var(--chart-love-weak); }
+.panel-tab .is-fortitude  { --boss: var(--chart-fortitude);  --boss-weak: var(--chart-fortitude-weak); }
+.panel-tab .is-absolute   { --boss: var(--chart-absolute);   --boss-weak: var(--chart-absolute-weak); }
+.panel-tab .is-ixaern-drk { --boss: var(--chart-ixaern-drk); --boss-weak: var(--chart-ixaern-drk-weak); }
+.panel-tab .is-ixaern-mnk { --boss: var(--chart-ixaern-mnk); --boss-weak: var(--chart-ixaern-mnk-weak); }
+.panel-tab .is-ixaern-drg { --boss: var(--chart-ixaern-drg); --boss-weak: var(--chart-ixaern-drg-weak); }
+/* The six trash families, each in the hue of the column it is farmed for. */
+.panel-tab .is-ghrah      { --boss: var(--chart-ghrah);      --boss-weak: var(--chart-ghrah-weak); }
+.panel-tab .is-xzomit     { --boss: var(--chart-xzomit);     --boss-weak: var(--chart-xzomit-weak); }
+.panel-tab .is-aern       { --boss: var(--chart-aern);       --boss-weak: var(--chart-aern-weak); }
+.panel-tab .is-phuabo     { --boss: var(--chart-phuabo);     --boss-weak: var(--chart-phuabo-weak); }
+.panel-tab .is-euvhi      { --boss: var(--chart-euvhi);      --boss-weak: var(--chart-euvhi-weak); }
+.panel-tab .is-hpemde     { --boss: var(--chart-hpemde);     --boss-weak: var(--chart-hpemde-weak); }
+
+/* Dynamis */
+.panel-tab .is-sandoria   { --boss: var(--chart-sandoria);   --boss-weak: var(--chart-sandoria-weak); }
+.panel-tab .is-bastok     { --boss: var(--chart-bastok);     --boss-weak: var(--chart-bastok-weak); }
+.panel-tab .is-windurst   { --boss: var(--chart-windurst);   --boss-weak: var(--chart-windurst-weak); }
+.panel-tab .is-jeuno      { --boss: var(--chart-jeuno);      --boss-weak: var(--chart-jeuno-weak); }
+.panel-tab .is-beaucedine { --boss: var(--chart-beaucedine); --boss-weak: var(--chart-beaucedine-weak); }
+.panel-tab .is-xarcabard  { --boss: var(--chart-xarcabard);  --boss-weak: var(--chart-xarcabard-weak); }
+.panel-tab .is-valkurm    { --boss: var(--chart-valkurm);    --boss-weak: var(--chart-valkurm-weak); }
+.panel-tab .is-buburimu   { --boss: var(--chart-buburimu);   --boss-weak: var(--chart-buburimu-weak); }
+.panel-tab .is-qufim      { --boss: var(--chart-qufim);      --boss-weak: var(--chart-qufim-weak); }
+.panel-tab .is-tavnazia   { --boss: var(--chart-tavnazia);   --boss-weak: var(--chart-tavnazia-weak); }
+
+/* Limbus */
+.panel-tab .is-apollyon-nw      { --boss: var(--chart-apollyon-nw);      --boss-weak: var(--chart-apollyon-nw-weak); }
+.panel-tab .is-apollyon-sw      { --boss: var(--chart-apollyon-sw);      --boss-weak: var(--chart-apollyon-sw-weak); }
+.panel-tab .is-apollyon-ne      { --boss: var(--chart-apollyon-ne);      --boss-weak: var(--chart-apollyon-ne-weak); }
+.panel-tab .is-apollyon-se      { --boss: var(--chart-apollyon-se);      --boss-weak: var(--chart-apollyon-se-weak); }
+.panel-tab .is-apollyon-central { --boss: var(--chart-apollyon-central); --boss-weak: var(--chart-apollyon-central-weak); }
+.panel-tab .is-apollyon-cs      { --boss: var(--chart-apollyon-cs);      --boss-weak: var(--chart-apollyon-cs-weak); }
+.panel-tab .is-temenos-west     { --boss: var(--chart-temenos-west);     --boss-weak: var(--chart-temenos-west-weak); }
+.panel-tab .is-temenos-north    { --boss: var(--chart-temenos-north);    --boss-weak: var(--chart-temenos-north-weak); }
+.panel-tab .is-temenos-east     { --boss: var(--chart-temenos-east);     --boss-weak: var(--chart-temenos-east-weak); }
+.panel-tab .is-temenos-1f       { --boss: var(--chart-temenos-1f);       --boss-weak: var(--chart-temenos-1f-weak); }
+.panel-tab .is-temenos-2f       { --boss: var(--chart-temenos-2f);       --boss-weak: var(--chart-temenos-2f-weak); }
+.panel-tab .is-temenos-3f       { --boss: var(--chart-temenos-3f);       --boss-weak: var(--chart-temenos-3f-weak); }
+.panel-tab .is-temenos-4f       { --boss: var(--chart-temenos-4f);       --boss-weak: var(--chart-temenos-4f-weak); }
+.panel-tab .is-temenos-b1       { --boss: var(--chart-temenos-b1);       --boss-weak: var(--chart-temenos-b1-weak); }
+
+/* HENM — a hue per tier, escalating up the ladder. */
+.panel-tab .is-henm-rocs      { --boss: var(--chart-henm-rocs);      --boss-weak: var(--chart-henm-rocs-weak); }
+.panel-tab .is-henm-decapod   { --boss: var(--chart-henm-decapod);   --boss-weak: var(--chart-henm-decapod-weak); }
+.panel-tab .is-henm-scorpions { --boss: var(--chart-henm-scorpions); --boss-weak: var(--chart-henm-scorpions-weak); }
+.panel-tab .is-henm-mammet    { --boss: var(--chart-henm-mammet);    --boss-weak: var(--chart-henm-mammet-weak); }
+.panel-tab .is-henm-tonberry  { --boss: var(--chart-henm-tonberry);  --boss-weak: var(--chart-henm-tonberry-weak); }
+.panel-tab .is-henm-ultimega  { --boss: var(--chart-henm-ultimega);  --boss-weak: var(--chart-henm-ultimega-weak); }
+.panel-tab .is-henm-behemoth  { --boss: var(--chart-henm-behemoth);  --boss-weak: var(--chart-henm-behemoth-weak); }
+.panel-tab .is-henm-minogame  { --boss: var(--chart-henm-minogame);  --boss-weak: var(--chart-henm-minogame-weak); }
+.panel-tab .is-henm-io        { --boss: var(--chart-henm-io);        --boss-weak: var(--chart-henm-io-weak); }
+.panel-tab .is-henm-council   { --boss: var(--chart-henm-council);   --boss-weak: var(--chart-henm-council-weak); }
+
+/* ===== Boss cards ===== */
+/* auto-fit rather than a fixed column count: five or six across on a desktop web page, two or three
+ * mid, one in the Discord iframe — no media query and no breakpoint to keep in sync with the
+ * shell's, and it copes with Sky's five cards, Sea's eight and Dynamis's ten equally. */
+.panel-tab .chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* A group heading (Dynamis's "Original" / "Dreamworld" runs) is a grid ITEM that spans every track,
+ * not a wrapper around a sub-grid: the cards keep the exact widths auto-fit gives them and the card
+ * markup is not duplicated per group. min-width:0 so a long label cannot raise the tracks'
+ * min-content contribution and widen the whole grid. Boards with no groups never emit one. */
+.panel-tab .chart-group-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 6px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-3);
+}
+
+.panel-tab .chart-group-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-2);
+}
+
+.panel-tab .chart-group-heading:first-child { margin-top: 0; }
+
+/* ===== Path columns (Sky) =====
+   ONE grid filled COLUMN-wise, not a container per column: a grid row is as tall as its tallest card
+   and every column shares those rows, so the two farm tiers and the god tier line up sideways —
+   which is the whole point of drawing the board this way. A container per column would let each one
+   size its own cards and the tiers would drift apart within a few pixels of each other.
+   --chart-path-rows is bound on the element: one heading plus the cards in the longest path. */
+.panel-tab .chart-paths {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(var(--chart-path-rows, 4), auto);
+  /* stretch, NOT start: a grid row is as tall as its tallest card, and with `start` a shorter card
+   * ended at its own height and left the rest of its row as a hole in the page — most visible on a
+   * Mini NM, which has no totals footer, but any card with fewer pop items than its neighbours did
+   * it too. Stretching means the card fills the row and the slack sits inside it, under a footer
+   * that is already pinned down by margin-top: auto. */
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.panel-tab .chart-path-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-3);
+}
+
+/* A rule on BOTH sides, so the label sits in the middle of its column and reads as that column's
+ * title rather than as a label pinned to its left edge. */
+.panel-tab .chart-path-heading::before,
+.panel-tab .chart-path-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-2);
+}
+
+/* Same treatment wherever a heading sits over CENTRED content — the row containers and the finale.
+ * A left-aligned title over a centred row is the one combination that reads as a mistake. */
+.panel-tab .chart-rows > .chart-group-heading::before,
+.panel-tab .chart-finale > .chart-group-heading::before {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-2);
+}
+
+/* Whatever sits BELOW the columns — the finale run. Centred, and sized in the columns' own widths so
+ * it lines up with them: one column of the grid above is
+ *   (100% - (count - 1) * gap) / count
+ * and a lone card takes two of those plus the gap between. Without that a single finale card lands
+ * in the first track of a four-track row and reads as an afterthought rather than as the thing every
+ * column leads to. */
+.panel-tab .chart-finale {
+  --chart-finale-col: calc(
+    (100% - (var(--chart-path-count, 4) - 1) * 10px) / var(--chart-path-count, 4)
+  );
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+/* TWO columns each, whatever the finale holds — Kirin alone, or Sea's Love and Absolute Virtue. The
+ * finale is the thing every column leads to, so it reads as one wide card rather than as a card the
+ * width of a feeder. Cards past the first wrap to their own centred row when two of them cannot fit
+ * across, which is what Sea's three-column board does. */
+.panel-tab .chart-finale > .chart-card {
+  flex: 0 0 calc(2 * var(--chart-finale-col) + 10px);
+  max-width: 100%;
+}
+/* Full width in a flex row, where grid-column means nothing. */
+.panel-tab .chart-finale > .chart-group-heading { flex: 1 0 100%; margin-top: 0; }
+
+/* ===== Author-chosen rows (Dynamis) =====
+   Cards at a fixed width, centred, with an explicit break where the board says a row ends. NOT the
+   auto-fit grid: that decides row length from whatever fits and stretches the cards to fill, which
+   is the opposite of a board saying "these four, then these two". The slack sits at the edges of
+   each row instead of inside the cards, which is what centring a chosen row means. */
+.panel-tab .chart-rows {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.panel-tab .chart-rows > .chart-card { flex: 0 1 280px; }
+.panel-tab .chart-rows > .chart-group-heading { flex: 1 0 100%; margin-top: 6px; }
+.panel-tab .chart-rows > .chart-group-heading:first-child { margin-top: 0; }
+/* Zero-height full-width item — the only way to force a line break mid-row in a wrap container. */
+.panel-tab .chart-row-break { flex: 1 0 100%; height: 0; margin: 0; }
+
+/* Four columns of 280px need 1160px+, which the Discord iframe rarely has. Below that they cannot
+ * hold their width, so the board falls back to the ordinary flow — each heading spans the row again
+ * and its cards follow it. The "→ God" badge on every farm card is what still says which path a card
+ * belongs to once the columns are gone, which is exactly why it earns its place. */
+@media (max-width: 1160px) {
+  .panel-tab .chart-paths {
+    grid-auto-flow: row;
+    grid-template-rows: none;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .panel-tab .chart-path-heading { grid-column: 1 / -1; margin-top: 6px; }
+
+  /* The columns are gone, so a finale sized against them means nothing — it just fills the row. */
+  .panel-tab .chart-finale > .chart-card { flex: 1 1 280px; }
+}
+
+.panel-tab .chart-card {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+
+.panel-tab .chart-card .card-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--boss);
+  background: linear-gradient(180deg, var(--boss-weak), transparent);
+}
+.panel-tab .chart-card__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.panel-tab .chart-card__emblem {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  border: 1px solid var(--boss);
+}
+.panel-tab .chart-card__name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--boss);
+  letter-spacing: -0.01em;
+}
+/* One line, ellipsised (full text on hover). A subtitle or progress note that wrapped made one
+ * card's head taller than its neighbours', and a grid row is as tall as its tallest card. */
+.panel-tab .chart-card__heading > div { min-width: 0; }
+.panel-tab .chart-card__subtitle {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--fg-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Which card this one's drops feed. Its --boss comes from an is-<targetKey> class ON THIS ELEMENT,
+ * so it is painted in the TARGET's hue while the card around it keeps its own — the .is-* rules set
+ * nothing but --boss / --boss-weak, and a declaration on the element beats the card's inherited one.
+ * The two rules set disjoint properties, so their source order does not matter. Same trick
+ * .chart-holdings__boss already uses in the holdings table.
+ *
+ * nowrap + ellipsis for the same reason the subtitle has them: a grid row is as tall as its tallest
+ * card, and one wrapped badge would make one card's head taller than the seven beside it. */
+.panel-tab .chart-card__leads-to {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--boss-weak);
+  color: var(--boss);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-tab .chart-card .tag.chart-count {
+  background: var(--boss-weak);
+  color: var(--boss);
+  border-color: transparent;
+  white-space: nowrap;
+}
+
+.panel-tab .chart-card__body { padding: 0; }
+
+.panel-tab .chart-card__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--boss);
+  border-top: 1px solid var(--border);
+}
+.panel-tab .chart-card__footer strong { color: var(--fg); font-weight: 600; }
+
+.panel-tab .chart-card__empty {
+  padding: 16px 14px;
+  font-size: 12px;
+  color: var(--fg-3);
+  text-align: center;
+}
+
+/* ===== Final encounter ===== */
+/* An ordinary card in an ordinary track. Its rewards are reference text rather than tracked data,
+ * so they hang off the footer strip: closed, the finale is exactly as tall as its neighbours. */
+.panel-tab .chart-rewards__bar { cursor: default; }
+.panel-tab .chart-rewards__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.panel-tab .chart-rewards__toggle:hover { color: var(--fg); }
+.panel-tab .chart-rewards__chevron {
+  display: inline-block;
+  transition: transform 150ms ease;
+}
+.panel-tab .chart-rewards__chevron.is-open { transform: rotate(90deg); }
+
+.panel-tab .chart-rewards {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.panel-tab .chart-rewards ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.panel-tab .chart-rewards li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-1);
+}
+.panel-tab .chart-rewards li span { color: var(--gold); }
+.panel-tab .chart-rewards__note {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--gold-weak);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-2);
+  text-align: center;
+}
+
+/* ===== Item table ===== */
+.panel-tab .chart-item-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.panel-tab .chart-item-table th {
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .chart-item-table td {
+  padding: 8px 10px;
+  color: var(--fg-1);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .chart-item-table tbody tr:last-child td { border-bottom: 0; }
+.panel-tab .chart-item-table tbody tr:hover { background: var(--surface-2); }
+.panel-tab .chart-item-table .chart-item__name { font-weight: 500; color: var(--fg); }
+.panel-tab .chart-item-table .chart-item__qty {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.panel-tab .chart-item-table .chart-item__muted { color: var(--fg-3); }
+.panel-tab .chart-item-table .chart-item__actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Six columns will not fit at 280px. Rather than nesting a horizontal scroller inside a
+ * vertically-scrolling iframe, flip the rows to stacked label/value pairs — the same treatment
+ * _responsive.scss already applies to participant and compact lists at this width. */
+@media (max-width: 720px) {
+  .panel-tab .chart-item-table thead { display: none; }
+  .panel-tab .chart-item-table tbody tr {
+    display: block;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-tab .chart-item-table tbody tr:last-child { border-bottom: 0; }
+  .panel-tab .chart-item-table td {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    padding: 3px 10px;
+    border-bottom: 0;
+  }
+  .panel-tab .chart-item-table td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-3);
+  }
+  .panel-tab .chart-item-table .chart-item__actions { justify-content: flex-start; }
+}
+
+/* ===== Credit editor (inline, per item row) ===== */
+/* Deliberately an expander on the row rather than a modal cross-tab editor: credit is stored per
+ * item, and a 60-person picker in a 400px-wide iframe has to be a list, not a grid. */
+.panel-tab .chart-credit-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.panel-tab .chart-credit-editor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-tab .chart-credit-editor__title { font-size: 12px; font-weight: 600; color: var(--fg); }
+.panel-tab .chart-credit-editor__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.panel-tab .chart-credit-editor__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+.panel-tab .chart-credit-editor__row:hover { background: var(--surface-2); }
+.panel-tab .chart-credit-editor__row input { accent-color: var(--accent); }
+.panel-tab .chart-credit-editor__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.panel-tab .chart-credit-editor__none { font-size: 12px; color: var(--fg-3); }
+
+/* ===== Farming Credit Ledger ===== */
+.panel-tab .chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.panel-tab .chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.panel-tab .chart-status-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+.panel-tab .chart-status-dot.is-credited   { color: var(--success); background: var(--success-weak); }
+.panel-tab .chart-status-dot.is-partial    { color: var(--warning); background: var(--warning-weak); }
+.panel-tab .chart-status-dot.is-none       { color: var(--danger);  background: var(--danger-weak); }
+/* A boss with nothing tracked is not a failure to farm — it is a question nobody has asked yet, so
+ * it reads as absent rather than red. */
+.panel-tab .chart-status-dot.is-nottracked { color: var(--fg-4); border-style: dashed; }
+
+/* ===== Pop Item Holdings =====
+   Four columns and mostly text, so unlike the ledger grid it needs no sticky column and no sideways
+   scroll — it just gets narrower. */
+.panel-tab .chart-holdings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.panel-tab .chart-holdings th {
+  padding: 9px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-2);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-2);
+}
+.panel-tab .chart-holdings td {
+  padding: 8px 12px;
+  color: var(--fg-1);
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .chart-holdings tbody tr:hover td { background: var(--surface-2); }
+
+/* A repeat of the item above: no top border, so the copies of one item read as one block. */
+.panel-tab .chart-holdings tbody tr.is-continued td { border-top: none; }
+.panel-tab .chart-holdings tbody tr.is-continued td:first-child { color: var(--fg-3); }
+
+.panel-tab .chart-holdings__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.panel-tab .chart-holdings__name { font-weight: 600; color: var(--fg); }
+/* The boss the item pops, in that boss's own hue — the same colour its card carries above. */
+.panel-tab .chart-holdings__boss {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--boss);
+}
+.panel-tab .chart-holdings__ditto { color: var(--fg-3); padding-left: 6px; }
+
+.panel-tab .chart-holdings__holder { font-weight: 500; }
+.panel-tab .chart-holdings__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--fg-3);
+}
+
+.panel-tab .chart-holdings__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 4px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg-1);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.panel-tab .chart-holdings__toggle:hover { border-color: var(--accent); color: var(--fg); }
+.panel-tab .chart-holdings__chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.panel-tab .chart-holdings__chevron.is-open { transform: rotate(90deg); }
+
+.panel-tab .chart-holdings__drawer td { background: var(--surface); }
+.panel-tab .chart-holdings__farmers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.panel-tab .chart-holdings__farmers-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-3);
+  margin-right: 2px;
+}
+.panel-tab .chart-holdings__farmer {
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--fg-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.panel-tab .chart-holdings__footer {
+  padding: 10px 14px;
+  margin: 0;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--fg-3);
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+.panel-tab .chart-ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.panel-tab .chart-ledger th {
+  padding: 9px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-2);
+  text-align: center;
+  white-space: nowrap;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-2);
+}
+.panel-tab .chart-ledger td {
+  padding: 8px 12px;
+  color: var(--fg-1);
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .chart-ledger tbody tr:hover td { background: var(--surface-2); }
+
+/* Eight bosses plus a name and a total will never fit, and the grid is inherently 2-D so it cannot
+ * stack. It scrolls sideways with the name column pinned — without that, the rows stop meaning
+ * anything the moment you scroll. */
+.panel-tab .chart-ledger th:first-child,
+.panel-tab .chart-ledger td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border-2);
+}
+.panel-tab .chart-ledger th:first-child { background: var(--surface); }
+.panel-tab .chart-ledger tbody tr:hover td:first-child { background: var(--surface-2); }
+
+.panel-tab .chart-ledger__boss { color: var(--boss); }
+
+.panel-tab .chart-ledger__member {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.panel-tab .chart-ledger__member-text { display: flex; flex-direction: column; }
+.panel-tab .chart-ledger__member-text strong { color: var(--fg); font-weight: 500; }
+.panel-tab .chart-ledger__member-text small { color: var(--fg-3); font-size: 10px; }
+.panel-tab .chart-ledger__former {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+}
+.panel-tab .chart-ledger__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.panel-tab .chart-ledger__cell.is-muted { color: var(--fg-3); }
+
+.panel-tab .chart-ledger__total {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  min-width: 84px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--success);
+  background: var(--success-weak);
+}
+.panel-tab .chart-ledger__total strong { font-weight: 600; }
+.panel-tab .chart-ledger__total small { font-size: 10px; opacity: 0.85; }
+.panel-tab .chart-ledger__total.is-zero { color: var(--fg-3); background: var(--surface-2); }
+
+.panel-tab .chart-ledger-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.panel-tab .chart-ledger-filter input { accent-color: var(--accent); }
+
+.panel-tab .chart-ledger__footer {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--fg-3);
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+/* ===== Add / edit form =====
+   Centred flex row rather than an auto-fit grid. The grid packed five short fields into the left of
+   a very wide card and left a third of it empty: auto-fit could never collapse the spare tracks,
+   because the actions row spans 1 / -1 and a spanned track is not an empty one. Flex has no tracks
+   to leave behind, so the fields sit as one centred group and wrap to as many rows as the width
+   allows. */
+.panel-tab .chart-form {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.panel-tab .chart-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Shrinks below its basis on a narrow panel but never grows past it — growing would stretch the
+     fields back across the card and undo the centring. */
+  flex: 0 1 200px;
+  min-width: 0;
+}
+.panel-tab .chart-form__field label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+}
+.panel-tab .chart-form__actions {
+  /* Its own full-width row under the fields, centred with them — right-aligned buttons under a
+     centred group read as belonging to the card's edge rather than to the form. */
+  flex: 1 0 100%;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ===== Farming credit multiselect (inside the add / edit form) =====
+   The panel is absolutely positioned so opening it does not push the form's other fields around,
+   and the wrapper is what the document-click handler matches to decide "inside". */
+
+/* .panel-tab .card clips its children so their corners follow the card's radius. That would cut off
+   the dropdown, which hangs past the bottom of this particular card — and it holds nothing that
+   needs clipping. */
+.panel-tab .card.chart-form-card { overflow: visible; }
+
+.panel-tab .chart-multiselect { position: relative; }
+
+/* ===== "Held by" combo box =====
+   Twelve rows then scroll. A native <datalist> cannot be capped — the browser picks the height and
+   no CSS reaches inside the popup — which is the whole reason this is hand-rolled. */
+.panel-tab .chart-combo { position: relative; }
+
+.panel-tab .chart-combo__panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  width: 100%;
+  min-width: 190px;
+  /* 12 × (row height + gap), so the thirteenth is half-visible and the list reads as scrollable. */
+  max-height: calc(12 * 28px);
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.panel-tab .chart-combo__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 26px;
+  margin-bottom: 2px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--fg-1);
+  background: none;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.panel-tab .chart-combo__row:hover { background: var(--surface-2); color: var(--fg); }
+.panel-tab .chart-combo__name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Whose alt this is. Muted and to the right: it identifies the row, it is not the name you pick. */
+.panel-tab .chart-combo__hint {
+  flex: none;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+/* Deliberately mirrors the base control theming in _tokens.scss (height, padding, surface, border,
+   focus ring) so this button sits in the row looking like the selects either side of it. */
+.panel-tab .chart-multiselect__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--fg);
+  background-color: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.panel-tab .chart-multiselect__toggle:hover { border-color: var(--border-hot); }
+.panel-tab .chart-multiselect__toggle:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.panel-tab .chart-multiselect__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+/* Same grey a placeholder gets, because "Nobody credited" is exactly that. */
+.panel-tab .chart-multiselect__value.is-empty { color: var(--fg-3); }
+
+.panel-tab .chart-multiselect__chevron {
+  flex: none;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+.panel-tab .chart-multiselect__chevron.is-open { transform: rotate(-90deg); }
+
+.panel-tab .chart-multiselect__panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.panel-tab .chart-multiselect__actions {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .chart-multiselect__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.panel-tab .chart-multiselect__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.panel-tab .chart-multiselect__row:hover { background: var(--surface-2); }
+.panel-tab .chart-multiselect__row input { accent-color: var(--accent); }
+.panel-tab .chart-multiselect__none {
+  font-size: 12px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+.panel-tab .chart-updated {
+  font-size: 11px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}

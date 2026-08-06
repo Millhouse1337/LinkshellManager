@@ -29,16 +29,21 @@ public class EventViewModel
 
     // HNM signup boards: the monster picker options + whether this linkshell allows
     // outside (account-less) Discord signups, which gates the "HNM" type in the
-    // create form. RepeatOnTod / RepeatLeadHours are bound from the repeat controls
-    // (HNM only) so the board re-posts before the next predicted pop.
+    // create form. RepeatOnTod is bound from the repeat toggle (HNM only) so the board
+    // re-posts before the next predicted pop; how far ahead is set on the End Camp /
+    // Post ToD form, not here.
     public List<string> MonsterOptions { get; set; } = new();
     public bool OutsidePartySignupEnabled { get; set; }
     // Gates whether "HNM" is offered in the create event-type dropdown. HNM signup boards
     // are roster-only / no-DKP and only make sense when the linkshell opts into them.
     public bool HnmOutsideSignupEnabled { get; set; }
     public bool RepeatOnTod { get; set; }
-    // Fractional hours (Activity enters it as H/M/S); the web form keeps a single number.
-    public double? RepeatLeadHours { get; set; }
+
+    // Index page only (NOT form-bound): the monster's standing Repeat-on-ToD board state, used
+    // to pre-fill the End Camp / Post ToD modal's re-post toggle + lead so the officer sees and
+    // adjusts what's actually configured. Null lead = no enabled board for this monster.
+    public bool BoardRepostEnabled { get; set; }
+    public double? BoardRepostLeadHours { get; set; }
 
     // Loaded for events on the Index page that have a linked Party Setup —
     // powers the inline "View & Sign Up" panel (alliance/parties/slots tree
@@ -56,6 +61,13 @@ public class EventViewModel
     public int WindowCount { get; set; } = 1;
     public List<EventAttendanceWindowViewModel> AttendanceWindows { get; set; } = new();
 
+    // Whether the Break Room (timer, progress, and the whole Actions column on Start.cshtml)
+    // applies. False for windowed HNM camps, which credit per posted window and have no timer to
+    // pause. Server-computed from Services/EventBreakPolicy, replacing this view's old local
+    // `EventType == "HNM"` test — that one axis disagreed with the window-count test the Activity
+    // and addon used, so the same camp answered differently depending on where you asked.
+    public bool SupportsBreakRoom { get; set; } = true;
+
     [DataType(DataType.DateTime)]
     public DateTime? StartTime { get; set; }
 
@@ -71,6 +83,9 @@ public class EventBoardTodPrefill
     public string? Interval { get; set; }
     public int? DayNumber { get; set; }
     public bool? Claim { get; set; }
+    // Null on ToDs logged before Killed was recorded; the modal falls back to "Yes", matching
+    // the controller's "unspecified means killed" default.
+    public bool? Killed { get; set; }
     public bool Hq { get; set; }
 }
 
@@ -91,6 +106,15 @@ public class EventAttendanceWindowViewModel
     public string? Label { get; set; }
     public DateTime PostedAt { get; set; }
     public List<AttendanceWindowAttendeeViewModel> Attendees { get; set; } = new();
+
+    // What this window pays each attendee, already resolved server-side (an officer's explicit
+    // price when they set one, otherwise the camp's open / close bonuses for this sequence). Null
+    // means the window pays nothing on its own, which on a middle window is the normal answer.
+    //
+    // NOT Event.DkpPerHour, which this page used to divide by and which HnmStandardCampFinalizer
+    // ignores outright — that is how two pages in the same app showed two different numbers for
+    // the same window.
+    public double? DkpAmount { get; set; }
 
     public string DisplayLabel =>
         string.IsNullOrWhiteSpace(Label) ? $"Window {SequenceNumber}" : Label;

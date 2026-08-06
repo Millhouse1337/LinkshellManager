@@ -32,6 +32,11 @@ public class LinkshellRole
 
     public bool CanManageInventory { get; set; }
 
+    // Add/edit/remove rows on the Charts boards (currently Charts → Sky: pop items, holders and
+    // farming credit). Reads are open to every member; this only gates writes, and it gates them
+    // on BOTH surfaces — ChartsController checks the same flag the Activity API does.
+    public bool CanManageCharts { get; set; }
+
     public bool CanManageTreasury { get; set; }
 
     public bool CanManageRules { get; set; }

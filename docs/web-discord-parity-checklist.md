@@ -24,6 +24,11 @@ The only intentionally different part is the login entry surface.
 - Event history parity is in place: full history list and detail views now exist in the Activity.
 - Live event parity is in place on actions and data: quick join, attendance actions, loot, and end-event flow exist in both surfaces.
 - Linkshell details parity is in place: the Activity now supports drill-in details for any membership, not only the primary linkshell.
+- Event System layout parity is in place: `/Event` now renders the Activity's three sections in the
+  same order — Current Field Activity (live camps + open attendance events), Pending Events, then
+  the archive (unlinked snapshots + closed attendance events) and Past Events. The live/queued
+  bucketing predicates are shared rules in `Services/EventSystemBuckets.cs`, mirroring the
+  Activity's `liveEvents()` / `queuedEvents()` / `isEndedCamp()`.
 
 ## Remaining parity gaps
 
@@ -68,8 +73,13 @@ Priority: Medium
 
 The underlying data, actions, and rules are now mostly aligned, but the surfaces still present them differently:
 
-- web uses dedicated pages for dashboard, history, linkshell details, and live event operations
+- web uses dedicated pages for dashboard, linkshell details, and live event operations
 - Activity uses the command-deck layout with inline panels and drawers
+
+Event history is no longer one of these: it is a section of `/Event` on both surfaces. The
+standalone `/EventHistory` and `/linkshells/{id}/window-events/history` pages remain reachable —
+the sidebar links point at the combined page's anchors, and the detail pages still link back to
+their own list.
 
 If strict parity means identical actions and outcomes, this is acceptable. If strict parity also means matching navigation structure, more redesign work is still required.
 

@@ -57,6 +57,29 @@ public class Event
 
     public double? EventDkp { get; set; }
 
+    // Per-camp overrides for the HNM payout amounts. Null (the default) means "use the
+    // linkshell's setting", so a camp created without touching them pays exactly what it
+    // always did. Set by the Activity's create / edit event form ("Change DKP") when one
+    // camp is worth more or less than the linkshell's usual rate — a pop nobody wants to
+    // sit, a rare wyrm, and so on.
+    //
+    // Which ones apply depends on the linkshell's HnmAttendanceMode, because the two modes
+    // pay on different shapes:
+    //   Standard (HnmStandardCampFinalizer) — Open + Close + Claim + Kill
+    //   Wd       (WdCampFinalizer)          — PerWindow × windows + Claim + Kill
+    // Claim and Kill are deliberately SHARED by both: a camp runs in exactly one mode, and
+    // "what this camp pays for the claim" means the same thing either way. Open/Close are
+    // Standard-only and PerWindow is Wd-only; the inapplicable ones stay null.
+    public double? HnmOpenBonusOverride { get; set; }
+
+    public double? HnmCloseBonusOverride { get; set; }
+
+    public double? HnmClaimBonusOverride { get; set; }
+
+    public double? HnmKillBonusOverride { get; set; }
+
+    public double? HnmPerWindowOverride { get; set; }
+
     public string? Details { get; set; }
 
     // Identifies who created the event so clients can show source-specific
@@ -100,14 +123,60 @@ public class Event
 
     // Multi-window pop counter (1..25) for the window-cycle HNMs (Tiamat / Jormungand /
     // Vrtra), which pop across successive windows after a ToD. The Discord board for those
-    // monsters shows "Window N" + a "Next Window" button (officers only) that wipes the
-    // signups and advances this. 1 for every other event; reset to 1 on board re-post.
+    // monsters shows "Window N", and HnmWindowAdvanceBackgroundService is the ONLY thing that
+    // moves this — there is no manual step button. 1 for every other event; reset to 1 on
+    // board re-post.
     public int HnmWindowNumber { get; set; } = 1;
+
+    // The highest window whose turnover has been settled, so a wyrm's roster is cleared exactly
+    // once per window even though the advancer polls every few seconds.
+    //
+    // Only wyrm boards clear a roster at all (HnmConfig.WindowAdvanceWipesRoster); on the
+    // kings/dragons settling is bookkeeping only, since their windows are one continuous camp.
+    //
+    // Null reads as 1: window 1 is the camp's opening roster and is never cleared, so a fresh
+    // board falls straight through rather than wiping everyone who just signed up.
+    public int? HnmClearedWindow { get; set; }
 
     // Optional "Day N" label for an HNM signup board — set on the create-event form and
     // shown on the board (Activity + Discord). Free-form day counter (e.g. which day of
     // the camp); null = not shown. Distinct from HnmWindowNumber (the spawn-window cycle).
     public int? DayNumber { get; set; }
+
+    // Manual Check In attendance state. AttendanceMode is stamped "Wd" (HnmAttendanceModes.Wd) at
+    // create time for HNM events in a Manual Check In linkshell; null = Standard (every existing/
+    // Standard event stays on the current code paths). All Manual Check In behavior is gated on this.
+    [MaxLength(16)]
+    public string? AttendanceMode { get; set; }
+
+    // Two-phase close for Manual Check In camps. When the officer logs the ToD the camp enters "Awaiting
+    // Processing" (WdAwaitingProcessingSince set) instead of finalizing immediately — late
+    // x-ins/corrections still work during the grace period. WdFinalizedAt is stamped once DKP
+    // has been written (idempotency guard: a second finalize is a no-op). WdClaimed/WdKilled
+    // capture whether the camp claimed/killed, driving the claim/kill bonuses at finalize.
+    public DateTime? WdAwaitingProcessingSince { get; set; }
+    public DateTime? WdFinalizedAt { get; set; }
+    public bool WdClaimed { get; set; }
+    public bool WdKilled { get; set; }
+
+    // The window the monster popped on (set by the officer at "Pop / End Camp"). Caps credit —
+    // nobody is paid past this window even if the window counter auto-advanced further while the
+    // group was fighting. Null = fall back to HnmWindowNumber (the current window) at finalize.
+    public int? WdPopWindow { get; set; }
+
+    // For a live timed camp, the UTC time the NEXT window opens (= WindowAnchorAt + HnmWindowNumber ×
+    // WindowMinutes) — a real clock boundary off the fixed grid, not "one cadence from the last
+    // click". Stamped at auto-start and on each manual Prev/Next so the board can show a live
+    // countdown. Null when the camp isn't on a timed cadence or is on its final window. Applies to
+    // every windowed HNM board now (Standard + Manual Check In), not just Manual Check In — hence the un-prefixed
+    // name.
+    public DateTime? NextWindowAt { get; set; }
+
+    // The UTC instant window 1 opened for a timed HNM camp — the anchor the window schedule counts
+    // from (window N opens at WindowAnchorAt + (N-1) × WindowMinutes). Always the camp's StartTime:
+    // seeded from it at auto-start and re-pinned to it on every manual Prev/Next, so the window grid
+    // is fixed and an officer clicking late never shifts it. Null ⇒ fall back to StartTime.
+    public DateTime? WindowAnchorAt { get; set; }
 
     // Optional link to a pre-built PartySetup (alliances → parties → slots,
     // monster-tagged, per-linkshell). Replaces the old inline "Minimal Party

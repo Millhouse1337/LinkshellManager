@@ -127,6 +127,9 @@
     .tod-row .countdown-timer.is-ready {
         color:var(--green-main); background:rgba(67,209,122,.14); border-color:rgba(67,209,122,.35);
     }
+    /* No repop to count down to: the camp ended without anyone seeing it die. Deliberately not a
+       pill — it's the absence of data, not a state the mob is in, and must never read as "Ready". */
+    .tod-row .tod-not-entered { color:var(--text-muted); font-size:12px; font-style:italic; }
 
     /* ---------- Expanded signup section (inset child panel) ---------- */
     .tod-setup-row > td { background:transparent !important; border:0 !important; padding:0 0 2px !important; }
@@ -354,7 +357,9 @@
                                         }
                                         else
                                         {
-                                            <span>—</span>
+                                            @* No repop to count down to — the ToD was never entered. Plain text, not
+                                               the countdown pill, so it can't flip to the green "Ready" state. *@
+                                            <span class="tod-not-entered">Not entered</span>
                                         }
                                     </td>
                                     <td class="col-actions">

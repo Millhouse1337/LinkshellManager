@@ -165,6 +165,11 @@
             var roles = [];
             var editingRoleId = null;
 
+            // LOCKSTEP — and this is the copy nothing checks. The role editor POSTs exactly the keys
+            // listed here; a permission missing from this array is bound as FALSE server-side and
+            // silently revoked on every role saved through the website. Keep it in step with
+            // ActivityLinkshellRolePermissions (Models/Activity/ActivityDtos.cs) and permissionKeys
+            // in the Activity's configurations-tab.component.ts.
             var permissions = [
                 { key: 'canManageRoles', label: 'Manage roles & permissions' },
                 { key: 'canManageMembers', label: 'Manage members (invite, rank, status)' },
@@ -172,6 +177,7 @@
                 { key: 'canModerateLiveEvent', label: 'Moderate live events (verify attendance, break room)' },
                 { key: 'canAddLoot', label: 'Add event loot entries' },
                 { key: 'canManageInventory', label: 'Manage inventory (items)' },
+                { key: 'canManageCharts', label: 'Manage Charts (pop items & credits)' },
                 { key: 'canManageTreasury', label: 'Manage treasury (revenue)' },
                 { key: 'canManageRules', label: 'Manage rules' },
                 { key: 'canManageAnnouncements', label: 'Manage announcements' },

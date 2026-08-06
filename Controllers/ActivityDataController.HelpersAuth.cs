@@ -310,6 +310,7 @@ public sealed partial class ActivityDataController
         role.CanModerateLiveEvent = permissions.CanModerateLiveEvent;
         role.CanAddLoot = permissions.CanAddLoot;
         role.CanManageInventory = permissions.CanManageInventory;
+        role.CanManageCharts = permissions.CanManageCharts;
         role.CanManageTreasury = permissions.CanManageTreasury;
         role.CanManageRules = permissions.CanManageRules;
         role.CanManageAnnouncements = permissions.CanManageAnnouncements;

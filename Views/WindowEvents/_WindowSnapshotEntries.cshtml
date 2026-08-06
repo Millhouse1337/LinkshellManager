@@ -27,7 +27,7 @@
 {
     @foreach (var entry in Model.Entries)
     {
-        <form id="snap-@Model.Id-del-@entry.Id" asp-action="DeleteSnapshotEntry"
+        <form id="snap-@Model.Id-del-@entry.Id" asp-controller="WindowEvents" asp-action="DeleteSnapshotEntry"
               asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@Model.Id"
               asp-route-entryId="@entry.Id" method="post" class="we-hidden-form"
               onsubmit="return confirm('Remove @entry.CharacterName from this snapshot?');">
@@ -38,7 +38,7 @@
     // Add-person form lives outside the table (a <form> can't be a tbody
     // child); the input and button sit in the last table row and bind to
     // it via the HTML form= attribute, same as the Remove buttons above.
-    <form id="snap-@Model.Id-add" asp-action="AddSnapshotEntry"
+    <form id="snap-@Model.Id-add" asp-controller="WindowEvents" asp-action="AddSnapshotEntry"
           asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@Model.Id"
           method="post" class="we-hidden-form">
         @Html.AntiForgeryToken()
@@ -66,7 +66,9 @@
         @{ var rowIndex = 0; }
         @foreach (var entry in Model.Entries)
         {
-            <tr>
+            @* Hand-added people sit in a block at the bottom and are tinted, so a name an officer
+               asserted never reads as one the addon actually scanned. *@
+            <tr class="@(entry.AddedManually ? "we-row--manual" : null)">
                 <td><strong>@entry.CharacterName</strong></td>
                 <td>
                     @if (!string.IsNullOrWhiteSpace(entry.MainJob))
@@ -144,7 +146,7 @@
             <tr class="we-add-row">
                 <td colspan="@addInputColspan">
                     @* list= binds to the shared #we-roster-options datalist
-                       rendered once on the Attendance Events page, giving a
+                       rendered once on the HNM Events page, giving a
                        live typeahead filter over the entire linkshell roster.
                        Free text is still allowed (server creates/links). *@
                     <input class="input" type="text" name="characterName"

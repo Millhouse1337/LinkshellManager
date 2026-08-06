@@ -8,7 +8,10 @@ namespace LinkshellManagerDiscordApp.Services;
 // One person signed up to an event (for rendering the Discord roster). For
 // no-slot attendees JobName is the main job, SubJobName the sub, JobType the role.
 public sealed record EventSignupLine(
-    string CharacterName, string? JobName, string? SubJobName = null, string? JobType = null);
+    string CharacterName, string? JobName, string? SubJobName = null, string? JobType = null,
+    // Manual Check In attendance: the window this member first x'd in for (null for Standard signups).
+    // Drives the on-board "✅ X'd In" roster grouped by arrival window.
+    int? WdArrivalWindow = null);
 
 // Builds the Discord message payloads for an event announcement.
 //
@@ -91,14 +94,32 @@ public static class DiscordEventMessageBuilder
     //   evt:mkalead:{eventId}
     public const string MakeAllianceLeaderPrefix = "evt:mkalead:";
 
-    // "Next Window" / "Prev Window" buttons on the window-cycle HNM boards
-    // (Tiamat/Jormungand/Vrtra): officers-only; wipe the signups and step
-    // Event.HnmWindowNumber within [1, MaxWindow]. Prev is the undo for an accidental
-    // Next double-click.
-    //   evt:nextwindow:{eventId}
+    // "View Previous Window" on the window-cycle HNM boards (Tiamat/Jormungand/Vrtra).
+    // READ-ONLY and open to everyone: replies ephemerally with the roster snapshot taken when the
+    // previous window turned over (EventWindowRosterSnapshot). It changes nothing on the board.
+    //
+    // There is deliberately NO "Next Window" counterpart. The counter is advanced solely by
+    // HnmWindowAdvanceBackgroundService on the monster's cadence — a manual step could only
+    // disagree with the clock, and the old Prev-as-step-back was in fact reverted within one poll
+    // tick because the service re-derives the window from the camp's fixed anchor.
+    //
+    // The wire id keeps its original "prevwindow" spelling on purpose: boards posted before this
+    // change are still live in Discord and their buttons still send it.
     //   evt:prevwindow:{eventId}
-    public const string NextWindowPrefix = "evt:nextwindow:";
-    public const string PrevWindowPrefix = "evt:prevwindow:";
+    public const string ViewPrevWindowPrefix = "evt:prevwindow:";
+
+    // Manual Check In attendance buttons (only emitted on Manual Check In boards, i.e. Event.AttendanceMode == "Wd").
+    //   evt:xin:{eventId}        — member self-serve "X-in (this window)": records the clicker's
+    //                              arrival window (AppUserEvent.WdArrivalWindow) at the board's
+    //                              current HnmWindowNumber; re-clicking later bumps it (x2 -> x3).
+    public const string XinPrefix = "evt:xin:";
+    //   evt:checkout:{eventId}   — member "Check Out": records their departure window so credit
+    //                              stops there (they left mid-camp with partial credit).
+    //   evt:wdpop:{eventId}       — officer "Pop / End Camp": opens a modal for the pop window +
+    //                              ToD, caps credit, and closes the camp — the roster goes to the
+    //                              Event System attendance sections for review (HnmCampReviewHandoffService).
+    public const string CheckOutPrefix = "evt:checkout:";
+    public const string WdPopPrefix = "evt:wdpop:";
 
     // "🔒 Stay Next Window" (member) + "🔒 Lock Member (officers)" on the window-cycle HNM
     // boards. A locked signup SURVIVES the officer "Next Window" wipe instead of being
@@ -196,11 +217,16 @@ public static class DiscordEventMessageBuilder
             };
         }
 
+        // Addon-run HNM camps are scored from the addon's in-game window snapshots, so this
+        // board is a notice, not a sign-up sheet: no job select, no Withdraw, no roster.
+        var snapshotOnly = IsAddonSnapshotCamp(ev);
         return new
         {
             content = BuildStartHeading(ev),
-            embeds = new[] { BuildEmbed(ev, signups) },
-            components = BuildComponents(ev.Id),
+            embeds = new[] { BuildEmbed(ev, signups, snapshotOnly) },
+            // An empty array is what clears the components off a board that already posted
+            // them — omitting the field on an edit would leave the old ones in place.
+            components = snapshotOnly ? Array.Empty<object>() : BuildComponents(ev.Id),
             attachments = Array.Empty<object>(),
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
@@ -414,33 +440,53 @@ public static class DiscordEventMessageBuilder
                     }
                     else
                     {
-                        sb.Append($"-# {icon} {crown}{Escape(SlotRequirement(slot, compact: false))}\n");
+                        sb.Append($"-# {icon} {crown}{Escape(SlotRequirement(slot))}\n");
                     }
                 }
             }
             sections.Add(sb.ToString().TrimEnd());
         }
 
-        // Also-attending (no-slot) roster, same shape as the embed's section.
-        var slotNames = new HashSet<string>(
-            slotSignups.Values
-                .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
-                .Select(s => s.CharacterName!.Trim()),
-            StringComparer.OrdinalIgnoreCase);
-        var extra = generalSignups
-            .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
-            .ToList();
-        if (extra.Count > 0)
+        if (IsWd(ev))
         {
-            var sb = new StringBuilder("### Also Attending\n");
-            foreach (var g in extra)
+            // Manual Check In: "✅ X'd In" grouped by arrival window (mirrors the embed's section).
+            var xin = generalSignups
+                .Where(g => g.WdArrivalWindow is not null && !string.IsNullOrWhiteSpace(g.CharacterName))
+                .ToList();
+            if (xin.Count > 0)
             {
-                var icon = GeneralRoleIcon(g.JobType);
-                var jobs = GeneralSignupJobs(g);
-                sb.Append($"{icon} **{Escape(g.CharacterName!)}**"
-                    + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}") + "\n");
+                var sb = new StringBuilder($"### ✅ Checked In ({xin.Count})\n");
+                foreach (var grp in xin.GroupBy(g => g.WdArrivalWindow!.Value).OrderBy(grp => grp.Key))
+                {
+                    sb.Append($"**Window {grp.Key}:** "
+                        + string.Join(", ", grp.Select(g => Escape(g.CharacterName!))) + "\n");
+                }
+                sections.Add(sb.ToString().TrimEnd());
             }
-            sections.Add(sb.ToString().TrimEnd());
+        }
+        else
+        {
+            // Also-attending (no-slot) roster, same shape as the embed's section.
+            var slotNames = new HashSet<string>(
+                slotSignups.Values
+                    .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
+                    .Select(s => s.CharacterName!.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            var extra = generalSignups
+                .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
+                .ToList();
+            if (extra.Count > 0)
+            {
+                var sb = new StringBuilder("### Also Attending\n");
+                foreach (var g in extra)
+                {
+                    var icon = GeneralRoleIcon(g.JobType);
+                    var jobs = GeneralSignupJobs(g);
+                    sb.Append($"{icon} **{Escape(g.CharacterName!)}**"
+                        + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}") + "\n");
+                }
+                sections.Add(sb.ToString().TrimEnd());
+            }
         }
 
         // Pack sections into ≤4000-char text-display blocks (Discord's Text Display cap),
@@ -820,16 +866,25 @@ public static class DiscordEventMessageBuilder
         return string.Join(" - ", new[] { role, job }.Where(s => !string.IsNullOrEmpty(s)));
     }
 
-    private static object BuildEmbed(Event ev, IReadOnlyList<EventSignupLine> signups)
+    // `snapshotOnly` (see IsAddonSnapshotCamp) swaps the "Signed up (N)" roster for a line saying
+    // where attendance actually comes from. Dropping the field silently would read as the board
+    // failing to render it, and it's the roster itself — not just the select — that misleads:
+    // a camp listing three names looks like three people are credited.
+    private static object BuildEmbed(Event ev, IReadOnlyList<EventSignupLine> signups, bool snapshotOnly = false)
     {
         var fields = new List<object>();
-        if (ev.CommencementStartTime is { } commenced)
+        // Windowed HNM camps show the officer-entered StartTime (= Window 1) rather than the
+        // poll-moment CommencementStartTime, matching BuildStartHeading — otherwise a back-dated camp
+        // reads "started just now". The label still reflects whether it has actually commenced.
+        var startWhen = UsesWindows(ev) ? ev.StartTime : (ev.CommencementStartTime ?? ev.StartTime);
+        if (startWhen is { } sw)
         {
-            fields.Add(new { name = "Started", value = TimestampMarkup(commenced), inline = true });
-        }
-        else if (ev.StartTime is { } start)
-        {
-            fields.Add(new { name = "Starts", value = TimestampMarkup(start), inline = true });
+            fields.Add(new
+            {
+                name = ev.CommencementStartTime is not null ? "Started" : "Starts",
+                value = TimestampMarkup(sw),
+                inline = true
+            });
         }
         if (ev.DkpPerHour is { } dkpPerHour)
         {
@@ -840,12 +895,25 @@ public static class DiscordEventMessageBuilder
             fields.Add(new { name = "Location", value = Escape(ev.EventLocation!.Trim()), inline = true });
         }
 
-        fields.Add(new
+        if (snapshotOnly)
         {
-            name = $"Signed up ({signups.Count})",
-            value = BuildRoster(signups),
-            inline = false,
-        });
+            fields.Add(new
+            {
+                name = "Attendance",
+                value = "_Recorded in game — the LSM addon posts a roster snapshot each window. "
+                      + "There is no Discord sign-up for this camp._",
+                inline = false,
+            });
+        }
+        else
+        {
+            fields.Add(new
+            {
+                name = $"Signed up ({signups.Count})",
+                value = BuildRoster(signups),
+                inline = false,
+            });
+        }
 
         var typePrefix = string.IsNullOrWhiteSpace(ev.EventType) ? string.Empty : $"{ev.EventType!.Trim()}: ";
         var title = Truncate($"⚔️ {typePrefix}{ev.EventName ?? $"Event #{ev.Id}"}", 250);
@@ -853,7 +921,11 @@ public static class DiscordEventMessageBuilder
         return new
         {
             title,
-            description = string.IsNullOrWhiteSpace(ev.Details) ? null : Truncate(Escape(ev.Details!.Trim()), 1500),
+            // Details is authored with a markdown toolbar (the Activity's create/edit
+            // event form), so it is NOT run through Escape() — the formatting is the
+            // point. Mentions still can't fire: every payload here sets
+            // allowed_mentions.parse = [].
+            description = string.IsNullOrWhiteSpace(ev.Details) ? null : Truncate(ev.Details!.Trim(), 1500),
             color = EmbedColor,
             fields = fields.ToArray(),
         };
@@ -950,6 +1022,143 @@ public static class DiscordEventMessageBuilder
     // in a Discord message. Uses Discord timestamp markup so it renders in each
     // viewer's own timezone. Empty when the event has no scheduled time. (Discord
     // has no way to center message text, so this sits left-aligned at the top.)
+    // Manual Check In helpers, shared with the interactions controller / finalizer. IsWd gates every Manual Check In
+    // board behavior; UsesWindows enables the window heading + Prev/Next advance for Manual Check In monsters
+    // that aren't the curated window-cycle HNMs (e.g. Fafnir); EffectiveWindowCount is the per-event
+    // window count (the per-linkshell override seeded into WindowCountOverride, else HnmConfig).
+    public static bool IsWd(Event ev) =>
+        string.Equals(ev.AttendanceMode, HnmAttendanceModes.Wd, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsHnm(Event ev) =>
+        string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+
+    // An HNM camp the LSM addon created and runs. Its roster is the per-window snapshot the
+    // addon scans and posts from in game, so NOTHING clicked in Discord counts toward it — and a
+    // board offering "Pick your job to sign up" next to a "Signed up (N)" list reads exactly like
+    // the way to get credit. It isn't, so those camps get a board with neither.
+    //
+    // Deliberately narrower than "every HNM event". An HNM board created in the Activity is the
+    // separate HNM Outside Sign Up feature (gated by Linkshell.HnmOutsideSignupEnabled, off by
+    // default), whose entire purpose IS collecting Discord signups; it keeps them. CreationSource
+    // is the existing discriminator for addon-made rows — see Event.CreationSource.
+    public static bool IsAddonSnapshotCamp(Event ev) =>
+        IsHnm(ev) && string.Equals(ev.CreationSource, "Addon", StringComparison.OrdinalIgnoreCase);
+
+    // A board "uses windows" (shows Window N of M + Prev/Next + the timed countdown) when its
+    // monster runs a multi-window spawn cycle — the long-window wyrms OR the short-window
+    // kings/dragons (both have a DefaultWindowCadence) — or when it's a Manual Check In camp with a custom count.
+    // This is what lights up automatic window advance for Standard-mode kings/dragons, not just Manual Check In.
+    public static bool UsesWindows(Event ev) =>
+        IsWd(ev)
+        || HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName)
+        || HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName) is not null;
+
+    // The window number every surface must display: the board, the Activity/web app, and the
+    // LSM addon. THIS is the single source of truth for "what window is this camp on" — callers
+    // must not re-derive it from HnmWindowNumber, or they drift apart (which is exactly what
+    // happened: the board said 18 while the addon and app said 17).
+    //
+    // Officer model: windows are the pop chances that FOLLOW the initial pop (shown as
+    // "Started"), and Window N opens at StartTime + (N-1)xcadence — so Window 1 is AT Started.
+    // On a camp that never wipes, what everyone watches is the window being AWAITED — the next pop
+    // to look for — which is one past the window that has already opened. Before the camp starts,
+    // on the final window, or once it's popped/defeated/finalized there IS no next window, so the
+    // awaited window collapses back to the current one ("Window 25 of 25" at the end).
+    //
+    // Wiping boards (ClearsRosterOnWindowAdvance — the wyrms) used to be excepted here and named
+    // the OPENED window instead, on the reasoning that the roster underneath belongs to it. It
+    // doesn't. A window is a knife edge, not an hour-long door (see the "Window N passed" line in
+    // BuildStartHeading): the pop chance is spent the instant the boundary is reached, and the
+    // roster is wiped on that same tick. Everything signed up afterwards is signing up for the
+    // NEXT chance — so a Tiamat board 20 minutes past window 7's boundary was heading a
+    // freshly-emptied, re-signing roster "Window 7 of 25", naming a window that was already over
+    // while its own countdown said "Next window 8".
+    //
+    // The visibility that exception was protecting is unaffected: the heading number still changes
+    // on exactly the tick the roster is cleared (both move with HnmWindowNumber), so "the new
+    // number over an emptied roster" is still one edit. Only WHICH number that is changes.
+    //
+    // This also un-breaks the addon's auto-post, which files its scheduled capture against the
+    // wire's hnmWindowNumber and documents it as the awaited window (render/auto_post.lua: "at
+    // boundary + delay the window that has just opened IS the awaited one"). Fed the opened window
+    // on a wyrm, that seq was one low and collided with the capture already taken for it, so the
+    // post-boundary snapshot was dropped as "already captured".
+    public static int FocusWindow(Event ev) =>
+        HasNextWindow(ev) ? OpenedWindow(ev) + 1 : OpenedWindow(ev);
+
+    // The window currently IN PROGRESS — the one the board's live roster belongs to, and the one
+    // the advancer moves. Always the stored counter, clamped to the camp's real window count.
+    public static int OpenedWindow(Event ev) =>
+        Math.Clamp(ev.HnmWindowNumber, 1, EffectiveWindowCount(ev));
+
+    // Whether another window is still coming: what decides the "Next window N <countdown>" line,
+    // and whether FocusWindow looks ahead at all.
+    public static bool HasNextWindow(Event ev) =>
+        UsesWindows(ev)
+        && OpenedWindow(ev) < EffectiveWindowCount(ev)
+        && ev.NextWindowAt is not null
+        && ev.WdFinalizedAt is null
+        && ev.HnmDefeatedAt is null;
+
+    // Does stepping this camp's window throw its roster away? The wyrms do; the kings/dragons are
+    // one continuous camp, and Manual Check In boards let members X-in per window themselves. This
+    // is the SAME condition HnmWindowAdvanceBackgroundService gates its clear on — named once here
+    // so the number the board prints and the roster underneath it can't disagree about which
+    // windows wipe.
+    public static bool ClearsRosterOnWindowAdvance(Event ev) =>
+        !IsWd(ev) && HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName);
+
+    // The SPAWN window count: how many pop chances the camp sits through. This is the "of M" the
+    // board prints, the ceiling the advance poller marches to, and the scale attendance posts
+    // against. It is NOT how many attendance posts the camp takes — see Event.WindowCountOverride,
+    // which is that other number ("Forces the post-by-window count"), 2 on a king/dragon against
+    // its 7 spawn windows.
+    //
+    // The monster's built-in cadence therefore wins over the override. Reading the override FIRST
+    // is what let an addon-made camp — which stores its 2-post count there, correctly — report 2
+    // spawn windows: the board read "Window N of 2" and HnmWindowAdvanceBackgroundService stopped
+    // there, five windows early.
+    //
+    // An override of exactly 1 still short-circuits, and that is deliberate: 1 means "this camp is
+    // NOT windowed, pay it by accumulated duration", which EventBreakPolicy reads to decide the
+    // camp keeps its Break Room. Letting the cadence overrule that would flip a timed camp onto the
+    // windowed payout path and strand its members with no way to stop the clock.
+    public static int EffectiveWindowCount(Event ev) =>
+        Math.Clamp(
+            ev.WindowCountOverride == 1
+                ? 1
+                : HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName)?.Windows
+                    ?? ev.WindowCountOverride
+                    ?? HnmConfig.GetWindowCount(ev.AssignedMonsterName ?? ev.EventName),
+            1, HnmConfig.MaxWindow);
+
+    // The ATTENDANCE POST count: how many times the roster is read. The companion to
+    // EffectiveWindowCount above, and deliberately a different number — a Standard king/dragon
+    // camp takes an Open and a Close (2) across the 7 spawn windows it sits through.
+    //
+    // THIS is what names a window. HnmConfig.GetDefaultWindowLabel returns "Open"/"Close" only at
+    // a count of 2, so handing it the spawn count instead labelled every king/dragon window
+    // "Window N" — the exact question that comment warns about ("which window of the seven?").
+    //
+    // For a curated HNM it comes off the MONSTER, not off WindowCountOverride. That column holds
+    // the post count on an addon-made camp but the SPAWN count on an app-made one (HnmEventSeeder
+    // stamps it there), so trusting it would name the same Behemoth camp's windows one way or the
+    // other depending on where it was filed. How many times you read the roster is a property of
+    // the camp, not of the form it was created on.
+    //
+    // Everything else — NMs, testing presets, custom events — keeps the override / name lookup,
+    // which is the only signal those carry.
+    //
+    // One home, because it is applied wherever a window is named or counted: the Activity DTO, the
+    // addon's event list, snapshot ingestion, and submission approval. They must never disagree, or
+    // one camp ends up with two different names for the same window.
+    public static int AttendancePostCount(Event ev) =>
+        Math.Clamp(
+            HnmConfig.IsTrueHnm(ev.AssignedMonsterName)
+                ? HnmConfig.GetWindowCount(ev.AssignedMonsterName)
+                : ev.WindowCountOverride ?? HnmConfig.GetWindowCount(ev.EventName),
+            1, HnmConfig.MaxWindow);
+
     private static string BuildStartHeading(Event ev, int lockedCount = 0)
     {
         // Every HNM board leads with the assigned monster name (e.g. "🪟 Aspidochelone")
@@ -960,12 +1169,75 @@ public static class DiscordEventMessageBuilder
         // HnmConfig.CombinedFromDay) — only the weaker version pops then; later days show both.
         var monster = HnmConfig.DisplayMonsterName(ev.AssignedMonsterName, ev.DayNumber)?.Trim();
         string? windowLine = null;
+        string? passedWindowLine = null;
+        string? nextWindowLine = null;
         if (!string.IsNullOrEmpty(monster))
         {
-            windowLine = HnmConfig.SupportsWindowAdvance(monster)
-                ? $"## 🪟 {monster} · Window {Math.Clamp(ev.HnmWindowNumber, 1, HnmConfig.MaxWindow)} of {HnmConfig.MaxWindow}"
+            var effectiveCount = EffectiveWindowCount(ev);
+            // Shared with the addon API and the Activity/web app — see FocusWindow, which owns the
+            // heading number. Heading and countdown name the SAME window (the one being awaited,
+            // which is the one the live roster is signing up for); the "passed" line below names
+            // the one behind it. Heading and countdown diverge only at the end of the camp, where
+            // there is no next window and the heading collapses onto the final one.
+            var focusWindow = FocusWindow(ev);
+            var hasNext = HasNextWindow(ev);
+            var openedWindow = OpenedWindow(ev);
+            var awaitedWindow = openedWindow + 1;
+
+            windowLine = UsesWindows(ev)
+                ? $"## 🪟 {monster} · Window {focusWindow} of {effectiveCount}"
                 : $"## 🪟 {monster}";
+
+            // "Next window N in <live countdown> <clock time>" — N is the awaited window and
+            // NextWindowAt is exactly when it opens. Both Discord tokens render per-viewer local:
+            // :R = relative (e.g. "in 52 minutes"), :T = long time with seconds (e.g. "8:29:44 AM").
+            // The countdown leads because that is the number the camp is watching; the wall-clock
+            // time rides behind it so officers can line the window up against a ToD without doing
+            // the math. Rendered as a `##` heading so the thing officers watch is the big-font line.
+            if (hasNext && ev.NextWindowAt is { } nextAt)
+            {
+                var nextUnix = ((DateTimeOffset)DateTime.SpecifyKind(nextAt, DateTimeKind.Utc)).ToUnixTimeSeconds();
+                nextWindowLine = $"## 🕐 Next window {awaitedWindow} <t:{nextUnix}:R> <t:{nextUnix}:T>";
+            }
+
+            // The past-tense twin of the countdown: "Window N passed <clock> <ago>". Without it the
+            // heading number alone can't say whether that window's pop chance is still ahead, in
+            // progress, or behind — a camp 44 minutes into window 1 looked identical to one that had
+            // just flipped to it. Deeper in a camp it is the only place the answer appears at all:
+            // "Event Started" covers window 1, and nothing else on the board dates window 9.
+            //
+            // PASSED, not "opened". These monsters show within about twenty seconds of a window
+            // turning over, so the moment the boundary is reached that pop chance is spent — the
+            // window is a knife edge, not an hour-long door. "✅ Window 6 opened … 4 minutes ago"
+            // sitting above a 57-minute countdown read as "window 6 is open for another 57
+            // minutes", which is the opposite of what it means and the reason people stayed at
+            // camp waiting on a chance that was already gone.
+            //
+            // Window N opened at anchor + (N-1)xcadence, the same grid the advancer counts on
+            // (HnmWindowAdvanceBackgroundService), so the two can't disagree about when a window
+            // turned over. Rendered only once it has genuinely passed, WITHOUT reading the clock —
+            // this builder stays a pure function of the event, so a board renders the same whenever
+            // it is rebuilt. Windows past the first are self-evident (the advancer only moves the
+            // counter after a boundary passes); window 1 needs the anchor to be at or before the
+            // camp going live, which an early manual start can break.
+            var cadenceMinutes = HnmConfig.WindowAdvanceMinutes(ev.AssignedMonsterName);
+            var anchor = ev.WindowAnchorAt ?? ev.StartTime;
+            if (UsesWindows(ev)
+                && cadenceMinutes > 0
+                && anchor is { } gridAnchor
+                && ev.CommencementStartTime is { } liveAt
+                && (openedWindow > 1 || gridAnchor <= liveAt))
+            {
+                var openedAt = gridAnchor.AddMinutes((openedWindow - 1) * (double)cadenceMinutes);
+                var openedUnix = ((DateTimeOffset)DateTime.SpecifyKind(openedAt, DateTimeKind.Utc)).ToUnixTimeSeconds();
+                passedWindowLine = $"## ⌛ Window {openedWindow} passed <t:{openedUnix}:T> <t:{openedUnix}:R>";
+            }
         }
+
+        // Camps used to sit in an "Awaiting Processing" grace here while a background service
+        // waited to pay them. End Camp now hands the roster straight to the Event System page's attendance sections for
+        // review, so the board closes immediately and there is no in-between state to render.
+        string? awaitingLine = null;
 
         // The day number rides on the big monster heading, right next to the name
         // ("🪟 Fafnir · Day 5"), instead of a separate embed field below. Standalone
@@ -975,27 +1247,23 @@ public static class DiscordEventMessageBuilder
             windowLine = string.IsNullOrEmpty(windowLine) ? $"## 📅 Day {dayNumber}" : $"{windowLine} · Day {dayNumber}";
         }
 
-        // Window-cycle HNMs predict each window's pop ~1h after the previous, so a
-        // not-yet-started board shows StartTime + (window − 1) hours. This is COMPUTED
-        // on the fly — the stored StartTime stays the Window 1 anchor, so stepping
-        // windows is non-destructive and editing the time still behaves predictably.
-        // Once the event is live (CommencementStartTime set), show the real start.
-        DateTime? when = ev.CommencementStartTime ?? ev.StartTime;
-        if (ev.CommencementStartTime is null
-            && ev.StartTime is not null
-            && HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
-        {
-            var windowOffset = Math.Clamp(ev.HnmWindowNumber, 1, HnmConfig.MaxWindow) - 1;
-            when = ev.StartTime.Value.AddHours(windowOffset);
-        }
+        // "Started" time. For a windowed HNM camp it is the officer-entered StartTime — i.e. when
+        // Window 1 opened — NOT CommencementStartTime. Auto-start stamps CommencementStartTime at the
+        // poll moment it notices the camp is due, so a back-dated camp ("started 4h ago") would wrongly
+        // read "just now" while the board shows Window 5. StartTime is the value entered in the app and
+        // never shifts while the camp is live, so the board stays in sync with what was entered.
+        // Non-windowed events keep the actual live-commence time.
+        DateTime? when = UsesWindows(ev) ? ev.StartTime : (ev.CommencementStartTime ?? ev.StartTime);
         string? startLine = null;
         if (when is not null)
         {
             var unix = ((DateTimeOffset)DateTime.SpecifyKind(when.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
-            var label = ev.CommencementStartTime is not null ? "Started" : "Starts";
+            var label = ev.CommencementStartTime is not null ? "Event Started" : "Event Starts";
             // :D long date + :T long time (which includes seconds) — Discord has no single
-            // date+time-with-seconds token, so combine the two (both still per-viewer local).
-            startLine = $"## 🕒 {label}: <t:{unix}:D> <t:{unix}:T> · <t:{unix}:R>";
+            // date+time-with-seconds token, so combine the two (both still per-viewer local). Plain
+            // (non-heading) text so the big-font emphasis sits on the window countdown line above, not
+            // here — the start time is reference info, not the thing officers are watching.
+            startLine = $"🕒 {label}: <t:{unix}:D> <t:{unix}:T> · <t:{unix}:R>";
         }
 
         // "N staying next window" as Discord subtext (-#) under the heading, so officers
@@ -1007,7 +1275,22 @@ public static class DiscordEventMessageBuilder
             stayingLine = $"-# 🔒 {lockedCount} staying next window";
         }
 
-        return string.Join("\n", new[] { windowLine, startLine, stayingLine }.Where(line => !string.IsNullOrEmpty(line)));
+        // Three visual blocks, separated by a blank line: the window headings officers watch, then the
+        // reference start time, then the 🔒 subtext footnote. Lines WITHIN a block stay tight (single
+        // newline); blocks are spaced apart so the start time and the lock count each read as their own
+        // thing instead of crowding the countdown. Empty blocks drop out, so a queued board with no
+        // countdown and no locks still renders without stray leading or doubled gaps.
+        var blocks = new[]
+        {
+            // Past → future, reading down: which window the camp is on, when that window's pop
+            // chance passed, and how long until the next one. The passed line sits ABOVE the
+            // countdown so the pair reads as one timeline: "that chance is gone, here's the next".
+            string.Join("\n", new[] { windowLine, passedWindowLine, nextWindowLine, awaitingLine }.Where(l => !string.IsNullOrEmpty(l))),
+            startLine ?? string.Empty,
+            stayingLine ?? string.Empty,
+        };
+
+        return string.Join("\n\n", blocks.Where(block => !string.IsNullOrEmpty(block)));
     }
 
     // Board embed (the fallback when the image renderer is unavailable): event
@@ -1047,8 +1330,8 @@ public static class DiscordEventMessageBuilder
 
         // The per-party text columns ALWAYS render (alongside the image, if any).
         // Discord embed fields can't be told not to wrap, so the lines are kept as
-        // short as possible (role dropped — the colored dot conveys it — and the long
-        // "Player's Choice" sub abbreviated to "PC") to minimize the ⅓-width wrapping.
+        // short as possible (role dropped — the colored dot conveys it — and a free
+        // sub rendered as the terse "ANY") to minimize the ⅓-width wrapping.
         if (partiesInline && !multiAlliance)
         {
             // Zero-width space (U+200B) — a thin full-width divider that breaks the row
@@ -1119,7 +1402,7 @@ public static class DiscordEventMessageBuilder
                     }
                     else
                     {
-                        line = $"{icon} {crown}{Escape(SlotRequirement(slot, compact: true))}";
+                        line = $"{icon} {crown}{Escape(SlotRequirement(slot))}";
                     }
                     if (sb.Length > 0) { sb.Append('\n'); }
                     // Empty slots render as Discord "subtext" (greyed) so they read as
@@ -1148,26 +1431,55 @@ public static class DiscordEventMessageBuilder
                 .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
                 .Select(s => s.CharacterName!.Trim()),
             StringComparer.OrdinalIgnoreCase);
-        var extra = generalSignups
-            .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
-            .ToList();
-        if (extra.Count > 0 && fields.Count < 25)
+        if (IsWd(ev))
         {
-            var sb = new StringBuilder();
-            foreach (var g in extra)
+            // Manual Check In boards show a live "✅ X'd In" roster grouped by the window each member first
+            // arrived (their WdArrivalWindow), instead of the flat "Also Attending" list — so
+            // officers see exactly who's credited from which window. Includes slot-holders who
+            // x'd in too (attendance is by x-in, independent of party slots).
+            var xin = generalSignups
+                .Where(g => g.WdArrivalWindow is not null && !string.IsNullOrWhiteSpace(g.CharacterName))
+                .ToList();
+            if (xin.Count > 0 && fields.Count < 25)
             {
-                if (sb.Length > 0) { sb.Append('\n'); }
-                var icon = GeneralRoleIcon(g.JobType);
-                var jobs = GeneralSignupJobs(g);
-                sb.Append($"{icon} **{Escape(g.CharacterName)}**"
-                    + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}"));
+                var sb = new StringBuilder();
+                foreach (var grp in xin.GroupBy(g => g.WdArrivalWindow!.Value).OrderBy(grp => grp.Key))
+                {
+                    if (sb.Length > 0) { sb.Append('\n'); }
+                    sb.Append($"**Window {grp.Key}:** "
+                        + string.Join(", ", grp.Select(g => Escape(g.CharacterName))));
+                }
+                fields.Add(new
+                {
+                    name = $"✅ Checked In ({xin.Count})",
+                    value = Truncate(sb.ToString(), 1024),
+                    inline = false,
+                });
             }
-            fields.Add(new
+        }
+        else
+        {
+            var extra = generalSignups
+                .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
+                .ToList();
+            if (extra.Count > 0 && fields.Count < 25)
             {
-                name = "Also Attending",
-                value = Truncate(sb.ToString(), 1024),
-                inline = false,
-            });
+                var sb = new StringBuilder();
+                foreach (var g in extra)
+                {
+                    if (sb.Length > 0) { sb.Append('\n'); }
+                    var icon = GeneralRoleIcon(g.JobType);
+                    var jobs = GeneralSignupJobs(g);
+                    sb.Append($"{icon} **{Escape(g.CharacterName)}**"
+                        + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}"));
+                }
+                fields.Add(new
+                {
+                    name = "Also Attending",
+                    value = Truncate(sb.ToString(), 1024),
+                    inline = false,
+                });
+            }
         }
 
         var typePrefix = string.IsNullOrWhiteSpace(ev.EventType) ? string.Empty : $"{ev.EventType!.Trim()}: ";
@@ -1180,7 +1492,8 @@ public static class DiscordEventMessageBuilder
             // little breathing room below the event type: the real details when set,
             // otherwise a single thin blank line. (Discord gives no other control over
             // title↕field spacing.)
-            description = string.IsNullOrWhiteSpace(ev.Details) ? "​" : Truncate(Escape(ev.Details!.Trim()), 1500),
+            // Rendered as authored markdown, not escaped — see BuildEmbed.
+            description = string.IsNullOrWhiteSpace(ev.Details) ? "​" : Truncate(ev.Details!.Trim(), 1500),
             color = EmbedColor,
             fields = fields.ToArray(),
             // The rendered board PNG, shown INSIDE the embed (omitted when null).
@@ -1204,8 +1517,11 @@ public static class DiscordEventMessageBuilder
     private static object[] BuildBoardComponents(Event ev, bool hasSignups, bool hasAttendees, bool multiAlliance)
     {
         var eventId = ev.Id;
-        var isHnm = string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var isHnm = IsHnm(ev);
 
+        // ── Row 1 — sign-up actions ──────────────────────────────────────────────────────────
+        // Sign Up · Sign Up as Party Leader · [Sign Up (No Slot) — non-HNM only] · Withdraw. Check In /
+        // Check Out live on their own row below, so an HNM camp board keeps this row to 3 buttons.
         var firstRow = new List<object>
         {
             new
@@ -1235,17 +1551,20 @@ public static class DiscordEventMessageBuilder
                 custom_id = $"{PartyJoinEventPrefix}{eventId}",
             });
         }
-        // "🔒 Stay Next Window" — window-cycle HNM only, and only once somebody holds a slot
-        // (you can only lock a slot you're already in). Shared button: toggles the CLICKER's
-        // own lock. Placed before Withdraw. The "Make Me …" leadership buttons live on their
-        // own row below (see leadershipRow), so this row stays well within Discord's 5-button
-        // cap — the "Sign Up (No Slot)" button is already omitted for HNM above.
-        if (HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName) && hasSignups)
+        // "🔒 Stay Next Window" (member self-service): a member holding a slot pins their OWN slot so
+        // it survives the roster wipe when the window turns over. Shown only where a wipe can actually
+        // happen — Standard-mode WYRM boards. A Manual Check In camp never wipes (attendance
+        // accumulates), and neither do the kings/dragons any more, so the lock would be a no-op
+        // there and the button is hidden. Shown once at least one slot is filled (you can only lock
+        // a slot you're already in); the click handler re-checks that the clicker actually holds a
+        // slot. Sits before Withdraw, keeping this HNM row at 4 buttons — under Discord's 5-per-row cap.
+        if (UsesWindows(ev) && hasSignups && !IsWd(ev)
+            && HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName))
         {
             firstRow.Add(new
             {
                 type = 2, // button
-                style = 2, // secondary — toggles the clicker's "stay next window" lock
+                style = 2, // secondary — toggles the clicker's own "stay next window" lock
                 label = "🔒 Stay Next Window",
                 custom_id = $"{LockNextWindowPrefix}{eventId}",
             });
@@ -1258,11 +1577,6 @@ public static class DiscordEventMessageBuilder
             custom_id = $"{PartySlotLeavePrefix}{eventId}",
         });
 
-        // The non-HNM-with-signups case already fills this row to Discord's hard cap of 5
-        // buttons; a future always-shown button would push it to 6, which Discord rejects —
-        // failing the WHOLE board post. The assert trips loudly in dev so the overflow is
-        // caught before shipping; the clamp degrades gracefully in production (drops the
-        // overflow button) so the board still posts rather than vanishing.
         System.Diagnostics.Debug.Assert(firstRow.Count <= 5, "Discord allows at most 5 buttons per action row.");
         if (firstRow.Count > 5)
         {
@@ -1278,13 +1592,11 @@ public static class DiscordEventMessageBuilder
             },
         };
 
-        // Leadership row: "Make Me Party Lead" (take your party's 👑) and, on multi-alliance
-        // boards, "Make Me Alliance Lead" (take your whole alliance's 👑). Both are only for
-        // members who ALREADY hold a slot, so the row appears once at least one slot is
-        // claimed. Discord components are shared by every viewer — a button can't be shown
-        // per-user — so this board-level gate (hide until somebody has signed up) is the
-        // closest we can get to "only show it once the person signs up". Kept off the sign-up
-        // row so the two leadership actions read as a group and neither row nears the 5-cap.
+        // ── Row 2 — leadership (crown actions), once at least one slot is claimed ─────────────
+        // "Make Me Party Lead" (+ "Make Me Alliance Lead" on multi-alliance boards) for seated members,
+        // grouped with the officer-only "Set Leader". All three need a seated member, so the whole row
+        // is slot-gated. Discord components are shared by every viewer, so this board-level gate (hide
+        // until somebody has signed up) is the closest we can get to "show it once the person signs up".
         if (hasSignups)
         {
             var leadershipRow = new List<object>
@@ -1307,6 +1619,12 @@ public static class DiscordEventMessageBuilder
                     custom_id = $"{MakeAllianceLeaderPrefix}{eventId}",
                 });
             }
+            leadershipRow.Add(new
+            {
+                type = 2, style = 2, // secondary — officer sets any seated member as their party's leader
+                label = "👑 Set Leader (officers)",
+                custom_id = $"{SetLeaderButtonPrefix}{eventId}",
+            });
             rows.Add(new
             {
                 type = 1, // action row
@@ -1314,14 +1632,10 @@ public static class DiscordEventMessageBuilder
             });
         }
 
-        // Officer-only "Add Member" on its own row — the first row is already at Discord's
-        // 5-button cap in the busy case, so this can't share it. The button is shown to
-        // everyone (Discord can't per-user gate a component); the click handler enforces the
-        // officer check, hence the "(officers)" label. Manually seats a roster member (or a
-        // new placeholder) into a slot for someone who didn't sign up themselves.
-        // Add Member always shows (you can seat someone onto an empty board). The
-        // member-management controls (move/set-leader/remove) only appear once there's
-        // somebody to manage. 4 buttons max — within Discord's 5-per-row cap.
+        // ── Row 3 — officer roster controls ──────────────────────────────────────────────────
+        // Add Member (always — you can seat someone onto an empty board), then Move / Lock / Remove
+        // once there's somebody to manage. All shown to everyone (Discord can't per-user gate a
+        // component); each click handler enforces the officer check, hence the "(officers)" labels.
         var officerButtons = new List<object>
         {
             new
@@ -1344,14 +1658,17 @@ public static class DiscordEventMessageBuilder
                 custom_id = $"{MoveMemberButtonPrefix}{eventId}",
             });
         }
-        // Set Leader needs a seated member (the leader holds a slot), so it's slot-gated.
-        if (hasSignups)
+        // Lock Member (pins a slot through the Next Window wipe) only means something on a board
+        // that actually wipes: Standard-mode wyrms with seated members. Same gate as the member's
+        // "🔒 Stay Next Window" button above.
+        if (UsesWindows(ev) && hasSignups && !IsWd(ev)
+            && HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName))
         {
             officerButtons.Add(new
             {
                 type = 2, style = 2, // secondary
-                label = "👑 Set Leader (officers)",
-                custom_id = $"{SetLeaderButtonPrefix}{eventId}",
+                label = "🔒 Lock Member (officers)",
+                custom_id = $"{OfficerLockButtonPrefix}{eventId}",
             });
         }
         if (hasAnyone)
@@ -1369,53 +1686,82 @@ public static class DiscordEventMessageBuilder
             components = officerButtons.ToArray(),
         });
 
-        // Window-cycle HNMs (Tiamat/Jormungand/Vrtra) get officer-only "Prev Window" /
-        // "Next Window" buttons on their own row. Next wipes the signups and advances
-        // "Window N"; Prev steps back one (in case Next was clicked by accident). Both are
-        // visible to everyone (Discord can't per-user gate a button); the handler enforces
-        // officers. Prev is disabled on the first window, Next on the final window.
-        if (HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        // ── Row 4 — Manual Check In (Manual Check In) per-window attendance ────────────────────────────────
+        // Check In records the clicker's arrival window at the board's current window (re-clicking a
+        // later window is the "x2 -> x3" correction); Check Out records their departure. Hidden once
+        // the camp is finalized (attendance locked).
+        if (IsWd(ev) && ev.WdFinalizedAt is null)
         {
-            var atMax = ev.HnmWindowNumber >= HnmConfig.MaxWindow;
-            var atMin = ev.HnmWindowNumber <= 1;
-            var windowButtons = new List<object>
-            {
-                new
-                {
-                    type = 2,
-                    style = 2, // secondary
-                    label = atMin ? "Window 1 (first)" : "◀ Prev Window (officers)",
-                    custom_id = $"{PrevWindowPrefix}{eventId}",
-                    disabled = atMin,
-                },
-                new
-                {
-                    type = 2,
-                    style = 1, // primary
-                    label = atMax ? $"Window {HnmConfig.MaxWindow} (final)" : "▶ Next Window (officers)",
-                    custom_id = $"{NextWindowPrefix}{eventId}",
-                    disabled = atMax,
-                },
-            };
-            // Officer "🔒 Lock Member" — pin anyone's slot so it survives the Next Window
-            // wipe (e.g. hold a key camp job across windows). Only useful once somebody's
-            // seated. 3 buttons stays within Discord's 5-per-row cap.
-            if (hasSignups)
-            {
-                windowButtons.Add(new
-                {
-                    type = 2,
-                    style = 2, // secondary
-                    label = "🔒 Lock Member (officers)",
-                    custom_id = $"{OfficerLockButtonPrefix}{eventId}",
-                });
-            }
             rows.Add(new
             {
                 type = 1,
-                components = windowButtons.ToArray(),
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 2, style = 3, // success (green)
+                        label = "✅ Check In (this window)",
+                        custom_id = $"{XinPrefix}{eventId}",
+                    },
+                    new
+                    {
+                        type = 2, style = 2, // secondary — leaving mid-camp, keeps credit through this window
+                        label = "🚪 Check Out",
+                        custom_id = $"{CheckOutPrefix}{eventId}",
+                    },
+                },
             });
         }
+
+        // ── Row 5 — window controls: ◀ View Previous Window · 🏁 End Camp ────────────────────────
+        // The counter is NOT steppable by hand. Every windowed board advances on its monster's timed
+        // cadence (HnmWindowAdvanceBackgroundService), and the wyrm boards wipe their roster on the
+        // same tick, so there is nothing for a "Next Window" button to do that the clock isn't
+        // already doing — and stepping BACK never worked here anyway, since the service re-derives
+        // the window from the camp's fixed anchor and undid it on the next poll.
+        //
+        // What's left is a read-only look at the hour that just ended: "View Previous Window" replies
+        // ephemerally with that window's roster snapshot. Everyone can press it — it's the same
+        // roster the board was showing publicly a window ago — so it carries no "(officers)" tag,
+        // unlike End Camp beside it. Disabled on window 1, which has no predecessor.
+        //
+        // Manual Check In (self-serve X-in) boards show no window control: members X-in per window
+        // themselves and those boards never wipe, so there is no per-window roster to look back at.
+        // End Camp still shows.
+        //
+        // They share ONE row so a populated Manual Check In board (Sign Up · leadership · officer · Check In ·
+        // this row) stays within Discord's hard 5-row-per-message cap.
+        if (UsesWindows(ev)
+            && ev.WdFinalizedAt is null
+            && ev.HnmDefeatedAt is null)
+        {
+            var atMin = ev.HnmWindowNumber <= 1;
+            var windowRow = new List<object>();
+            if (!IsWd(ev))
+            {
+                windowRow.Add(new
+                {
+                    type = 2,
+                    style = 2, // secondary — read-only; opens an ephemeral, never edits the board
+                    label = atMin ? "Window 1 (first)" : "◀ View Previous Window",
+                    custom_id = $"{ViewPrevWindowPrefix}{eventId}",
+                    disabled = atMin,
+                });
+            }
+            windowRow.Add(new
+            {
+                type = 2,
+                style = 1, // primary — the main action on this row
+                label = "🏁 End Camp / Enter ToD (officers)",
+                custom_id = $"{WdPopPrefix}{eventId}",
+            });
+            rows.Add(new
+            {
+                type = 1,
+                components = windowRow.ToArray(),
+            });
+        }
+
 
         return rows.ToArray();
     }
@@ -1440,7 +1786,7 @@ public static class DiscordEventMessageBuilder
     }
 
     // Compact slot requirement for a picker option: the role ("Tank"), the job
-    // ("WAR" / "WAR/NIN"), or "Any".
+    // ("WAR" / "WAR/NIN" / "WAR/ANY" for a free sub), or "Any".
     private static string SlotShortLabel(PartySetupSlot slot)
     {
         if (string.Equals(slot.RequirementType, PartySetupSlotRequirementTypes.Role, StringComparison.OrdinalIgnoreCase))
@@ -1451,16 +1797,16 @@ public static class DiscordEventMessageBuilder
         {
             return string.IsNullOrWhiteSpace(slot.MainJob)
                 ? "Any"
-                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? "Player's Choice" : slot.SubJob)}";
+                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? "ANY" : slot.SubJob)}";
         }
         return "Any";
     }
 
     // Mirrors the in-app slot requirement label (Any Role / Any {role} /
-    // {main}[/{sub}]). `compact` abbreviates the long "Player's Choice" sub to "PC"
-    // so the 3-column board embed fits each requirement on one line (Discord embed
-    // fields wrap, and we can't widen them); the full label is kept everywhere else.
-    public static string SlotRequirement(PartySetupSlot slot, bool compact = false)
+    // {main}[/{sub}]). A free sub reads "ANY" — short enough that even the 3-column
+    // board embed fits each requirement on one line (Discord embed fields wrap and
+    // we can't widen them), and matching the image board's open-slot marker.
+    public static string SlotRequirement(PartySetupSlot slot)
     {
         var label = string.IsNullOrWhiteSpace(slot.Label) ? string.Empty : $" ({slot.Label})";
         string core;
@@ -1470,10 +1816,9 @@ public static class DiscordEventMessageBuilder
         }
         else if (string.Equals(slot.RequirementType, PartySetupSlotRequirementTypes.Job, StringComparison.OrdinalIgnoreCase))
         {
-            var freeSub = compact ? "PC" : "Player's Choice";
             core = string.IsNullOrWhiteSpace(slot.MainJob)
                 ? "Any job"
-                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? freeSub : slot.SubJob)}";
+                : $"{slot.MainJob}/{(string.IsNullOrWhiteSpace(slot.SubJob) ? "ANY" : slot.SubJob)}";
         }
         else
         {

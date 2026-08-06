@@ -75,15 +75,7 @@ public sealed partial class ActivityDataController
             .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
 
-        // Net treasury (income minus expense), not the raw sum — an Expense entry
-        // subtracts. Mirrors the Manage Revenue panel's "Net". EntryType is the
-        // normalized "Income"/"Expense" the Activity writes; legacy/web source
-        // strings aren't "Expense", so they count as income.
-        var revenueTotals = await _dbContext.RevenueEntries
-            .Where(entry => linkshellIds.Contains(entry.LinkshellId))
-            .GroupBy(entry => entry.LinkshellId)
-            .Select(group => new { LinkshellId = group.Key, Total = group.Sum(entry => entry.EntryType == "Expense" ? -entry.Value : entry.Value) })
-            .ToDictionaryAsync(item => item.LinkshellId, item => item.Total, cancellationToken);
+        var revenueTotals = await _treasury.GetCashOnHandByLinkshellAsync(linkshellIds, cancellationToken);
 
         var rolesByLinkshell = await EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
         var rolesByLinkshellAndName = rolesByLinkshell.ToDictionary(
@@ -125,7 +117,10 @@ public sealed partial class ActivityDataController
                 .AsNoTracking()
                 .Include(tod => tod.TodLootDetails)
                 .Where(tod => tod.LinkshellId == primaryLinkshellId.Value)
-                .OrderByDescending(tod => tod.Time)
+                // Time ?? TimeStamp: a ToD that was never entered (camp ended without a kill) has
+                // no Time, but it's still the monster's most recent event — fall back to when the
+                // row was written so it doesn't sink below the pop it superseded.
+                .OrderByDescending(tod => tod.Time ?? tod.TimeStamp)
                 .ThenByDescending(tod => tod.Id)
                 .Take(25)
                 .ToListAsync(cancellationToken)
@@ -225,14 +220,23 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken)
             : new List<Item>();
 
+        // The legacy revenueEntries payload, kept for ONE release and now fed from the treasury journal
+        // rather than the old RevenueEntries table.
+        //
+        // The Angular bundle ships separately from the server and there is no API versioning, so a
+        // browser holding a cached bundle will call the new server. Reading the old table would show
+        // such a client a treasury frozen at conversion day; dropping the field outright would render
+        // NaN gil. Projecting the journal back into the old shape keeps it correct until the field goes.
         var primaryRevenue = primaryLinkshellId.HasValue
-            ? await _dbContext.RevenueEntries
+            ? await _dbContext.JournalEntries
                 .AsNoTracking()
-                .Where(entry => entry.LinkshellId == primaryLinkshellId.Value)
-                .OrderByDescending(entry => entry.OccurredAt)
-                .ThenByDescending(entry => entry.Id)
+                .Include(entry => entry.Lines)
+                .Where(entry => entry.LinkshellId == primaryLinkshellId.Value
+                    && entry.Status == JournalEntryStatuses.Confirmed)
+                .OrderByDescending(entry => entry.TransactionDate)
+                .ThenByDescending(entry => entry.Sequence)
                 .ToListAsync(cancellationToken)
-            : new List<RevenueEntry>();
+            : new List<JournalEntry>();
 
         // News-feed sources for the dashboard: recent auctions + DKP adjustments.
         var primaryAuctions = primaryLinkshellId.HasValue
@@ -253,6 +257,113 @@ public sealed partial class ActivityDataController
                 .Take(10)
                 .ToListAsync(cancellationToken)
             : new List<DkpLedgerEntry>();
+
+        // Snapshots an officer attached to one of these camps. Same one-query-then-group shape as
+        // the claim shields below, and for the same reason: most events have none.
+        var linkedEventIds = activeEvents.Select(evt => evt.Id).ToList();
+        var linkedSnapshotsByEvent = linkedEventIds.Count > 0
+            ? (await _dbContext.AttendanceSnapshots
+                    .AsNoTracking()
+                    .Include(snapshot => snapshot.Entries)
+                    .Where(snapshot => snapshot.LinkedEventId != null
+                                       && linkedEventIds.Contains(snapshot.LinkedEventId.Value)
+                                       && snapshot.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
+                    .OrderBy(snapshot => snapshot.CapturedAtUtc)
+                    .ToListAsync(cancellationToken))
+                .GroupBy(snapshot => snapshot.LinkedEventId!.Value)
+                .ToDictionary(group => group.Key, group => group.ToList())
+            : new Dictionary<int, List<AttendanceSnapshot>>();
+
+        List<ActivityLinkedSnapshotDto> LinkedSnapshotsFor(Event evt)
+        {
+            if (!linkedSnapshotsByEvent.TryGetValue(evt.Id, out var snapshots))
+            {
+                return new List<ActivityLinkedSnapshotDto>();
+            }
+            // The POST count, because this names a window. On a Standard king/dragon that is 2,
+            // so a snapshot taken in the camp's first window reads "Open" — the spawn count (7)
+            // would send it down GetDefaultWindowLabel's numbered branch instead.
+            var windowCount = DiscordEventMessageBuilder.AttendancePostCount(evt);
+            return snapshots.Select(snapshot => new ActivityLinkedSnapshotDto(
+                snapshot.Id,
+                snapshot.Name,
+                snapshot.CapturedAtUtc,
+                snapshot.CapturedByCharacterName,
+                // Named the same way the window tabs above it are, so a snapshot taken in the
+                // camp's first window reads "Open" here too rather than "Window 1".
+                snapshot.WindowNumber is { } window
+                    ? HnmConfig.GetDefaultWindowLabel(evt.EventName, window, windowCount)
+                      ?? $"Window {window}"
+                    : null,
+                snapshot.SnapshotStatus,
+                snapshot.Entries
+                    // Hand-added names sort last so an asserted attendee never sits among the
+                    // scanned ones (the UI tints them too).
+                    .OrderBy(entry => entry.AddedManually)
+                    .ThenBy(entry => entry.CharacterName)
+                    .Select(entry => new ActivityLinkedSnapshotEntryDto(
+                        entry.Id,
+                        entry.CharacterName,
+                        entry.MainJob,
+                        entry.MainJobLevel,
+                        entry.SubJob,
+                        entry.SubJobLevel,
+                        entry.Zone,
+                        entry.AddedManually))
+                    .ToList()))
+                .ToList();
+        }
+
+        // Claim-shield lotteries captured during these camps, grouped by event.
+        // Loaded in one query rather than as an Include on activeEvents: most
+        // events have none, and the ones that do have very few, so a join would
+        // fan out every event row for the sake of a handful of captures.
+        var claimShieldEventIds = activeEvents.Select(evt => evt.Id).ToList();
+        var claimShieldsByEvent = claimShieldEventIds.Count > 0
+            ? (await _dbContext.ClaimShieldCaptures
+                    .AsNoTracking()
+                    .Include(capture => capture.Members)
+                    .Where(capture => capture.EventId != null
+                                      && claimShieldEventIds.Contains(capture.EventId.Value))
+                    .OrderBy(capture => capture.CapturedAtUtc)
+                    .ToListAsync(cancellationToken))
+                .GroupBy(capture => capture.EventId!.Value)
+                .ToDictionary(group => group.Key, group => group.ToList())
+            : new Dictionary<int, List<ClaimShieldCapture>>();
+
+        // Which posted window a capture belongs to. Windows are posted AT a
+        // moment, so a capture sits "in" the window whose post it follows --
+        // the last window posted at or before it. A capture that predates every
+        // window (the pop happened before anyone posted) falls to the first.
+        //
+        // This is the direction the officer actually wants: the game stamped the
+        // lottery line, so the capture dates the window, not the other way round.
+        static int? NearestWindowSequence(
+            ClaimShieldCapture capture, ICollection<EventAttendanceWindow> windows)
+        {
+            if (windows.Count == 0) return null;
+            var ordered = windows.OrderBy(window => window.PostedAt).ToList();
+            var match = ordered.LastOrDefault(window => window.PostedAt <= capture.CapturedAtUtc);
+            return (match ?? ordered[0]).SequenceNumber;
+        }
+
+        List<ActivityClaimShieldCaptureDto> ClaimShieldsFor(Event evt) =>
+            claimShieldsByEvent.TryGetValue(evt.Id, out var captures)
+                ? captures.Select(capture => new ActivityClaimShieldCaptureDto(
+                    capture.Id,
+                    capture.MonsterName,
+                    capture.Won,
+                    capture.TotalPlayers,
+                    capture.CapturedAtUtc,
+                    capture.CapturedMessage,
+                    NearestWindowSequence(capture, evt.AttendanceWindows),
+                    capture.Members
+                        .OrderBy(member => member.CharacterName)
+                        .Select(member => new ActivityClaimShieldMemberDto(
+                            member.CharacterName, member.ActionMessage, member.Matched))
+                        .ToList()))
+                    .ToList()
+                : new List<ActivityClaimShieldCaptureDto>();
 
         // Resolve creator/starter character names for each active event. Prefer
         // the user's linkshell-specific character name; fall back to their
@@ -378,11 +489,33 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken))
             .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
             .ToDictionary(g => g.Key, g => g.First().LeadHours);
-        double? HnmLead(Event e) =>
-            !string.IsNullOrWhiteSpace(e.AssignedMonsterName)
-            && hnmBoardLeadByMonster.TryGetValue(e.AssignedMonsterName.Trim().ToLowerInvariant(), out var lh)
-                ? lh
-                : (double?)null;
+        // Matched on every spelling of the spawn (either half of a merge pair and the
+        // combined "Base/Stronger" label) so a board keyed on one still pre-fills the
+        // End Camp form's re-post toggle + lead for an event keyed on another.
+        double? HnmLead(Event e)
+        {
+            foreach (var name in HnmConfig.MonsterMatchNamesLower(e.AssignedMonsterName))
+            {
+                if (hnmBoardLeadByMonster.TryGetValue(name, out var lh))
+                {
+                    return lh;
+                }
+            }
+            return null;
+        }
+
+        // Source ToDs that carry NO observed Time of Death — the camp was ended without one, so
+        // there is no predicted repop and the board's StartTime still points at the pop that just
+        // passed. The defeated-board banner branches on this instead of promising a repop that was
+        // never derived. One query for every event in the payload; absent from the set = fine.
+        var todlessSourceTodIds = (await _dbContext.Tods
+                .AsNoTracking()
+                .Where(t => t.LinkshellId == primaryLinkshellId && t.Time == null)
+                .Select(t => t.Id)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        bool HnmTodRecorded(Event e) =>
+            e.SourceTodId is not { } todId || !todlessSourceTodIds.Contains(todId);
 
         // Which linkshells have a dashboard banner (+ its version for cache-busting),
         // fetched WITHOUT the image bytes so the polled overview stays lean.
@@ -395,6 +528,10 @@ public sealed partial class ActivityDataController
             bannerVersions.TryGetValue(lsId, out var updated)
                 ? $"/api/activity/linkshells/{lsId}/banner?v={updated.Ticks}"
                 : null;
+
+        var hnmWindowSetups = HnmConfig.WindowedHnmSetups()
+            .Select(setup => new HnmWindowSetupDto(setup.Monster, setup.Windows, setup.Minutes))
+            .ToList();
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -486,17 +623,7 @@ public sealed partial class ActivityDataController
                         item.IsSold,
                         item.SoldPrice,
                         item.SoldByCharacterName)).ToList(),
-                    primaryRevenue.Select(entry => new ActivityRevenueEntryDto(
-                        entry.Id,
-                        entry.LinkshellId,
-                        entry.EntryType,
-                        entry.Category,
-                        entry.Value,
-                        entry.Details,
-                        entry.OccurredAt,
-                        entry.CreatedByAppUserId,
-                        entry.CreatedByCharacterName,
-                        entry.CreatedAt)).ToList(),
+                    primaryRevenue.Select(ToLegacyRevenueDto).ToList(),
                     primaryAuctions.Select(auction =>
                     {
                         var closed = auction.EndTime is { } end && end <= DateTime.UtcNow;
@@ -587,7 +714,9 @@ public sealed partial class ActivityDataController
                                 item.DeniedBy,
                                 item.Source))
                             .ToList(),
-                        EventBiddableDkp(evt.LinkshellId, evt.EventType, participation.AppUserId)))
+                        EventBiddableDkp(evt.LinkshellId, evt.EventType, participation.AppUserId),
+                        participation.WdArrivalWindow,
+                        participation.WdDepartureWindow))
                     .ToList(),
                 evt.EventLootDetails
                     .OrderByDescending(loot => loot.Id)
@@ -607,13 +736,26 @@ public sealed partial class ActivityDataController
                 evt.SourceTodId,
                 HnmLead(evt) != null,
                 HnmLead(evt),
-                evt.WindowCountOverride ?? HnmConfig.GetWindowCount(evt.EventName),
+                DiscordEventMessageBuilder.EffectiveWindowCount(evt),
+                DiscordEventMessageBuilder.AttendancePostCount(evt),
                 evt.AttendanceWindows
                     .OrderBy(window => window.SequenceNumber)
                     .Select(window => new ActivityAttendanceWindowDto(
                         window.Id,
                         window.SequenceNumber,
-                        window.Label,
+                        // Not window.Label raw, for two reasons. Rows posted before the Open/Close
+                        // rename still say "On Time" / "Claim/Kill", and a camp caught mid-flight
+                        // would show one of each. And a row written while the label was derived
+                        // from the SPAWN count has no label at all — GetDefaultWindowLabel only
+                        // names a 2-post camp — so it fell back to "Window 1" on a camp whose
+                        // windows are an Open and a Close. Re-deriving here from the post count
+                        // heals those without a migration; a stored label still wins.
+                        // (activeEvents is materialized, so this runs in memory.)
+                        HnmConfig.NormalizeWindowLabel(window.Label)
+                            ?? HnmConfig.GetDefaultWindowLabel(
+                                evt.EventName,
+                                window.SequenceNumber,
+                                DiscordEventMessageBuilder.AttendancePostCount(evt)),
                         window.PostedAt,
                         window.Attendees
                             .OrderBy(att => att.AppUserEvent != null ? att.AppUserEvent.CharacterName : string.Empty)
@@ -625,11 +767,35 @@ public sealed partial class ActivityDataController
                                 att.Zone,
                                 att.VerifiedAt,
                                 att.VerifiedBy))
-                            .ToList()))
+                            .ToList(),
+                        window.DkpAmount))
                     .ToList(),
+                LinkedSnapshotsFor(evt),
+                ClaimShieldsFor(evt),
                 ResolveActorName(evt.LinkshellId, evt.CreatorUserId),
                 ResolveActorName(evt.LinkshellId, evt.StarterUserId),
-                EventPoolName(evt.LinkshellId, evt.EventType))).ToList(),
+                EventPoolName(evt.LinkshellId, evt.EventType),
+                evt.AttendanceMode,
+                evt.HnmWindowNumber,
+                evt.NextWindowAt,
+                evt.WdAwaitingProcessingSince,
+                evt.WdFinalizedAt,
+                evt.WdPopWindow,
+                // What the UI shows — same helper the Discord board uses, so the two can't
+                // disagree. Separate from HnmWindowNumber above, which pop-window logic needs.
+                DiscordEventMessageBuilder.FocusWindow(evt),
+                // Whether the Break Room applies. Same predicate the break endpoints enforce, so
+                // the Activity can never show a control the server would refuse.
+                EventBreakPolicy.SupportsBreakRoom(evt),
+                // False = the camp ended with no Time of Death, so there is no repop to announce.
+                HnmTodRecorded(evt),
+                // Per-camp bonus overrides, so the edit form reopens "Change DKP" with this
+                // camp's own numbers instead of silently resetting it to the linkshell default.
+                evt.HnmOpenBonusOverride,
+                evt.HnmCloseBonusOverride,
+                evt.HnmClaimBonusOverride,
+                evt.HnmKillBonusOverride,
+                evt.HnmPerWindowOverride)).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,
@@ -674,7 +840,8 @@ public sealed partial class ActivityDataController
                 recentHistory.Count,
                 activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
             addonConfigured,
-            addonGloballyDisabled));
+            addonGloballyDisabled,
+            hnmWindowSetups));
     }
 
     [HttpGet("history")]

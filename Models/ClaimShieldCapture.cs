@@ -18,6 +18,19 @@ public class ClaimShieldCapture
     [ForeignKey(nameof(LinkshellId))]
     public Linkshell? Linkshell { get; set; }
 
+    // The camp this lottery belonged to, so the capture can be shown alongside
+    // that event's attendance windows instead of only on the linkshell-wide ToD
+    // page. Set from the addon's linked event when there is one, otherwise
+    // matched server-side by monster + time (see ResolveClaimShieldEventAsync).
+    //
+    // Nullable on purpose: a pop can be captured with no camp open at all, and
+    // that record is still worth keeping. SetNull on delete -- losing the event
+    // must not delete the audit row.
+    public int? EventId { get; set; }
+
+    [ForeignKey(nameof(EventId))]
+    public Event? Event { get; set; }
+
     [MaxLength(128)]
     public string MonsterName { get; set; } = string.Empty;
 

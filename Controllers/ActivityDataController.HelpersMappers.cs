@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -48,7 +49,21 @@ public sealed partial class ActivityDataController
             linkshell.FillAlliancesInOrder,
             linkshell.HnmOutsideSignupEnabled,
             linkshell.UseComponentsV2Boards,
-            linkshell.DiscussionChannelId);
+            linkshell.DiscussionChannelId,
+            HnmAttendanceModes.Normalize(linkshell.HnmAttendanceMode),
+            linkshell.WdDkpPerWindow,
+            linkshell.WdClaimBonus,
+            linkshell.WdKillBonus,
+            linkshell.HnmStandardOpenBonus,
+            linkshell.HnmStandardCloseBonus,
+            linkshell.HnmStandardClaimBonus,
+            linkshell.HnmStandardKillBonus,
+            ParseTodMonsterTimings(linkshell.TodMonsterTimings),
+            linkshell.HnmAutoSnapshotEnabled,
+            linkshell.HnmAutoSnapshotDelaySeconds,
+            linkshell.HnmStandardWindowBonus,
+            linkshell.WdOpenBonus,
+            linkshell.WdCloseBonus);
     }
 
     // Splits the pipe-separated storage form into a clean list of names
@@ -65,6 +80,51 @@ public sealed partial class ActivityDataController
             if (trimmed.Length > 0) list.Add(trimmed);
         }
         return list;
+    }
+
+    // Pop-only mobs (Sky Gods, Sea NMs, HENMs) are no longer part of the ToD monster catalog,
+    // so any timing a linkshell saved for one while it still was is dropped here rather than
+    // handed to a client — otherwise the picker would show it back as a "custom" monster.
+    // Filtering on the read path also means the stored value self-cleans on the next save.
+    private static IReadOnlyList<ActivityTodMonsterTimingDto> ParseTodMonsterTimings(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<ActivityTodMonsterTimingDto>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<ActivityTodMonsterTimingDto>>(raw)
+                ?.Where(timing => !string.IsNullOrWhiteSpace(timing.MonsterName)
+                    && !HnmConfig.PopOnlyNms.Contains(timing.MonsterName.Trim())
+                    && timing.CooldownHours > 0
+                    && timing.IntervalHours >= 0
+                    && timing.IntervalMinutes >= 0
+                    && timing.IntervalMinutes < 60)
+                .ToArray()
+                ?? Array.Empty<ActivityTodMonsterTimingDto>();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<ActivityTodMonsterTimingDto>();
+        }
+    }
+
+    internal static string SerializeTodMonsterTimings(IReadOnlyList<ActivityTodMonsterTimingDto>? timings)
+    {
+        if (timings is null || timings.Count == 0) return string.Empty;
+
+        var normalized = timings
+            .Where(timing => !string.IsNullOrWhiteSpace(timing.MonsterName)
+                && !HnmConfig.PopOnlyNms.Contains(timing.MonsterName.Trim())
+                && timing.CooldownHours > 0
+                && timing.IntervalHours >= 0
+                && timing.IntervalMinutes >= 0
+                && timing.IntervalMinutes < 60)
+            .GroupBy(timing => timing.MonsterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last() with { MonsterName = group.Key })
+            .OrderBy(timing => timing.MonsterName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return normalized.Length == 0 ? string.Empty : JsonSerializer.Serialize(normalized);
     }
 
     // Joins the wire form back into the pipe-separated storage form.
@@ -116,6 +176,7 @@ public sealed partial class ActivityDataController
             role.CanModerateLiveEvent,
             role.CanAddLoot,
             role.CanManageInventory,
+            role.CanManageCharts,
             role.CanManageTreasury,
             role.CanManageRules,
             role.CanManageAnnouncements,
@@ -142,6 +203,7 @@ public sealed partial class ActivityDataController
             role.CanModerateLiveEvent,
             role.CanAddLoot,
             role.CanManageInventory,
+            role.CanManageCharts,
             role.CanManageTreasury,
             role.CanManageRules,
             role.CanManageAnnouncements,
@@ -178,7 +240,9 @@ public sealed partial class ActivityDataController
                 .ToList(),
             tod.ImagePath,
             tod.Hq,
-            tod.AdditionalSeconds);
+            tod.AdditionalSeconds,
+            tod.PopWindow,
+            tod.TimeStamp);
     }
 
     private static ActivityAuctionDto MapAuctionDto(

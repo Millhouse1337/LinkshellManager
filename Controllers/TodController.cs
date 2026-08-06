@@ -522,7 +522,9 @@ public class TodController : Controller
                 .AsNoTracking()
                 .Include(item => item.TodLootDetails)
                 .Where(item => item.LinkshellId == selectedLinkshellId)
-                .OrderByDescending(item => item.Time)
+                // Time ?? TimeStamp so a "Not entered" ToD (camp ended without a kill) still sorts
+                // as the monster's newest row rather than falling to the bottom of the list.
+                .OrderByDescending(item => item.Time ?? item.TimeStamp)
                 .ThenByDescending(item => item.Id)
                 .ToListAsync()
             : new List<Tod>();
@@ -637,9 +639,11 @@ public class TodController : Controller
                 Id = item.Id,
                 MonsterName = item.MonsterName ?? string.Empty,
                 DayNumber = item.DayNumber,
-                TodDisplay = ConvertUtcToUserTimeZone(item.Time, user.TimeZone)?.ToString("M/d/yyyy h:mm:ss tt") ?? "-",
+                // No time / no repop = the camp ended without anyone seeing it die, so nothing was
+                // recorded. Say "Not entered" rather than a bare dash, which reads as missing data.
+                TodDisplay = ConvertUtcToUserTimeZone(item.Time, user.TimeZone)?.ToString("M/d/yyyy h:mm:ss tt") ?? "Not entered",
                 Cooldown = item.Cooldown ?? string.Empty,
-                RepopTimeDisplay = ConvertUtcToUserTimeZone(item.RepopTime, user.TimeZone)?.ToString("M/d/yyyy h:mm:ss tt") ?? "-",
+                RepopTimeDisplay = ConvertUtcToUserTimeZone(item.RepopTime, user.TimeZone)?.ToString("M/d/yyyy h:mm:ss tt") ?? "Not entered",
                 Interval = item.Interval ?? string.Empty,
                 RepopTimeUtc = item.RepopTime,
                 Claim = item.Claim,
@@ -649,9 +653,12 @@ public class TodController : Controller
             TodLootDetails = lootDetails,
             NoLoot = source?.NoLoot ?? false,
             Notifications = source?.Notifications ?? new List<string>(),
-            // Full curated monster list (HNMs included). "Other" is appended
-            // in the view to reveal a free-text field for anything not listed.
-            MonsterOptions = TodManagerViewModel.SupportedMonsters.ToList(),
+            // Full curated monster list (HNMs included), with each NQ/HQ pair offered as ONE
+            // combined "Base/Stronger" entry rather than as two halves -- the same list the
+            // create-event form and the Activity's ToD picker show, and the same form the
+            // sign-up board stores in Event.AssignedMonsterName. "Other" is appended in the
+            // view to reveal a free-text field for anything not listed.
+            MonsterOptions = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters),
             CooldownOptions = TodManagerViewModel.SupportedCooldowns.ToList(),
             IntervalOptions = TodManagerViewModel.SupportedIntervals.ToList(),
             CharacterNames = characterNames,

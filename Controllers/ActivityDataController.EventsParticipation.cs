@@ -309,8 +309,26 @@ public sealed partial class ActivityDataController
         // than removing them — their timer pauses and their DKP / attendance / event
         // history are preserved, so a return (Resume from break) picks up exactly where
         // they left off. Their party slot is kept too. Idempotent if already on break.
+        //
+        // ...but ONLY for a timed event. A windowed (HNM) camp credits per posted window, so
+        // there is no timer to pause and parking someone here is a self-service way to strand
+        // themselves — see the INVARIANT on PutParticipationOnBreak. Plain-removing them instead
+        // is NOT an alternative: AppUserEventWindow cascade-deletes with AppUserEvent
+        // (ApplicationDbContext), so it would destroy the window credit they already earned.
+        // The Activity hides the button while a windowed camp is live; this is the backstop.
+        //
+        // Note the deliberate asymmetry with the Razor Unsign action in
+        // EventController.Participation.cs, which plain-removes: it is only reachable from the
+        // pre-start signup list (Views/Event/Index.cshtml), where there is nothing accrued to
+        // destroy. The two differ because they sit at different lifecycle stages — don't "fix"
+        // one to match the other.
         if (eventEntity.CommencementStartTime.HasValue)
         {
+            if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+            {
+                return BadRequest(new { error = EventBreakPolicy.WindowedWithdrawRejectionMessage });
+            }
+
             var live = await _dbContext.AppUserEvents
                 .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
             if (live is null)

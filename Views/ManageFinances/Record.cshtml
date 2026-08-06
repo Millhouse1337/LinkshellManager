@@ -1,0 +1,108 @@
+@using LinkshellManagerDiscordApp.Models
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.RecordTreasuryEntryViewModel
+@{
+    var editing = Model.Id != 0;
+    ViewData["Title"] = editing ? "Edit draft" : TreasuryLabels.RecordAction;
+    ViewData["BodyClass"] = "lsm-page";
+    var action = editing ? "EditDraft" : "Record";
+    // Grouped so the everyday options come first and the "gil promised but not yet moved" ones sit
+    // together further down, out of the way of anyone who never needs them.
+    var groups = new[]
+    {
+        (Key: TreasuryTransactionKinds.GroupCommon, Label: "Everyday"),
+        (Key: TreasuryTransactionKinds.GroupOwed, Label: "Gil promised but not moved yet"),
+        (Key: TreasuryTransactionKinds.GroupSetup, Label: "Setup"),
+    };
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@ViewData["Title"]</h1>
+        <div class="page-sub"><span>@TreasuryLabels.Section · @TreasuryLabels.Title</span></div>
+    </div>
+</div>
+
+<div class="card fade d2" style="padding:20px">
+    <form asp-action="@action" asp-route-id="@(editing ? Model.Id : (int?)null)" method="post">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));column-gap:24px;align-items:end">
+            <div class="field" style="grid-column:1/-1">
+                <label asp-for="TransactionKind"></label>
+                <select asp-for="TransactionKind" class="form-select" id="TransactionKind" required>
+                    @foreach (var group in groups)
+                    {
+                        var options = Model.Options.Where(option => option.Group == group.Key).ToList();
+                        if (options.Count == 0) { continue; }
+                        <optgroup label="@group.Label">
+                            @foreach (var option in options)
+                            {
+                                <option value="@option.Key" data-help="@option.Help" data-preview="@option.PreviewTemplate"
+                                        data-member="@(option.ShowsMember ? "1" : "0")"
+                                        data-split="@(option.IsSplittable ? "1" : "0")"
+                                        data-settles="@(option.SettlesMemberDebt ? "1" : "0")">@option.Label</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+                <span asp-validation-for="TransactionKind" class="text-danger"></span>
+                <div id="kindHelp" style="font-size:12px;color:var(--fg-3);margin-top:4px"></div>
+            </div>
+
+            <div class="field">
+                <label asp-for="Amount"></label>
+                <input asp-for="Amount" class="form-control" type="text" inputmode="numeric" data-thousands
+                       autocomplete="off" id="Amount" />
+                <span asp-validation-for="Amount" class="text-danger"></span>
+            </div>
+
+            <div class="field">
+                <label asp-for="TransactionDate"></label>
+                <input asp-for="TransactionDate" class="form-control" type="datetime-local"
+                       value="@Model.TransactionDate.ToString("yyyy-MM-ddTHH:mm")" />
+                <span asp-validation-for="TransactionDate" class="text-danger"></span>
+            </div>
+
+            @* Type to filter the roster rather than typing a name from memory. data-owed carries
+               what each is still due, so settling can fill the amount in. *@
+            <div class="field" id="memberField">
+                <label asp-for="Member"></label>
+                <input asp-for="Member" class="form-control" maxlength="256" autocomplete="off"
+                       list="memberOptions" placeholder="Search members…" />
+                <datalist id="memberOptions">
+                    @foreach (var option in Model.Roster)
+                    {
+                        <option value="@option.CharacterName" data-owed="@option.Owed"></option>
+                    }
+                </datalist>
+                <div id="memberOwed" style="font-size:12px;color:var(--fg-3);margin-top:4px"></div>
+                <span asp-validation-for="Member" class="text-danger"></span>
+            </div>
+
+            <partial name="_TreasuryRecipients" model="Model" />
+
+            <div class="field" style="grid-column:1/-1">
+                <label asp-for="Memo"></label>
+                <textarea asp-for="Memo" class="form-control" rows="2" maxlength="1024"></textarea>
+                <span asp-validation-for="Memo" class="text-danger"></span>
+            </div>
+        </div>
+
+        @* Free confidence for someone who just picked an option they are not sure about. *@
+        <div id="preview" style="margin-top:16px;padding:10px 12px;border:1px solid var(--border);
+                                border-radius:6px;font-size:13px;color:var(--fg-2)"></div>
+
+        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+            <button type="submit" name="Confirm" value="true" class="btn primary">@TreasuryLabels.ConfirmAction</button>
+            <button type="submit" name="Confirm" value="false" class="btn ghost">@TreasuryLabels.SaveDraftAction</button>
+            <a class="btn ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @* Shared with Fix.cshtml, which renders the same fields. *@
+    <script src="~/js/treasury-record.js" asp-append-version="true" defer></script>
+}

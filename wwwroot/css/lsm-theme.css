@@ -1,4 +1,4 @@
-/* lsm-theme.css
+﻿/* lsm-theme.css
    Shared "dark crystal / FFXI HUD" theme, opt-in per page by setting
    ViewData["BodyClass"] = "lsm-page" (the layout puts it on .content).
    It re-themes the existing primitives (.card, .btn, .table, .input, .tag,
@@ -207,7 +207,7 @@
 }
 .lsm-page .form-control::placeholder { color: var(--text-muted); }
 
-/* Profile job cards — mirror the Discord Activity's .job-card (defined border,
+/* Profile job cards â€” mirror the Discord Activity's .job-card (defined border,
    subtle gradient, inset highlight + drop shadow) so the web matches. */
 .lsm-page .jobcard {
     min-height: 112px;
@@ -220,10 +220,10 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
-/* Relic weapon: glowing aurora flame border (blue → purple → magenta). Mirrors
+/* Relic weapon: glowing aurora flame border (blue â†’ purple â†’ magenta). Mirrors
    the Discord Activity's .tag.relic-flame. The OVERLAY (animated aurora border
    pulse, dark gradient, multi-color glow + flames) is shared; each base keeps its
-   own shape — the profile relic CHIPS take the Activity's squarish pill, the
+   own shape â€” the profile relic CHIPS take the Activity's squarish pill, the
    roster/profile job PILLS (.jr-pill) keep their rounded shape. */
 .lsm-page .tag.relic-flame,
 .lsm-page .jr-pill.relic-flame,
@@ -445,3 +445,785 @@
     }
     .lsm-page .rule-content ul.cols { columns: 1; }
 }
+
+/* ---------- Treasury: sharing one amount between several members ----------
+   Used by ManageFinances Record + Fix via Views/Shared/_TreasuryRecipients.cshtml. Both fields are
+   hidden/shown by wwwroot/js/treasury-record.js depending on which "what happened" option is picked. */
+.lsm-page .lsm-recipients {
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-panel);
+}
+
+.lsm-page .lsm-recipient {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    margin: 0;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.lsm-page .lsm-recipient:last-child { border-bottom: 0; }
+.lsm-page .lsm-recipient:hover { background: var(--bg-card-hover); }
+.lsm-page .lsm-recipient input[type="checkbox"] { flex: 0 0 auto; margin: 0; accent-color: var(--blue-main); }
+.lsm-page .lsm-recipient__name { flex: 1 1 auto; }
+.lsm-page .lsm-recipient__rank { flex: 0 0 auto; font-size: 11px; color: var(--text-muted); }
+
+/* Who gets exactly how much, before anything is recorded. The leftover gil is at most 1 each, but
+   showing it is what stops "it did not divide evenly" reading as a bug. */
+.lsm-page .lsm-recipients__shares:not(:empty) {
+    margin-top: 8px;
+    padding: 8px 11px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: var(--bg-card);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.lsm-page .lsm-recipients__warn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding: 8px 11px;
+    border: 1px solid var(--orange-main);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--orange-main) 12%, transparent);
+    font-size: 12px;
+    color: var(--text-main);
+}
+
+/* ---------- Treasury: the balance sheet ----------
+   What we have on the left, what we owe on the right, and what that leaves underneath both. The two
+   sides carry a subtotal each so the bottom line visibly comes from subtracting one from the other.
+   Mirrors .fin-sheet in the Discord Activity. */
+.lsm-page .lsm-sheet {
+    padding: 14px 16px 10px;
+}
+
+/* The working, behind a disclosure. The summary is the whole two-row header — the title strip AND
+   the flow chips — so everything a collapsed card shows is also its hit target. */
+.lsm-page .lsm-balance__summary {
+    display: block;
+    cursor: pointer;
+    /* Both are needed to drop the native triangle: list-style for Firefox/Chrome, the pseudo-element
+       for Safari. Without them there is a marker AND our chevron. */
+    list-style: none;
+}
+
+.lsm-page .lsm-balance__summary::-webkit-details-marker { display: none; }
+
+/* What moved, in and out. The card's headline, so it reads at the top in both states. The rule under
+   it only appears once there is something below it to divide from. */
+.lsm-page .lsm-flow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 12px 18px;
+}
+
+.lsm-page .lsm-balance[open] .lsm-flow { border-bottom: 1px solid var(--border-soft); }
+
+/* flex:1 rather than absolute centring: the chevron takes the whole gap between the title and the
+   chips and centres inside it, so it can never overlap either of them. */
+.lsm-page .lsm-balance__chev {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+.lsm-page .lsm-balance__chev svg {
+    width: 18px;
+    height: 18px;
+    transition: transform .12s ease;
+}
+
+.lsm-page .lsm-balance[open] .lsm-balance__chev svg { transform: rotate(180deg); }
+.lsm-page .lsm-balance__summary:hover .lsm-balance__chev { color: var(--text-main); }
+
+/* auto-fit so a narrow window folds it back to one column instead of squeezing two columns of
+   numbers together. */
+.lsm-page .lsm-sheet__cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 4px 32px;
+    padding: 14px 16px 10px;
+}
+
+.lsm-page .lsm-sheet__col { min-width: 0; }
+
+/* The answer, outside the disclosure, so a collapsed card still shows it. */
+.lsm-page .lsm-sheet--answer { padding-top: 0; }
+
+.lsm-page .lsm-sheet__section {
+    margin-top: 14px;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+}
+
+.lsm-page .lsm-sheet__section:first-child { margin-top: 0; }
+
+.lsm-page .lsm-sheet__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 3px 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.lsm-page .lsm-sheet__row .num { color: var(--text-main); }
+
+/* Section subtotal: a rule above it, the way it would be written on paper. */
+.lsm-page .lsm-sheet__row--total {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-soft);
+}
+
+/* The bottom line, marked off so it reads as the answer rather than one more row. */
+.lsm-page .lsm-sheet__row--worth {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 2px solid var(--border-soft);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.lsm-page .lsm-sheet__row--worth .num { font-size: 22px; font-weight: 700; }
+
+/* Who the "owed to members" figure is owed to. Collapsed, because the total is what most people
+   came for and the names only matter when someone is about to settle up. */
+.lsm-page .lsm-sheet__who { margin: 2px 0 0 12px; }
+
+.lsm-page .lsm-sheet__who > summary {
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.lsm-page .lsm-sheet__members {
+    margin-top: 4px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--bg-panel);
+}
+
+.lsm-page .lsm-sheet__members .lsm-sheet__row { font-size: 12px; }
+
+/* Who a line belongs to, inside the bookkeeping-details panel. A split writes one line per member
+   on the same category, so the name is the only thing telling those rows apart. */
+.lsm-page .lsm-half__member { color: var(--text-main); font-weight: 500; }
+
+/* ===== Charts boards (Sky, Sea, â€¦) ==============================================================
+   Twin of the .chart-card block in the Activity's src/styles/_chart-board.scss. Same idea,
+   deliberately different variable names, because the two apps' token vocabularies differ
+   (--red-main here, --danger there) and STYLE.md is explicit that Activity classes must not be
+   pasted into Razor.
+
+   Per-boss theming goes through one locally-scoped --boss custom property, so there is a single
+   themed block and one line per boss rather than one copy of the card per boss. */
+
+/* Sea needs EIGHT distinct hues in one categorical set and Dynamis needs TEN; the web palette only
+   supplied six that read apart at card-header size. Mirrors --pink / --violet / --warning in the
+   Activity's _tokens.scss. --amber-main is not a new colour — it is the literal already behind
+   .lsm-page .tag.warning, promoted to a token. */
+.lsm-page {
+    --pink-main: #ec4899;
+    --violet-main: #b57bff;
+    --amber-main: #f59e0b;
+}
+
+.lsm-page .chart-card,
+.lsm-page .chart-ledger__boss { --boss: var(--blue-main); }
+
+/* Sky */
+.lsm-page .is-suzaku { --boss: var(--red-main); }
+.lsm-page .is-genbu { --boss: var(--green-main); }
+.lsm-page .is-seiryu { --boss: var(--cyan-main); }
+.lsm-page .is-byakko { --boss: var(--gold-main); }
+.lsm-page .is-kirin { --boss: var(--purple-main); }
+/* Sky farm NMs — each takes the hue of the GOD IT FEEDS, so a whole column is one colour and the
+   board reads as four paths rather than as twelve unrelated cards. */
+.lsm-page .is-faust, .lsm-page .is-brigandish-blade { --boss: var(--red-main); }
+.lsm-page .is-zipacna, .lsm-page .is-olla-grande { --boss: var(--green-main); }
+.lsm-page .is-steam-cleaner, .lsm-page .is-mother-globe { --boss: var(--cyan-main); }
+.lsm-page .is-despot, .lsm-page .is-ullikummi { --boss: var(--gold-main); }
+
+/* Sea — every card in a path column takes the hue of the Jailer at the foot of it, so the colour
+   says which path you are looking at. Deliberately the opposite of the "no two cards under one
+   heading share a hue" rule the ungrouped boards follow: here the heading IS a column. */
+.lsm-page .is-justice, .lsm-page .is-fortitude, .lsm-page .is-ixaern-drk,
+.lsm-page .is-ghrah, .lsm-page .is-xzomit { --boss: var(--purple-main); }
+.lsm-page .is-hope, .lsm-page .is-temperance, .lsm-page .is-ixaern-mnk,
+.lsm-page .is-aern, .lsm-page .is-phuabo { --boss: var(--blue-main); }
+.lsm-page .is-prudence, .lsm-page .is-faith, .lsm-page .is-ixaern-drg,
+.lsm-page .is-euvhi, .lsm-page .is-hpemde { --boss: var(--pink-main); }
+.lsm-page .is-love { --boss: var(--violet-main); }
+.lsm-page .is-absolute { --boss: var(--orange-main); }
+
+/* Dynamis — ten zones, which puts the whole categorical set in play at once. */
+.lsm-page .is-sandoria { --boss: var(--red-main); }
+.lsm-page .is-bastok { --boss: var(--gold-main); }
+.lsm-page .is-windurst { --boss: var(--green-main); }
+.lsm-page .is-jeuno { --boss: var(--purple-main); }
+.lsm-page .is-beaucedine { --boss: var(--cyan-main); }
+.lsm-page .is-xarcabard { --boss: var(--blue-main); }
+.lsm-page .is-valkurm { --boss: var(--orange-main); }
+.lsm-page .is-buburimu { --boss: var(--amber-main); }
+.lsm-page .is-qufim { --boss: var(--violet-main); }
+.lsm-page .is-tavnazia { --boss: var(--pink-main); }
+
+/* Limbus — coloured by FLOW, the same rule Sky and Sea follow: every area that is a step toward a
+   fight wears that fight's hue. Apollyon's four outer areas and Proto-Omega are one colour, Temenos's
+   towers, floors and Proto-Ultima another — a shared hue would make fourteen cards read as one run
+   instead of two. The chip areas stay OUT of both flows in the "stocking" green every farmed card
+   wears: they are not steps toward the fight, they are the farm that pays for the steps. */
+.lsm-page .is-apollyon-nw,
+.lsm-page .is-apollyon-sw,
+.lsm-page .is-apollyon-ne,
+.lsm-page .is-apollyon-se,
+.lsm-page .is-apollyon-central { --boss: var(--orange-main); }
+.lsm-page .is-apollyon-cs { --boss: var(--green-main); }
+
+.lsm-page .is-temenos-west,
+.lsm-page .is-temenos-east,
+.lsm-page .is-temenos-north,
+.lsm-page .is-temenos-1f,
+.lsm-page .is-temenos-2f,
+.lsm-page .is-temenos-3f,
+.lsm-page .is-temenos-4f { --boss: var(--violet-main); }
+.lsm-page .is-temenos-b1 { --boss: var(--green-main); }
+
+/* HENM — a TIER ladder, coloured as one: a hue per tier, escalating green → gold → orange → red, so
+   where you are on the ladder reads before you have read a single card name. */
+.lsm-page .is-henm-rocs,
+.lsm-page .is-henm-decapod,
+.lsm-page .is-henm-scorpions { --boss: var(--green-main); }
+.lsm-page .is-henm-mammet,
+.lsm-page .is-henm-tonberry,
+.lsm-page .is-henm-ultimega { --boss: var(--gold-main); }
+.lsm-page .is-henm-behemoth,
+.lsm-page .is-henm-minogame,
+.lsm-page .is-henm-io { --boss: var(--orange-main); }
+.lsm-page .is-henm-council { --boss: var(--red-main); }
+
+/* auto-fit rather than a fixed column count: no breakpoint to keep in sync, and it copes with
+   five Sky cards, eight Sea cards and ten Dynamis cards equally. */
+.lsm-page .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+/* A group heading (Dynamis's "Original" / "Dreamworld" runs) is a grid ITEM spanning every track,
+   not a wrapper around a sub-grid: the cards keep the widths auto-fit gives them and the card
+   partial is not duplicated per group. font-size and margin are explicit so the UA's <h2> defaults
+   cannot leak in. Boards with no groups never emit one. */
+.lsm-page .chart-group-heading {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    margin: 4px 2px 0;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+}
+
+.lsm-page .chart-group-heading::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border-soft);
+}
+
+.lsm-page .chart-group-heading:first-child { margin-top: 0; }
+
+/* ---------- Path columns (Sky) ----------
+   ONE grid filled COLUMN-wise, not a container per column: a grid row is as tall as its tallest
+   card and every column shares those rows, so the two farm tiers and the god tier line up sideways —
+   which is the whole point of drawing the board this way. A container per column would let each one
+   size its own cards and the tiers would drift apart.
+   --chart-path-rows is set on the element by the view: heading + the cards in the tallest path. */
+.lsm-page .chart-paths {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(var(--chart-path-rows, 4), auto);
+    /* stretch, NOT start: a grid row is as tall as its tallest card, and with `start` a shorter card
+       ended at its own height and left the rest of its row as a hole in the page — most visible on a
+       Mini NM, which has no totals footer. Stretching means the card fills the row instead. */
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.lsm-page .chart-path-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    margin: 0 2px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-muted);
+}
+/* A rule on BOTH sides, so the label sits in the middle of its column and reads as that column's
+   title rather than as a label pinned to its left edge. */
+.lsm-page .chart-path-heading::before,
+.lsm-page .chart-path-heading::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border-soft);
+}
+
+/* Same treatment wherever a heading sits over CENTRED content — the row containers and the finale. */
+.lsm-page .chart-rows > .chart-group-heading::before,
+.lsm-page .chart-finale > .chart-group-heading::before {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border-soft);
+}
+
+/* Whatever sits BELOW the columns — the finale run. Centred, and sized in the columns' own widths so
+   it lines up with them: one column of the grid above is (100% - (count - 1) * gap) / count, and a
+   lone card takes two of those plus the gap between. Without that a single finale card lands in the
+   first track of a four-track row and reads as an afterthought rather than as the thing every column
+   leads to. */
+.lsm-page .chart-finale {
+    --chart-finale-col: calc((100% - (var(--chart-path-count, 4) - 1) * 12px) / var(--chart-path-count, 4));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+/* TWO columns each, whatever the finale holds — Kirin alone, or Sea's Love and Absolute Virtue. The
+   finale is the thing every column leads to, so it reads as one wide card rather than as a card the
+   width of a feeder. Cards past the first wrap to their own centred row when two cannot fit across. */
+.lsm-page .chart-finale > .chart-card {
+    flex: 0 0 calc(2 * var(--chart-finale-col) + 12px);
+    max-width: 100%;
+}
+/* Full width in a flex row, where grid-column means nothing. */
+.lsm-page .chart-finale > .chart-group-heading { flex: 1 0 100%; margin-top: 0; }
+
+/* ---------- Author-chosen rows (Dynamis) ----------
+   Cards at a fixed width, centred, with an explicit break where the board says a row ends. NOT the
+   auto-fit grid: that decides row length from whatever fits and stretches the cards to fill, which
+   is the opposite of a board saying "these four, then these two". The slack sits at the edges of
+   each row instead of inside the cards. */
+.lsm-page .chart-rows {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.lsm-page .chart-rows > .chart-card { flex: 0 1 300px; }
+.lsm-page .chart-rows > .chart-group-heading { flex: 1 0 100%; margin-top: 4px; }
+.lsm-page .chart-rows > .chart-group-heading:first-child { margin-top: 0; }
+/* Zero-height full-width item — the only way to force a line break mid-row in a wrap container. */
+.lsm-page .chart-row-break { flex: 1 0 100%; height: 0; margin: 0; }
+
+/* Four columns of 300px need 1200px+. Below that the columns cannot hold their width, so the board
+   falls back to the ordinary flow — each heading spans the row again and its cards follow it. The
+   "→ God" badge on every farm card is what still says which path a card belongs to here. */
+@media (max-width: 1100px) {
+    .lsm-page .chart-paths {
+        grid-auto-flow: row;
+        grid-template-rows: none;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+    .lsm-page .chart-path-heading { grid-column: 1 / -1; margin-top: 4px; }
+
+    /* The columns are gone, so a finale sized against them means nothing — it just fills the row. */
+    .lsm-page .chart-finale > .chart-card { flex: 1 1 300px; }
+}
+
+.lsm-page .chart-card { display: flex; flex-direction: column; }
+.lsm-page .chart-card .card-head { align-items: flex-start; border-bottom: 1px solid var(--boss); }
+.lsm-page .chart-card__heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lsm-page .chart-card__emblem {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--boss);
+}
+.lsm-page .chart-card__name { font-size: 15px; font-weight: 600; color: var(--boss); }
+.lsm-page .chart-card__subtitle { margin-top: 2px; font-size: 11px; color: var(--text-muted); }
+/* Which card this one's drops feed, in the TARGET card's hue — is-<targetKey> on the badge itself
+   re-scopes --boss for this element only, and every .is-* rule sets nothing but --boss. An OUTLINE
+   rather than a tinted fill because this stylesheet has no --boss-weak: .tag.chart-count already
+   makes the same trade, so the two pills on a card match each other. */
+.lsm-page .chart-card__leads-to {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    margin-top: 3px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    color: var(--boss);
+    border: 1px solid var(--boss);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lsm-page .chart-card__head-right { display: flex; align-items: center; gap: 6px; }
+.lsm-page .chart-card .tag.chart-count,
+.lsm-page .chart-card .tag.chart-status { color: var(--boss); border-color: var(--boss); white-space: nowrap; }
+.lsm-page .chart-card__empty { padding: 16px 14px; font-size: 13px; color: var(--text-muted); text-align: center; }
+.lsm-page .chart-card__footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: auto;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--boss);
+    border-top: 1px solid var(--border-soft);
+}
+.lsm-page .chart-card__footer strong { color: var(--text-main); }
+
+/* Final encounter: an ordinary grid card whose reward list hangs off a collapsed footer strip, so a
+   board can carry more than one finale (Limbus ends both Apollyon and Temenos) and each sits in its
+   own group rather than stacking full-width under the grid. */
+.lsm-page .chart-final { border-color: var(--boss); }
+
+.lsm-page .chart-rewards__bar { justify-content: space-between; }
+.lsm-page .chart-rewards__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--boss);
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.lsm-page .chart-rewards__chevron { transition: transform .12s ease; }
+
+.lsm-page .chart-rewards {
+    margin: 0 12px 12px;
+    padding: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--bg-panel-light);
+}
+.lsm-page .chart-rewards[hidden] { display: none; }
+.lsm-page .chart-rewards h3 { margin: 0 0 8px; font-size: 13px; color: var(--text-main); }
+.lsm-page .chart-rewards ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.lsm-page .chart-rewards li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.lsm-page .chart-rewards li span { color: var(--gold-main); }
+.lsm-page .chart-rewards__note {
+    margin-top: 10px;
+    padding: 8px;
+    border: 1px solid var(--gold-dark);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.lsm-page .chart-item-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lsm-page .chart-item-table th {
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border-soft);
+}
+.lsm-page .chart-item-table td {
+    padding: 8px 10px;
+    color: var(--text-main);
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-soft);
+}
+.lsm-page .chart-item-table .chart-item__name { font-weight: 500; }
+.lsm-page .chart-item-table .chart-item__muted { color: var(--text-muted); }
+.lsm-page .chart-item-table .chart-item__actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.lsm-page .chart-drawer > td { background: var(--bg-panel-light); }
+
+/* Centred flex row rather than an auto-fit grid — the twin of .panel-tab .chart-form. The grid
+   packed five short fields into the left of a wide card and left the rest empty: auto-fit could
+   never collapse the spare tracks, because the actions row spans 1 / -1 and a spanned track is not
+   an empty one. */
+.lsm-page .chart-form {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+}
+/* flex: 0 1 200px — shrinks on a narrow screen, never grows back across the card. */
+.lsm-page .chart-form__field { display: flex; flex-direction: column; gap: 4px; flex: 0 1 200px; min-width: 0; }
+.lsm-page .chart-form__field label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+}
+/* Own full-width row under the fields, centred with them. */
+.lsm-page .chart-form__actions { flex: 1 0 100%; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* Farming credit multiselect — a <details>, so it needs no script to open. The panel is absolutely
+   positioned so opening it does not push the rest of the form around. Twin of
+   .panel-tab .chart-multiselect in the Activity. */
+
+/* .lsm-page .card clips its children so their corners follow the card's radius. That would cut off
+   the dropdown, which hangs past the bottom of this particular card.
+   margin-bottom because .card carries none: the board container that follows sets only its own
+   bottom margin, so without this the first row of boss cards sits flush against the form. Stated
+   here rather than as a top margin on the containers — they also follow each other (path columns
+   then finale), and a top margin there would double the gap between those. */
+.lsm-page .card.chart-form-card { overflow: visible; margin-bottom: 16px; }
+
+.lsm-page .chart-multiselect { position: relative; }
+.lsm-page .chart-multiselect__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    /* Mirrors .lsm-page .input above, so this sits in the row looking like the fields either side. */
+    height: 34px;
+    padding: 0 10px;
+    color: var(--text-main);
+    background: var(--bg-panel-light);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    cursor: pointer;
+    list-style: none;
+}
+.lsm-page .chart-multiselect__toggle::-webkit-details-marker { display: none; }
+.lsm-page .chart-multiselect__toggle::after {
+    content: "›";
+    transform: rotate(90deg);
+    color: var(--text-muted);
+}
+.lsm-page .chart-multiselect[open] .chart-multiselect__toggle::after { transform: rotate(-90deg); }
+.lsm-page .chart-multiselect__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsm-page .chart-multiselect__panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 20;
+    min-width: 100%;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-top: 4px;
+    padding: 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .45);
+}
+.lsm-page .chart-multiselect__list { display: flex; flex-direction: column; gap: 2px; }
+.lsm-page .chart-multiselect__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.lsm-page .chart-multiselect__row:hover { background: var(--bg-panel-light); }
+.lsm-page .chart-multiselect__none { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+.lsm-page .chart-credit-editor { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.lsm-page .chart-credit-editor__title { font-size: 13px; font-weight: 600; color: var(--text-main); }
+.lsm-page .chart-credit-editor__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.lsm-page .chart-credit-editor__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.lsm-page .chart-credit-editor__row:hover { background: var(--bg-card-hover); }
+.lsm-page .chart-credit-editor__actions { display: flex; gap: 8px; justify-content: flex-end; }
+.lsm-page .chart-credit-editor__none { font-size: 13px; color: var(--text-muted); }
+
+.lsm-page .chart-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); }
+.lsm-page .chart-legend > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+.lsm-page .chart-status-dot {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+}
+.lsm-page .chart-status-dot.is-credited { color: var(--green-main); }
+.lsm-page .chart-status-dot.is-partial { color: var(--gold-main); }
+.lsm-page .chart-status-dot.is-none { color: var(--red-main); }
+/* A boss with nothing tracked is not a failure to farm â€” it is a question nobody has asked yet, so
+   it reads as absent rather than red. */
+.lsm-page .chart-status-dot.is-nottracked { color: var(--text-muted); border-style: dashed; }
+
+.lsm-page .table-wrap { overflow-x: auto; }
+
+/* Pop Item Holdings — four columns and mostly text, so unlike the ledger grid it needs no sticky
+   column and no sideways scroll. Twin of .panel-tab .chart-holdings in the Activity. */
+.lsm-page .chart-holdings td, .lsm-page .chart-holdings th { text-align: left; vertical-align: top; }
+/* A repeat of the item above: no top border, so copies of one item read as one block. */
+.lsm-page .chart-holdings tbody tr.is-continued td { border-top: none; }
+.lsm-page .chart-holdings__item { display: flex; flex-direction: column; gap: 2px; }
+.lsm-page .chart-holdings__name { font-weight: 600; color: var(--text-main); }
+/* The boss the item pops, in that boss's own hue — the same colour its card carries above. */
+.lsm-page .chart-holdings__boss {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--boss);
+}
+.lsm-page .chart-holdings__ditto { color: var(--text-muted); padding-left: 6px; }
+.lsm-page .chart-holdings__holder { font-weight: 500; color: var(--text-main); }
+.lsm-page .chart-holdings__note {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--text-muted);
+}
+.lsm-page .chart-holdings__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px 2px 6px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--text-main);
+    background: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    cursor: pointer;
+}
+.lsm-page .chart-holdings__toggle:hover { border-color: var(--blue-main); }
+.lsm-page .chart-holdings__drawer td { background: var(--bg-panel-light); }
+.lsm-page .chart-holdings__farmers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lsm-page .chart-holdings__farmers-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.lsm-page .chart-holdings__farmer {
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--text-main);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+}
+.lsm-page .chart-holdings__footer {
+    padding: 10px 14px;
+    margin: 0;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--text-muted);
+    text-align: center;
+    border-top: 1px solid var(--border-soft);
+}
+
+.lsm-page .chart-ledger td, .lsm-page .chart-ledger th { text-align: center; white-space: nowrap; }
+/* Eight bosses plus a name and a total will never fit, and the grid is inherently 2-D so it cannot
+   stack. It scrolls sideways with the name column pinned â€” without that, the rows stop meaning
+   anything the moment you scroll. */
+.lsm-page .chart-ledger th:first-child,
+.lsm-page .chart-ledger td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    text-align: left;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border-soft);
+}
+.lsm-page .chart-ledger__boss { color: var(--boss); }
+.lsm-page .chart-ledger__member { display: inline-flex; align-items: center; gap: 8px; }
+.lsm-page .chart-ledger__member > span { display: flex; flex-direction: column; }
+.lsm-page .chart-ledger__member strong { color: var(--text-main); font-weight: 500; }
+.lsm-page .chart-ledger__member small { color: var(--text-muted); font-size: 11px; }
+.lsm-page .chart-ledger__former {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+}
+.lsm-page .chart-ledger__cell { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.lsm-page .chart-ledger__cell.is-muted { color: var(--text-muted); }
+.lsm-page .chart-ledger__total {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 8px;
+    min-width: 84px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    color: var(--green-main);
+    background: rgba(67, 209, 122, .12);
+}
+.lsm-page .chart-ledger__total small { font-size: 11px; opacity: .85; }
+.lsm-page .chart-ledger__total.is-zero { color: var(--text-muted); background: var(--bg-card); }
+.lsm-page .chart-ledger__footer {
+    margin: 0;
+    padding: 10px;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--text-muted);
+    text-align: center;
+    border-top: 1px solid var(--border-soft);
+}
+.lsm-page .chart-subnav { display: flex; gap: 6px; flex-wrap: wrap; }

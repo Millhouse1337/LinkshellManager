@@ -12,15 +12,17 @@ import {
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
 import { TAB_NAMES, type TabName } from './activity-home.types';
-import { rankIcon } from './activity-home.helpers';
+import { primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
+import { ChartsTabComponent } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
+import { DkpGroupingTabComponent } from './tabs/dkp-grouping-tab.component';
 import { DkpSheetTabComponent } from './tabs/dkp-sheet-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
 import { LinkshellTabComponent } from './tabs/linkshell-tab.component';
+import { TreasuryTabComponent } from './tabs/treasury-tab.component';
 import { PartySetupTabComponent } from './tabs/party-setup-tab.component';
 import { TodsTabComponent } from './tabs/tods-tab.component';
-import { WindowEventsTabComponent } from './tabs/window-events-tab.component';
 import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.component';
 
 @Component({
@@ -29,15 +31,17 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     CommonModule,
     FormsModule,
     ActivitySidebarPanelComponent,
+    ChartsTabComponent,
     ConfigurationsTabComponent,
     DashboardTabComponent,
+    DkpGroupingTabComponent,
     DkpSheetTabComponent,
     EventsTabComponent,
     LinkshellTabComponent,
+    TreasuryTabComponent,
     LootHistoryPanelComponent,
     PartySetupTabComponent,
-    TodsTabComponent,
-    WindowEventsTabComponent
+    TodsTabComponent
   ],
   templateUrl: './activity-home.component.html',
   styleUrl: './activity-home.component.scss',
@@ -50,6 +54,18 @@ export class ActivityHomeComponent {
   private readonly liveUpdate = inject(LiveUpdateService);
   protected readonly activeTab = signal<TabName>('dashboard');
   protected readonly reconnecting = signal(false);
+
+  // Which of the DKP tab's three views is showing. They share one space and one strip of
+  // sub-tabs rather than being top-level tabs of their own: all three are the same DKP economy
+  // at different zoom levels, and splitting them across the main nav would put the
+  // linkshell-wide total, and the rules that produced it, a full tab away from the member row
+  // you were just reading. 'history' is the default the tab has always opened on.
+  protected readonly dkpViews = [
+    { key: 'history' as const, label: 'DKP History' },
+    { key: 'sheet' as const, label: 'DKP Sheet' },
+    { key: 'grouping' as const, label: 'DKP Grouping' },
+  ];
+  protected readonly dkpView = signal<'history' | 'sheet' | 'grouping'>('history');
 
   // Wall-clock display for the identity bar. We tick once per minute since the
   // header only shows hours/minutes; the initial timeout aligns the next tick
@@ -341,10 +357,7 @@ export class ActivityHomeComponent {
   }
 
   protected primaryLinkshellSettings(): ActivityLinkshellSettings | null {
-    const primaryId = this.activity.overview()?.appUser?.primaryLinkshellId;
-    if (primaryId == null) return null;
-    const link = this.activity.overview()?.linkshells?.find(l => l.id === primaryId);
-    return link?.settings ?? null;
+    return primaryLinkshellSettings(this.activity.overview());
   }
 
   protected primaryLootStructure(): ActivityLootStructure {
@@ -352,10 +365,11 @@ export class ActivityHomeComponent {
   }
 
   protected isFeatureEnabled(key: keyof ActivityLinkshellSettings): boolean {
-    // Charts and Missions aren't built yet — force them off everywhere (nav + panels) until they
-    // ship, regardless of the stored flag. The Feature toggles UI locks them off + "(TBA)" to
-    // match. Remove this guard when the features land.
-    if (key === 'enableEndgame' || key === 'enableMissions') { return false; }
+    // Missions isn't built yet — force it off everywhere (nav + panel) until it ships, regardless of
+    // the stored flag. The Feature toggles UI locks it off + "(TBA)" to match. Remove this guard
+    // when Missions lands. (Charts shipped with the Sky Pop Item Tracker and is governed by its
+    // stored enableEndgame flag like every other feature.)
+    if (key === 'enableMissions') { return false; }
     const settings = this.primaryLinkshellSettings();
     if (!settings) return true;
     const value = settings[key];
@@ -366,17 +380,9 @@ export class ActivityHomeComponent {
     return this.primaryLootStructure() !== 'LootCouncil';
   }
 
-  // HNM-only linkshells hide the Event System (timed events) tab; Attendance
-  // System stays since HNM linkshells run snapshot sessions.
-  protected isHnmOnly(): boolean {
-    return this.primaryLinkshellSettings()?.linkshellType === 'HnmOnly';
-  }
-
-  // Sky/Sea/Dynamis linkshells run timed events only — no HNM snapshot
-  // sessions — so the Attendance System tab is irrelevant for them.
-  protected isSkySeaDynamis(): boolean {
-    return this.primaryLinkshellSettings()?.linkshellType === 'SkySeaDynamis';
-  }
+  // Linkshell-type gating used to live here as isHnmOnly()/isSkySeaDynamis(), one per tab. Both
+  // tabs are now one, so the surviving check (attendanceApplies) sits in activity-home.helpers.ts
+  // where the Event System tab and the refresh timer can share it.
 
   // ----- Tab badges -----
 

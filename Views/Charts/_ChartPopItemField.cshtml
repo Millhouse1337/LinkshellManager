@@ -1,0 +1,45 @@
+@model LinkshellManagerDiscordApp.ViewModels.ChartPopItemFieldContext
+@*
+    The "Pop item" control, shared by the add form and every row's edit drawer.
+
+    BOTH controls are rendered and one is hidden AND disabled, because the right control depends on
+    which boss is selected and that can change after the page is served: Sea's second-stage Jailers
+    take a closed list of virtues and deeds, while Temperance and two of the three Ix'aern are
+    lottery or animosity spawns that take no trade item at all. A disabled control does not post, so
+    exactly one itemName reaches the action however the boss select is left — and the server-rendered
+    state is already correct for the boss the form opens on, so this needs no script to be right,
+    only to switch.
+*@
+@{
+    var options = Model.Options;
+    var current = Model.Current?.Trim();
+    var hasCurrent = !string.IsNullOrWhiteSpace(current);
+    var known = hasCurrent && options.Any(option =>
+        string.Equals(option.Name, current, StringComparison.OrdinalIgnoreCase));
+
+    // Which control is live on arrival: the picker when this boss has a list, the text box when not.
+    var picking = options.Count > 0;
+}
+
+@* The id rides on whichever control is live, so the field's <label for> always points at something
+   visible. The script moves it when it swaps them. *@
+<select name="itemName" id="@(picking ? Model.FieldId : null)" class="chart-item-picker"
+        data-chart-item-picker data-chart-item-id="@Model.FieldId"
+        hidden="@(!picking)" disabled="@(!picking)" required>
+    <option value="">Pick a pop item…</option>
+    @if (hasCurrent && !known)
+    {
+        @* The name this row is ALREADY saved under, when the board does not list it — a row typed
+           before Sea had a list would otherwise be silently re-pointed at the first option. *@
+        <option value="@current" selected>@current — already on this row</option>
+    }
+    @foreach (var option in options)
+    {
+        <option value="@option.Name"
+                selected="@(known && string.Equals(option.Name, current, StringComparison.OrdinalIgnoreCase))">@option.Label</option>
+    }
+</select>
+
+<input name="itemName" id="@(picking ? null : Model.FieldId)" class="input" type="text"
+       data-chart-item-free data-chart-item-id="@Model.FieldId" value="@(picking ? null : current)"
+       hidden="@picking" disabled="@picking" required />

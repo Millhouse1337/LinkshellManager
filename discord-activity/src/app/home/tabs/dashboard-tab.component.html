@@ -25,7 +25,8 @@
           }
           @if (dashboardLinkshell.settings?.enableRevenue) {
             <div class="stat-cell">
-              <div class="stat-cell-label">Revenue</div>
+              <!-- "Revenue" was never what this number was: it is the gil the linkshell holds. -->
+              <div class="stat-cell-label">Gil on hand</div>
               <div class="stat-cell-value">{{ dashboardLinkshell.revenue | number }}</div>
             </div>
           }
@@ -230,26 +231,29 @@
                 [(ngModel)]="dashboardRosterSearch"
                 name="dashboardRosterSearch" />
               <!--
-                App Sync filter: limits the roster to members who have actually
-                opened/synced the Discord Activity (member.hasSyncedActivity) — not
-                merely account-linked (outside-sign-up-board members get an account
-                without opening the Activity). Status is shown but never filtered on.
+                Show Jobs: swaps Rank/DKP/Status for each member's leveled jobs
+                (main + alts), the same toggle the Manage Team roster has. Lazy-loads
+                the jobs data, shared between both rosters.
               -->
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
                 <input
                   type="checkbox"
-                  [checked]="appSyncOnly()"
-                  (change)="toggleAppSync($any($event.target).checked)" />
-                App Sync
+                  [checked]="showJobs()"
+                  (change)="toggleShowJobs($any($event.target).checked)" />
+                Show Jobs
               </label>
             </div>
-            <div class="ac-roster ac-roster--scroll">
+            <div class="ac-roster ac-roster--scroll" [class.ac-roster--jobs]="showJobs()">
               <div class="ac-roster-head">
                 <div></div>
                 <div>Character</div>
-                <div>Rank</div>
-                <div class="ac-roster-dkp-head">DKP</div>
-                <div>Status</div>
+                @if (showJobs()) {
+                  <div>Jobs</div>
+                } @else {
+                  <div>Rank</div>
+                  <div class="ac-roster-dkp-head">DKP</div>
+                  <div>Status</div>
+                }
               </div>
               @for (member of filteredDashboardMembers(); track member.id) {
                 <div class="ac-roster-row">
@@ -267,9 +271,42 @@
                       }
                     }
                   </div>
-                  <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
-                  <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
-                  <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+                  @if (showJobs()) {
+                    <div class="ac-roster-jobs">
+                      @if (jobsBusy()) {
+                        <div class="jobs-roster-member__empty">Loading jobs…</div>
+                      } @else if (jobsCharacters(member.id); as characters) {
+                        @if (characters.length === 0) {
+                          <div class="jobs-roster-member__empty">No jobs entered</div>
+                        }
+                        @for (ch of characters; track ch.label) {
+                          <div class="jobs-roster-member__character">
+                            @if (ch.isAlt) {
+                              <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
+                            }
+                            @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
+                              @if (jobs.length === 0) {
+                                <div class="jobs-roster-member__empty">No jobs entered</div>
+                              } @else {
+                                <div class="jobs-roster-member__pills">
+                                  @for (job of jobs; track job.name) {
+                                    <span class="tag default jobs-roster-member__pill" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)">
+                                      <span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>
+                                      @if (job.strong) { <span class="jr-strong" title="Merited">★</span> }
+                                    </span>
+                                  }
+                                </div>
+                              }
+                            }
+                          </div>
+                        }
+                      }
+                    </div>
+                  } @else {
+                    <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
+                    <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
+                    <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
+                  }
                 </div>
               }
               @if (filteredDashboardMembers().length === 0) {
@@ -331,7 +368,7 @@
               <div class="upcoming-list">
                 @for (event of dashboardUpcomingEvents(); track event.id) {
                   <div class="upcoming-row">
-                    @if (eventTypeImage(event.type); as thumbSrc) {
+                    @if (eventThumbImage(event); as thumbSrc) {
                       <img class="upcoming-thumb upcoming-thumb--image" [src]="thumbSrc" [alt]="event.type || 'Event'" />
                     } @else {
                       <div class="upcoming-thumb"></div>
@@ -369,9 +406,10 @@
            linkshell feature toggle (ToDs / HNM section); the row only renders
            when at least one is enabled. -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-        @if ((dashboardLinkshell.settings?.enableToDs && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis') || (dashboardLinkshell.settings?.enableHnmSection && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis')) {
+        @if (dashboardLinkshell.settings; as settings) {
+        @if (settings.enableToDs || (settings.enableHnmSection && settings.linkshellType !== 'SkySeaDynamis')) {
         <div class="dash-row dash-row--equal">
-        @if (dashboardLinkshell.settings?.enableToDs && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis') {
+        @if (settings.enableToDs) {
         <div class="card card--tod-fixed">
           <div class="card-head">
             <div class="card-title">ToD Tracker</div>
@@ -401,13 +439,15 @@
                     <div class="tod-meta-label">Countdown</div>
                     <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
                   </div>
+                  <!-- "Not entered" = the camp ended without anyone seeing it die, so no time and
+                       no repop were recorded. Never show a synthesized timestamp here. -->
                   <div class="tod-meta-cell">
                     <div class="tod-meta-label">Time of death</div>
-                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || 'Unavailable' }}</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || notEntered }}</div>
                   </div>
                   <div class="tod-meta-cell">
                     <div class="tod-meta-label">Repop starts</div>
-                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || 'Unavailable' }}</div>
+                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || notEntered }}</div>
                   </div>
                 </div>
                 <div class="tod-entry-actions">
@@ -448,7 +488,7 @@
                       <div class="tod-history-item">
                         <div class="tod-history-main">
                           <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
-                          <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || 'Unavailable' }}</span>
+                          <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || notEntered }}</span>
                         </div>
                         <div class="tod-history-meta">
                           <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }} &middot; {{ hist.lootCount }} loot</span>
@@ -487,7 +527,7 @@
         }
 
         <!-- HNM Claims donut (hidden for Sky/Sea/Dynamis linkshells — no HNM). -->
-        @if (dashboardLinkshell.settings?.enableHnmSection && dashboardLinkshell.settings?.linkshellType !== 'SkySeaDynamis') {
+        @if (settings.enableHnmSection && settings.linkshellType !== 'SkySeaDynamis') {
         <div class="card">
           <div class="card-head">
             <div class="card-title">HNM Claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>
@@ -532,6 +572,7 @@
         </div>
         }
         </div>
+        }
         }
       }
 

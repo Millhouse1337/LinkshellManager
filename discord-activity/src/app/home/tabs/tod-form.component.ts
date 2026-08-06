@@ -12,8 +12,11 @@ import {
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
+  combinedMonsterOptions,
+  defaultTodMonsterTiming,
+  hasSpawnWindowCadence,
   HNM_COMBINED_FROM_DAY,
-  LONG_WINDOW_TOD_MONSTERS,
+  HNM_MERGE_PAIRS,
   TOD_COOLDOWN_OPTIONS,
   TOD_INTERVAL_OPTIONS,
   TOD_MONSTER_OPTIONS
@@ -41,7 +44,6 @@ export class TodFormComponent {
   // viewChild resolves immediately.
   private readonly logTodDialog = viewChild<ElementRef<HTMLDialogElement>>('logTodDialog');
 
-  protected readonly todMonsterOptions = [...TOD_MONSTER_OPTIONS];
   protected readonly todCooldownOptions = [...TOD_COOLDOWN_OPTIONS];
   protected readonly todIntervalOptions = [...TOD_INTERVAL_OPTIONS];
   protected readonly todDraft: ActivityCreateTodInput = {
@@ -59,6 +61,9 @@ export class TodFormComponent {
   };
   protected todTimeLocalValue = '';
   protected todRepopLocalValue = '';
+  protected todMonsterSearch = '';
+  protected todMonsterPickerOpen = false;
+  protected todMonsterActiveIndex = -1;
   protected todCustomMonsterName = '';
   protected todClaimChoice: 'Yes' | 'No' | 'NotSpecified' = 'Yes';
   protected todDayNumberNotSpecified = false;
@@ -74,10 +79,21 @@ export class TodFormComponent {
   protected boardMode = false;
   protected boardEventId: number | null = null;
   protected boardMonsterDisplay = '';
+  // "End Camp" = board mode opened from a LIVE camp's End Camp button (vs a defeated board's
+  // Post/Edit ToD). Adds the pop-window + killed inputs that cap credit and drive the Manual Check In bonuses.
+  protected boardEndCamp = false;
+  protected boardKilledChoice: 'Yes' | 'No' = 'Yes';
+  // Which window the monster popped on. End Camp pre-fills it from the live camp and uses it to
+  // cap credit; the ToDs tab lets the officer type it in as history on the ToD itself.
+  protected todPopWindow: number | null = null;
   // The board's day number (from the event). Shown read-only next to the locked
   // monster, and it gates the HQ toggle: a merge pair's stronger "HQ" monster only
   // appears on day 4+, so on days 1–3 there is no HQ to record and the toggle hides.
   protected boardDayNumber: number | null = null;
+  // End Camp only: whether to re-post the sign-up board before the next pop, and how many hours
+  // before it. Pre-filled from the event's standing Repeat-on-ToD config.
+  protected boardRepost = false;
+  protected boardRepostLeadHours: number | null = null;
 
   // ----- Public API -----
 
@@ -87,14 +103,19 @@ export class TodFormComponent {
     this.boardMode = false;
     this.boardEventId = null;
     this.boardDayNumber = null;
+    this.boardEndCamp = false;
+    this.boardRepost = false;
+    this.boardRepostLeadHours = null;
     this.editingTodId = null;
     this.resetTodDraft(linkshellId);
     const monster = (prefillMonster ?? '').trim();
     if (monster) {
-      const presets = TOD_MONSTER_OPTIONS as readonly string[];
-      if (presets.includes(monster)) {
+      // Resolve to the OPTION covering it, so a prefill of "Aspidochelone" lands on the
+      // combined "Adamantoise/Aspidochelone" entry the picker actually offers.
+      const option = this.todMonsterOptionFor(monster);
+      if (option) {
         // Sets monsterName + the matching cooldown/interval defaults + recomputes repop.
-        this.onTodMonsterChange(monster);
+        this.onTodMonsterChange(option);
       } else {
         this.todDraft.monsterName = 'Other';
         this.todCustomMonsterName = monster;
@@ -107,17 +128,26 @@ export class TodFormComponent {
   // Open the form to log a ToD for an HNM signup board (the card's "Post ToD" button).
   // The monster is locked to the board's monster; screenshot/loot are hidden. boardEventId
   // ties the ToD to the event so submit can drive the board (handled server-side).
-  public openForBoard(linkshellId: number, monster: string, eventId: number, dayNumber: number | null = null): void {
+  // endCampWindow, when provided, opens this as an "End Camp" for a still-live camp: it shows the
+  // pop-window (pre-filled to the current window) + killed inputs. null/omitted = a plain Post ToD.
+  public openForBoard(linkshellId: number, monster: string, eventId: number, dayNumber: number | null = null,
+    endCampWindow: number | null = null, repeatOnTod = false, repeatLeadHours: number | null = null): void {
     this.boardMode = true;
     this.boardEventId = eventId;
     this.boardDayNumber = dayNumber;
+    this.boardEndCamp = endCampWindow != null;
+    this.boardKilledChoice = 'Yes';
+    this.boardRepost = repeatOnTod;
+    this.boardRepostLeadHours = repeatLeadHours;
     this.editingTodId = null;
     this.resetTodDraft(linkshellId);
+    // After the reset (which blanks it) — End Camp opens on the camp's current window.
+    this.todPopWindow = endCampWindow ?? null;
     const m = (monster ?? '').trim();
     this.boardMonsterDisplay = m;
-    const presets = TOD_MONSTER_OPTIONS as readonly string[];
-    if (presets.includes(m)) {
-      this.onTodMonsterChange(m);
+    const boardOption = this.todMonsterOptionFor(m);
+    if (boardOption) {
+      this.onTodMonsterChange(boardOption);
     } else {
       this.todDraft.monsterName = 'Other';
       this.todCustomMonsterName = m;
@@ -133,6 +163,9 @@ export class TodFormComponent {
     this.boardMode = true;
     this.boardEventId = eventId;
     this.boardDayNumber = dayNumber;
+    this.boardEndCamp = false;
+    this.boardRepost = false;
+    this.boardRepostLeadHours = null;
     this.boardMonsterDisplay = (monster ?? '').trim();
     this.beginEditTod(tod);
     // Days 1–3 have no HQ variant, so never carry a stale HQ=true into the form.
@@ -146,14 +179,51 @@ export class TodFormComponent {
     this.boardMode = false;
     this.boardEventId = null;
     this.boardDayNumber = null;
+    this.boardEndCamp = false;
+    this.boardRepost = false;
+    this.boardRepostLeadHours = null;
     this.beginEditTod(tod);
   }
 
-  // HQ is only meaningful on day 4+ (the merge pair's stronger monster). On a board
-  // whose day number is 1–3 there is no HQ to log, so the toggle is hidden. When the
-  // day is unknown (null) we keep the toggle available.
+  // HQ = the merge pair's stronger half popped instead of the base. Whenever the form's monster
+  // HAS a stronger half the toggle is offered, whatever the day: the officer is recording what
+  // actually showed up, and the day number only governs how the board PRINTS the name. For a
+  // monster with no known pair we fall back to the day rule (1–3 = base only, nothing to log).
   protected hqOptionVisible(): boolean {
+    if (this.monsterHasHqVariant()) {
+      return true;
+    }
     return !(this.boardDayNumber != null && this.boardDayNumber < HNM_COMBINED_FROM_DAY);
+  }
+
+  // "Popped on window N" only means something when the monster HAS windows: the wyrms' 25 and
+  // the short band's 7. The Sky NMs, Shikigami Weapon, Bloodsucker, Xolotl, King Vinegarroon and
+  // the other untimed NMs pop off a plain repop timer with no grid to number, so the field is
+  // hidden for them rather than collecting a figure nothing can interpret.
+  //
+  // Board mode reads the locked display name; the ToDs tab reads the picked monster -- same
+  // split as monsterHasHqVariant, for the same reason.
+  protected popWindowVisible(): boolean {
+    const raw = (this.boardMode ? this.boardMonsterDisplay : this.todDraft.monsterName) ?? '';
+    return hasSpawnWindowCadence(raw);
+  }
+
+  // Day counts a monster's POP CYCLE, and only the three NQ/HQ families have one (mirrors
+  // HnmConfig.HnmDayCycles: Nidhogg, King Behemoth, Aspidochelone). Asking for a day on a
+  // Simurgh or a Sky god invited a number that means nothing and that the board would then
+  // print. Same predicate as the HQ toggle beside it -- both questions are only askable of a
+  // monster that has two halves.
+  protected dayNumberVisible(): boolean {
+    return this.monsterHasHqVariant();
+  }
+
+  // Is the form's monster part of a merge pair? Board mode reads the locked display name (which
+  // may be the combined "Base/Stronger" the event stores); the ToDs tab reads the picked monster.
+  private monsterHasHqVariant(): boolean {
+    const raw = (this.boardMode ? this.boardMonsterDisplay : this.todDraft.monsterName) ?? '';
+    const halves = raw.split('/').map(part => part.trim().toLowerCase()).filter(Boolean);
+    return HNM_MERGE_PAIRS.some(pair =>
+      halves.includes(pair.base.toLowerCase()) || halves.includes(pair.stronger.toLowerCase()));
   }
 
   // ----- Dialog open/close -----
@@ -266,11 +336,143 @@ export class TodFormComponent {
     this.todDraft.monsterName = monsterName;
     if (monsterName !== 'Other') {
       this.todCustomMonsterName = '';
-      const usesLongWindow = LONG_WINDOW_TOD_MONSTERS.has(monsterName.trim());
-      this.todDraft.cooldown = usesLongWindow ? '72 Hour' : '22 Hour';
-      this.todDraft.interval = usesLongWindow ? '1 Hour' : '10 Min';
+      // Match a configured timing on EITHER half of a combined "Base/Stronger" pick. The ToD
+      // Cooldowns picker still configures per half ("Adamantoise"), so an exact compare
+      // against the combined label would miss a timing the linkshell had deliberately set and
+      // silently seed the built-in default instead.
+      const halves = monsterName.split('/').map(half => half.trim()).filter(Boolean);
+      const configured = this.linkshellSettingsFor(this.todDraft.linkshellId)?.todMonsterTimings
+        ?.find(timing => halves.some(half =>
+          timing.monsterName.localeCompare(half, undefined, { sensitivity: 'accent' }) === 0));
+      if (configured) {
+        this.setTodCooldownHours(configured.cooldownHours);
+        this.todDraft.interval = this.formatTodInterval(configured.intervalHours, configured.intervalMinutes);
+      } else {
+        // No per-linkshell timing configured for this monster — fall back to the same
+        // built-in defaults the ToD Cooldowns picker seeds itself from (so Bloodsucker
+        // still lands on its 71-hour cycle, the wyrms on 84, and so on).
+        const fallback = defaultTodMonsterTiming(monsterName);
+        this.todDraft.cooldown = fallback.cooldown;
+        this.todDraft.interval = fallback.interval;
+      }
     }
     this.updateTodRepopTime();
+  }
+
+  protected isCustomTodInterval(): boolean {
+    return !(TOD_INTERVAL_OPTIONS as readonly string[]).includes(this.todDraft.interval ?? 'Not specified');
+  }
+
+  private setTodCooldownHours(hours: number): void {
+    const normalized = Math.max(0.01, Number(hours) || 22);
+    if (normalized === 84) {
+      this.todDraft.cooldown = '84 Hour';
+    } else if (normalized === 72) {
+      this.todDraft.cooldown = '72 Hour';
+    } else if (normalized === 71) {
+      this.todDraft.cooldown = '71 Hour';
+    } else if (normalized === 2) {
+      this.todDraft.cooldown = '2 Hour';
+    } else if (normalized === 5 / 60) {
+      this.todDraft.cooldown = '5 Min';
+    } else if (normalized === 22) {
+      this.todDraft.cooldown = '22 Hour';
+    } else {
+      this.todDraft.cooldown = 'Other';
+      this.todCustomCooldownHours = normalized;
+    }
+  }
+
+  private formatTodInterval(hours: number, minutes: number): string {
+    const normalizedHours = Math.max(0, Math.floor(Number(hours) || 0));
+    const normalizedMinutes = Math.min(59, Math.max(0, Math.floor(Number(minutes) || 0)));
+    if (normalizedHours > 0 && normalizedMinutes > 0) return `${normalizedHours} Hour ${normalizedMinutes} Min`;
+    if (normalizedHours > 0) return `${normalizedHours} Hour`;
+    return `${Math.max(1, normalizedMinutes)} Min`;
+  }
+
+  protected filteredTodMonsterOptions(): string[] {
+    const search = this.todMonsterSearch.trim().toLocaleLowerCase();
+    return this.todMonsterOptions().filter(monster =>
+      monster.toLocaleLowerCase().includes(search));
+  }
+
+  // The three merge pairs are offered as ONE combined "Base/Stronger" entry, not as six
+  // separate halves — the same list the create-event monster dropdown shows, and the same
+  // form the sign-up board stores. Which half actually popped is the HQ toggle's question,
+  // which is exactly why that toggle sits beside this picker.
+  private todMonsterOptions(): string[] {
+    const configured = this.linkshellSettingsFor(this.todDraft.linkshellId)?.todMonsterTimings ?? [];
+    return combinedMonsterOptions(
+      [...new Set([...TOD_MONSTER_OPTIONS, ...configured.map(timing => timing.monsterName.trim()).filter(Boolean)])]);
+  }
+
+  // The option that COVERS a stored monster name, i.e. the one whose name it is or whose
+  // combined label contains it. A ToD saved before the pairs were combined holds a bare half
+  // ("Aspidochelone"); without this it would no longer match any option and editing it would
+  // drop into the free-text "Other" branch, quietly turning a curated monster into a custom one.
+  private todMonsterOptionFor(monsterName: string): string | null {
+    const wanted = (monsterName ?? '').trim();
+    if (!wanted) { return null; }
+    return this.todMonsterOptions().find(option =>
+      option.localeCompare(wanted, undefined, { sensitivity: 'accent' }) === 0
+      || option.split('/').some(half =>
+        half.trim().localeCompare(wanted, undefined, { sensitivity: 'accent' }) === 0)) ?? null;
+  }
+
+  private isKnownTodMonster(monsterName: string): boolean {
+    return this.todMonsterOptionFor(monsterName) !== null;
+  }
+
+  protected onTodMonsterSelectionChange(monsterName: string): void {
+    this.todMonsterSearch = monsterName;
+    this.todMonsterPickerOpen = false;
+    this.todMonsterActiveIndex = -1;
+    this.onTodMonsterChange(monsterName);
+  }
+
+  protected openTodMonsterPicker(): void {
+    if (!this.todMonsterPickerOpen) {
+      this.todMonsterSearch = '';
+      this.todMonsterPickerOpen = true;
+      this.todMonsterActiveIndex = 0;
+    }
+  }
+
+  protected onTodMonsterSearchChange(value: string): void {
+    this.todMonsterSearch = value;
+    this.todMonsterPickerOpen = true;
+    this.todMonsterActiveIndex = 0;
+  }
+
+  protected closeTodMonsterPicker(): void {
+    setTimeout(() => {
+      this.todMonsterPickerOpen = false;
+      this.todMonsterActiveIndex = -1;
+      this.todMonsterSearch = this.todDraft.monsterName;
+      this.cdr.markForCheck();
+    });
+  }
+
+  protected onTodMonsterPickerKeydown(event: KeyboardEvent): void {
+    const options = this.filteredTodMonsterOptions();
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.todMonsterPickerOpen = true;
+      this.todMonsterActiveIndex = Math.min(this.todMonsterActiveIndex + 1, options.length - 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.todMonsterPickerOpen = true;
+      this.todMonsterActiveIndex = Math.max(this.todMonsterActiveIndex - 1, 0);
+    } else if (event.key === 'Enter' && this.todMonsterPickerOpen && options[this.todMonsterActiveIndex]) {
+      event.preventDefault();
+      this.onTodMonsterSelectionChange(options[this.todMonsterActiveIndex]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.todMonsterPickerOpen = false;
+      this.todMonsterActiveIndex = -1;
+      this.todMonsterSearch = this.todDraft.monsterName;
+    }
   }
 
   protected isTodMonsterOther(): boolean {
@@ -290,11 +492,19 @@ export class TodFormComponent {
     this.onTodClaimChange(value === 'Yes');
   }
 
-  protected onTodDayNumberNotSpecifiedChange(enabled: boolean): void {
-    this.todDayNumberNotSpecified = enabled;
-    if (enabled) {
-      this.todDraft.dayNumber = null;
-    }
+  // The ToDs-tab "Day" input. Blank (or 0/negative) = the officer didn't record a day, which is
+  // what todDayNumberNotSpecified means to submit.
+  protected onTodDayNumberChange(value: number | null): void {
+    const day = Number(value);
+    const normalized = Number.isFinite(day) && day > 0 ? Math.floor(day) : null;
+    this.todDraft.dayNumber = normalized;
+    this.todDayNumberNotSpecified = normalized == null;
+  }
+
+  // The "Popped on window" input on both forms. Windows are 1-based; blank = not recorded.
+  protected onTodPopWindowChange(value: number | null): void {
+    const window = Number(value);
+    this.todPopWindow = Number.isFinite(window) && window > 0 ? Math.floor(window) : null;
   }
 
   protected isTodCooldownOther(): boolean {
@@ -307,6 +517,9 @@ export class TodFormComponent {
   }
 
   private resolveCooldownHours(): number {
+    if (this.todDraft.cooldown === '84 Hour') {
+      return 84;
+    }
     if (this.todDraft.cooldown === '72 Hour') {
       return 72;
     }
@@ -395,7 +608,12 @@ export class TodFormComponent {
     if (!eventId) {
       return;
     }
-    if (!this.todTimeLocalValue || !this.todDraft.timeLocal.trim()) {
+    // End Camp may be submitted with no ToD: the window closed, or another linkshell took it, so
+    // nobody saw it die. That records "Not entered" (no time, no repop) instead of stamping the
+    // moment the officer closed the board. Plain Post/Edit ToD still requires a real time — it
+    // exists precisely to record one.
+    const hasTod = !!this.todTimeLocalValue && !!this.todDraft.timeLocal.trim();
+    if (!hasTod && !this.boardEndCamp) {
       this.activity.actionError.set('Time of Death is required.');
       this.activity.actionMessage.set(null);
       return;
@@ -415,13 +633,23 @@ export class TodFormComponent {
 
     try {
       await this.activity.postBoardTod(eventId, {
-        timeLocal: this.todDraft.timeLocal,
+        // Blank = "Not entered"; the server leaves Time + RepopTime unrecorded.
+        timeLocal: hasTod ? this.todDraft.timeLocal : '',
         cooldown: cooldown ?? null,
         interval: interval ?? null,
         dayNumber: dayNumber ?? null,
         claim: this.todDraft.claim ?? null,
         hq: this.todDraft.hq,
-        additionalSeconds: this.todDraft.additionalSeconds
+        additionalSeconds: this.todDraft.additionalSeconds,
+        // End Camp only: cap credit at the pop window + record whether it was killed.
+        popWindow: this.boardEndCamp ? this.todPopWindow : null,
+        killed: this.boardEndCamp ? (this.boardKilledChoice === 'Yes') : null,
+        // End Camp only: whether to re-post the sign-up board before the next pop, and the lead.
+        repost: this.boardEndCamp ? this.boardRepost : null,
+        repostLeadHours: this.boardEndCamp && this.boardRepost ? this.boardRepostLeadHours : null,
+        // End Camp only: the optional kill screenshot (the plain board Post/Edit ToD has no
+        // upload field, so it never sends one and the ToD's existing image is left alone).
+        imagePath: this.boardEndCamp ? this.todImagePath : null
       });
       this.closeLogTodDialog();
     } catch {
@@ -498,6 +726,7 @@ export class TodFormComponent {
           todId: this.editingTodId,
           monsterName,
           dayNumber,
+          popWindow: this.todPopWindow,
           hq: this.todDraft.hq,
           additionalSeconds: this.todDraft.additionalSeconds,
           claim: this.todDraft.claim,
@@ -513,6 +742,7 @@ export class TodFormComponent {
           linkshellId,
           monsterName,
           dayNumber,
+          popWindow: this.todPopWindow,
           hq: this.todDraft.hq,
           additionalSeconds: this.todDraft.additionalSeconds,
           claim: this.todDraft.claim,
@@ -537,6 +767,7 @@ export class TodFormComponent {
     this.editingTodId = tod.id;
     this.todDraft.linkshellId = linkshellId;
     this.todDraft.dayNumber = tod.dayNumber ?? null;
+    this.todPopWindow = tod.popWindow ?? null;
     this.todDraft.hq = !!tod.hq;
     this.todDraft.additionalSeconds = tod.additionalSeconds ?? 0;
     this.todDraft.claim = !!tod.claim;
@@ -544,14 +775,15 @@ export class TodFormComponent {
     this.todDayNumberNotSpecified = tod.dayNumber == null;
 
     const monsterName: string = tod.monsterName ?? '';
-    const presets = TOD_MONSTER_OPTIONS as readonly string[];
-    if (presets.includes(monsterName)) {
+    if (this.isKnownTodMonster(monsterName)) {
       this.todDraft.monsterName = monsterName;
       this.todCustomMonsterName = '';
     } else {
       this.todDraft.monsterName = 'Other';
       this.todCustomMonsterName = monsterName;
     }
+    this.todMonsterSearch = this.todDraft.monsterName;
+    this.todMonsterPickerOpen = false;
 
     const cooldown: string = tod.cooldown ?? '22 Hour';
     const cooldownPresets = TOD_COOLDOWN_OPTIONS as readonly string[];
@@ -601,6 +833,7 @@ export class TodFormComponent {
     this.todDraft.linkshellId = linkshellId;
     this.todDraft.monsterName = TOD_MONSTER_OPTIONS[0];
     this.todDraft.dayNumber = null;
+    this.todPopWindow = null;
     this.todDraft.hq = false;
     this.todDraft.additionalSeconds = 0;
     this.todDraft.claim = true;
@@ -611,6 +844,9 @@ export class TodFormComponent {
     this.todDraft.lootDetails = [createEmptyTodLootRow()];
     this.todTimeLocalValue = '';
     this.todRepopLocalValue = '';
+    this.todMonsterSearch = this.todDraft.monsterName;
+    this.todMonsterPickerOpen = false;
+    this.todMonsterActiveIndex = -1;
     this.todCustomMonsterName = '';
     this.todClaimChoice = 'Yes';
     this.todDayNumberNotSpecified = false;

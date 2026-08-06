@@ -1,39 +1,26 @@
-@model IEnumerable<EventViewModel>
+@model EventSystemPageViewModel
 @using LinkshellManagerDiscordApp.Models
 @{
     ViewData["Title"] = "Events";
     ViewData["BodyClass"] = "lsm-page";
-    var currentCharacter = ViewBag.CharacterName as string;
-    var currentAppUserId = ViewBag.CurrentAppUserId as string;
-    var mainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions;
-    var subJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions;
-    var jobTypeOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions;
-    var signUpRoleOptions = ViewBag.SignUpRoleOptions as List<string> ?? jobTypeOptions.ToList();
-    var signUpMainOptions = ViewBag.SignUpMainJobOptions as List<string> ?? mainJobOptions.ToList();
-    var signUpSubOptions = ViewBag.SignUpSubJobOptions as List<string> ?? subJobOptions.ToList();
-    // Characters the current member can sign up as (main + alts). The "sign up
-    // as" picker only renders when there's more than one to choose from.
-    var signupCharacters = ViewBag.SignupCharacters as List<string> ?? new List<string>();
-    var eventIndexUrl = Url.Action("Index", "Event") ?? "/Event";
 
-    string RelativeTime(DateTime? when)
-    {
-        if (!when.HasValue) return "TBD";
-        var delta = when.Value - DateTime.UtcNow;
-        var abs = delta.Duration();
-        var prefix = delta.TotalSeconds < 0 ? "" : "in ";
-        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
-        if (abs.TotalMinutes < 60) return $"{prefix}{(int)abs.TotalMinutes}m{suffix}";
-        if (abs.TotalHours < 24) return $"{prefix}{(int)abs.TotalHours}h{suffix}";
-        if (abs.TotalDays < 14) return $"{prefix}{(int)abs.TotalDays}d{suffix}";
-        return when.Value.ToString("MMM d");
-    }
+    // Viewer context for _TimedEventCard. Html.PartialAsync(name, model) shares THIS dictionary
+    // with the partial, so setting them once here reaches every card in both sections.
+    ViewData["CurrentCharacterName"] = Model.CurrentCharacterName;
+    ViewData["CurrentAppUserId"]     = Model.CurrentAppUserId;
+    ViewData["SignupCharacters"]     = Model.SignupCharacters;
+    ViewData["SignUpRoleOptions"]    = Model.SignUpRoleOptions;
+    ViewData["SignUpMainJobOptions"] = Model.SignUpMainJobOptions;
+    ViewData["SignUpSubJobOptions"]  = Model.SignUpSubJobOptions;
+    ViewData["EventIndexUrl"]        = Url.Action("Index", "Event") ?? "/Event";
 }
 
 @* Scoped styles for the inline Party Setup panel + manual signup toggle.
    Mirrors the Discord Activity "View & Sign Up" UX: click expands the
    alliance/parties/slots tree inline, with a "Sign Up Manually" affordance
-   at the bottom that's hidden when the user already owns a slot. *@
+   at the bottom that's hidden when the user already owns a slot.
+
+   Lives here rather than in _TimedEventCard so it's emitted once, not once per card. *@
 <style>
     .event-ps-row {
         padding: 12px 16px; border-top: 1px solid var(--border);
@@ -125,8 +112,12 @@
     <div>
         <h1 class="page-title">Event System</h1>
         <div class="page-sub">
-            <span><span class="num">@Model.Count()</span> active</span>
-            <span class="live-dot">Live</span>
+            <span><span class="num">@(Model.LiveCount + Model.PendingCount)</span> active</span>
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span class="dot"> &middot; </span>
+                <span>@Model.LinkshellName</span>
+            }
         </div>
     </div>
     <div class="page-actions">
@@ -134,6 +125,9 @@
     </div>
 </div>
 
+@* Every flash message for this page, surfaced once, above every section. The two WindowEvent
+   ones used to live inside _AttendanceSections; that partial now renders twice, and reading
+   TempData marks the entry consumed, so whichever slice ran first would have eaten them. *@
 @if (TempData["StartError"] is string startError && !string.IsNullOrWhiteSpace(startError))
 {
     <div class="card fade d1" style="border:1px solid var(--accent);padding:14px 16px;margin-bottom:16px">
@@ -141,767 +135,380 @@
         <div style="color:var(--fg-2);font-size:14px">@startError</div>
     </div>
 }
-
-@* PartySetup signup/withdraw posts redirect back here with a flash message
-   stored in TempData. Surface it the same way ToD Tracker does. *@
 @if (TempData["PartySetupMessage"] is string psMsg && !string.IsNullOrWhiteSpace(psMsg))
 {
     <div class="card fade d1" style="border:1px solid var(--accent);padding:12px 14px;margin-bottom:12px">
         <div style="color:var(--fg);font-size:14px">@psMsg</div>
     </div>
 }
-
-@if (!Model.Any())
+@if (TempData["Error"] is string generalError && !string.IsNullOrWhiteSpace(generalError))
 {
-    <div class="card fade d2">
-        <div class="empty">
-            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No active events</div>
-            <div style="margin-bottom:12px">Create your first event to begin scheduling linkshell runs.</div>
-            <a class="btn primary" asp-action="Create">Create event</a>
-        </div>
-    </div>
+    <div class="alert alert-danger fade d1" style="margin-bottom:12px">@generalError</div>
 }
-else
+@if (TempData["WindowEventError"] is string attendanceErr)
 {
-    @* Inline panel toggle: clicking a .event-ps-toggle button shows/hides the
-       matching .event-ps-panel (by id stored in data-target). Same handler
-       also drives the "Sign Up Manually" toggle. On page load, if the URL
-       has a fragment matching a panel id (e.g. "#event-ps-panel-42"), open
-       that panel — used after a PartySetup signup/withdraw round-trip. *@
-    <script nonce="@Html.CspNonce()">
-        (function () {
-            var STORE_KEY = 'lsmOpenEventPsPanel';
+    <div class="alert alert-danger fade d1" style="margin-bottom:12px">@attendanceErr</div>
+}
+@if (TempData["WindowEventStatus"] is string attendanceStatus)
+{
+    <div class="alert alert-success fade d1" style="margin-bottom:12px">@attendanceStatus</div>
+}
 
-            function openPanel(id) {
-                if (!id) { return null; }
-                var panel = document.getElementById(id);
-                if (panel && panel.classList.contains('event-ps-panel')) {
-                    panel.removeAttribute('hidden');
-                    return panel;
-                }
-                return null;
-            }
+@* The three sections, in the Discord Activity's order. *@
+@await Html.PartialAsync("_CurrentFieldActivity", Model)
+@await Html.PartialAsync("_PendingEvents", Model)
+@if (Model.Attendance is not null)
+{
+    @await Html.PartialAsync("_AttendanceArchive", Model)
+}
+@await Html.PartialAsync("_PastEvents", Model)
 
-            document.addEventListener('click', function (e) {
-                var t = e.target.closest('.event-ps-toggle, .event-manual__toggle');
-                if (!t) return;
-                var panel = document.getElementById(t.getAttribute('data-target'));
-                if (!panel) return;
-                if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden');
-                else panel.setAttribute('hidden', '');
-            });
-
-            // Sign up / Withdraw / manual-signup forms live inside a party-setup panel.
-            // Submit them via fetch and swap ONLY that panel in place — no full page
-            // reload. (Falls back to a normal submit on a network error, and to a reload
-            // if the panel can't be located in the response.)
-            document.addEventListener('submit', async function (e) {
-                var form = e.target;
-                if (!form || !form.closest) return;
-                var panel = form.closest('.event-ps-panel');
-                if (!panel || !panel.id) return;
-                var panelId = panel.id;
-                // Remember the open panel so a fallback full reload re-expands it.
-                try { sessionStorage.setItem(STORE_KEY, panelId); } catch (err) { /* ignore */ }
-                e.preventDefault();
-                var fd = new FormData(form);
-                // FormData omits the clicked submit button — re-add it (e.g. asLeader=true/false).
-                if (e.submitter && e.submitter.name) { fd.append(e.submitter.name, e.submitter.value); }
-                var res;
-                try {
-                    res = await fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
-                } catch (err) { form.submit(); return; }
-                var fresh = null;
-                try {
-                    var doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-                    fresh = doc.getElementById(panelId);
-                } catch (err) { /* ignore */ }
-                var current = document.getElementById(panelId);
-                if (fresh && current) {
-                    current.replaceWith(fresh);
-                    fresh.removeAttribute('hidden'); // keep it expanded after the swap
-                    try { sessionStorage.removeItem(STORE_KEY); } catch (err) { /* ignore */ }
-                } else {
-                    window.location.reload();
-                }
-            });
-
-            // On load, re-open the panel remembered across a signup/withdraw
-            // round-trip (one-shot), and/or the one named by the URL fragment.
-            var restored = null;
-            try {
-                var saved = sessionStorage.getItem(STORE_KEY);
-                if (saved) {
-                    sessionStorage.removeItem(STORE_KEY);
-                    restored = openPanel(saved);
-                }
-            } catch (err) { /* ignore */ }
-
-            var hash = window.location.hash;
-            if (hash && hash.length > 1) {
-                var fromHash = openPanel(hash.substring(1));
-                if (fromHash && !restored) { restored = fromHash; }
-            }
-
-            if (restored) {
-                restored.scrollIntoView({ behavior: 'auto', block: 'center' });
-            }
-        })();
-    </script>
-    <div class="fade d2" style="display:grid;gap:16px">
-        @foreach (var item in Model)
+@* Shared roster typeahead source for every "Add a character by name…" input in the snapshot
+   editors above (they reference it via list=). Emitted here, once, because _AttendanceSections
+   renders twice on this page and both slices contain those editors. Managers only — they're the
+   only ones who see the add form. *@
+@if (Model.Attendance is { CanManage: true } attendanceForRoster && attendanceForRoster.RosterCharacterNames.Count > 0)
+{
+    <datalist id="we-roster-options">
+        @foreach (var name in attendanceForRoster.RosterCharacterNames)
         {
-            var signedUp = item.AppUserEvents.Any(entry => entry.CharacterName == currentCharacter);
-            var isLive = item.Event.CommencementStartTime.HasValue;
-            <div class="card">
-                <div class="card-head">
-                    <div style="display:flex;flex-direction:column;gap:4px;flex:1">
-                        <div class="card-title">
-                            @item.Event.EventName
-                            @if (!string.IsNullOrWhiteSpace(item.Event.EventType))
-                            {
-                                <span class="tag">@item.Event.EventType</span>
-                            }
-                            @if (isLive)
-                            {
-                                <span class="tag success">Live</span>
-                            }
-                        </div>
-                        <div style="font-size:12px;color:var(--fg-3)">
-                            @if (!string.IsNullOrWhiteSpace(item.Event.EventLocation))
-                            {
-                                <span>@item.Event.EventLocation</span>
-                                <span class="dot"> · </span>
-                            }
-                            <span>@(item.Event.StartTime?.ToString("ddd MMM d, HH:mm") ?? "Start TBD")</span>
-                            <span class="dot"> · </span>
-                            <span>@RelativeTime(item.Event.StartTime)</span>
-                            <span class="dot"> · </span>
-                            <span>by @(item.CreatorCharacterName ?? "Unknown")</span>
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
-                        @if (isLive)
-                        {
-                            <a class="btn primary sm" asp-action="Start" asp-route-eventId="@item.Event.Id">View</a>
-                        }
-                        else if (string.Equals((item.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
-                        {
-                            @* HNM signup boards aren't "started" — logging the monster's Time
-                               of Death is what drives the board (re-post + repop). Mirrors the
-                               Activity's "Post ToD" / "Edit ToD" button. Opens the shared modal
-                               below, pre-filled with this board's monster. *@
-                            var awaitingRepost = item.Event.HnmDefeatedAt is not null;
-                            var prefill = item.BoardTod;
-                            var claimAttr = prefill?.Claim == true ? "true" : (prefill?.Claim == false ? "false" : "");
-                            <button class="btn primary sm event-tod-open" type="button"
-                                    data-event-id="@item.Event.Id"
-                                    data-monster="@item.Event.AssignedMonsterName"
-                                    data-editing="@(awaitingRepost ? "true" : "false")"
-                                    data-tod-time="@prefill?.TimeLocal"
-                                    data-cooldown="@prefill?.Cooldown"
-                                    data-interval="@prefill?.Interval"
-                                    data-day="@(item.Event.DayNumber?.ToString())"
-                                    data-hq="@(prefill?.Hq == true ? "true" : "false")"
-                                    data-claim="@claimAttr"
-                                    title="@(awaitingRepost ? "Edit the logged Time of Death (updates the repop + re-post time)." : "Log the Time of Death. The board wipes signups and re-posts before the next pop.")">
-                                @(awaitingRepost ? "Edit ToD" : "Post ToD")
-                            </button>
-                        }
-                        else
-                        {
-                            <form asp-action="StartEvent" method="post" style="display:inline">
-                                <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                <button class="btn primary sm" type="submit">Start</button>
-                            </form>
-                        }
-                        <a class="btn ghost sm" asp-action="Edit" asp-route-id="@item.Event.Id">Edit</a>
-                        @* Delete is hidden while an event is live so an officer
-                           can't wipe an active run mid-flight; the run has to
-                           be ended (or archived via End event) first. *@
-                        @if (!isLive)
-                        {
-                            <a class="btn ghost sm" asp-action="Delete" asp-route-id="@item.Event.Id">Delete</a>
-                        }
-                    </div>
-                </div>
-
-                <div>
-                @* HNM "defeated / awaiting re-post" banner — shown after a ToD is logged from
-                   this board. Signups are wiped; the board re-posts before the next pop.
-                   Mirrors the Discord Activity's queue-card banner. *@
-                @if (item.Event.HnmDefeatedAt is not null)
-                {
-                    var monsterLabel = string.IsNullOrWhiteSpace(item.Event.AssignedMonsterName)
-                        ? item.Event.EventName : item.Event.AssignedMonsterName;
-                    string? leadLabel = null;
-                    if (item.Event.StartTime is DateTime repop && item.Event.HnmRepostAt is DateTime repost && repop > repost)
-                    {
-                        var lead = repop - repost;
-                        var parts = new List<string>();
-                        if ((int)lead.TotalHours > 0) { parts.Add($"{(int)lead.TotalHours}h"); }
-                        if (lead.Minutes > 0) { parts.Add($"{lead.Minutes}m"); }
-                        if (parts.Count == 0) { parts.Add($"{lead.Seconds}s"); }
-                        leadLabel = string.Join(" ", parts);
-                    }
-                    <div style="margin:0 16px 12px;padding:12px 14px;border:1px solid var(--accent);border-radius:8px;background:var(--surface-2)">
-                        <div style="font-weight:600;color:var(--fg)">💀 @monsterLabel defeated</div>
-                        <div style="color:var(--fg-2);font-size:13px;margin-top:2px">
-                            Will repop @(item.Event.StartTime?.ToString("ddd MMM d, HH:mm:ss") ?? "soon").
-                            @if (item.Event.HnmRepostAt is not null)
-                            {
-                                <text>Sign-up board automatically re-posts @item.Event.HnmRepostAt?.ToString("ddd MMM d, HH:mm:ss")@(leadLabel is not null ? $" ({leadLabel} before the first window)" : "").</text>
-                            }
-                            else
-                            {
-                                <text>Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.</text>
-                            }
-                        </div>
-                    </div>
-                }
-                @if (!string.IsNullOrWhiteSpace(item.Event.Details))
-                {
-                    <div style="padding:0 16px 12px;color:var(--fg-3);font-size:13px">@item.Event.Details</div>
-                }
-
-                @{
-                    var hasLinkedBoard = item.LinkedPartySetupBoard != null;
-                    var setupPanelId = $"event-ps-panel-{item.Event.Id}";
-                    var manualFormId = $"event-manual-form-{item.Event.Id}";
-                    var userOwnsSlot = item.CurrentUserOwnsLinkedPartySetupSlot;
-                    // Per-event returnUrl with a fragment so the PartySetup
-                    // controller's redirect lands back here AND re-opens the
-                    // matching event's panel (page-load JS reads the hash).
-                    var returnUrl = $"{eventIndexUrl}#{setupPanelId}";
-                    // "Also attending" = participants with no party slot (e.g. Join no-slot).
-                    var slotNames = item.LinkedPartySetupBoard?.Alliances
-                        .SelectMany(a => a.Parties).SelectMany(p => p.Slots)
-                        .Where(s => !string.IsNullOrWhiteSpace(s.SignedUpCharacterName))
-                        .Select(s => s.SignedUpCharacterName!.Trim())
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    var alsoAttending = item.AppUserEvents
-                        .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName) && !slotNames.Contains(p.CharacterName!.Trim()))
-                        .ToList();
-                }
-
-                @if (hasLinkedBoard)
-                {
-                    var board = item.LinkedPartySetupBoard!;
-                    <div class="event-ps-row">
-                        <div class="event-ps-row__label">
-                            <span>Linked party setup:</span>
-                            <strong>@(item.LinkedPartySetupName ?? "(unnamed setup)")</strong>
-                            @if (!string.IsNullOrWhiteSpace(item.LinkedPartySetupMonsterName))
-                            {
-                                <span class="tag" style="margin-left:6px">@item.LinkedPartySetupMonsterName</span>
-                            }
-                        </div>
-                        <button type="button" class="btn ghost sm event-ps-toggle"
-                                data-target="@setupPanelId">
-                            View &amp; Sign Up
-                        </button>
-                    </div>
-
-                    @* Inline party setup tree. Hidden by default; the toggle
-                       button above flips [hidden] off. Slot signup/withdraw
-                       posts go through PartySetupController and return to this
-                       page via the returnUrl. *@
-                    <div id="@setupPanelId" class="event-ps-panel" hidden>
-                        @if (!board.Alliances.Any())
-                        {
-                            <div class="event-ps-empty">This party setup has no alliances yet.</div>
-                        }
-                        @{ var multiAllianceBoard = board.Alliances.Count > 1; }
-                        @foreach (var alliance in board.Alliances)
-                        {
-                            var iHoldSlotHere = !string.IsNullOrEmpty(currentAppUserId)
-                                && alliance.Parties.SelectMany(p => p.Slots).Any(s => s.SignedUpAppUserId == currentAppUserId);
-                            var iAmAllianceLead = !string.IsNullOrEmpty(currentAppUserId) && alliance.LeadAppUserId == currentAppUserId;
-                            <div class="event-ps-alliance-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                                <span>@alliance.Name</span>
-                                @if (multiAllianceBoard && !string.IsNullOrEmpty(alliance.LeadCharacterName))
-                                {
-                                    <span class="event-ps-alliance-lead" title="Alliance lead">👑 Alliance Lead: @alliance.LeadCharacterName</span>
-                                }
-                                @if (multiAllianceBoard && iHoldSlotHere && !iAmAllianceLead)
-                                {
-                                    <form asp-controller="Event" asp-action="MakeAllianceLead" method="post" style="display:inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                        <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                        <button type="submit" class="btn xs" title="Take this alliance's lead">👑 Make me alliance lead</button>
-                                    </form>
-                                }
-                            </div>
-                            <div class="event-ps-party-grid">
-                                @foreach (var party in alliance.Parties)
-                                {
-                                    <div class="event-ps-party">
-                                        <div class="event-ps-party__head">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:14px;height:14px;color:var(--accent)">
-                                                <path d="M16 11a4 4 0 1 0-4-4"/><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M2 20c0-3 2.5-5 6-5s6 2 6 5"/><path d="M14 15c3 0 6 1.6 6 5"/>
-                                            </svg>
-                                            <span>@party.Name</span>
-                                            <span class="event-ps-party__count">@party.Slots.Count</span>
-                                        </div>
-                                        @{ var partyHasLeader = party.Slots.Any(s => s.SignedUpIsPartyLeader); }
-                                        @foreach (var slot in party.Slots)
-                                        {
-                                            var mine = !slot.IsOpen && slot.SignedUpAppUserId == currentAppUserId;
-                                            var slotRequiresRole = !string.IsNullOrWhiteSpace(slot.Role);
-                                            var slotRequiresMain = !string.IsNullOrWhiteSpace(slot.MainJob);
-                                            var slotRequiresSub  = !string.IsNullOrWhiteSpace(slot.SubJob);
-                                            <div class="event-ps-slot @(slot.IsPartyLeader ? "event-ps-slot--leader" : null)">
-                                                <div class="event-ps-slot__label">
-                                                    @if (slot.IsPartyLeader)
-                                                    {
-                                                        <span class="event-ps-leader-tag" title="Party leader">
-                                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5l4.6 3.2L12 3.5l4.9 7.2 4.6-3.2-1.9 11.5H4.4L2.5 7.5z"/></svg>
-                                                            Leader
-                                                        </span>
-                                                    }
-                                                    <span>@slot.Display</span>
-                                                </div>
-                                                @if (slot.IsOpen)
-                                                {
-                                                    <form class="event-ps-slot__controls" asp-controller="Event" asp-action="SignUpPartySlot" asp-route-eventId="@item.Event.Id" asp-route-slotId="@slot.SlotId" method="post">
-                                                        @Html.AntiForgeryToken()
-                                                        <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                                        @if (signupCharacters.Count > 1)
-                                                        {
-                                                            <select name="selectedCharacter" class="form-select" title="Sign up as">
-                                                                @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
-                                                            </select>
-                                                        }
-                                                        @if (!slotRequiresRole)
-                                                        {
-                                                            <select name="role" required class="form-select">
-                                                                <option value="">Role…</option>
-                                                                @foreach (var r in signUpRoleOptions) { <option value="@r">@r</option> }
-                                                            </select>
-                                                        }
-                                                        @if (!slotRequiresMain)
-                                                        {
-                                                            <select name="mainJob" required class="form-select">
-                                                                <option value="">Main…</option>
-                                                                @foreach (var j in signUpMainOptions) { <option value="@j">@j</option> }
-                                                            </select>
-                                                        }
-                                                        @if (!slotRequiresSub)
-                                                        {
-                                                            <select name="subJob" class="form-select">
-                                                                <option value="">Sub (opt)</option>
-                                                                @foreach (var j in signUpSubOptions) { <option value="@j">@j</option> }
-                                                            </select>
-                                                        }
-                                                        <button type="submit" name="asLeader" value="false" class="btn primary sm">Sign up</button>
-                                                        @if (!partyHasLeader)
-                                                        {
-                                                            <button type="submit" name="asLeader" value="true" class="btn sm" title="Claim this party's leader spot">👑 Leader</button>
-                                                        }
-                                                    </form>
-                                                }
-                                                else if (mine)
-                                                {
-                                                    <div class="event-ps-slot__controls">
-                                                        <span class="event-ps-chip event-ps-chip--mine">
-                                                            @if (slot.SignedUpIsPartyLeader) { <span title="Party leader">👑</span> }
-                                                            @slot.SignedUpCharacterName (you)
-                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
-                                                            {
-                                                                <span class="muted">· @slot.SignedUpJobsDisplay</span>
-                                                            }
-                                                        </span>
-                                                        <form asp-controller="Event" asp-action="WithdrawPartySlot" asp-route-eventId="@item.Event.Id" method="post" style="display:inline">
-                                                            @Html.AntiForgeryToken()
-                                                            <input type="hidden" name="returnUrl" value="@returnUrl" />
-                                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)">Withdraw</button>
-                                                        </form>
-                                                    </div>
-                                                }
-                                                else
-                                                {
-                                                    <div class="event-ps-slot__controls">
-                                                        <span class="event-ps-chip">
-                                                            @if (slot.SignedUpIsPartyLeader) { <span title="Party leader">👑</span> }
-                                                            @slot.SignedUpCharacterName
-                                                            @if (!string.IsNullOrEmpty(slot.SignedUpJobsDisplay))
-                                                            {
-                                                                <span class="muted">· @slot.SignedUpJobsDisplay</span>
-                                                            }
-                                                        </span>
-                                                    </div>
-                                                }
-                                            </div>
-                                        }
-                                        @if (!party.Slots.Any())
-                                        {
-                                            <div class="event-ps-empty">No slots.</div>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-
-                        @if (alsoAttending.Count > 0)
-                        {
-                            <div class="event-ps-alliance-title" style="margin-top:8px">Also attending <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· no slot</span></div>
-                            <div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 8px">
-                                @foreach (var a in alsoAttending)
-                                {
-                                    <span class="event-ps-chip @(a.CharacterName == currentCharacter ? "event-ps-chip--mine" : null)">
-                                        @a.CharacterName@(a.CharacterName == currentCharacter ? " (you)" : "")
-                                        @if (!string.IsNullOrEmpty(a.JobName))
-                                        {
-                                            <span class="muted">· @a.JobName@(string.IsNullOrEmpty(a.SubJobName) ? "" : "/" + a.SubJobName)</span>
-                                        }
-                                    </span>
-                                }
-                            </div>
-                        }
-
-                        @* Sign Up Manually toggle, mirroring the Discord Activity:
-                           hidden when the viewer already owns a slot above. *@
-                        @if (!isLive && !signedUp)
-                        {
-                            <div class="event-manual">
-                                @if (userOwnsSlot)
-                                {
-                                    <div class="event-manual__locked">
-                                        You're signed up to a slot above. Withdraw from it first if you want to sign up as a different job.
-                                    </div>
-                                }
-                                else
-                                {
-                                    <button type="button" class="btn ghost sm event-manual__toggle"
-                                            data-target="@manualFormId">
-                                        Sign Up Manually
-                                    </button>
-                                    @* Quick general join: on the attendance roster without a
-                                       party slot or a job pick (mirrors the Discord "Join (no slot)"). *@
-                                    <form asp-action="SignUp" method="post" style="display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle">
-                                        <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                        @if (signupCharacters.Count > 1)
-                                        {
-                                            <select name="characterName" class="form-select" title="Sign up as">
-                                                @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
-                                            </select>
-                                        }
-                                        <button class="btn sm" type="submit"
-                                                title="Join the roster without claiming a party slot">Join (no slot)</button>
-                                    </form>
-                                    <div id="@manualFormId" class="event-manual__form" hidden>
-                                        <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
-                                            Sign up as a job that isn't in the party setup above.
-                                        </div>
-                                        <form asp-action="SignUp" method="post">
-                                            <input type="hidden" name="eventId" value="@item.Event.Id" />
-                                            @if (signupCharacters.Count > 1)
-                                            {
-                                                <div class="field" style="margin-bottom:8px">
-                                                    <label>Character</label>
-                                                    <select class="form-select" name="characterName">
-                                                        @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
-                                                    </select>
-                                                </div>
-                                            }
-                                            <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
-                                                <div class="field">
-                                                    <label>Role</label>
-                                                    <select class="form-select" name="jobType" required>
-                                                        <option value="">Select role</option>
-                                                        @foreach (var jobTypeOption in jobTypeOptions) { <option value="@jobTypeOption">@jobTypeOption</option> }
-                                                    </select>
-                                                </div>
-                                                <div class="field">
-                                                    <label>Main job</label>
-                                                    <select class="form-select" name="jobName" required>
-                                                        <option value="">Select main job</option>
-                                                        @foreach (var jobOption in mainJobOptions) { <option value="@jobOption">@jobOption</option> }
-                                                    </select>
-                                                </div>
-                                                <div class="field">
-                                                    <label>Sub job</label>
-                                                    <select class="form-select" name="subJobName" required>
-                                                        <option value="">Select sub job</option>
-                                                        @foreach (var jobOption in subJobOptions) { <option value="@jobOption">@jobOption</option> }
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div style="display:flex;justify-content:flex-end;margin-top:8px">
-                                                <button class="btn primary sm" type="submit">Sign up</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-
-                @* For events with NO linked party setup, keep the original
-                   bare-bones ad-hoc signup form so members can still join. *@
-                @if (!hasLinkedBoard && !isLive && !signedUp)
-                {
-                    <div style="padding:12px 16px;border-top:1px solid var(--border)">
-                        <div style="font-size:12px;color:var(--fg-3);margin-bottom:8px">
-                            Pick the job you'll bring and sign up.
-                        </div>
-                        <form asp-action="SignUp" method="post">
-                            <input type="hidden" name="eventId" value="@item.Event.Id" />
-                            @if (signupCharacters.Count > 1)
-                            {
-                                <div class="field" style="margin-bottom:8px">
-                                    <label>Character</label>
-                                    <select class="form-select" name="characterName">
-                                        @foreach (var c in signupCharacters) { <option value="@c">@c</option> }
-                                    </select>
-                                </div>
-                            }
-                            <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
-                                <div class="field">
-                                    <label>Role</label>
-                                    <select class="form-select" name="jobType" required>
-                                        <option value="">Select role</option>
-                                        @foreach (var jobTypeOption in jobTypeOptions)
-                                        {
-                                            <option value="@jobTypeOption">@jobTypeOption</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label>Main job</label>
-                                    <select class="form-select" name="jobName" required>
-                                        <option value="">Select main job</option>
-                                        @foreach (var jobOption in mainJobOptions)
-                                        {
-                                            <option value="@jobOption">@jobOption</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="field">
-                                    <label>Sub job</label>
-                                    <select class="form-select" name="subJobName" required>
-                                        <option value="">Select sub job</option>
-                                        @foreach (var jobOption in subJobOptions)
-                                        {
-                                            <option value="@jobOption">@jobOption</option>
-                                        }
-                                    </select>
-                                </div>
-                            </div>
-                            <div style="display:flex;justify-content:flex-end;margin-top:8px">
-                                <button class="btn primary sm" type="submit">Sign up</button>
-                            </div>
-                        </form>
-                    </div>
-                }
-                else if (!isLive && signedUp)
-                {
-                    var ownSignup = item.AppUserEvents.FirstOrDefault(entry => entry.CharacterName == currentCharacter);
-                    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-                        <div style="font-size:12px;color:var(--fg-3)">
-                            @if (string.IsNullOrWhiteSpace(ownSignup?.JobName))
-                            {
-                                <text>On the roster <strong style="color:var(--fg)">(no slot)</strong></text>
-                            }
-                            else
-                            {
-                                <text>Signed up as <strong style="color:var(--fg)">@(ownSignup!.JobName)/@(ownSignup.SubJobName ?? "?")</strong></text>
-                                @if (!string.IsNullOrWhiteSpace(ownSignup.JobType))
-                                {
-                                    <span class="tag" style="margin-left:6px">@ownSignup.JobType</span>
-                                }
-                            }
-                        </div>
-                        <form asp-action="Unsign" method="post" style="display:inline">
-                            <input type="hidden" name="eventId" value="@item.Event.Id" />
-                            <button class="btn ghost sm" type="submit">Leave</button>
-                        </form>
-                    </div>
-                }
-
-                <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--fg-3)">
-                    <span><span class="num">@item.AppUserEvents.Count</span> participants @(signedUp ? "· you are signed up" : "")</span>
-                </div>
-                </div> <!-- /event-card-collapsible__body -->
-            </div>
+            <option value="@name"></option>
         }
-    </div>
-
-    @* Shared HNM board ToD modal — opened by each HNM card's "Post ToD" / "Edit ToD"
-       button. Posts to PostBoardTod, which records the ToD, moves the board to the next
-       repop, wipes signups, and re-posts before the pop. Mirrors the Activity's board-mode
-       ToD dialog. The monster is locked to the board's monster (read-only). *@
-    <div id="tod-modal" hidden
-         style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)">
-        <div style="max-width:560px;width:calc(100% - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <strong id="tod-modal-title" style="font-size:16px;color:var(--fg)">Post ToD</strong>
-                <button type="button" class="btn ghost sm" id="tod-modal-close">Close</button>
-            </div>
-            <form asp-action="PostBoardTod" method="post">
-                <input type="hidden" name="eventId" id="tod-modal-eventid" value="" />
-                <input type="hidden" name="returnUrl" id="tod-modal-returnurl" value="" />
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;align-items:start">
-                    @* Monster is locked to the board; Day (read-only) comes from the event and
-                       drives whether the HQ toggle shows. Day fills the row when absent. *@
-                    <div class="field" id="tod-modal-monster-field" style="grid-column:1/-1;display:flex;flex-direction:column">
-                        <label>Monster</label>
-                        <input class="form-control" id="tod-modal-monster" readonly
-                               title="Locked to this board's monster" />
-                    </div>
-                    <div class="field" id="tod-modal-day-field" hidden style="display:none;flex-direction:column">
-                        <label>Day</label>
-                        <input class="form-control" id="tod-modal-day-display" readonly
-                               title="Set on the event; days 1–3 show just the base monster, day 4+ shows the merge pair" />
-                        <input type="hidden" name="dayNumber" id="tod-modal-day" value="" />
-                    </div>
-                    <div class="field" style="display:flex;flex-direction:column">
-                        <label for="tod-modal-time">Time of death</label>
-                        <input class="form-control" id="tod-modal-time" name="todTimeLocal" type="datetime-local" step="1" required />
-                    </div>
-                    <div class="field" style="display:flex;flex-direction:column">
-                        <label for="tod-modal-cooldown">Cooldown</label>
-                        <select class="form-select" id="tod-modal-cooldown" name="cooldown">
-                            @foreach (var cd in TodManagerViewModel.SupportedCooldowns)
-                            {
-                                <option value="@cd">@cd</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="field" style="display:flex;flex-direction:column">
-                        <label for="tod-modal-interval">Interval</label>
-                        <select class="form-select" id="tod-modal-interval" name="interval">
-                            @foreach (var iv in TodManagerViewModel.SupportedIntervals)
-                            {
-                                <option value="@iv">@iv</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="field" style="display:flex;flex-direction:column">
-                        <label for="tod-modal-claim">Claim</label>
-                        <select class="form-select" id="tod-modal-claim" name="claim">
-                            <option value="true" selected>Yes</option>
-                            <option value="false">No</option>
-                            <option value="">Not specified</option>
-                        </select>
-                    </div>
-                    @* HQ is hidden by the modal JS on days 1–3 (no HQ variant exists then). *@
-                    <div class="field" id="tod-modal-hq-field" style="display:flex;flex-direction:column">
-                        <label for="tod-modal-hq">HQ</label>
-                        <label class="tod-toggle" style="display:inline-flex;align-items:center;gap:6px">
-                            <input type="checkbox" id="tod-modal-hq" name="hq" value="true" />
-                            <span>Yes</span>
-                        </label>
-                    </div>
-                </div>
-                <div style="margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)">
-                    <div style="font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.04em">Calculated repop</div>
-                    <strong id="tod-modal-repop" style="color:var(--fg)">Pick a time of death.</strong>
-                </div>
-                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
-                    <button type="button" class="btn ghost" id="tod-modal-cancel">Cancel</button>
-                    <button type="submit" class="btn primary" id="tod-modal-submit">Log ToD</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script nonce="@Html.CspNonce()">
-        (function () {
-            var modal = document.getElementById('tod-modal');
-            if (!modal) { return; }
-            var titleEl = document.getElementById('tod-modal-title');
-            var submitEl = document.getElementById('tod-modal-submit');
-            var eventIdEl = document.getElementById('tod-modal-eventid');
-            var returnUrlEl = document.getElementById('tod-modal-returnurl');
-            var monsterEl = document.getElementById('tod-modal-monster');
-            var timeEl = document.getElementById('tod-modal-time');
-            var cooldownEl = document.getElementById('tod-modal-cooldown');
-            var intervalEl = document.getElementById('tod-modal-interval');
-            var repopEl = document.getElementById('tod-modal-repop');
-            var monsterFieldEl = document.getElementById('tod-modal-monster-field');
-            var dayFieldEl = document.getElementById('tod-modal-day-field');
-            var dayDisplayEl = document.getElementById('tod-modal-day-display');
-            var dayHiddenEl = document.getElementById('tod-modal-day');
-            var hqFieldEl = document.getElementById('tod-modal-hq-field');
-            var hqEl = document.getElementById('tod-modal-hq');
-            // Window-cycle HNMs use the long 72h window / 1h interval; the rest 22h / 10m.
-            var LONG = ['Tiamat', 'Jormungand', 'Vrtra'];
-
-            function cooldownHours(v) {
-                if (v === '5 Min') { return 5 / 60; }
-                if (v === '2 Hour') { return 2; }
-                if (v === '72 Hour') { return 72; }
-                return 22;
-            }
-
-            function updateRepop() {
-                if (!timeEl.value) { repopEl.textContent = 'Pick a time of death.'; return; }
-                var d = new Date(timeEl.value);
-                if (isNaN(d.getTime())) { repopEl.textContent = 'Pick a time of death.'; return; }
-                var repop = new Date(d.getTime() + cooldownHours(cooldownEl.value) * 3600000);
-                repopEl.textContent = repop.toLocaleString();
-            }
-
-            function openModal(btn) {
-                var monster = btn.getAttribute('data-monster') || '';
-                var editing = btn.getAttribute('data-editing') === 'true';
-                eventIdEl.value = btn.getAttribute('data-event-id') || '';
-                returnUrlEl.value = window.location.pathname + window.location.search;
-                monsterEl.value = monster;
-                titleEl.textContent = editing ? 'Edit ToD' : 'Post ToD';
-                submitEl.textContent = editing ? 'Save ToD' : 'Log ToD';
-
-                // Day comes from the event (read-only). When present it takes half the row,
-                // so the Monster field drops from full-width to half; otherwise it fills the row.
-                var dayRaw = btn.getAttribute('data-day') || '';
-                var dayNum = dayRaw === '' ? null : parseInt(dayRaw, 10);
-                var hasDay = dayNum !== null && !isNaN(dayNum);
-                dayHiddenEl.value = hasDay ? String(dayNum) : '';
-                dayDisplayEl.value = hasDay ? String(dayNum) : '';
-                dayFieldEl.hidden = !hasDay;
-                dayFieldEl.style.display = hasDay ? 'flex' : 'none';
-                monsterFieldEl.style.gridColumn = hasDay ? 'auto' : '1/-1';
-
-                // HQ (stronger merge-pair monster) only exists on day 4+; hide the toggle on
-                // days 1–3 and never carry a stale checked state into a hidden field.
-                var hqAllowed = !hasDay || dayNum >= 4;
-                hqFieldEl.style.display = hqAllowed ? 'flex' : 'none';
-                hqEl.checked = hqAllowed && editing && btn.getAttribute('data-hq') === 'true';
-
-                var prefillTime = btn.getAttribute('data-tod-time') || '';
-                if (editing && prefillTime) {
-                    // Edit ToD: open with the board's already-logged values.
-                    timeEl.value = prefillTime;
-                    cooldownEl.value = btn.getAttribute('data-cooldown') || '22 Hour';
-                    intervalEl.value = btn.getAttribute('data-interval') || '10 Min';
-                    // data-claim is 'true' / 'false' / '' (Not specified) — matches the select.
-                    document.getElementById('tod-modal-claim').value = btn.getAttribute('data-claim') || '';
-                } else {
-                    // Post ToD: blank time, defaults keyed to the monster's window length.
-                    var isLong = LONG.indexOf(monster) !== -1;
-                    timeEl.value = '';
-                    cooldownEl.value = isLong ? '72 Hour' : '22 Hour';
-                    intervalEl.value = isLong ? '1 Hour' : '10 Min';
-                    document.getElementById('tod-modal-claim').value = 'true';
-                }
-                updateRepop();
-                modal.removeAttribute('hidden');
-            }
-
-            function closeModal() { modal.setAttribute('hidden', ''); }
-
-            document.addEventListener('click', function (e) {
-                var open = e.target.closest('.event-tod-open');
-                if (open) { e.preventDefault(); openModal(open); return; }
-                if (e.target.closest('#tod-modal-close, #tod-modal-cancel')) { closeModal(); return; }
-                if (e.target === modal) { closeModal(); return; } // backdrop click
-            });
-            timeEl.addEventListener('input', updateRepop);
-            timeEl.addEventListener('change', updateRepop);
-            cooldownEl.addEventListener('change', updateRepop);
-        })();
-    </script>
+    </datalist>
 }
+
+@* Shared HNM board ToD modal — opened by each HNM card's "Post ToD" / "Edit ToD"
+   button. Posts to PostBoardTod, which records the ToD, moves the board to the next
+   repop, wipes signups, and re-posts before the pop. Mirrors the Activity's board-mode
+   ToD dialog. The monster is locked to the board's monster (read-only).
+
+   Rendered unconditionally. It used to sit inside an `@@if (Model.Any())` else-branch, which was
+   fine when every event shared one list; now a defeated board waiting to re-post lives in Pending
+   Events and needs this dialog on pages with no live events at all. *@
+<div id="tod-modal" hidden
+     style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55)">
+    <div style="max-width:560px;width:calc(100% - 32px);max-height:calc(100vh - 48px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <strong id="tod-modal-title" style="font-size:16px;color:var(--fg)">Post ToD</strong>
+            <button type="button" class="btn ghost sm" id="tod-modal-close">Close</button>
+        </div>
+        <form asp-action="PostBoardTod" method="post">
+            <input type="hidden" name="eventId" id="tod-modal-eventid" value="" />
+            <input type="hidden" name="returnUrl" id="tod-modal-returnurl" value="" />
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;align-items:start">
+                @* Monster is locked to the board; Day (read-only) comes from the event and
+                   drives whether the HQ toggle shows. Day fills the row when absent. *@
+                <div class="field" id="tod-modal-monster-field" style="grid-column:1/-1;display:flex;flex-direction:column">
+                    <label>Monster</label>
+                    <input class="form-control" id="tod-modal-monster" readonly
+                           title="Locked to this board's monster" />
+                </div>
+                <div class="field" id="tod-modal-day-field" hidden style="display:none;flex-direction:column">
+                    <label>Day</label>
+                    <input class="form-control" id="tod-modal-day-display" readonly
+                           title="Set on the event; days 1–3 show just the base monster, day 4+ shows the merge pair" />
+                    <input type="hidden" name="dayNumber" id="tod-modal-day" value="" />
+                </div>
+                <div class="field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-time">Time of death</label>
+                    <input class="form-control" id="tod-modal-time" name="todTimeLocal" type="datetime-local" step="1" required />
+                </div>
+                <div class="field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-cooldown">Cooldown</label>
+                    <select class="form-select" id="tod-modal-cooldown" name="cooldown">
+                        @foreach (var cd in TodManagerViewModel.SupportedCooldowns)
+                        {
+                            <option value="@cd">@cd</option>
+                        }
+                    </select>
+                </div>
+                <div class="field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-interval">Interval</label>
+                    <select class="form-select" id="tod-modal-interval" name="interval">
+                        @foreach (var iv in TodManagerViewModel.SupportedIntervals)
+                        {
+                            <option value="@iv">@iv</option>
+                        }
+                    </select>
+                </div>
+                <div class="field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-claim">Claim</label>
+                    <select class="form-select" id="tod-modal-claim" name="claim">
+                        <option value="true" selected>Yes</option>
+                        <option value="false">No</option>
+                        <option value="">Not specified</option>
+                    </select>
+                </div>
+                @* Did we get the kill? Drives the kill bonus at finalize in both attendance
+                   modes. This form used to have no such field and the controller hardcoded
+                   "killed", so ending a camp here always paid the kill bonus. *@
+                <div class="field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-killed">Killed</label>
+                    <select class="form-select" id="tod-modal-killed" name="killed">
+                        <option value="true" selected>Yes</option>
+                        <option value="false">No</option>
+                    </select>
+                </div>
+                @* HQ is hidden by the modal JS on days 1–3 (no HQ variant exists then). *@
+                <div class="field" id="tod-modal-hq-field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-hq">HQ</label>
+                    <label class="tod-toggle" style="display:inline-flex;align-items:center;gap:6px">
+                        <input type="checkbox" id="tod-modal-hq" name="hq" value="true" />
+                        <span>Yes</span>
+                    </label>
+                </div>
+            </div>
+            @* Re-post the sign-up board before the next pop. This is the ONLY place the lead
+               is entered — the event create form just toggles recurrence on/off, because
+               this is where the officer actually knows the next pop. Mirrors the Activity's
+               End Camp form and the Discord modal's last field. *@
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;align-items:start;margin-top:12px">
+                <div class="field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-repost">Re-post board before next pop?</label>
+                    <label class="tod-toggle" style="display:inline-flex;align-items:center;gap:6px">
+                        <input type="checkbox" id="tod-modal-repost" name="repost" value="true" />
+                        <input type="hidden" name="repost" value="false" />
+                        <span>Re-post the sign-up board</span>
+                    </label>
+                </div>
+                <div class="field" id="tod-modal-repost-lead-field" style="display:flex;flex-direction:column">
+                    <label for="tod-modal-repost-lead">Hours before repop</label>
+                    <input class="form-control" type="number" min="0" max="168" step="0.25"
+                           id="tod-modal-repost-lead" name="repostLeadHours" placeholder="e.g. 2"
+                           title="How many hours before the predicted next pop the board auto-re-posts" />
+                </div>
+            </div>
+            <div style="margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)">
+                <div style="font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.04em">Calculated repop</div>
+                <strong id="tod-modal-repop" style="color:var(--fg)">Pick a time of death.</strong>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+                <button type="button" class="btn ghost" id="tod-modal-cancel">Cancel</button>
+                <button type="submit" class="btn primary" id="tod-modal-submit">Log ToD</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* Inline panel toggle: clicking a .event-ps-toggle button shows/hides the
+   matching .event-ps-panel (by id stored in data-target). Same handler
+   also drives the "Sign Up Manually" toggle. On page load, if the URL
+   has a fragment matching a panel id (e.g. "#event-ps-panel-42"), open
+   that panel — used after a PartySetup signup/withdraw round-trip.
+
+   Unconditional for the same reason as the ToD modal above: cards now live in two sections and
+   either can be empty. *@
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var STORE_KEY = 'lsmOpenEventPsPanel';
+
+        function openPanel(id) {
+            if (!id) { return null; }
+            var panel = document.getElementById(id);
+            if (panel && panel.classList.contains('event-ps-panel')) {
+                panel.removeAttribute('hidden');
+                return panel;
+            }
+            return null;
+        }
+
+        document.addEventListener('click', function (e) {
+            var t = e.target.closest('.event-ps-toggle, .event-manual__toggle');
+            if (!t) return;
+            var panel = document.getElementById(t.getAttribute('data-target'));
+            if (!panel) return;
+            if (panel.hasAttribute('hidden')) panel.removeAttribute('hidden');
+            else panel.setAttribute('hidden', '');
+        });
+
+        // Sign up / Withdraw / manual-signup forms live inside a party-setup panel.
+        // Submit them via fetch and swap ONLY that panel in place — no full page
+        // reload. (Falls back to a normal submit on a network error, and to a reload
+        // if the panel can't be located in the response.)
+        document.addEventListener('submit', async function (e) {
+            var form = e.target;
+            if (!form || !form.closest) return;
+            var panel = form.closest('.event-ps-panel');
+            if (!panel || !panel.id) return;
+            var panelId = panel.id;
+            // Remember the open panel so a fallback full reload re-expands it.
+            try { sessionStorage.setItem(STORE_KEY, panelId); } catch (err) { /* ignore */ }
+            e.preventDefault();
+            var fd = new FormData(form);
+            // FormData omits the clicked submit button — re-add it (e.g. asLeader=true/false).
+            if (e.submitter && e.submitter.name) { fd.append(e.submitter.name, e.submitter.value); }
+            var res;
+            try {
+                res = await fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+            } catch (err) { form.submit(); return; }
+            var fresh = null;
+            try {
+                var doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+                fresh = doc.getElementById(panelId);
+            } catch (err) { /* ignore */ }
+            var current = document.getElementById(panelId);
+            if (fresh && current) {
+                current.replaceWith(fresh);
+                fresh.removeAttribute('hidden'); // keep it expanded after the swap
+                try { sessionStorage.removeItem(STORE_KEY); } catch (err) { /* ignore */ }
+            } else {
+                window.location.reload();
+            }
+        });
+
+        // On load, re-open the panel remembered across a signup/withdraw
+        // round-trip (one-shot), and/or the one named by the URL fragment.
+        // A section anchor like #past-events falls through openPanel (it isn't an
+        // .event-ps-panel), leaving the browser's native anchor scroll to it.
+        var restored = null;
+        try {
+            var saved = sessionStorage.getItem(STORE_KEY);
+            if (saved) {
+                sessionStorage.removeItem(STORE_KEY);
+                restored = openPanel(saved);
+            }
+        } catch (err) { /* ignore */ }
+
+        var hash = window.location.hash;
+        if (hash && hash.length > 1) {
+            var fromHash = openPanel(hash.substring(1));
+            if (fromHash && !restored) { restored = fromHash; }
+        }
+
+        if (restored) {
+            restored.scrollIntoView({ behavior: 'auto', block: 'center' });
+        }
+    })();
+</script>
+
+@* asp-fragment exists for <a> but not for <form method="get">, and a fragment written into a
+   form's action is dropped by the browser. The two archive search boxes carry data-anchor
+   instead, and this handler rebuilds the URL with it so a search lands back on its own section. *@
+<script nonce="@Html.CspNonce()">
+    document.addEventListener('submit', function (e) {
+        var f = e.target, anchor = f && f.getAttribute && f.getAttribute('data-anchor');
+        if (!anchor) return;
+        e.preventDefault();
+        var qs = new URLSearchParams(new FormData(f)).toString();
+        window.location.assign(f.action + (qs ? '?' + qs : '') + '#' + anchor);
+    });
+</script>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var modal = document.getElementById('tod-modal');
+        if (!modal) { return; }
+        var titleEl = document.getElementById('tod-modal-title');
+        var submitEl = document.getElementById('tod-modal-submit');
+        var eventIdEl = document.getElementById('tod-modal-eventid');
+        var returnUrlEl = document.getElementById('tod-modal-returnurl');
+        var monsterEl = document.getElementById('tod-modal-monster');
+        var timeEl = document.getElementById('tod-modal-time');
+        var cooldownEl = document.getElementById('tod-modal-cooldown');
+        var intervalEl = document.getElementById('tod-modal-interval');
+        var repopEl = document.getElementById('tod-modal-repop');
+        var monsterFieldEl = document.getElementById('tod-modal-monster-field');
+        var dayFieldEl = document.getElementById('tod-modal-day-field');
+        var dayDisplayEl = document.getElementById('tod-modal-day-display');
+        var dayHiddenEl = document.getElementById('tod-modal-day');
+        var hqFieldEl = document.getElementById('tod-modal-hq-field');
+        var hqEl = document.getElementById('tod-modal-hq');
+        var repostEl = document.getElementById('tod-modal-repost');
+        var repostLeadEl = document.getElementById('tod-modal-repost-lead');
+        var repostLeadFieldEl = document.getElementById('tod-modal-repost-lead-field');
+        // Wyrms use an 84h window; the other window-cycle HNMs use 72h / 1h.
+        var LONG = ['Tiamat', 'Jormungand', 'Vrtra'];
+
+        function cooldownHours(v) {
+            if (v === '5 Min') { return 5 / 60; }
+            if (v === '2 Hour') { return 2; }
+            if (v === '84 Hour') { return 84; }
+            if (v === '72 Hour') { return 72; }
+            return 22;
+        }
+
+        // The lead only means anything while re-posting is on.
+        function syncRepostLead() {
+            repostLeadFieldEl.style.display = repostEl.checked ? 'flex' : 'none';
+        }
+
+        function updateRepop() {
+            if (!timeEl.value) { repopEl.textContent = 'Pick a time of death.'; return; }
+            var d = new Date(timeEl.value);
+            if (isNaN(d.getTime())) { repopEl.textContent = 'Pick a time of death.'; return; }
+            var repop = new Date(d.getTime() + cooldownHours(cooldownEl.value) * 3600000);
+            repopEl.textContent = repop.toLocaleString();
+        }
+
+        function openModal(btn) {
+            var monster = btn.getAttribute('data-monster') || '';
+            var editing = btn.getAttribute('data-editing') === 'true';
+            eventIdEl.value = btn.getAttribute('data-event-id') || '';
+            returnUrlEl.value = window.location.pathname + window.location.search;
+            monsterEl.value = monster;
+            titleEl.textContent = editing ? 'Edit ToD' : 'Post ToD';
+            submitEl.textContent = editing ? 'Save ToD' : 'Log ToD';
+
+            // Day comes from the event (read-only). When present it takes half the row,
+            // so the Monster field drops from full-width to half; otherwise it fills the row.
+            var dayRaw = btn.getAttribute('data-day') || '';
+            var dayNum = dayRaw === '' ? null : parseInt(dayRaw, 10);
+            var hasDay = dayNum !== null && !isNaN(dayNum);
+            dayHiddenEl.value = hasDay ? String(dayNum) : '';
+            dayDisplayEl.value = hasDay ? String(dayNum) : '';
+            dayFieldEl.hidden = !hasDay;
+            dayFieldEl.style.display = hasDay ? 'flex' : 'none';
+            monsterFieldEl.style.gridColumn = hasDay ? 'auto' : '1/-1';
+
+            // HQ (stronger merge-pair monster) only exists on day 4+; hide the toggle on
+            // days 1–3 and never carry a stale checked state into a hidden field.
+            var hqAllowed = !hasDay || dayNum >= 4;
+            hqFieldEl.style.display = hqAllowed ? 'flex' : 'none';
+            hqEl.checked = hqAllowed && editing && btn.getAttribute('data-hq') === 'true';
+
+            var prefillTime = btn.getAttribute('data-tod-time') || '';
+            if (editing && prefillTime) {
+                // Edit ToD: open with the board's already-logged values.
+                timeEl.value = prefillTime;
+                cooldownEl.value = btn.getAttribute('data-cooldown') || '22 Hour';
+                intervalEl.value = btn.getAttribute('data-interval') || '10 Min';
+                // data-claim is 'true' / 'false' / '' (Not specified) — matches the select.
+                document.getElementById('tod-modal-claim').value = btn.getAttribute('data-claim') || '';
+                // data-killed is 'true' / 'false'; unrecorded ToDs fall back to 'true', the
+                // same "unspecified means killed" default the controller applies.
+                document.getElementById('tod-modal-killed').value =
+                    btn.getAttribute('data-killed') === 'false' ? 'false' : 'true';
+            } else {
+                // Post ToD: blank time, defaults keyed to the monster's window length.
+                var isLong = LONG.indexOf(monster) !== -1;
+                timeEl.value = '';
+                cooldownEl.value = isLong ? '84 Hour' : '22 Hour';
+                intervalEl.value = isLong ? '1 Hour' : '10 Min';
+                document.getElementById('tod-modal-claim').value = 'true';
+                document.getElementById('tod-modal-killed').value = 'true';
+            }
+
+            // Re-post: open with the monster's current standing config so the officer sees
+            // what's set and can change it here (the create form no longer asks for a lead).
+            repostEl.checked = btn.getAttribute('data-repost') === 'true';
+            repostLeadEl.value = btn.getAttribute('data-repost-lead') || '';
+            syncRepostLead();
+
+            updateRepop();
+            modal.removeAttribute('hidden');
+        }
+
+        function closeModal() { modal.setAttribute('hidden', ''); }
+
+        document.addEventListener('click', function (e) {
+            var open = e.target.closest('.event-tod-open');
+            if (open) { e.preventDefault(); openModal(open); return; }
+            if (e.target.closest('#tod-modal-close, #tod-modal-cancel')) { closeModal(); return; }
+            if (e.target === modal) { closeModal(); return; } // backdrop click
+        });
+        timeEl.addEventListener('input', updateRepop);
+        timeEl.addEventListener('change', updateRepop);
+        cooldownEl.addEventListener('change', updateRepop);
+        repostEl.addEventListener('change', syncRepostLead);
+    })();
+</script>

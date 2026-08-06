@@ -47,6 +47,16 @@ public class AttendanceSnapshot
     [ForeignKey(nameof(WindowEventId))]
     public WindowEvent? WindowEvent { get; set; }
 
+    // Which spawn window this capture was taken in, measured from its Window Event's grid anchor
+    // (WindowEvent.WindowGridAnchorUtc) at the monster's own cadence — 10-minute steps on the
+    // 7-window kings/dragons, hourly on the 25-window wyrms. Stamped once at capture, so a snapshot
+    // keeps the window it was actually taken in rather than being re-derived later against a grid
+    // that may have moved.
+    //
+    // NULL means "this camp has no window grid" — Sky gods, farm NMs and ad-hoc `/lsm now` posts
+    // run no cadence, so there is no window to name. Deliberately distinct from window 1.
+    public int? WindowNumber { get; set; }
+
     [MaxLength(32)]
     public string SnapshotStatus { get; set; } = AttendanceSnapshotStatuses.Active;
 

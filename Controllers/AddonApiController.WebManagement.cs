@@ -152,46 +152,83 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        var tokens = await _auth.ListActiveAsync(linkshellId, cancellationToken);
-        return Ok(new
-        {
-            tokens = tokens.Select(t => new
+        var tokens = await _auth.ListVisibleAsync(linkshellId, appUser.Id, cancellationToken);
+
+        // A pairing code mints one token per linkshell, so collapse each batch
+        // back into the single pairing the user actually performed -- otherwise
+        // someone in four linkshells sees the same pairing listed four times.
+        // Tokens predating PairingBatchId (null) stand alone, as they always did.
+        var pairings = tokens
+            .GroupBy(t => t.PairingBatchId?.ToString() ?? $"token:{t.Id}")
+            .Select(group =>
             {
-                id = t.Id,
-                prefix = t.TokenPrefix,
-                label = t.Label,
-                createdAt = t.CreatedAt,
-                lastUsedAt = t.LastUsedAt,
-                issuedToAppUserId = t.IssuedToAppUserId
+                // Revoke authorizes against the row's own linkshell, so hand back
+                // the token bound to the linkshell being viewed when the batch
+                // covers it; otherwise the oldest, which is the redeemed one.
+                var representative = group.FirstOrDefault(t => t.LinkshellId == linkshellId)
+                                     ?? group.OrderBy(t => t.Id).First();
+                return new
+                {
+                    id = representative.Id,
+                    linkshellId = representative.LinkshellId,
+                    prefix = representative.TokenPrefix,
+                    label = representative.Label,
+                    createdAt = group.Min(t => t.CreatedAt),
+                    lastUsedAt = group.Max(t => t.LastUsedAt),
+                    issuedToAppUserId = representative.IssuedToAppUserId,
+                    // Lets the UI separate "your pairing" (shown on every one of
+                    // your linkshells) from another member's pairing on this one.
+                    mine = representative.IssuedToAppUserId == appUser.Id,
+                    linkshells = group
+                        .Select(t => t.Linkshell?.LinkshellName ?? $"#{t.LinkshellId}")
+                        .Distinct()
+                        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                };
             })
-        });
+            .OrderByDescending(p => p.createdAt)
+            .ToList();
+
+        return Ok(new { tokens = pairings });
     }
 
+    // linkshellId is accepted for backwards compatibility with older callers but
+    // is no longer what authorizes the revoke: the listing now surfaces pairings
+    // bound to any of the viewer's linkshells, so the token's own linkshell (or
+    // the viewer owning it) is what decides.
     [HttpPost("management/tokens/{tokenId:int}/revoke")]
     public async Task<IActionResult> RevokeTokenAsync(
         int tokenId,
-        [FromQuery] int linkshellId,
         CancellationToken cancellationToken)
     {
-        if (linkshellId <= 0)
-        {
-            return BadRequest(new { error = "Linkshell is required." });
-        }
-
         var appUser = await ResolveManagementUserAsync(cancellationToken);
         if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
-        var membership = await _dbContext.AppUserLinkshells
-            .FirstOrDefaultAsync(
-                m => m.AppUserId == appUser.Id && m.LinkshellId == linkshellId,
-                cancellationToken);
+        var token = await _dbContext.AddonApiTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tokenId, cancellationToken);
 
-        if (!CanManageLinkshell(membership))
+        if (token is null)
         {
-            return Forbid();
+            return NotFound(new { error = "Token not found." });
         }
 
-        var revoked = await _auth.RevokeAsync(tokenId, linkshellId, cancellationToken);
+        // Your own pairing is always yours to disconnect. Anyone else's needs
+        // manage rights on the linkshell that token is bound to.
+        if (token.IssuedToAppUserId != appUser.Id)
+        {
+            var membership = await _dbContext.AppUserLinkshells
+                .FirstOrDefaultAsync(
+                    m => m.AppUserId == appUser.Id && m.LinkshellId == token.LinkshellId,
+                    cancellationToken);
+
+            if (!CanManageLinkshell(membership))
+            {
+                return Forbid();
+            }
+        }
+
+        var revoked = await _auth.RevokeAsync(tokenId, token.LinkshellId, cancellationToken);
         if (!revoked)
         {
             return NotFound(new { error = "Token not found." });

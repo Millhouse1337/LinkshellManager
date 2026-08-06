@@ -87,13 +87,16 @@ public static class AuctionBidService
             return Fail($"Bid amount cannot exceed {MaxBidAmount:N0}.");
         }
 
-        // The starting bid is a suggested opening, not a floor: the first bid is
-        // accepted at any positive amount (validated above). Once there's a high
-        // bid, each new bid must beat it by at least 1.
+        // The starting bid is the floor — no bid may come in under it. Once there's
+        // a high bid, each new bid must also beat that by at least 1.
         var currentHigh = item.CurrentHighestBid ?? 0;
-        if (currentHigh > 0 && bidAmount <= currentHigh)
+        var startingBid = item.StartingBidDkp ?? 0;
+        var minimumBid = Math.Max(startingBid, currentHigh + 1);
+        if (bidAmount < minimumBid)
         {
-            return Fail($"Bid must be greater than the current high bid of {currentHigh}.");
+            return Fail(currentHigh > 0 && minimumBid == currentHigh + 1
+                ? $"Bid must be greater than the current high bid of {currentHigh}."
+                : $"Bid must be at least the starting bid of {startingBid} DKP.");
         }
 
         // Bids are paid out of the DKP pool the officer picked when they created the auction, so

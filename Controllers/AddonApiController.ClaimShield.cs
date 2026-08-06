@@ -7,13 +7,67 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class AddonApiController
 {
+    // One member the addon confirmed landed an action on the mob, and the line
+    // that proves it ("Azurth casts Dia on the Aspidochelone.").
+    public sealed record AddonClaimShieldMember(string? Name, string? Action);
+
     public sealed record AddonClaimShieldRequest(
         string? Monster,
         bool Won,
         int? TotalPlayers,
         DateTime? CapturedAtUtc,
         string? CapturedMessage,
-        IReadOnlyList<string>? Members);
+        // Names only. Kept because an addon built before actions were recorded
+        // still sends this shape, and a claim record with no sentences beats
+        // dropping the capture on the floor. MemberActions wins when both arrive.
+        IReadOnlyList<string>? Members,
+        IReadOnlyList<AddonClaimShieldMember>? MemberActions = null,
+        // The camp that was linked in the addon when the pop landed. Verified
+        // against the token's linkshell below; null falls back to a monster +
+        // time match.
+        int? EventId = null);
+
+    // The camp a capture belongs to.
+    //
+    // The addon's own linked event is trusted first -- it knows what the officer
+    // had open -- but only after checking it belongs to this linkshell, since it
+    // arrives from the client. Everything else is matched here: a pop can be
+    // captured by someone who hasn't linked the camp yet, and that record should
+    // still land on the right event rather than nowhere.
+    //
+    // The match is deliberately narrow: same linkshell, the monster's name
+    // appears in the event name, the camp had started, and it hadn't ended.
+    // Newest first, so a re-pop of the same monster attaches to the current camp
+    // rather than last week's.
+    private async Task<int?> ResolveClaimShieldEventAsync(
+        int? requestedEventId, int linkshellId, string monster, DateTime capturedAt,
+        CancellationToken cancellationToken)
+    {
+        if (requestedEventId is int claimed && claimed > 0)
+        {
+            var owned = await _dbContext.Events
+                .AsNoTracking()
+                .AnyAsync(e => e.Id == claimed && e.LinkshellId == linkshellId, cancellationToken);
+            if (owned)
+            {
+                return claimed;
+            }
+            // Fall through rather than reject: a stale id in the addon is not a
+            // reason to lose the capture.
+        }
+
+        return await _dbContext.Events
+            .AsNoTracking()
+            .Where(e => e.LinkshellId == linkshellId
+                        && e.EventName != null
+                        && EF.Functions.Like(e.EventName, "%" + monster + "%")
+                        && e.CommencementStartTime != null
+                        && e.CommencementStartTime <= capturedAt
+                        && (e.EndTime == null || e.EndTime >= capturedAt))
+            .OrderByDescending(e => e.CommencementStartTime)
+            .Select(e => (int?)e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 
     // Records one claim-shield lottery window the addon parsed out of chat.
     // Permission mirrors ToD (CanManageTods OR CanSubmitTodForApproval) but —
@@ -98,6 +152,8 @@ public sealed partial class AddonApiController
         var capture = new ClaimShieldCapture
         {
             LinkshellId = token.LinkshellId,
+            EventId = await ResolveClaimShieldEventAsync(
+                request.EventId, token.LinkshellId, monster, capturedAt, cancellationToken),
             MonsterName = TruncateString(monster, 128) ?? monster,
             Won = request.Won,
             TotalPlayers = totalPlayers,
@@ -108,12 +164,20 @@ public sealed partial class AddonApiController
             CreatedAtUtc = nowUtc,
         };
 
+        // One list to iterate whichever shape arrived. MemberActions is the
+        // current addon; Members is the older names-only form.
+        var incoming = request.MemberActions is { Count: > 0 }
+            ? request.MemberActions
+            : (request.Members ?? Array.Empty<string>())
+                .Select(name => new AddonClaimShieldMember(name, null))
+                .ToList();
+
         var seenRawNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenMembershipIds = new HashSet<int>();
-        foreach (var raw in request.Members ?? Array.Empty<string>())
+        foreach (var entry in incoming)
         {
-            if (string.IsNullOrWhiteSpace(raw)) continue;
-            var name = raw.Trim();
+            if (string.IsNullOrWhiteSpace(entry?.Name)) continue;
+            var name = entry.Name.Trim();
             if (!seenRawNames.Add(name)) continue;
 
             membershipByName.TryGetValue(name, out var membership);
@@ -128,6 +192,9 @@ public sealed partial class AddonApiController
                 CharacterName = TruncateString(name, 256) ?? name,
                 AppUserId = membership?.AppUserId,
                 Matched = membership is not null,
+                ActionMessage = string.IsNullOrWhiteSpace(entry.Action)
+                    ? null
+                    : TruncateString(entry.Action.Trim(), 512),
             });
         }
 
@@ -145,6 +212,9 @@ public sealed partial class AddonApiController
             totalPlayers = capture.TotalPlayers,
             memberCount = capture.MemberCount,
             matchedCount = capture.MatchedCount,
+            // Echoed so the addon can say which camp it landed on -- or show
+            // that it landed on none, which is the case worth noticing.
+            eventId = capture.EventId,
         });
     }
 }

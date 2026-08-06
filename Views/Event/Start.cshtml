@@ -1,4 +1,4 @@
-@using System.Globalization
+﻿@using System.Globalization
 @using System.Security.Claims
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @model EventViewModel
@@ -13,9 +13,16 @@
     // split its DKP — every pool-aware label below then renders exactly as it always has.
     var eventPoolName = ViewBag.EventPoolName as string;
     string ToLocalIso(DateTime? value) => value?.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty;
-    // HNM-typed events get the multi-window roster card and a slimmer Participants table
-    // (Timer + Progress columns are not meaningful per-spawn-window).
+    // HNM-typed events get the multi-window roster card (display only — see supportsBreakRoom
+    // below for the break/timer gate, which is a different question).
     var isHnmEvent = string.Equals(Model.Event.EventType, "HNM", StringComparison.OrdinalIgnoreCase);
+    // Whether the Break Room applies: the Timer + Progress columns and the whole Actions column
+    // (Take Break / Force Break / Resume / Verify / Deny). False for windowed camps, which credit
+    // per posted window and so have no clock to pause. Server-computed via
+    // Services/EventBreakPolicy, replacing this view's old local `EventType == "HNM"` test —
+    // that missed multi-window boards carrying a non-HNM type (the addon's NMS / HENM preset
+    // categories), which kept their break controls while the Activity and addon hid them.
+    var supportsBreakRoom = Model.SupportsBreakRoom;
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
     var isAlreadyParticipant = !string.IsNullOrWhiteSpace(currentUserId)
         && Model.AppUserEvents.Any(p => p.AppUserId == currentUserId);
@@ -195,10 +202,12 @@
                 }
                 else
                 {
-                    // HNM windows reuse the DkpPerHour column as DKP per window,
-                    // matching the addon convention. Falls back to 0 when null so
-                    // the per-window total math stays well-defined.
-                    var dkpPerWindow = Model.Event.DkpPerHour ?? 0;
+                    @* Each window carries its OWN resolved value (EventAttendanceWindowViewModel
+                       .DkpAmount) — an officer's explicit price when they set one, otherwise the
+                       camp's open / close bonus for that sequence. This used to read
+                       Model.Event.DkpPerHour, the column HnmStandardCampFinalizer ignores outright,
+                       so this page and the Discord Activity showed two different numbers for the
+                       same window. Editing lives in the Activity; this page reports. *@
                     <div style="padding:0 16px 16px" data-attendance-windows>
                         <ul class="nav nav-tabs" role="tablist"
                             style="display:flex;flex-wrap:wrap;flex-direction:row;list-style:none;padding-left:0;margin:0;gap:6px">
@@ -229,20 +238,23 @@
                             {
                                 var window = Model.AttendanceWindows[i];
                                 var paneId = $"window-pane-{window.Id}";
-                                var windowTotal = dkpPerWindow * window.Attendees.Count;
+                                var windowDkp = window.DkpAmount ?? 0;
+                                var windowTotal = windowDkp * window.Attendees.Count;
                                 <div class="tab-pane fade @(i == 0 ? "show active" : string.Empty)"
                                      id="@paneId" role="tabpanel">
                                     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:8px">
                                         <div style="font-size:11px;color:var(--fg-3)">
                                             Posted @window.PostedAt.ToString("g")
                                         </div>
-                                        @if (dkpPerWindow > 0)
+                                        @if (windowDkp > 0)
                                         {
+                                            @* "for", not "awarded": on an HNM camp this is staged
+                                               for officer review at End Camp, not credited yet. *@
                                             <div style="font-size:12px;color:var(--fg-2)">
-                                                <strong>@dkpPerWindow DKP</strong>
+                                                <strong>@windowDkp.ToString("0.##") DKP</strong>
                                                 <span style="color:var(--fg-3)">/ attendee × @window.Attendees.Count =</span>
-                                                <strong style="color:var(--accent)">@windowTotal DKP</strong>
-                                                <span style="color:var(--fg-3)">awarded this window</span>
+                                                <strong style="color:var(--accent)">@windowTotal.ToString("0.##") DKP</strong>
+                                                <span style="color:var(--fg-3)">for this window</span>
                                             </div>
                                         }
                                     </div>
@@ -268,8 +280,11 @@
                                                     <tr data-window-attendee-row="@attendee.Id">
                                                         <td>@attendee.CharacterName</td>
                                                         <td>@attendee.JobName/@attendee.SubJobName</td>
+                                                        @* An em dash is a real answer, not missing
+                                                           data: a middle window on a Standard camp
+                                                           pays nobody. *@
                                                         <td style="text-align:right;font-family:var(--font-mono)">
-                                                            @(dkpPerWindow > 0 ? dkpPerWindow.ToString() : "—")
+                                                            @(window.DkpAmount is { } amount ? amount.ToString("0.##") : "—")
                                                         </td>
                                                         <td style="color:var(--fg-3);font-size:12px">@attendee.VerifiedBy</td>
                                                         <td style="text-align:right">
@@ -359,14 +374,14 @@
                         <tr>
                             <th>Character</th>
                             <th>Job</th>
-                            @if (!isHnmEvent)
+                            @if (supportsBreakRoom)
                             {
                                 <th>Timer</th>
                                 <th style="width:140px">Progress</th>
                             }
                             <th style="text-align:right">DKP</th>
                             <th>Status</th>
-                            @if (!isHnmEvent)
+                            @if (supportsBreakRoom)
                             {
                                 <th style="text-align:right">Actions</th>
                             }
@@ -399,7 +414,7 @@
                                     <div>@participant.JobName/@participant.SubJobName</div>
                                     <div style="color:var(--fg-4);font-size:11px">@(participant.JobType ?? "Role")</div>
                                 </td>
-                                @if (!isHnmEvent)
+                                @if (supportsBreakRoom)
                                 {
                                     <td style="font-family:var(--font-mono);font-size:12px" data-live-participant-timer>00:00:00</td>
                                     <td>
@@ -432,7 +447,7 @@
                                         <span class="tag">Pending</span>
                                     }
                                 </td>
-                                @if (!isHnmEvent)
+                                @if (supportsBreakRoom)
                                 {
                                 <td style="text-align:right">
                                     <div style="display:flex;justify-content:flex-end;gap:4px;flex-wrap:wrap">

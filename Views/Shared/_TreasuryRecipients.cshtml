@@ -1,0 +1,65 @@
+@model LinkshellManagerDiscordApp.ViewModels.RecordTreasuryEntryViewModel
+@*
+    Who shares one amount, for the "what happened" options that split it.
+
+    Flat repeated checkboxes bound to List<int> — the same shape EventHistory/Details uses for its
+    credited list. No hidden false-sentinel here: only the checked set matters, and an unchecked box
+    posting nothing is exactly right.
+
+    Values are membership rows rather than names, because a name is not unique and is not something
+    the server can check against a roster. Unsynced characters are included: they are real members and
+    get real shares, they just have no account behind the name.
+*@
+<div class="field" id="recipientsField" style="grid-column:1/-1">
+    <label asp-for="RecipientMembershipIds"></label>
+
+    @* Posted back, so the block actually holds on submit rather than being advice that scrolls away.
+       "Drop them" clears the hidden fields, which is how an officer acknowledges it deliberately. *@
+    @if (Model.UnresolvedRecipients.Count > 0)
+    {
+        <div class="lsm-recipients__warn" id="unresolvedRecipients">
+            @foreach (var name in Model.UnresolvedRecipients)
+            {
+                <input type="hidden" name="UnresolvedRecipients" value="@name" />
+            }
+            <span>
+                No longer in the linkshell: @string.Join(", ", Model.UnresolvedRecipients).
+                Pick who should get their share instead — recording as-is would replace the original
+                split with a smaller one.
+            </span>
+            <button type="button" class="btn ghost" id="dropUnresolved">Drop them</button>
+        </div>
+    }
+
+    <input type="search" class="form-control" id="recipientFilter" autocomplete="off"
+           placeholder="Search members…" style="margin-bottom:8px" />
+
+    @* MembershipId 0 means "owed gil but no longer in the linkshell" — settleable, but not someone
+       a new split can be shared with. *@
+    @{ var pickable = Model.Roster.Where(option => option.MembershipId != 0).ToList(); }
+    @if (pickable.Count > 0)
+    {
+        <div class="lsm-recipients" id="recipientList">
+            @foreach (var member in pickable)
+            {
+                <label class="lsm-recipient" data-name="@member.CharacterName.ToLowerInvariant()">
+                    <input type="checkbox" name="RecipientMembershipIds" value="@member.MembershipId"
+                           checked="@(Model.RecipientMembershipIds.Contains(member.MembershipId) ? "checked" : null)" />
+                    <span class="lsm-recipient__name">@member.CharacterName</span>
+                    @if (!string.IsNullOrWhiteSpace(member.Rank))
+                    {
+                        <span class="lsm-recipient__rank">@member.Rank</span>
+                    }
+                </label>
+            }
+        </div>
+    }
+    else
+    {
+        <div style="font-size:12px;color:var(--fg-3)">Nobody on the roster has a character name yet.</div>
+    }
+
+    @* Who gets exactly how much, worked out the same way the server does it. *@
+    <div id="splitPreview" class="lsm-recipients__shares"></div>
+    <span asp-validation-for="RecipientMembershipIds" class="text-danger"></span>
+</div>

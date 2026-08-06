@@ -215,13 +215,13 @@
                               (ngModelChange)="auctionBidDrafts[item.id] = $event"
                               [name]="'auctionBidDraft' + item.id"
                               type="number"
-                              min="1"
+                              [min]="itemMinBid(item)"
                               [placeholder]="'Min ' + itemMinBid(item)" />
                             <button
                               type="button"
                               [class]="auctionState(auction) === 'ending' ? 'btn warning-fill sm' : 'btn primary sm'"
                               [disabled]="activity.busyAuctionItemId() === item.id"
-                              (click)="submitAuctionBid(item.id)">
+                              (click)="submitAuctionBid(item)">
                               {{ activity.busyAuctionItemId() === item.id ? '…' : 'Bid' }}
                             </button>
                           </div>

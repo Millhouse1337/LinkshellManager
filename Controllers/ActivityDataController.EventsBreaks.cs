@@ -36,6 +36,11 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Break status is only available after the event has started." });
         }
 
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+        {
+            return BadRequest(new { error = EventBreakPolicy.WindowedRejectionMessage });
+        }
+
         var participation = await _dbContext.AppUserEvents
             .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
 
@@ -153,6 +158,11 @@ public sealed partial class ActivityDataController
         if (!eventEntity.CommencementStartTime.HasValue)
         {
             return BadRequest(new { error = "Break status is only available after the event has started." });
+        }
+
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+        {
+            return BadRequest(new { error = EventBreakPolicy.WindowedRejectionMessage });
         }
 
         var participation = await _dbContext.AppUserEvents
@@ -379,6 +389,13 @@ public sealed partial class ActivityDataController
     // by the self-service break flow and "Withdraw From Event" (which now parks a live
     // member here instead of deleting their participation). The caller saves; skip the
     // call when the participant is already on break.
+    //
+    // INVARIANT: this is the only helper that writes IsOnBreak = true, and it has TWO entry
+    // points -- TakeBreakAsync/ForceBreakAsync above, and UnsignAsync in
+    // ActivityDataController.EventsParticipation.cs. BOTH must reject
+    // EventBreakPolicy.IsWindowedAttendance before calling, and any new caller must carry the
+    // same guard. A windowed camp credits per posted window, so there is no clock to pause --
+    // and a parked member vanishes from the addon roster with no surface able to bring them back.
     private void PutParticipationOnBreak(
         AppUserEvent participation, int eventId, DateTime nowUtc, DateTime? commencementStart)
     {

@@ -1,0 +1,39 @@
+@model LinkshellManagerDiscordApp.ViewModels.ChartBossCardContext
+@{
+    var boss = Model.Boss;
+}
+
+@if (boss.Items.Count == 0)
+{
+    <div class="chart-card__empty">No pop items tracked yet.</div>
+}
+else
+{
+    @* WHAT IT IS and HOW MANY, nothing else — and one line per item, with the copies summed. A card
+       is one of several in a row: a column per fact squeezed the item's own name into three wrapped
+       lines, and three people holding a Gem of the South printed the same word three times.
+
+       Who holds which copy, who is credited for it, and every button that edits a row live in the
+       Pop Item Holdings table below, which has the whole page width to say them in. This is the
+       at-a-glance view; that is the detail view, and the only one that writes.
+
+       Mirrors ChartBoardSectionComponent.consolidatedItems: first-seen spelling and first-seen
+       position win, because officers order their own rows. *@
+    <table class="chart-item-table">
+        <thead>
+            <tr>
+                <th>Pop Item</th>
+                <th>Qty</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var line in boss.ConsolidatedItems)
+            {
+                <tr>
+                    <td data-label="Pop Item"><span class="chart-item__name">@line.Name</span></td>
+                    <td data-label="Qty"><span class="chart-item__qty">@line.Quantity</span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

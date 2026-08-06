@@ -21,7 +21,15 @@ public sealed partial class AddonApiController
         string? CapturedByCharacterName,
         string? UtcOffset,
         IReadOnlyList<AddonAttendanceSnapshotEntryDto>? Entries,
-        string? Name);
+        string? Name,
+        // The window the officer explicitly chose (Open = 1, Close = 2 on a 2-post camp).
+        // Null keeps the derived value, which is what /lsm now and older addons send.
+        //
+        // The derivation reads a time grid anchored at the camp's FIRST post, so an officer
+        // who only reaches camp for the kill has their Close stamped as window 1 — there is
+        // no elapsed time for the grid to measure. An explicit choice is the only way to
+        // record a Close that had no Open.
+        int? WindowNumber = null);
 
     [HttpPost("attendance-snapshots")]
     [AddonApiAuth]
@@ -82,22 +90,69 @@ public sealed partial class AddonApiController
             nowUtc,
             cancellationToken);
 
-        var snapshot = new AttendanceSnapshot
+        // Which spawn window this capture lands in, off the event's fixed grid. Null for a camp with
+        // no cadence (Sky gods, farm NMs, ad-hoc posts) — those have no windows to name.
+        var snapshotWindow = windowEvent is null
+            ? null
+            : HnmConfig.SnapshotWindowNumber(windowEvent.Name, windowEvent.WindowGridAnchorUtc, capturedAt);
+
+        // An explicitly chosen window WINS over the grid. The grid measures elapsed time from the
+        // camp's first post, which is exactly the wrong answer for the officer who arrived only in
+        // time for the kill: no time has elapsed for them, so their Close derives as window 1.
+        // Clamped to the camp's real window count so a bad client can't invent one.
+        if (windowEvent is not null && request.WindowNumber is int chosenWindow)
+        {
+            var windowCap = Math.Max(1, HnmConfig.EffectiveWindowCount(windowEvent.Name));
+            snapshotWindow = Math.Clamp(chosenWindow, 1, windowCap);
+        }
+
+        // Several officers scanning the same camp within a couple of minutes are capturing ONE
+        // roster, not competing ones. Fold this post into that snapshot instead of adding another
+        // row — see HnmConfig.SnapshotMergeWindow for why this replaced duplicate flagging.
+        var mergeTarget = windowEvent is null
+            ? null
+            : await FindMergeTargetSnapshotAsync(windowEvent, capturedAt, snapshotWindow, cancellationToken);
+
+        var snapshot = mergeTarget ?? new AttendanceSnapshot
         {
             LinkshellId = token.LinkshellId,
             CapturedAtUtc = capturedAt,
             CapturedByCharacterName = TruncateString(request.CapturedByCharacterName, 256),
             UtcOffset = TruncateString(request.UtcOffset, 8),
-            EntryCount = entries.Count,
             CreatedAtUtc = nowUtc,
             Name = trimmedName,
             WindowEventId = windowEvent?.Id,
+            WindowNumber = snapshotWindow,
             SnapshotStatus = AttendanceSnapshotStatuses.Active,
         };
 
+        // On a fold the target's own CapturedAtUtc is deliberately NOT moved forward. It anchors the
+        // merge window, so a steady drip of posts every 2 minutes eventually starts a fresh snapshot
+        // instead of chaining into one that grows all camp long.
+        var newerThanTarget = mergeTarget is null || capturedAt >= mergeTarget.CapturedAtUtc;
+        var existingByName = snapshot.Entries
+            .GroupBy(e => NormalizeWindowEventName(e.CharacterName) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
         foreach (var e in entries)
         {
-            snapshot.Entries.Add(new AttendanceSnapshotEntry
+            var key = NormalizeWindowEventName(e.CharacterName) ?? string.Empty;
+            if (existingByName.TryGetValue(key, out var already))
+            {
+                // Same character seen again. Keep the LATEST reading of their job/zone, matching how
+                // the combined roster picks a member's row, and leave it alone for an older post.
+                if (newerThanTarget)
+                {
+                    already.MainJob = TruncateString(e.MainJob, 8);
+                    already.MainJobLevel = e.MainJobLevel;
+                    already.SubJob = TruncateString(e.SubJob, 8);
+                    already.SubJobLevel = e.SubJobLevel;
+                    already.Zone = TruncateString(e.Zone, 128);
+                }
+                continue;
+            }
+
+            var added = new AttendanceSnapshotEntry
             {
                 CharacterName = TruncateString(e.CharacterName, 256) ?? string.Empty,
                 MainJob = TruncateString(e.MainJob, 8),
@@ -105,26 +160,29 @@ public sealed partial class AddonApiController
                 SubJob = TruncateString(e.SubJob, 8),
                 SubJobLevel = e.SubJobLevel,
                 Zone = TruncateString(e.Zone, 128),
-            });
+            };
+            snapshot.Entries.Add(added);
+            existingByName[key] = added;
         }
 
-        _dbContext.AttendanceSnapshots.Add(snapshot);
+        snapshot.EntryCount = snapshot.Entries.Count;
+        if (mergeTarget is null)
+        {
+            _dbContext.AttendanceSnapshots.Add(snapshot);
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         if (windowEvent is not null)
         {
-            var possibleDuplicate = await FindLikelyDuplicateSnapshotAsync(snapshot, cancellationToken);
-            if (possibleDuplicate is not null)
-            {
-                snapshot.SnapshotStatus = AttendanceSnapshotStatuses.PossibleDuplicate;
-                snapshot.DuplicateOfSnapshotId = possibleDuplicate.Id;
-            }
-            windowEvent.FirstCapturedAtUtc = windowEvent.FirstCapturedAtUtc <= snapshot.CapturedAtUtc
+            // Snapshots are never auto-flagged any more: everything posted stays Active and feeds
+            // the combined roster, which already dedupes by character and pays per Window Event
+            // rather than per snapshot. Officers can still mark a row Duplicate/Ignored by hand.
+            windowEvent.FirstCapturedAtUtc = windowEvent.FirstCapturedAtUtc <= capturedAt
                 ? windowEvent.FirstCapturedAtUtc
-                : snapshot.CapturedAtUtc;
-            windowEvent.LastCapturedAtUtc = windowEvent.LastCapturedAtUtc >= snapshot.CapturedAtUtc
+                : capturedAt;
+            windowEvent.LastCapturedAtUtc = windowEvent.LastCapturedAtUtc >= capturedAt
                 ? windowEvent.LastCapturedAtUtc
-                : snapshot.CapturedAtUtc;
+                : capturedAt;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -144,7 +202,14 @@ public sealed partial class AddonApiController
             capturedAtUtc = snapshot.CapturedAtUtc,
             linkedEventId = (int?)null,
             windowEventId = snapshot.WindowEventId,
+            // Echoed so the addon files its local tab under the window the server actually
+            // stored, rather than under the one it asked for — a merge into an existing
+            // snapshot keeps that snapshot's window, which may not be the requested one.
+            windowNumber = snapshot.WindowNumber,
             snapshotStatus = snapshot.SnapshotStatus,
+            // True when this post was absorbed into an existing snapshot rather than creating one,
+            // so the addon can say "added to the current roster" instead of "posted".
+            merged = mergeTarget is not null,
         });
     }
 
@@ -223,6 +288,10 @@ public sealed partial class AddonApiController
             CreatedAtUtc = nowUtc,
             FirstCapturedAtUtc = capturedAtUtc,
             LastCapturedAtUtc = capturedAtUtc,
+            // Window 1 opens here, and this never moves again — every snapshot's window number is
+            // measured off it. The first `/lsm now` post IS the camp start for a snapshot-native
+            // event, so it doubles as the grid anchor.
+            WindowAnchorAtUtc = capturedAtUtc,
             CreatedByCharacterName = capturedByCharacterName,
             // Pre-select the camp from the monster name so officers don't
             // have to set it manually on every "/lsm now <monster>" event.
@@ -233,58 +302,50 @@ public sealed partial class AddonApiController
         return windowEvent;
     }
 
-    private async Task<AttendanceSnapshot?> FindLikelyDuplicateSnapshotAsync(
-        AttendanceSnapshot snapshot,
+    // The snapshot an incoming post should be folded into: the most recent ACTIVE one on the same
+    // Window Event captured within HnmConfig.SnapshotMergeWindow of it. Null starts a new snapshot.
+    //
+    // Purely time-based, with no roster-similarity test at all. That's the point — the old
+    // duplicate check demanded 75% name overlap, so the case that matters most (two officers each
+    // scanning their OWN alliance, barely overlapping) looked like two unrelated captures while two
+    // scans of one alliance looked like a mistake. Officers scanning together inside the merge
+    // window are building one roster no matter how much their lists overlap.
+    //
+    // Checked symmetrically (±window) so an addon retry carrying an older CapturedAtUtc still lands
+    // in the right place instead of opening a snapshot behind the one it belongs to.
+    //
+    // A fold also requires the SAME spawn window. The merge window is deliberately shorter than any
+    // real spawn window, but it can still straddle a boundary — two posts 2 minutes apart at 9:59
+    // and 10:01 are in windows 6 and 7 of a 10-minute camp. Folding those would put window 7's
+    // members under a snapshot labelled "Window 6", and a window label that lies is worse than an
+    // extra row. So the boundary always wins over the merge.
+    private async Task<AttendanceSnapshot?> FindMergeTargetSnapshotAsync(
+        WindowEvent windowEvent,
+        DateTime capturedAtUtc,
+        int? snapshotWindow,
         CancellationToken cancellationToken)
     {
-        if (!snapshot.WindowEventId.HasValue || snapshot.Entries.Count == 0)
-        {
-            return null;
-        }
+        var mergeWindow = HnmConfig.SnapshotMergeWindow(windowEvent.Name);
+        var fromUtc = capturedAtUtc - mergeWindow;
+        var toUtc = capturedAtUtc + mergeWindow;
 
-        var names = snapshot.Entries
-            .Select(e => NormalizeWindowEventName(e.CharacterName))
-            .Where(n => n is not null)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (names.Count == 0)
-        {
-            return null;
-        }
-
-        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-8);
-        var toUtc = snapshot.CapturedAtUtc.AddMinutes(8);
-        var candidates = await _dbContext.AttendanceSnapshots
+        var candidates = _dbContext.AttendanceSnapshots
             .Include(item => item.Entries)
             .Where(item =>
-                item.Id != snapshot.Id &&
-                item.WindowEventId == snapshot.WindowEventId &&
-                item.SnapshotStatus != AttendanceSnapshotStatuses.Ignored &&
-                item.SnapshotStatus != AttendanceSnapshotStatuses.Duplicate &&
+                item.WindowEventId == windowEvent.Id &&
+                item.SnapshotStatus == AttendanceSnapshotStatuses.Active &&
                 item.CapturedAtUtc >= fromUtc &&
-                item.CapturedAtUtc <= toUtc)
-            .ToListAsync(cancellationToken);
+                item.CapturedAtUtc <= toUtc);
 
-        AttendanceSnapshot? best = null;
-        var bestOverlap = 0d;
-        foreach (var candidate in candidates)
-        {
-            var candidateNames = candidate.Entries
-                .Select(e => NormalizeWindowEventName(e.CharacterName))
-                .Where(n => n is not null)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (candidateNames.Count == 0) continue;
+        // Branch rather than comparing two nullables: `x.WindowNumber == null`-valued parameter
+        // translates to `= NULL` in SQL, which matches nothing.
+        candidates = snapshotWindow.HasValue
+            ? candidates.Where(item => item.WindowNumber == snapshotWindow.Value)
+            : candidates.Where(item => item.WindowNumber == null);
 
-            var overlap = names.Count(n => candidateNames.Contains(n!));
-            var denominator = Math.Min(names.Count, candidateNames.Count);
-            var ratio = denominator == 0 ? 0 : overlap / (double)denominator;
-            if (ratio > bestOverlap)
-            {
-                bestOverlap = ratio;
-                best = candidate;
-            }
-        }
-
-        return bestOverlap >= 0.75 ? best : null;
+        return await candidates
+            .OrderByDescending(item => item.CapturedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private static string? NormalizeWindowEventName(string? value)

@@ -1900,6 +1900,41 @@ table.themed .num {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
 }
+/* Collapsible card — the head IS the <summary>, so the whole bar toggles. Grid rather than
+   flex so the chevron sits dead centre of the bar instead of drifting with the width of the
+   title and counts either side of it. */
+.we-card > summary.we-card__head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.we-card > summary.we-card__head::-webkit-details-marker { display: none; }
+.we-card > summary.we-card__head > .we-card__title-group { justify-self: start; }
+.we-card > summary.we-card__head > .we-card__counts { justify-self: end; }
+.we-card > summary.we-card__head:hover .we-card__caret { color: var(--fg); border-color: var(--accent); }
+.we-card:not([open]) > summary.we-card__head { border-bottom: none; }
+.we-card__caret {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: var(--fg-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: transform 0.18s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.we-card__caret svg { width: 18px; height: 18px; }
+.we-card[open] > summary.we-card__head > .we-card__caret { transform: rotate(180deg); }
+@media (max-width: 760px) {
+  .we-card > summary.we-card__head { grid-template-columns: 1fr auto; }
+  .we-card > summary.we-card__head > .we-card__counts { grid-column: 1 / -1; justify-self: start; }
+}
 .we-card__title-group {
   display: flex;
   flex-wrap: wrap;
@@ -1958,35 +1993,40 @@ table.themed .num {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
 }
-/* Rename (name input + Rename button) sits hard-left; the Close/Delete
-   action cluster is pushed to the far right of the row. */
-.we-rename-form { margin-right: 4px; }
 .we-card__actions { margin-left: auto; }
-.we-card__form {
+/* The DKP form still carries the per-member overrides that Save / Post to DKP sheet submit,
+   but it has no visible inputs of its own now that Default DKP is set per snapshot — so it
+   must not occupy a row of its own. */
+.we-card__form { display: contents; }
+
+/* Edit event dialog — reached from the card's "Edit Event" button. Only the name is editable. */
+.we-edit-dialog {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0;
+  background: var(--bg-elev);
+  color: var(--fg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  width: min(420px, calc(100vw - 32px));
+}
+.we-edit-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+.we-edit-dialog__form {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 14px;
-  flex-wrap: wrap;
+  padding: 18px;
 }
-.we-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-.we-field__label {
+.we-edit-dialog__title { margin: 0; font-size: 16px; font-weight: 700; }
+.we-edit-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   font-size: 12px;
   color: var(--fg-2);
-  line-height: 1.2;
-  white-space: nowrap;
 }
-.we-field__input {
-  width: 72px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.we-field__select {
-  width: 180px;
-}
+.we-edit-dialog__field .input { width: 100%; }
+.we-edit-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 .we-card__actions {
   display: inline-flex;
   align-items: center;
@@ -2049,6 +2089,22 @@ table.themed .num {
 .we-table__scroll {
   overflow-x: auto;
 }
+/* Cap the combined roster at ~10 rows and scroll past that. A wyrm camp can gather most of a
+   linkshell, and an uncapped table pushed Save / Post to DKP sheet far below the fold — the two
+   buttons an officer is here to press. Row height is 10+10 padding + a ~21px job-pill line + 1px
+   border; the +32 is the header row. Scoped to .we-roster so snapshot tables are untouched. */
+.we-roster .we-table__scroll {
+  max-height: 452px;
+  overflow-y: auto;
+}
+/* Keep the column headings visible while scrolling. Needs an explicit background of its own or
+   the rows show through as they pass under it. */
+.we-roster .we-table__scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+}
 .we-table {
   width: 100%;
   border-collapse: collapse;
@@ -2072,6 +2128,18 @@ table.themed .num {
 }
 .we-table tbody tr:last-child td {
   border-bottom: none;
+}
+/* Hand-added people ("+ Add person"), sorted into a block at the bottom. Amber rather than the
+   usual surface so a name an officer ASSERTED is distinguishable at a glance from one the addon
+   actually scanned — this table is the evidence behind a DKP payout. */
+.we-table tbody tr.we-row--manual td {
+  background: rgba(245, 158, 11, 0.07);
+}
+.we-table tbody tr.we-row--manual:hover td {
+  background: rgba(245, 158, 11, 0.13);
+}
+.we-table tbody tr.we-row--manual td:first-child {
+  box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.55);
 }
 .we-table tbody tr:hover td {
   background: var(--surface);
@@ -2115,6 +2183,28 @@ table.themed .num {
 }
 .we-muted {
   color: var(--fg-3);
+}
+
+/* ----- attendance crystal -----
+   Used to live only in the inline <style> of the standalone Attendance Events page. That page folded
+   into Event System, so it's global now — which also means Attendance History finally renders its
+   crystal (it uses _WindowEventCard, but never had this rule). */
+.attendance-crystal {
+  width: 13px;
+  height: 13px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  flex: 0 0 auto;
+  background: linear-gradient(135deg, #7ea2ff, #1f3bb3);
+  border: 1px solid rgba(150, 180, 255, .7);
+  box-shadow: 0 0 12px rgba(79, 124, 255, .7), inset 0 0 4px rgba(255, 255, 255, .4);
+}
+
+/* ----- open attendance events container -----
+   Groups the open event cards under one titled card on the Event System page. No flex gap here on
+   purpose: _WindowEventCard sets an inline margin-top, which would stack with a gap. */
+.we-open-list {
+  padding: 0 18px 14px;
 }
 
 /* ----- per-row DKP input ----- */
@@ -2178,6 +2268,15 @@ table.themed .num {
 .we-snapshot__meta {
   color: var(--fg-2);
   font-size: 12px;
+}
+/* Which spawn window a capture was taken in. Leads the row — on a 25-window wyrm it's the
+   fastest way to tell four snapshots of the same camp apart, ahead of the timestamp. */
+.we-snapshot__window {
+  background: rgba(79, 124, 255, 0.16);
+  border-color: rgba(79, 124, 255, 0.45);
+  color: #9db4ff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .we-snapshot__actions {
   display: inline-flex;

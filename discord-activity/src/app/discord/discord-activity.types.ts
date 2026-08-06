@@ -119,6 +119,14 @@ export type ActivityLootStructure = 'Dkp' | 'LootCouncil' | 'Hybrid';
 
 export type ActivityDkpRoundingIncrement = 'Quarter' | 'Half';
 
+export interface ActivityTodMonsterTiming {
+  monsterName: string;
+  cooldownHours: number;
+  intervalHours: number;
+  intervalMinutes: number;
+  category?: string | null;
+}
+
 export interface ActivityLinkshellSettings {
   lootStructure: ActivityLootStructure;
   enableHnmSection: boolean;
@@ -139,6 +147,8 @@ export interface ActivityLinkshellSettings {
   // Names of monsters the linkshell admin has elected to hide from the
   // ToD Tracker (Dashboard + ToDs tab). Empty when none are hidden.
   hiddenTodMonsters: string[];
+  // Per-monster cooldown and interval overrides. Empty uses built-in defaults.
+  todMonsterTimings: ActivityTodMonsterTiming[];
   // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
   linkshellType: string;
   // The single Discord server (guild) this linkshell is associated with, or null
@@ -168,15 +178,46 @@ export interface ActivityLinkshellSettings {
   // Discord channel id new post-event discussion comments mirror to, or null to
   // keep discussion in-app only.
   discussionChannelId?: string | null;
+  // Manual Check In HNM attendance: mode (Standard | Wd) + scoring. Only used when
+  // hnmAttendanceMode === 'Wd'. dkpPerWindow is a fraction (0.25 default) — the
+  // per-window rate; bonuses are added once per attendee at finalize.
+  hnmAttendanceMode?: string;
+  wdDkpPerWindow?: number;
+  wdClaimBonus?: number;
+  wdKillBonus?: number;
+  // Manual Check In open / close bonuses, paid once on top of the per-window rate. Gated on the
+  // member's own check-in range: open = checked in from window 1, close = still checked in at the
+  // camp's last credited window. See WdCampFinalizer.ComputeDkp.
+  wdOpenBonus?: number;
+  wdCloseBonus?: number;
+  // Standard-mode HNM bonuses. Only used when hnmAttendanceMode === 'Standard':
+  // extra DKP for being on the roster at the camp's open / close, plus claim / kill
+  // outcome bonuses.
+  hnmStandardOpenBonus?: number;
+  hnmStandardCloseBonus?: number;
+  hnmStandardClaimBonus?: number;
+  hnmStandardKillBonus?: number;
+  // What a REGULAR (in-between) window pays each attendee scanned in it on a Standard camp — the
+  // base rate the open / close bonuses ride on top of. 0 = the old open/close-only payout.
+  hnmStandardWindowBonus?: number;
+  // Automatic per-window attendance snapshots (both modes). When on, an officer running the LSM
+  // addon can ARM a live camp and the addon posts THEIR ALLIANCE as that window's snapshot
+  // ~hnmAutoSnapshotDelaySeconds after each window opens. Arming stays an explicit per-officer,
+  // per-camp action in the addon — this only says officers may arm. Delay is clamped [5, 300].
+  hnmAutoSnapshotEnabled?: boolean;
+  hnmAutoSnapshotDelaySeconds?: number;
 }
-
-// One Discord server the caller can lock a linkshell to (the bot is in it and so
 // is the caller). Populates the Configurations "Discord server lock" dropdown.
 export interface ActivityGuildOption {
   id: string;
   name: string;
 }
 
+// LOCKSTEP: a permission added here must ALSO be added to ActivityLinkshellRole and
+// ActivityLinkshellRolePermissionsInput below, to the three matching C# records in
+// Models/Activity/ActivityDtos.cs, to BOTH permissionKeys and saveRoleDraft in
+// configurations-tab.component.ts, and to the plain-JS `permissions` array in
+// Views/Linkshell/Permissions.cshtml. Only the last one fails silently.
 export interface ActivityLinkshellPermissions {
   canManageRoles: boolean;
   canManageMembers: boolean;
@@ -184,6 +225,7 @@ export interface ActivityLinkshellPermissions {
   canModerateLiveEvent: boolean;
   canAddLoot: boolean;
   canManageInventory: boolean;
+  canManageCharts: boolean;
   canManageTreasury: boolean;
   canManageRules: boolean;
   canManageAnnouncements: boolean;
@@ -208,6 +250,7 @@ export interface ActivityLinkshellRole {
   canModerateLiveEvent: boolean;
   canAddLoot: boolean;
   canManageInventory: boolean;
+  canManageCharts: boolean;
   canManageTreasury: boolean;
   canManageRules: boolean;
   canManageAnnouncements: boolean;
@@ -234,6 +277,7 @@ export interface ActivityLinkshellRolePermissionsInput {
   canModerateLiveEvent: boolean;
   canAddLoot: boolean;
   canManageInventory: boolean;
+  canManageCharts: boolean;
   canManageTreasury: boolean;
   canManageRules: boolean;
   canManageAnnouncements: boolean;
@@ -333,6 +377,152 @@ export interface ActivityItemInput {
   quantity: number;
   notes?: string | null;
 }
+
+/**
+ * Treasury: what the linkshell has, what moved, and what can happen to it.
+ *
+ * Every user-visible string comes from the server (TreasuryLabels / TreasuryTransactionKinds), so the
+ * website and Discord cannot end up calling the same thing two different names — which is exactly what
+ * happened before, when one column was "Source" on the web and "Type" here.
+ */
+export interface ActivityTreasuryLine {
+  /**
+   * Unique within the entry, unlike accountNumber: a split payout puts one line per member on the
+   * same category. Track the list on this — duplicate @for keys throw.
+   */
+  lineNumber: number;
+  accountNumber: number;
+  accountName: string;
+  classLabel: string;
+  presentedAmount: number;
+  counterpartyCharacterName?: string | null;
+}
+
+/** One member's share of a split. membershipId is null once they have left the linkshell. */
+export interface ActivityTreasuryRecipient {
+  membershipId?: number | null;
+  appUserId?: string | null;
+  characterName: string;
+  share: number;
+}
+
+/** Someone who can be given a share. Only sent to officers who can record. */
+export interface ActivityTreasuryMember {
+  membershipId: number;
+  appUserId?: string | null;
+  characterName: string;
+  rank?: string | null;
+}
+
+export interface ActivityTreasuryEntry {
+  id: number;
+  linkshellId: number;
+  entryNumber: string;
+  status: string;
+  statusLabel: string;
+  kind: string;
+  source: string;
+  transactionKind?: string | null;
+  /** The plain-English sentence the officer picked, e.g. "Sold an item". */
+  whatHappened: string;
+  amount: number;
+  /** Signed: negative means gil left. Zero when the entry only records something owed. */
+  cashDelta: number;
+  transactionDate: string;
+  memo?: string | null;
+  counterpartyCharacterName?: string | null;
+  enteredByCharacterName?: string | null;
+  recordedAt?: string | null;
+  reversesEntryId?: number | null;
+  reversesEntryNumber?: string | null;
+  isReversed: boolean;
+  correctionReason?: string | null;
+  /** Everyone who got a share. Empty for an ordinary entry, one name for a single-member one. */
+  recipients: ActivityTreasuryRecipient[];
+  lines: ActivityTreasuryLine[];
+}
+
+export interface ActivityTreasuryCategory {
+  id: number;
+  accountNumber: number;
+  name: string;
+  description?: string | null;
+  classLabel: string;
+  isCash: boolean;
+  isPostable: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/** One option in the "What happened?" picker. */
+export interface ActivityTreasuryKind {
+  key: string;
+  label: string;
+  help: string;
+  group: string;
+  showsMember: boolean;
+  /** Shares one amount between several members instead of naming one. */
+  isSplittable: boolean;
+  /** Picking a member fills in what they are still owed, rather than asking for a number. */
+  settlesMemberDebt: boolean;
+  /** "{0}" is the formatted amount. */
+  previewTemplate: string;
+}
+
+/** One member the linkshell still owes. These always add up to `weOwe`. */
+export interface ActivityTreasuryMemberObligation {
+  characterName: string;
+  amount: number;
+}
+
+export interface ActivityTreasurySnapshot {
+  cashOnHand: number;
+  owedToUs: number;
+  weOwe: number;
+  moneyIn: number;
+  moneyOut: number;
+  netChange: number;
+  netWorth: number;
+  startingBalance: number;
+  balances: boolean;
+  uncategorizedCount: number;
+  lockedThroughUtc?: string | null;
+  basisNote: string;
+  /** Who `weOwe` is owed to, largest first. Projected from the same lines, so it always adds up. */
+  owedToMembers: ActivityTreasuryMemberObligation[];
+}
+
+export interface ActivityTreasuryPage {
+  summary: ActivityTreasurySnapshot;
+  entries: ActivityTreasuryEntry[];
+  totalEntries: number;
+  page: number;
+  pageSize: number;
+  categories: ActivityTreasuryCategory[];
+  kinds: ActivityTreasuryKind[];
+  /** Who a split can be shared with. Empty unless canManage. */
+  members: ActivityTreasuryMember[];
+  canManage: boolean;
+}
+
+export interface ActivityTreasuryEntryInput {
+  transactionKind: string;
+  amount: number;
+  transactionDate?: string | null;
+  memo?: string | null;
+  counterpartyAppUserId?: string | null;
+  counterpartyCharacterName?: string | null;
+  /** False keeps it an editable draft; true puts it on the books. */
+  confirm: boolean;
+  /** Membership rows, not names. The server resolves each one against this linkshell's roster. */
+  recipientMembershipIds?: number[] | null;
+}
+
+export interface ActivityTreasuryFixInput extends Omit<ActivityTreasuryEntryInput, 'confirm'> {
+  reason: string;
+}
+
+export type ActivityTreasuryFilter = 'all' | 'in' | 'out' | 'drafts' | 'reversed';
 
 export interface ActivityRevenueInput {
   entryType: 'Income' | 'Expense';
@@ -547,6 +737,11 @@ export interface ActivityEventParticipant {
   duration?: number | null;
   eventDkp?: number | null;
   statusLedger: ActivityStatusLedgerEntry[];
+  // Manual Check In only. The window this member first checked in for, and the one they
+  // checked out on (null = still in). Credit runs arrival..min(departure, popWindow),
+  // inclusive. Null on Standard camps and on anyone who never checked in.
+  wdArrivalWindow?: number | null;
+  wdDepartureWindow?: number | null;
 }
 
 export interface ActivityEventAddMemberCandidate {
@@ -574,11 +769,19 @@ export interface ActivityTodEntry {
   linkshellId: number;
   monsterName: string;
   dayNumber?: number | null;
+  // Which pop window it showed up on (round-trips into the form on edit).
+  popWindow?: number | null;
   // Whether the kill was HQ (shown in the ToD list).
   hq?: boolean;
   // Extra seconds folded into the repop time (round-trips into the form on edit).
   additionalSeconds?: number;
+  // The observed Time of Death. Null = "Not entered": the camp ended without anyone seeing it
+  // die (the window closed, or another linkshell took it), so no time was recorded. A null
+  // `time` always comes with a null `repopTime` — there's nothing to derive a repop from.
   time?: string | null;
+  // When the row was written, as distinct from `time`. Sort on time ?? timeStamp so a
+  // not-entered ToD still counts as the monster's newest entry (see todSortKey).
+  timeStamp?: string | null;
   // Tri-state: true = Claimed, false = Unclaimed, null = Not Specified.
   // Null is the auto-posted state from the addon's loot-pool flow.
   claim: boolean | null;
@@ -630,13 +833,58 @@ export interface ActivityEvent {
   // repopulate the "Repeat post" toggle + lead time. repeatLeadHours is fractional hours.
   repeatOnTod?: boolean;
   repeatLeadHours?: number | null;
+  // How many SPAWN windows the camp runs — pop chances, 7 on a king/dragon. Heads the card as
+  // "Window N of M", matching the Discord board.
   windowCount: number;
+  // How many ATTENDANCE POSTS it takes — roster reads, 2 on a Standard king/dragon (an Open and
+  // a Close). A DIFFERENT number from windowCount, and the one the Attendance Windows card and
+  // every window NAME go by: those tabs are posts, not pop chances. Optional for payloads from a
+  // server predating the field — fall back to windowCount, which is what the two were before
+  // they were split. See DiscordEventMessageBuilder.AttendancePostCount.
+  attendancePostCount?: number;
+  // Whether the Break Room applies (take break / force break / return / verify / deny, and the
+  // live "Withdraw From Event" that parks a member there). False for windowed HNM camps: they
+  // credit per posted window, so there is no timer to pause. Server-computed from
+  // Services/EventBreakPolicy — branch on this, never on a local windowCount test, so the UI
+  // can't offer a control the endpoints would refuse. Optional only for payloads from a server
+  // predating the flag; see supportsBreakRoom() in events-tab.component.ts for the fallback.
+  supportsBreakRoom?: boolean;
+  // False = this camp was ended with NO Time of Death (the window closed, or another linkshell
+  // took it). There is then no predicted repop: startTime still points at the pop that just
+  // passed and nothing auto-re-posts, so the defeated banner must not announce a repop.
+  // Optional for payloads from a server predating the flag; treat undefined as true.
+  hnmTodRecorded?: boolean;
+  // Per-camp overrides for the linkshell's four Standard-mode HNM bonuses. Null/undefined
+  // means this camp pays the linkshell default; a number means the creator priced this camp
+  // itself via "Change DKP" on the create/edit form.
+  hnmOpenBonusOverride?: number | null;
+  hnmCloseBonusOverride?: number | null;
+  hnmClaimBonusOverride?: number | null;
+  hnmKillBonusOverride?: number | null;
+  hnmPerWindowOverride?: number | null;
   attendanceWindows: ActivityAttendanceWindow[];
+  linkedSnapshots: ActivityLinkedSnapshot[];
+  claimShieldCaptures: ActivityClaimShieldCapture[];
   creatorCharacterName?: string | null;
   starterCharacterName?: string | null;
   // The DKP pool this event earns into and pays its loot out of. Null when the linkshell has a
   // single pool — the cue to render the loot UI exactly as it did before pools existed.
   dkpPoolName?: string | null;
+  // Live HNM camp state. attendanceMode 'Wd' = Manual Check In, null = Standard. nextWindowAt is
+  // when the next window opens (null on the final window / not timed). wdFinalizedAt is stamped at
+  // End Camp (always null on a Standard board); wdAwaitingProcessingSince is a legacy column that
+  // nothing writes any more — camps hand their roster to the attendance sections of the Event System tab for review instead.
+  attendanceMode?: string | null;
+  // The window that has already OPENED. Pop-window semantics use this (End Camp treats it as the
+  // window it popped on). Do NOT show it — it reads one lower than the Discord board.
+  hnmWindowNumber?: number;
+  // The window to DISPLAY: what the Discord board shows (the window being awaited). Always use
+  // this for any "Window N of M" the user reads.
+  hnmFocusWindow?: number;
+  nextWindowAt?: string | null;
+  wdAwaitingProcessingSince?: string | null;
+  wdFinalizedAt?: string | null;
+  wdPopWindow?: number | null;
 }
 
 export interface ActivityAttendanceWindow {
@@ -645,6 +893,64 @@ export interface ActivityAttendanceWindow {
   label?: string | null;
   postedAt: string;
   attendees: ActivityAttendanceWindowAttendee[];
+  // What an officer priced THIS window at, or null when they never did and the camp's own open /
+  // close bonuses apply. An explicit amount REPLACES those bonuses rather than adding to them —
+  // see EventsTabComponent.windowValue, which mirrors HnmStandardCampFinalizer.WindowValue.
+  // Only ever non-null on a Standard HNM camp; the server refuses the write on any other kind.
+  dkpAmount?: number | null;
+}
+
+// A snapshot an officer attached to this camp from the Event System's unlinked list.
+// Presentational only — payroll still runs off the snapshot's attendance event — so these
+// rows are read-only here, unlike the attendance windows above them.
+export interface ActivityLinkedSnapshot {
+  id: number;
+  name?: string | null;
+  capturedAtUtc: string;
+  capturedByCharacterName?: string | null;
+  // Already named the way the window tabs are ("Open" / "Close" / "Window 3"), or null on a
+  // camp with no window grid.
+  windowLabel?: string | null;
+  snapshotStatus: string;
+  entries: ActivityLinkedSnapshotEntry[];
+}
+
+export interface ActivityLinkedSnapshotEntry {
+  id: number;
+  characterName?: string | null;
+  mainJob?: string | null;
+  mainJobLevel?: number | null;
+  subJob?: string | null;
+  subJobLevel?: number | null;
+  zone?: string | null;
+  // A name an officer typed rather than one the addon scanned; tinted in the table.
+  addedManually: boolean;
+}
+
+// One claim-shield lottery captured by the addon during this camp.
+export interface ActivityClaimShieldCapture {
+  id: number;
+  monsterName: string;
+  won: boolean;
+  // Players in the lottery server-wide, from the game's own result line — NOT a
+  // linkshell figure. members.length is the linkshell's share of it.
+  totalPlayers: number;
+  capturedAtUtc: string;
+  capturedMessage?: string | null;
+  // The posted window this pop falls inside (the last one posted at or before
+  // it), or null when the camp has posted none yet. This is what ties the claim
+  // to a window: the game stamped the lottery line, so the capture dates the
+  // window rather than the other way round.
+  nearestWindowSequence?: number | null;
+  members: ActivityClaimShieldMember[];
+}
+
+export interface ActivityClaimShieldMember {
+  characterName: string;
+  // "Azurth casts Dia on the Aspidochelone." — the line the tag rests on. Null
+  // on captures stored before actions were recorded; show the name alone.
+  actionMessage?: string | null;
+  matched: boolean;
 }
 
 export interface ActivityAttendanceWindowAttendee {
@@ -705,6 +1011,10 @@ export interface ActivityWindowEvent {
   dkpAmount?: number | null;
   entryType?: string | null;
   postedToSheetUtc?: string | null;
+  // Set when this row came from ending an HNM camp rather than an addon "/lsm now" capture.
+  // Camp rows arrive with every member's DKP already computed from the camp's scoring; snapshot
+  // rows don't. Drives the "Camp" tag on the card header.
+  sourceEventId?: number | null;
 }
 
 export interface ActivityWindowSnapshot {
@@ -717,6 +1027,12 @@ export interface ActivityWindowSnapshot {
   capturedByCharacterName?: string | null;
   primaryZone?: string | null;
   entryCount: number;
+  // The spawn window this capture was taken in, off the camp's fixed grid (10-minute steps on the
+  // 7-window kings/dragons, hourly on the 25-window wyrms). Null on camps with no cadence at all —
+  // Sky gods, farm NMs, ad-hoc `/lsm now` posts — which show no window tag.
+  windowNumber?: number | null;
+  // Pre-rendered "Window 3 of 25" for display; null whenever windowNumber is.
+  windowLabel?: string | null;
   entries: ActivityWindowSnapshotEntry[];
 }
 
@@ -728,6 +1044,10 @@ export interface ActivityWindowSnapshotEntry {
   subJob?: string | null;
   subJobLevel?: number | null;
   zone?: string | null;
+  // Typed in by an officer via "+ Add person" rather than scanned by the addon. Sorted to the
+  // bottom of the snapshot server-side, and tinted here so an asserted name never reads as
+  // captured evidence.
+  addedManually?: boolean;
 }
 
 export interface ActivityWindowCombinedMember {
@@ -809,11 +1129,19 @@ export interface ActivityHistoryDetail {
 // Game Addon (att) pairing — mirrors the web app's /Linkshell/Customize card.
 export interface ActivityAddonToken {
   id: number;
+  // The linkshell the representative token row is bound to. One pairing spans
+  // several, so this is not necessarily the linkshell currently selected.
+  linkshellId: number;
   prefix: string;
   label?: string | null;
   createdAt: string;
   lastUsedAt?: string | null;
   issuedToAppUserId?: string | null;
+  // True when the pairing belongs to the viewer — those show on every linkshell
+  // they cover, not just the selected one.
+  mine?: boolean;
+  // Names of every linkshell this one pairing code connected.
+  linkshells?: string[];
 }
 
 export interface ActivityAddonTokenList {
@@ -1026,6 +1354,17 @@ export interface ActivityOverview {
   stats: ActivityOverviewStats;
   addonConfigured: boolean;
   addonGloballyDisabled: boolean;
+  // Built-in per-monster spawn-window setups. Global and read-only — surfaced so the HNM
+  // Settings card can show the real numbers instead of a hand-copied duplicate.
+  hnmWindowSetups?: HnmWindowSetup[];
+}
+
+// One monster's built-in spawn-window setup: how many windows the camp runs and how many
+// minutes apart they open.
+export interface HnmWindowSetup {
+  monster: string;
+  windows: number;
+  minutes: number;
 }
 
 export interface ActivityCreateEventInput {
@@ -1045,13 +1384,22 @@ export interface ActivityCreateEventInput {
   autoStart?: boolean;
   // When true, attendees earn active-member credit (reconciled at close). Default true.
   countsTowardActive?: boolean;
-  // HNM signup board only: the monster the board is for, plus whether to re-post the
-  // board N hours before the next predicted pop when a new ToD is recorded.
+  // HNM signup board only: the monster the board is for, plus whether the board re-posts
+  // before the next predicted pop when a new ToD is recorded. No lead time here — that's
+  // entered on the End Camp / Post ToD form, so creating or editing an event never
+  // overwrites it.
   monsterName?: string | null;
   repeatOnTod?: boolean;
-  repeatLeadHours?: number | null;
   // HNM signup board only: optional "Day N" label shown on the board.
   dayNumber?: number | null;
+  // HNM signup board only: per-camp overrides for the linkshell's payout amounts. Null =
+  // use the linkshell default (what the form sends unless the creator opened "Change DKP").
+  // Open/Close apply in Standard mode, PerWindow in Wd mode, Claim/Kill in both.
+  hnmOpenBonusOverride?: number | null;
+  hnmCloseBonusOverride?: number | null;
+  hnmClaimBonusOverride?: number | null;
+  hnmKillBonusOverride?: number | null;
+  hnmPerWindowOverride?: number | null;
 }
 
 export interface ActivityAddEventMemberInput {
@@ -1082,6 +1430,8 @@ export interface ActivityCreateTodInput {
   linkshellId: number;
   monsterName: string;
   dayNumber?: number | null;
+  // Which pop window it showed up on. null = not recorded.
+  popWindow?: number | null;
   hq: boolean;
   additionalSeconds: number;
   claim: boolean;
@@ -1097,6 +1447,8 @@ export interface ActivityUpdateTodInput {
   todId: number;
   monsterName: string;
   dayNumber?: number | null;
+  // Which pop window it showed up on. null = not recorded.
+  popWindow?: number | null;
   hq: boolean;
   additionalSeconds: number;
   claim: boolean;
@@ -1525,4 +1877,179 @@ export interface ActivityClaimCandidate {
   currentDkp: number;
   totalDkp: number;
   totalSpent: number;
+}
+
+// ---- Charts (Sky, Sea, …) ----------------------------------------------------------------------
+// Mirrors the ActivityChart* records in Models/Activity/ActivityDtos.cs. Hand-written — there is no
+// codegen — so the two must be edited together.
+//
+// Board-agnostic: Sky's five gods and Sea's eight Jailers use these same interfaces, differing only
+// in what the server's ChartBoardCatalog says.
+
+/** Lower-case slug naming a CSS class. Never carries a colour value. */
+export type ChartThemeKey = string;
+
+/** Chooses the card layout. The data behind every kind is identical. */
+export type ChartBossKind = 'Standard' | 'MiniNm' | 'Final';
+
+/** Composed server-side so both surfaces word the ledger identically. */
+export type ChartCreditStatus = 'Credited' | 'Partial' | 'None' | 'NotTracked';
+
+export interface ActivityChartCredit {
+  membershipId: number | null;
+  characterName: string;
+  detail?: string | null;
+}
+
+export interface ActivityChartPopItem {
+  id: number;
+  board: string;
+  boss: string;
+  itemName: string;
+  heldByCharacterName?: string | null;
+  heldByMembershipId: number | null;
+  quantity: number;
+  notes?: string | null;
+  sortOrder: number;
+  credits: ActivityChartCredit[];
+  /** What the card's "Farmers Credited" column shows. */
+  creditCount: number;
+  updatedAt: string;
+}
+
+/**
+ * One pop item a boss takes. `name` is what gets stored; `source` is the mob that drops it; `label`
+ * is the two composed server-side, so this surface and the website word the picker identically.
+ */
+export interface ActivityChartPopItemOption {
+  name: string;
+  source?: string | null;
+  label: string;
+}
+
+export interface ActivityChartBoss {
+  boss: string;
+  themeKey: ChartThemeKey;
+  kind: ChartBossKind;
+  /**
+   * Section heading this card sits under, or null on an ungrouped board. Cards sharing a label are
+   * always adjacent, which is what lets the grid collapse them into runs.
+   */
+  group?: string | null;
+  emblemPath: string;
+  subtitle?: string | null;
+  /** Static reference content — currently only the final encounter's reward list. */
+  rewards: string[];
+  referenceNote?: string | null;
+  /**
+   * The card this one's drops feed ("Suzaku"), or null. Renders as the "→ Suzaku" arrow badge on a
+   * farm-NM card. Names a boss, never a colour.
+   */
+  leadsTo?: string | null;
+  /** That card's OWN theme key, so the badge is tinted in the TARGET's hue, not this card's. */
+  leadsToThemeKey?: ChartThemeKey | null;
+  /**
+   * Start a new row after this card. A board that sets it anywhere is drawn as centred rows of
+   * fixed-width cards rather than as a stretch-to-fit grid.
+   */
+  endsRow?: boolean;
+  /**
+   * The pop items this boss takes. Non-empty makes the form's "Pop item" box a picker; empty leaves
+   * it free text, which is what every board but Sky sends today.
+   */
+  popItemOptions: ActivityChartPopItemOption[];
+  items: ActivityChartPopItem[];
+  totalItems: number;
+  totalQuantity: number;
+}
+
+export interface ActivityChartLedgerCell {
+  boss: string;
+  status: ChartCreditStatus;
+  /** "6 / 8", or an em dash when the boss has nothing tracked. */
+  detail: string;
+  creditedItems: number;
+  totalItems: number;
+}
+
+export interface ActivityChartLedgerRow {
+  membershipId: number | null;
+  characterName: string;
+  /** False for someone credited on an item who has since left the linkshell. */
+  isCurrentMember: boolean;
+  rank?: string | null;
+  cells: ActivityChartLedgerCell[];
+  /** Items credited over items tracked across the whole board, plus the percentage. */
+  totalCredited: number;
+  totalTracked: number;
+  creditedPercent: number;
+}
+
+export interface ActivityChartLedger {
+  bosses: string[];
+  rows: ActivityChartLedgerRow[];
+}
+
+export interface ActivityChartRosterMember {
+  membershipId: number;
+  appUserId?: string | null;
+  characterName: string;
+  rank?: string | null;
+  /**
+   * This member's own other characters, for the "Held by" list. Farming credit is not offered per
+   * alt — credit belongs to a membership, and an alt is the same person.
+   */
+  altCharacterNames: string[];
+}
+
+export interface ActivityChartBoard {
+  linkshellId: number;
+  board: string;
+  boardLabel: string;
+  blurb: string;
+  bosses: ActivityChartBoss[];
+  /**
+   * Group labels drawn as vertical columns rather than rows of the grid — Sky's four paths, where
+   * the two farm NMs that feed a god stack above it. Empty for every other board. A run not named
+   * here renders below the columns.
+   */
+  pathColumns: string[];
+  /**
+   * Draw as centred rows of fixed-width cards rather than a stretch-to-fit grid, for a board that
+   * chose its own row lengths (Dynamis, Limbus, HENM).
+   */
+  centersRows: boolean;
+  ledger: ActivityChartLedger;
+  /** Empty unless canManage — a reader has nobody to pick. */
+  roster: ActivityChartRosterMember[];
+  lastUpdatedUtc?: string | null;
+  /** The server's own answer on whether this member may edit. Never re-derive it from permissions. */
+  canManage: boolean;
+}
+
+/** The boards the sub-nav offers, so the client does not keep its own list. */
+export interface ActivityChartBoardSummary {
+  board: string;
+  label: string;
+}
+
+export interface ActivityChartPopItemInput {
+  boss: string;
+  itemName: string;
+  heldByCharacterName?: string | null;
+  heldByMembershipId?: number | null;
+  quantity: number;
+  notes?: string | null;
+  /**
+   * Who farmed it, named while the row is written instead of in a second trip through the credits
+   * endpoint. Set-wise: a list REPLACES what the row has, and an empty list clears it. Omitting the
+   * field leaves the row's credits alone — it is not the same as sending [].
+   */
+  credits?: ActivityChartCreditInput[];
+}
+
+export interface ActivityChartCreditInput {
+  membershipId?: number | null;
+  characterName?: string | null;
+  detail?: string | null;
 }

@@ -33,6 +33,13 @@ namespace LinkshellManagerDiscordApp.Models
         public DateTime? SoldAt { get; set; }
         public string? SoldByCharacterName { get; set; }
         // The RevenueEntry created for this sale, so unselling can remove exactly it.
+        //
+        // SUPERSEDED by JournalEntryId below. Both are written for one release so rolling the
+        // app binary back is a non-event; the column goes when RevenueEntries does.
         public int? RevenueEntryId { get; set; }
+
+        // The treasury entry recorded for this sale. Unselling REVERSES it rather than deleting
+        // it, so the fact that the item was once sold — and for how much — survives.
+        public int? JournalEntryId { get; set; }
     }
 }

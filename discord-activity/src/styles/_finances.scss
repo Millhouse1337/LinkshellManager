@@ -1,0 +1,513 @@
+/* ===== Management > Finances > Treasury =====
+   Replaces the .revenue-* rules that used to live in linkshell-tab.component.ts's inline styles
+   block, plus the entry-item--income / --expense classes that template emitted and nothing ever
+   defined.
+
+   Every colour is a token. Per STYLE.md and discord-activity/CLAUDE.md there are no raw colour
+   literals outside _tokens.scss, and that applies to component style blocks too — which is part of
+   why these moved out of the component. */
+
+.panel-tab .fin-head-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.panel-tab .fin-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* --- Card 1: the balance sheet. What we have, what we owe, what that leaves. ---
+   Reads top to bottom with a subtotal under each section, because the whole point is that one
+   subtracts from the other. A row of figures side by side cannot show that. */
+.panel-tab .fin-sheet {
+  padding: 12px 14px 4px;
+}
+
+/* The balance sheet's working, behind a disclosure. The summary is the whole two-row header — the
+   title strip AND the flow chips — so everything a collapsed card shows is also its hit target. */
+.panel-tab .fin-balance__summary {
+  display: block;
+  cursor: pointer;
+  /* Both are needed to drop the native triangle: list-style for Firefox/Chrome, the pseudo-element
+     for Safari. Without them there is a marker AND our chevron. */
+  list-style: none;
+}
+
+.panel-tab .fin-balance__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* What moved, in and out, USED to be a second header row of its own. It is three chips; it now sits
+   in the header beside the others, and the card is a row shorter in both states. */
+
+/* flex:1 rather than absolute centring: the chevron takes the whole gap between the title and the
+   chips and centres inside it, so it can never overlap either of them on a narrow iframe. */
+.panel-tab .fin-balance__chev {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-balance__chev svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.12s ease;
+}
+
+.panel-tab .fin-balance[open] .fin-balance__chev svg {
+  transform: rotate(180deg);
+}
+
+.panel-tab .fin-balance__summary:hover .fin-balance__chev {
+  color: var(--fg-1);
+}
+
+/* Have on the left, owe on the right. auto-fit so the Discord iframe folds it back to one column
+   instead of squeezing two 120px columns of numbers. */
+.panel-tab .fin-sheet__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 4px 28px;
+  padding: 12px 14px 4px;
+}
+
+.panel-tab .fin-sheet__col {
+  min-width: 0;
+}
+
+/* The answer, outside the disclosure. Its own padding because the sheet above it is now a sibling
+   that disappears. */
+.panel-tab .fin-sheet--answer {
+  padding-top: 0;
+}
+
+.panel-tab .fin-sheet__section {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-sheet__section:first-child {
+  margin-top: 0;
+}
+
+.panel-tab .fin-sheet__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.panel-tab .fin-sheet__row .num {
+  color: var(--fg);
+}
+
+/* Section subtotal: a rule above it, the way it would be written on paper. */
+.panel-tab .fin-sheet__row--total {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* The bottom line, marked off by a heavier rule so it reads as the answer rather than one more row. */
+.panel-tab .fin-sheet__row--worth {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 2px solid var(--border-2);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.panel-tab .fin-sheet__row--worth .num {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* Who the "owed to members" figure is owed to. Collapsed, because the total is the number most
+   people came for, and the names only matter when someone is about to settle up. */
+.panel-tab .fin-sheet__who {
+  margin: 2px 0 0 12px;
+}
+
+.panel-tab .fin-sheet__members {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.panel-tab .fin-sheet__members .fin-sheet__row {
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+/* The basis note, and the running commentary under the gil-count form. Disclosed rather than
+   assumed, and served from the server so both front-ends say the same thing. */
+.panel-tab .fin-basis {
+  padding: 0 14px 12px;
+  font-size: 11px;
+  color: var(--fg-4);
+}
+
+/* --- The form --- */
+.panel-tab .fin-help {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-preview {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+/* --- Sharing one amount between several members ---
+   Rows are buttons, not checkboxes: the only checkbox styling in this app is the iOS-style toggle
+   switch, which reads as a settings control rather than a selection. role="checkbox" plus
+   aria-checked carries the semantics a native input would have given for free. */
+.panel-tab .fin-payout {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-tab .fin-payout__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-payout__search {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.panel-tab .fin-payout__count {
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.panel-tab .fin-payout__list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-tab .fin-payout__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-tab .fin-payout__row:last-child {
+  border-bottom: 0;
+}
+
+.panel-tab .fin-payout__row:hover {
+  background: var(--surface-3);
+}
+
+.panel-tab .fin-payout__row.is-picked {
+  background: var(--accent-weak);
+  color: var(--fg);
+}
+
+/* An empty box that fills in when picked, so the picked state is legible without relying on the
+   row background alone. */
+.panel-tab .fin-payout__tick {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-hot);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--fg);
+}
+
+.panel-tab .fin-payout__row.is-picked .fin-payout__tick {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.panel-tab .fin-payout__row.is-picked .fin-payout__tick::before {
+  content: '✓';
+}
+
+.panel-tab .fin-payout__name {
+  flex: 1 1 auto;
+}
+
+.panel-tab .fin-payout__rank {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-4);
+}
+
+/* Who gets exactly how much, before anything is recorded. The leftover gil is at most 1 each, but
+   showing it is what stops "it did not divide evenly" reading as a bug. */
+.panel-tab .fin-payout__shares {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-payout__share strong {
+  color: var(--fg-2);
+  font-weight: 600;
+}
+
+.panel-tab .fin-payout__warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 11px;
+  border: 1px solid var(--warning);
+  border-radius: var(--r-md);
+  background: var(--warning-weak);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+/* --- Toolbar: search + the direction chips --- */
+.panel-tab .fin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+}
+
+.panel-tab .fin-search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.panel-tab .fin-filter {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* --- The list --- */
+.panel-tab .fin-scroll {
+  max-height: 460px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.panel-tab .fin-daygroup {
+  margin-bottom: 4px;
+}
+
+/* Sticks to the top of the scroll area so the day being read stays labelled. The left inset matches
+   the entry rows below it. */
+.panel-tab .fin-day-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 14px 6px;
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Direction as a left edge, so a column of entries can be scanned for outflows without reading the
+   numbers. The old template emitted these two classes and nothing styled them. */
+.panel-tab .entry-item--in {
+  border-left: 2px solid var(--success);
+}
+
+.panel-tab .entry-item--out {
+  border-left: 2px solid var(--warning);
+}
+
+.panel-tab .fin-reason {
+  font-style: italic;
+  color: var(--fg-4);
+}
+
+/* --- The one place debits and credits appear in the whole product --- */
+.panel-tab .fin-details {
+  margin-top: 6px;
+}
+
+.panel-tab .fin-details > summary {
+  font-size: 11px;
+  color: var(--fg-4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.panel-tab .fin-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-tab .fin-details > summary::before {
+  content: '▸ ';
+}
+
+.panel-tab .fin-details[open] > summary::before {
+  content: '▾ ';
+}
+
+.panel-tab .fin-halves {
+  margin-top: 5px;
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-tab .fin-half {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-half__class {
+  color: var(--fg-4);
+}
+
+/* Who a line belongs to. A split writes N lines on one category, so without the name those rows are
+   indistinguishable from each other. */
+.panel-tab .fin-half__member {
+  color: var(--fg-2);
+  font-weight: 500;
+}
+
+/* --- Picking one member ---
+   The typed name is also the search term, so the menu hangs off the input rather than sitting in a
+   second field. Absolutely positioned so opening it does not reflow the form row. */
+.panel-tab .fin-memberpick {
+  position: relative;
+}
+
+.panel-tab .fin-memberpick__list {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-tab .fin-memberpick__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-tab .fin-memberpick__row:last-child {
+  border-bottom: 0;
+}
+
+.panel-tab .fin-memberpick__row:hover {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+.panel-tab .fin-memberpick__name {
+  flex: 1 1 auto;
+}
+
+.panel-tab .fin-memberpick__rank {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--fg-4);
+}
+
+/* What this person is still owed — the number that is about to be filled in for you. */
+.panel-tab .fin-memberpick__owed {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+/* --- Pager --- */
+.panel-tab .fin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+}
+
+.panel-tab .fin-pager__label {
+  font-size: 12px;
+  color: var(--fg-3);
+}

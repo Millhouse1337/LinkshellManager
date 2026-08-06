@@ -118,7 +118,7 @@
                         </select>
                         <select [ngModel]="jobEditFor(slot.slotId).subJob" (ngModelChange)="setJobEdit(slot.slotId, { subJob: $event })"
                           [disabled]="!jobEditFor(slot.slotId).mainJob">
-                          <option value="">Player's choice</option>
+                          <option value="">Any sub job</option>
                           @for (j of subJobOptions(); track j) {
                             @if (j !== jobEditFor(slot.slotId).mainJob) { <option [value]="j">{{ j }}</option> }
                           }

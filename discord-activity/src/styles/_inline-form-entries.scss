@@ -70,12 +70,8 @@
   margin-top: 4px;
 }
 
-/* ===== Revenue totals ===== */
-.panel-tab .revenue-totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
+/* The treasury's chip row is .fin-chips in _finances.scss now; the old .revenue-totals rule went
+   with the markup that used it. */
 
 /* ===== Rules / Announcements cards (dashboard) =====
    Each card carries an accent class that sets --acc; the icon + tag + hover read it,

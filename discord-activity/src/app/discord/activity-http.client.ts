@@ -109,7 +109,7 @@ export class ActivityHttpClient {
 
     const responseText = await response.text();
     if (!responseText) {
-      throw new Error(`Activity request failed with status ${response.status}.`);
+      throw new Error(this.emptyBodyMessage(response.status));
     }
 
     let parsed: { error?: string } | null = null;
@@ -122,6 +122,22 @@ export class ActivityHttpClient {
       throw new Error(parsed.error);
     }
     throw new Error(this.nonJsonMessage(response, responseText));
+  }
+
+  // ASP.NET's Forbid()/Challenge() return an empty body, so there's no JSON
+  // { error } to surface. Map the common auth statuses to something actionable
+  // instead of a bare "Activity request failed with status 403".
+  private emptyBodyMessage(status: number): string {
+    if (status === 403) {
+      // Keep this identical to the server's generic 403 body (Program.cs
+      // OnRedirectToAccessDenied) so the message reads the same whether it comes
+      // from the response body or this empty-body fallback.
+      return "You don't have permission to do that. If you think you should, ask a linkshell leader to update your role.";
+    }
+    if (status === 401) {
+      return 'Your session may have expired — reload the Activity and try again.';
+    }
+    return `Activity request failed with status ${status}.`;
   }
 
   // Turns a non-JSON response (HTML login/access-denied page, SPA fallback, a

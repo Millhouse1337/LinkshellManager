@@ -208,12 +208,13 @@ public sealed partial class ActivityDataController
         var context = string.IsNullOrWhiteSpace(request.Context) ? null : request.Context!.Trim();
         var nowUtc = DateTime.UtcNow;
 
+        // Time stays null — see LootHistoryController: this row carries loot, not an observed ToD,
+        // and stamping "now" let it hijack the monster's ToD Tracker card. TimeStamp records the write.
         var tod = new Tod
         {
             LinkshellId = linkshellId,
             MonsterName = context ?? "Manual Loot",
             Claim = true,
-            Time = nowUtc,
             TimeStamp = nowUtc,
             TotalClaims = 1
         };

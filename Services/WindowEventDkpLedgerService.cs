@@ -86,12 +86,27 @@ public sealed class WindowEventDkpLedgerService
             }
         }
 
+        // Camp handoffs (HnmCampReviewHandoffService) stamp the account straight onto the entry,
+        // so prefer that over the name lookup. Addon "/lsm now" captures leave AppUserId null and
+        // fall through to the by-name path below exactly as before.
+        //
+        // This is what keeps a camp from silently underpaying: the roster is keyed on AppUserId,
+        // but a member whose in-game character isn't one of the four names indexed above would
+        // resolve to nothing by name and simply never be credited — no error, no log.
+        var membershipByAppUserId = membershipsWithUser
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Membership.AppUserId))
+            .GroupBy(pair => pair.Membership.AppUserId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Membership, StringComparer.OrdinalIgnoreCase);
+
         var candidates = combined
             .Select(item => new
             {
                 item.Snapshot,
                 item.Entry,
-                Membership = membershipsByCharacterName.GetValueOrDefault(item.Entry.CharacterName.Trim())
+                Membership = (!string.IsNullOrWhiteSpace(item.Entry.AppUserId)
+                        ? membershipByAppUserId.GetValueOrDefault(item.Entry.AppUserId!)
+                        : null)
+                    ?? membershipsByCharacterName.GetValueOrDefault(item.Entry.CharacterName.Trim())
             })
             .Where(item => item.Membership is not null && !string.IsNullOrWhiteSpace(item.Membership.AppUserId))
             .ToList();
@@ -138,6 +153,13 @@ public sealed class WindowEventDkpLedgerService
         // on the DKP grouping card — they fall through to the default pool like any unmapped type.
         var windowEventPool = DkpPoolRef.Derived(windowEvent.EntryType);
 
+        // A camp-sourced event archives an EventHistory the way the old End Camp finalizers did —
+        // but at POST, because that is when the DKP becomes real. Reading the camp's dates off
+        // SourceEvent would be wrong: the pop already re-pointed Event.StartTime to the next
+        // predicted repop, so the history would be dated to the pop that hasn't happened. The
+        // Camp* columns are the snapshot taken at End Camp for exactly this.
+        var campHistory = BuildCampEventHistory(windowEvent);
+
         var written = 0;
         foreach (var item in candidates)
         {
@@ -153,24 +175,49 @@ public sealed class WindowEventDkpLedgerService
                 }
             }
 
+            var amount = AmountForCharacter(item.Entry.CharacterName);
+
+            campHistory?.AppUserEventHistories.Add(new AppUserEventHistory
+            {
+                AppUserId = membership.AppUserId,
+                CharacterName = item.Entry.CharacterName.Trim(),
+                JobName = item.Entry.MainJob,
+                SubJobName = item.Entry.SubJob,
+                StartTime = windowEvent.CampStartedAtUtc,
+                Duration = null,
+                EventDkp = amount,
+                IsQuickJoin = true,
+                IsVerified = true,
+                ActiveCredit = true,
+            });
+
             await _dkpLedger.AppendAsync(
                 membership,
                 "SnapshotEarned",
-                AmountForCharacter(item.Entry.CharacterName),
+                amount,
                 item.Snapshot.CapturedAtUtc,
                 windowEventPool,
                 new DkpEntryContext(
                     CharacterName: membership.CharacterName,
                     EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
                     EventType: windowEvent.EntryType,
-                    EventLocation: item.Entry.Zone,
-                    EventStartTime: windowEvent.FirstCapturedAtUtc,
-                    EventEndTime: windowEvent.LastCapturedAtUtc,
-                    Details: $"DKP earned from posted snapshot Window Event #{windowEvent.Id}.",
+                    EventLocation: campHistory is not null ? windowEvent.CampEventLocation : item.Entry.Zone,
+                    EventStartTime: campHistory is not null ? windowEvent.CampStartedAtUtc : windowEvent.FirstCapturedAtUtc,
+                    EventEndTime: campHistory is not null ? windowEvent.CampEndedAtUtc : windowEvent.LastCapturedAtUtc,
+                    Details: campHistory is not null
+                        ? $"HNM camp DKP, reviewed and posted as Window Event #{windowEvent.Id}."
+                        : $"DKP earned from posted snapshot Window Event #{windowEvent.Id}.",
                     SourceWindowEventId: windowEvent.Id,
-                    AttInputRowNumber: attInputRowNumber),
+                    AttInputRowNumber: attInputRowNumber,
+                    EventHistory: campHistory),
                 cancellationToken);
             written++;
+        }
+
+        // Only archive when someone was actually credited, matching how an empty event behaves.
+        if (campHistory is not null && campHistory.AppUserEventHistories.Count > 0)
+        {
+            _db.EventHistories.Add(campHistory);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -239,6 +286,20 @@ public sealed class WindowEventDkpLedgerService
         // The edit may have changed the entry type, which changes which pool these rows belong to.
         var newPoolId = await _dkpPools.ResolveAsync(windowEvent.LinkshellId, newEntryType, cancellationToken);
 
+        // A camp-sourced event also wrote an EventHistory at post time. Its per-member EventDkp
+        // rows are the Event History / DKP sheet view of this payout, so an edit has to move them
+        // too — otherwise history keeps reporting the pre-edit amounts forever.
+        var historyIds = ledgerEntries
+            .Where(entry => entry.EventHistoryId.HasValue)
+            .Select(entry => entry.EventHistoryId!.Value)
+            .Distinct()
+            .ToList();
+        var historyRows = historyIds.Count == 0
+            ? new List<AppUserEventHistory>()
+            : await _db.AppUserEventHistories
+                .Where(row => historyIds.Contains(row.EventHistoryId))
+                .ToListAsync(cancellationToken);
+
         foreach (var entry in ledgerEntries)
         {
             var newAmountForEntry = AmountForCharacter(entry.CharacterName);
@@ -252,6 +313,13 @@ public sealed class WindowEventDkpLedgerService
             _dkpLedger.Amend(entry, newAmountForEntry, newDetails: null, membership);
             entry.EventType = newEntryType;
             _dkpLedger.Repoint(entry, newPoolId);
+
+            foreach (var row in historyRows.Where(row =>
+                         row.EventHistoryId == entry.EventHistoryId &&
+                         string.Equals(row.AppUserId, entry.AppUserId, StringComparison.OrdinalIgnoreCase)))
+            {
+                row.EventDkp = newAmountForEntry;
+            }
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -277,6 +345,39 @@ public sealed class WindowEventDkpLedgerService
             created += await EnsurePostedWindowEventLedgerEntriesAsync(windowEventId, cancellationToken);
         }
         return created;
+    }
+
+    // The EventHistory archive for a camp-sourced window event, or null for an ordinary addon
+    // snapshot event (those aren't camps and get no history row, same as before).
+    //
+    // Everything comes off the WindowEvent's Camp* columns rather than SourceEvent: the camp row
+    // is RECYCLED for the next pop, so by post time its StartTime points at a future repop and
+    // CommencementStartTime is null. SourceEventId can also be null already if the camp was
+    // deleted — the review row still has to be postable.
+    private static EventHistory? BuildCampEventHistory(WindowEvent windowEvent)
+    {
+        if (windowEvent.SourceEventId is null && windowEvent.CampEndedAtUtc is null)
+        {
+            return null;
+        }
+
+        return new EventHistory
+        {
+            LinkshellId = windowEvent.LinkshellId,
+            EventName = windowEvent.Name,
+            EventType = windowEvent.CampEventType,
+            EventLocation = windowEvent.CampEventLocation,
+            StartDate = windowEvent.CampStartedAtUtc?.Date,
+            StartTime = windowEvent.CampStartedAtUtc,
+            EndTime = windowEvent.CampEndedAtUtc,
+            CommencementStartTime = windowEvent.CampStartedAtUtc,
+            Duration = null,
+            EventDkp = null,
+            Details = $"HNM camp, reviewed and posted as Window Event #{windowEvent.Id}.",
+            CountsTowardActive = true,
+            TimeStamp = windowEvent.PostedToSheetAt ?? windowEvent.CampEndedAtUtc,
+            AppUserEventHistories = new List<AppUserEventHistory>(),
+        };
     }
 
     private static List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> BuildCombinedMembers(IEnumerable<AttendanceSnapshot> snapshots)

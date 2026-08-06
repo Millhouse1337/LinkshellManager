@@ -541,10 +541,9 @@ export class AuctionsPanelComponent {
 
   protected itemMinBid(item: { startingBidDkp?: number | null; currentHighestBid?: number | null }): number {
     const highest = item.currentHighestBid ?? 0;
-    if (highest > 0) return highest + 1;
-    // First bid: any positive amount — the starting bid is a suggested opening
-    // (shown in its own column), not a floor.
-    return 1;
+    // The starting bid is a hard floor; once there's a high bid the next one must
+    // also beat it by at least 1.
+    return Math.max(item.startingBidDkp ?? 0, highest + 1, 1);
   }
 
   protected isCurrentUserWinning(item: { currentHighestBidderAppUserId?: string | null; currentHighestBid?: number | null }): boolean {
@@ -690,20 +689,25 @@ export class AuctionsPanelComponent {
     }
   }
 
-  protected async submitAuctionBid(itemId: number): Promise<void> {
+  protected async submitAuctionBid(item: {
+    id: number;
+    startingBidDkp?: number | null;
+    currentHighestBid?: number | null;
+  }): Promise<void> {
     if (!this.selectedLinkshellId) {
       return;
     }
 
-    const bidAmount = this.auctionBidDrafts[itemId];
-    if (!bidAmount || bidAmount <= 0) {
-      this.activity.actionError.set('Enter a bid greater than 0.');
+    const bidAmount = this.auctionBidDrafts[item.id];
+    const minimumBid = this.itemMinBid(item);
+    if (!bidAmount || bidAmount < minimumBid) {
+      this.activity.actionError.set(`Enter a bid of at least ${minimumBid} DKP.`);
       this.activity.actionMessage.set(null);
       return;
     }
 
-    await this.activity.placeAuctionBid(itemId, bidAmount, this.selectedLinkshellId);
-    this.auctionBidDrafts[itemId] = null;
+    await this.activity.placeAuctionBid(item.id, bidAmount, this.selectedLinkshellId);
+    this.auctionBidDrafts[item.id] = null;
   }
 
   protected async markAuctionHistoryItemReceived(itemId: number): Promise<void> {

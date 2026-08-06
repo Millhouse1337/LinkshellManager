@@ -134,35 +134,50 @@ each time.
  /lsm now     1m later             attaches        new event
 ```
 
-### B) Duplicate detection on the new snapshot
+### B) Folding close-together posts into one roster
 
-After saving the new snapshot to the parent event,
-`FindLikelyDuplicateSnapshotAsync` flags it as a **PossibleDuplicate**
-when all of:
+Nothing is flagged as a duplicate. A post landing close in time to an
+existing snapshot on the same Window Event is **folded into it** — its
+members are unioned in and no second snapshot row is created:
 
 | Condition | Detail |
 |---|---|
-| **Same Window Event** | Both snapshots attached to the same parent |
-| **Within ±8 minutes** | `\|other.CapturedAt − this.CapturedAt\| ≤ 8 min` |
-| **Other not already Ignored / Duplicate** | Skips already-filtered rows |
-| **Roster overlap ≥ 75%** | `overlap / min(this.size, other.size) ≥ 0.75` |
+| **Same Window Event** | Both posts attached to the same parent |
+| **Target still Active** | A row an officer marked `Duplicate`/`Ignored` is never a target |
+| **Within the merge window** | `\|target.CapturedAt − this.CapturedAt\| ≤ merge window` |
 
-Both snapshots stay in the DB; downstream sheet sync, DKP credit, and
-the Window Events UI **exclude** `PossibleDuplicate` and `Duplicate`
-rows from the credited roster. Officers can flip the status back to
-`Active` (or to `Ignored`) on the Window Events page.
+The merge window is scaled to the monster's own spawn window, so a fold
+can never span two real windows (`HnmConfig.SnapshotMergeWindow`):
+
+| Camp | Spawn window | Merge window |
+|---|---|---|
+| Tiamat / Jormungand / Vrtra | 60 min × 25 | **5 min** |
+| Fafnir / Behemoth / Adamantoise (+HQ) | 10 min × 7 | **3 min** |
+| Everything else (Sky, farm NMs, ad-hoc) | — | **3 min** |
+
+There is no roster-similarity test. Two officers each scanning their own
+alliance barely overlap, and that is exactly the case that most needs
+combining. The target's `CapturedAt` does not move when a post folds in,
+so a steady drip of posts eventually starts a fresh snapshot instead of
+chaining into one that grows all camp long.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │   1-MINUTE-LATER SCENARIO                                   │
 ├─────────────────────────────────────────────────────────────┤
-│   Roster mostly the same  →  PossibleDuplicate (no double-  │
-│                              credit; officer reviews)       │
+│   Inside the merge window   →  folded in; one snapshot,     │
+│                                union of both rosters        │
 │                                                             │
-│   Roster very different   →  fresh Active snapshot on the   │
-│                              same event (combined roster)   │
+│   Outside the merge window  →  fresh Active snapshot on the │
+│                                same event (combined roster) │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+> **Why this replaced duplicate detection.** DKP is credited per Window
+> Event, not per snapshot, so double-posting never double-paid. But a
+> flagged snapshot is *excluded* from the combined roster — so anyone who
+> appeared only in the flagged post silently lost their credit. Folding
+> keeps every name.
 
 ---
 
@@ -171,7 +186,7 @@ rows from the credited roster. Officers can flip the status back to
 | You want… | How to do it |
 |---|---|
 | A **new event** for a same-name repop within 21h | Close the previous Window Event on the web UI first — closed events are no longer absorbed. |
-| To reinstate a flagged duplicate | Window Events page → flip status from `PossibleDuplicate` back to `Active`. |
+| Two posts to stay **separate** rows | Leave more than the merge window between them (5 min on a wyrm, 3 min otherwise), or post the second under a different event name. |
 | To mark a snapshot junk | Window Events page → set status to `Ignored`. |
 | To track multi-day pops separately | Use a day suffix in the name: `/lsm now Fafnir D2`, `/lsm now Fafnir D3` — they normalize differently so they don't group. |
 

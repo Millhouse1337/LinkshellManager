@@ -1,0 +1,30 @@
+<div class="panel-tab">
+  @if (linkshellId(); as id) {
+    <!-- Gil first: it is the number people open this tab for. Items sit in the MIDDLE of it, above
+         the transactions list — selling one is what moves the totals, and the transactions list runs
+         long enough to bury anything placed under it. finances-section has a slot at that point;
+         see the comment there for why Items is projected rather than rendered inside it. -->
+    @if (showGil()) {
+      <app-finances-section [linkshellId]="id">
+        @if (showItems()) {
+          <app-items-section [linkshellId]="id" [canManage]="canManageItems()" />
+        }
+      </app-finances-section>
+    } @else if (showItems()) {
+      <!-- Gil is switched off, so there is no host to project into. -->
+      <app-items-section [linkshellId]="id" [canManage]="canManageItems()" />
+    }
+    @if (!showGil() && !showItems()) {
+      <div class="empty-state">
+        <div class="empty-state-desc">
+          Gil and Items are both switched off for this linkshell. A leader can turn them back on under
+          Configurations.
+        </div>
+      </div>
+    }
+  } @else {
+    <div class="empty-state">
+      <div class="empty-state-desc">Join a linkshell to track its gil and items.</div>
+    </div>
+  }
+</div>

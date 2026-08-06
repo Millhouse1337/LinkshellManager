@@ -1,0 +1,30 @@
+<div class="mdta">
+  <div class="mdta__toolbar" role="toolbar" aria-label="Formatting">
+    @for (action of actions; track action.id) {
+      @if (action.startsGroup) {
+        <span class="mdta__divider" aria-hidden="true"></span>
+      }
+      <button
+        type="button"
+        class="mdta__btn"
+        [title]="action.title"
+        [attr.aria-label]="action.title"
+        (click)="apply(action.id)">
+        <span class="mdta__glyph" [class]="action.glyphClass ?? ''">{{ action.glyph }}</span>
+      </button>
+    }
+    <span class="mdta__count" [class.mdta__count--over]="length > maxLength()">
+      {{ length }} / {{ maxLength() }}
+    </span>
+  </div>
+
+  <textarea
+    #area
+    class="mdta__area"
+    [attr.aria-label]="ariaLabel()"
+    [attr.placeholder]="placeholder()"
+    [attr.maxlength]="maxLength()"
+    [value]="value() ?? ''"
+    (input)="onInput($event)"
+    (keydown)="onKeydown($event)"></textarea>
+</div>

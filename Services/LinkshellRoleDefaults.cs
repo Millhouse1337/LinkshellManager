@@ -18,6 +18,7 @@ public static class LinkshellRoleDefaults
             CanModerateLiveEvent = true,
             CanAddLoot = true,
             CanManageInventory = true,
+            CanManageCharts = true,
             CanManageTreasury = true,
             CanManageRules = true,
             CanManageAnnouncements = true,
@@ -45,6 +46,9 @@ public static class LinkshellRoleDefaults
             CanModerateLiveEvent = true,
             CanAddLoot = true,
             CanManageInventory = true,
+            // Charts is a shared operational board like ToDs / Events / Rules — on for officers by
+            // default. It is not a money surface like Treasury, where withholding is the point.
+            CanManageCharts = true,
             CanManageTreasury = false,
             CanManageRules = true,
             CanManageAnnouncements = true,

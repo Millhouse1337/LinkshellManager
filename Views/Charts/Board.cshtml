@@ -1,0 +1,534 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.ChartBoardViewModel
+@{
+    ViewData["Title"] = $"{Model.BoardLabel} Pop Item Tracker";
+    ViewData["BodyClass"] = "lsm-page";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@Model.BoardLabel Pop Item Tracker</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span>@Model.LinkshellName</span>
+                <span class="dot"> · </span>
+            }
+            <span>@Model.Blurb</span>
+            @if (Model.LastUpdatedUtc.HasValue)
+            {
+                <span class="dot"> · </span>
+                <span>Updated @Model.LastUpdatedUtc.Value.ToLocalTime().ToString("g")</span>
+            }
+        </div>
+    </div>
+
+    <div class="page-actions chart-subnav">
+        @foreach (var board in Model.Boards)
+        {
+            <a class="btn sm @(board.Key == Model.BoardKey ? "primary" : "ghost")"
+               asp-action="@board.Key">@board.Label</a>
+        }
+    </div>
+</div>
+
+@if (TempData["ChartsMessage"] is string okMessage)
+{
+    <div class="alert alert-success fade d1" style="margin-bottom:12px">@okMessage</div>
+}
+@if (TempData["ChartsError"] is string errorMessage)
+{
+    <div class="alert alert-danger fade d1" style="margin-bottom:12px">@errorMessage</div>
+}
+
+@if (Model.LinkshellId == 0)
+{
+    <div class="card fade d2">
+        <div class="empty">Join a linkshell to track @Model.BoardLabel pop items.</div>
+    </div>
+}
+else
+{
+    @if (Model.CanManage)
+    {
+        @* chart-form-card lifts the card's `overflow: hidden`, which would otherwise clip the credit
+           dropdown where it hangs past the bottom of the card. *@
+        <div class="card chart-form-card fade d2">
+            <div class="card-head"><div class="card-title">Add a pop item</div></div>
+            <div class="card-body">
+                <form asp-action="AddItem" method="post" class="chart-form">
+                    <input type="hidden" name="board" value="@Model.BoardKey" />
+                    <div class="chart-form__field">
+                        <label for="add-boss">Boss</label>
+                        <select id="add-boss" name="boss">
+                            @foreach (var boss in Model.Bosses)
+                            {
+                                <option value="@boss.Boss">@boss.Boss</option>
+                            }
+                        </select>
+                    </div>
+                    @* Rendered for the boss the select above opens on — the first card on the board.
+                       The script at the foot of the page swaps it when that changes. *@
+                    <div class="chart-form__field">
+                        <label for="add-item">Pop item</label>
+                        <partial name="_ChartPopItemField"
+                                 model='new ChartPopItemFieldContext(Model.Bosses[0].PopItemOptions, null, "add-item")' />
+                    </div>
+                    <div class="chart-form__field">
+                        <label for="add-holder">Held by</label>
+                        <input id="add-holder" name="heldByCharacterName" class="input" type="text"
+                               list="chart-roster-names" placeholder="Character name or alt" />
+                    </div>
+                    <div class="chart-form__field">
+                        <label for="add-qty">Qty</label>
+                        <input id="add-qty" name="quantity" class="input" type="number" min="0" value="1" />
+                    </div>
+                    @* Farming credit, picked while the row is written rather than in a second pass
+                       through the row's Credits drawer. A <details> rather than a <select multiple>:
+                       crediting a whole farm night is the common case, and ctrl-clicking fifteen
+                       names is not that — and this needs no script at all. Unticked boxes do not
+                       post, so it is the same set-wise contract SetCredits uses. *@
+                    <div class="chart-form__field">
+                        <label for="add-credits">Farming credit</label>
+                        <details id="add-credits" class="chart-multiselect">
+                            <summary class="chart-multiselect__toggle">
+                                <span class="chart-multiselect__value">Nobody credited</span>
+                            </summary>
+                            <div class="chart-multiselect__panel">
+                                @if (Model.Roster.Count == 0)
+                                {
+                                    <div class="chart-multiselect__none">No members on the roster to credit.</div>
+                                }
+                                else
+                                {
+                                    <div class="chart-multiselect__list">
+                                        @foreach (var member in Model.Roster)
+                                        {
+                                            <label class="chart-multiselect__row">
+                                                <input type="checkbox" name="membershipIds" value="@member.MembershipId" />
+                                                @member.CharacterName
+                                            </label>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </details>
+                    </div>
+
+                    <div class="chart-form__field">
+                        <label for="add-notes">Notes</label>
+                        <input id="add-notes" name="notes" class="input" type="text" placeholder="Optional" />
+                    </div>
+                    <div class="chart-form__actions">
+                        <button type="submit" class="btn primary">Add item</button>
+                    </div>
+                </form>
+
+                @* Each member, then their REAL alts by their own names — the same characters their
+                   profile registers, not a made-up "alt of X" string. A pop item sitting on
+                   somebody's alt sits there under the alt's name, which is what an officer would
+                   look for. The main is the option's label, so it is obvious whose alt it is.
+                   Shared by the add form and every edit drawer on the page. *@
+                <datalist id="chart-roster-names">
+                    @foreach (var member in Model.Roster)
+                    {
+                        <option value="@member.CharacterName"></option>
+                        @foreach (var alt in member.AltCharacterNames)
+                        {
+                            <option value="@alt">alt of @member.CharacterName</option>
+                        }
+                    }
+                </datalist>
+            </div>
+        </div>
+    }
+
+    @* ---- ONE grid over every card, in the catalog's order, with a full-row heading per group run.
+         The heading is a grid ITEM spanning every track, not a wrapper around a sub-grid: the cards
+         keep the widths auto-fit gives them and the card partial is not duplicated per group. A
+         board that declares no groups is ONE run with a null label and emits no heading at all.
+
+         Mini NMs and finales are grid items too. They used to stack full-width beneath this grid,
+         which put them outside the heading of the group they belong to as soon as a board
+         interleaved kinds with groups — Limbus does. Kind picks the card's chrome, never its
+         position or width. Same call the Activity made. ---- *@
+    @* ---- Path columns, when the board declares any (Sky). Each run is one COLUMN: its heading, then
+         its cards stacked under it. ONE grid rather than a container per column, filled column-wise
+         (grid-auto-flow: column) — that is what makes the tiers line up sideways, because a grid row
+         is as tall as its tallest card and every column shares those rows. It needs every path to
+         hold the same number of cards, which ChartBoardCatalogTests pins. ---- *@
+    @if (Model.PathGroups.Count > 0)
+    {
+        <div class="chart-paths fade d2" style="--chart-path-rows: @(Model.PathGroups.Max(group => group.Bosses.Count) + 1)">
+            @foreach (var group in Model.PathGroups)
+            {
+                <h2 class="chart-path-heading">@group.Label</h2>
+                foreach (var boss in group.Bosses)
+                {
+                    <partial name="_ChartBossCard" model="new ChartBossCardContext(Model, boss)" />
+                }
+            }
+        </div>
+    }
+
+    @* ---- Everything not drawn as a column. On a path board that is the finale run, centred under
+         the columns and sized in COLUMN widths so it lines up with them — a lone card takes two
+         columns, which is what stops Kirin sitting in the corner of a four-track row looking like an
+         afterthought. On every other board there are no path columns and this is the ordinary grid,
+         exactly as it always was. ---- *@
+    @* Already inside the else block's code context, so no @{ } here.
+
+       Three container shapes, and a board is exactly one of them: chart-finale sits under path
+       columns and is sized in their widths (Sky, Sea); chart-rows is centred rows the board chose
+       the length of (Dynamis); chart-grid is the plain stretch-to-fit grid everything else uses. *@
+    var finale = Model.PathGroups.Count > 0;
+    var container = finale ? "chart-finale" : Model.CentersRows ? "chart-rows" : "chart-grid";
+
+    @* A null attribute value is omitted entirely by Razor, so a board with no columns gets no
+       inline style at all. *@
+    <div class="@container fade d2"
+         style="@(finale ? $"--chart-path-count: {Model.PathGroups.Count}" : null)">
+        @foreach (var group in Model.TrailingGroups)
+        {
+            if (!string.IsNullOrWhiteSpace(group.Label))
+            {
+                <h2 class="chart-group-heading">@group.Label</h2>
+            }
+            foreach (var boss in group.Bosses)
+            {
+                <partial name="_ChartBossCard" model="new ChartBossCardContext(Model, boss)" />
+
+                @* A zero-height full-width flex item: the only way to force a line break mid-row in
+                   a wrap container, and it costs nothing when the row would have broken anyway. *@
+                if (boss.EndsRow)
+                {
+                    <div class="chart-row-break"></div>
+                }
+            }
+        }
+    </div>
+
+    @* ---- Pop Item Holdings ----
+         One row per pop item PER HOLDER: three Gems of the North held by three people are three
+         rows, which is the question this table answers. A holder is a plain name, so "alt of
+         Millhouse" is a perfectly good one.
+
+         Built from the same Bosses the cards above render — one set of rows read two ways, so the
+         two halves of the page cannot disagree. Read-only: credit is edited on the item's row up on
+         its boss card, which is the one place it lives. ---- *@
+    <div class="card fade d3">
+        <div class="card-head">
+            <div class="card-title">@Model.BoardLabel Pop Item Holdings</div>
+            @if (!Model.IsEmpty)
+            {
+                <span class="tag">@Model.Bosses.Sum(boss => boss.TotalQuantity) held</span>
+            }
+        </div>
+
+        @if (Model.IsEmpty)
+        {
+            <div class="empty">Nothing is tracked yet. Add pop items to a boss above and they are listed here.</div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table chart-holdings">
+                    <thead>
+                        <tr>
+                            <th>Pop Item</th>
+                            <th>Held By</th>
+                            <th>Qty</th>
+                            <th>Farming Credit</th>
+                            @if (Model.CanManage)
+                            {
+                                <th></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            // Board order, then item name, then holder — so copies of one item land
+                            // together and read as one block of holders. previousItem is what blanks
+                            // the repeated name cell.
+                            string? previousItem = null;
+                            string? previousBoss = null;
+                            var holdingsColumns = Model.CanManage ? 5 : 4;
+                        }
+                        @foreach (var boss in Model.Bosses)
+                        {
+                            foreach (var item in boss.Items
+                                .OrderBy(row => row.ItemName, StringComparer.OrdinalIgnoreCase)
+                                .ThenBy(row => row.HeldByCharacterName, StringComparer.OrdinalIgnoreCase))
+                            {
+                                var continues = previousBoss == boss.Boss
+                                    && string.Equals(previousItem, item.ItemName, StringComparison.OrdinalIgnoreCase);
+                                previousBoss = boss.Boss;
+                                previousItem = item.ItemName;
+
+                                <tr class="@(continues ? "is-continued" : null)">
+                                    <td>
+                                        @if (continues)
+                                        {
+                                            <span class="chart-holdings__ditto" aria-label="@item.ItemName">↳</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="chart-holdings__item">
+                                                <span class="chart-holdings__name">@item.ItemName</span>
+                                                <span class="chart-holdings__boss is-@boss.ThemeKey">@boss.Boss</span>
+                                            </span>
+                                        }
+                                    </td>
+
+                                    <td>
+                                        @if (string.IsNullOrWhiteSpace(item.HeldByCharacterName))
+                                        {
+                                            <span class="chart-item__muted">Nobody yet</span>
+                                        }
+                                        else
+                                        {
+                                            <strong class="chart-holdings__holder">@item.HeldByCharacterName</strong>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                        {
+                                            <span class="chart-holdings__note">@item.Notes</span>
+                                        }
+                                    </td>
+
+                                    <td><span class="chart-item__qty">@item.Quantity</span></td>
+
+                                    <td>
+                                        @* Expanding this only READS the list. Changing it is the Credits
+                                           button, which is a thing an officer sets out to do. Reuses the
+                                           page's drawer script. *@
+                                        @if (item.CreditCount > 0)
+                                        {
+                                            <button type="button" class="chart-holdings__toggle chart-toggle"
+                                                    data-target="chart-holding-@item.Id">
+                                                <span class="chart-holdings__chevron">›</span> @item.CreditCount credited
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="chart-item__muted">Nobody credited</span>
+                                        }
+                                    </td>
+
+                                    @if (Model.CanManage)
+                                    {
+                                        @* No Credits button: the Edit drawer carries the farming credit
+                                           picker, ticked with this row's farmers, so there is one place a
+                                           row is changed. *@
+                                        <td>
+                                            <span class="chart-item__actions">
+                                                <button type="button" class="btn sm ghost chart-toggle"
+                                                        data-target="chart-edit-@item.Id">Edit</button>
+                                                <form asp-action="DeleteItem" method="post" style="display:inline">
+                                                    <input type="hidden" name="id" value="@item.Id" />
+                                                    <button type="submit" class="btn sm danger"
+                                                            onclick="return confirm('Remove @item.ItemName?')">Remove</button>
+                                                </form>
+                                            </span>
+                                        </td>
+                                    }
+                                </tr>
+
+                                @if (item.CreditCount > 0)
+                                {
+                                    <tr id="chart-holding-@item.Id" class="chart-drawer chart-holdings__drawer" hidden>
+                                        <td colspan="@holdingsColumns">
+                                            <div class="chart-holdings__farmers">
+                                                <span class="chart-holdings__farmers-label">Credited for @item.ItemName</span>
+                                                @foreach (var farmer in item.CreditedTo)
+                                                {
+                                                    <span class="chart-holdings__farmer">@farmer</span>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+
+                                @if (Model.CanManage)
+                                {
+                                    <tr id="chart-edit-@item.Id" class="chart-drawer" hidden>
+                                        <td colspan="@holdingsColumns">
+                                            <form asp-action="EditItem" method="post" class="chart-form">
+                                                <input type="hidden" name="id" value="@item.Id" />
+                                                <div class="chart-form__field">
+                                                    <label>Boss</label>
+                                                    <select name="boss">
+                                                        @foreach (var option in Model.Bosses)
+                                                        {
+                                                            <option value="@option.Boss" selected="@(option.Boss == item.Boss)">@option.Boss</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <div class="chart-form__field">
+                                                    <label>Pop item</label>
+                                                    <partial name="_ChartPopItemField"
+                                                             model="new ChartPopItemFieldContext(boss.PopItemOptions, item.ItemName)" />
+                                                </div>
+                                                <div class="chart-form__field">
+                                                    <label>Held by</label>
+                                                    <input name="heldByCharacterName" class="input" type="text"
+                                                           list="chart-roster-names" value="@item.HeldByCharacterName" />
+                                                </div>
+                                                <div class="chart-form__field">
+                                                    <label>Qty</label>
+                                                    <input name="quantity" class="input" type="number" min="0" value="@item.Quantity" />
+                                                </div>
+                                                @* Farming credit, ticked with this row's farmers — the same
+                                                   picker the add form has. creditsIncluded tells the action
+                                                   that this form CARRIED the picker, so unticking everybody
+                                                   clears the row rather than reading as "said nothing". *@
+                                                <div class="chart-form__field">
+                                                    <label>Farming credit</label>
+                                                    <input type="hidden" name="creditsIncluded" value="true" />
+                                                    <details class="chart-multiselect">
+                                                        <summary class="chart-multiselect__toggle">
+                                                            <span class="chart-multiselect__value">
+                                                                @(item.CreditCount == 0 ? "Nobody credited"
+                                                                    : item.CreditCount == 1 ? item.CreditedTo[0]
+                                                                    : item.CreditCount == Model.Roster.Count ? $"Everyone ({item.CreditCount})"
+                                                                    : $"{item.CreditCount} farmers")
+                                                            </span>
+                                                        </summary>
+                                                        <div class="chart-multiselect__panel">
+                                                            @if (Model.Roster.Count == 0)
+                                                            {
+                                                                <div class="chart-multiselect__none">No members on the roster to credit.</div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <div class="chart-multiselect__list">
+                                                                    @foreach (var member in Model.Roster)
+                                                                    {
+                                                                        var isCredited = item.CreditedTo.Contains(
+                                                                            member.CharacterName, StringComparer.OrdinalIgnoreCase);
+                                                                        <label class="chart-multiselect__row">
+                                                                            <input type="checkbox" name="membershipIds"
+                                                                                   value="@member.MembershipId" checked="@isCredited" />
+                                                                            @member.CharacterName
+                                                                        </label>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </details>
+                                                </div>
+                                                <div class="chart-form__field">
+                                                    <label>Notes</label>
+                                                    <input name="notes" class="input" type="text" value="@item.Notes" />
+                                                </div>
+                                                <div class="chart-form__actions">
+                                                    <button type="submit" class="btn primary">Save changes</button>
+                                                </div>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <p class="chart-holdings__footer">
+            Credit is awarded when a member is present for the pop and remains until the NM is defeated.
+        </p>
+    </div>
+}
+
+@* The whole board's pop items, for the picker script below. Only emitted when there is a picker to
+   feed — every board but Sky still takes free text. *@
+@if (Model.CanManage && Model.HasPopItemOptions)
+{
+    <script id="chart-pop-items" type="application/json">@Html.Raw(Model.PopItemOptionsJson)</script>
+}
+
+@section Scripts {
+    <script>
+        // A pop item belongs to ONE boss, so changing the boss on a form has to change what its
+        // picker offers — and on Sea, whether there is a picker at all: its second-stage Jailers take
+        // a closed list, while Temperance and two of the Ix'aern take no trade item and get a text
+        // box. Server-rendered for the boss each form OPENS on, so this only handles the change; with
+        // JS off the form is still correct, it just cannot switch.
+        (function () {
+            var source = document.getElementById('chart-pop-items');
+            if (!source) return;
+            var byBoss = JSON.parse(source.textContent);
+
+            // A disabled control does not post, so exactly one itemName ever reaches the action.
+            function setLive(control, live, fieldId) {
+                control.hidden = !live;
+                control.disabled = !live;
+                if (!live) {
+                    control.value = '';
+                    control.removeAttribute('id');
+                } else if (fieldId) {
+                    control.id = fieldId;
+                }
+            }
+
+            document.addEventListener('change', function (e) {
+                var bossSelect = e.target.closest('select[name="boss"]');
+                if (!bossSelect || !bossSelect.form) return;
+
+                var picker = bossSelect.form.querySelector('[data-chart-item-picker]');
+                var free = bossSelect.form.querySelector('[data-chart-item-free]');
+                if (!picker || !free) return;
+
+                // Rebuilt rather than filtered: the old boss's items are not answers for the new one,
+                // and neither is a name carried over from the row being edited.
+                var options = byBoss[bossSelect.value] || [];
+                if (options.length) {
+                    picker.innerHTML = '';
+                    picker.appendChild(new Option('Pick a pop item…', ''));
+                    options.forEach(function (option) {
+                        picker.appendChild(new Option(option.label, option.name));
+                    });
+                }
+
+                var fieldId = picker.dataset.chartItemId;
+                setLive(picker, options.length > 0, fieldId);
+                setLive(free, options.length === 0, fieldId);
+            });
+        })();
+    </script>
+    <script>
+        // Keeps the closed summary honest as boxes are ticked — a <details> shows only its summary,
+        // so without this the add form would still read "Nobody credited" with three names picked.
+        // Same wording as the Activity's formCreditsSummary.
+        document.addEventListener('change', function (e) {
+            var box = e.target.closest('.chart-multiselect input[type="checkbox"]');
+            if (!box) return;
+            var picker = box.closest('.chart-multiselect');
+            var value = picker.querySelector('.chart-multiselect__value');
+            if (!value) return;
+
+            var boxes = picker.querySelectorAll('input[type="checkbox"]');
+            var checked = picker.querySelectorAll('input[type="checkbox"]:checked');
+            if (checked.length === 0) value.textContent = 'Nobody credited';
+            else if (checked.length === 1) value.textContent = checked[0].parentElement.textContent.trim();
+            else if (checked.length === boxes.length) value.textContent = 'Everyone (' + boxes.length + ')';
+            else value.textContent = checked.length + ' farmers';
+        });
+    </script>
+    <script>
+        // Edit / Credits / Progress open an inline drawer on the row rather than a modal: credit is
+        // stored per pop item, so the editor belongs on the thing it is about.
+        document.addEventListener('click', function (e) {
+            var button = e.target.closest('.chart-toggle');
+            if (!button) return;
+            var row = document.getElementById(button.dataset.target);
+            if (!row) return;
+            var opening = row.hasAttribute('hidden');
+            // Only one drawer at a time, or the cards grow taller than the screen.
+            document.querySelectorAll('.chart-drawer').forEach(function (other) {
+                other.setAttribute('hidden', '');
+            });
+            if (opening) row.removeAttribute('hidden');
+        });
+    </script>
+}

@@ -1,0 +1,503 @@
+@if (summary(); as totals) {
+  <!-- Treasury > Gil -->
+  <div class="section-head">
+    <div>
+      <div class="section-label">Treasury</div>
+      <div class="section-title">Gil</div>
+    </div>
+    @if (canManage()) {
+      <div class="fin-head-actions">
+        <button type="button" class="btn ghost sm" (click)="toggleCheckGil()">Gil on Hand</button>
+        <button type="button" class="btn primary sm" (click)="toggleForm()">
+          {{ showForm() ? 'Cancel' : 'Record Transaction' }}
+        </button>
+      </div>
+    }
+  </div>
+
+  <!-- The one gil card: what moved over the period, and — behind a disclosure — the sheet that
+       explains where that leaves the linkshell. A balance and a movement are different kinds of
+       number, so they are still separated; they are separated by a fold now rather than by a card. -->
+  <div class="card">
+    <!--
+      What moved is the headline and the sheet is the working, so the flow chips live INSIDE the
+      <summary> — they are the whole of what a collapsed card shows — and everything else is the
+      disclosure. Native <details> rather than a signal: no state to hold, no OnPush to think about,
+      and the whole two-row header is the hit target.
+
+      open: expanded is the default. Collapsing is there for someone who wants the flow figures
+      alone, not the state the tab opens in.
+    -->
+    <details class="fin-balance" open>
+      <summary class="fin-balance__summary">
+        <div class="card-head fin-balance__head">
+          <span class="card-title">Balance Sheet</span>
+          <span class="fin-balance__chev" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </span>
+          <!-- What moved sits in the header itself: it is the card's headline, and it was costing a
+               whole second row to say. -->
+          <span class="fin-chips">
+            <span class="tag success num">Gil in {{ totals.moneyIn | number }}</span>
+            <span class="tag warning num">Gil out {{ totals.moneyOut | number }}</span>
+            <span class="tag default num">Net change {{ totals.netChange | number }}</span>
+
+            <!-- Only the FAILURE is worth a chip. "Adds up" was the answer on every healthy board,
+                 which is a lot of green to say nothing; a sheet that does not balance still says so. -->
+            @if (!totals.balances) {
+              <span class="tag warning">Does not add up</span>
+            }
+            @if (totals.uncategorizedCount > 0) {
+              <span class="tag default">Uncategorized {{ totals.uncategorizedCount }}</span>
+            }
+            @if (totals.lockedThroughUtc) {
+              <span class="tag default">Locked through {{ activity.formatDate(totals.lockedThroughUtc) }}</span>
+            }
+          </span>
+        </div>
+      </summary>
+
+      <!-- Have on the left, owe on the right — the two sides read against each other rather than as
+           one long column where the second heading is below the fold.
+
+           Every line shows, including zeros: a subtotal over conditionally-hidden components does not
+           add up on screen, and a liability that disappears at zero reads as "there is no such thing"
+           rather than "there is none right now". -->
+      <div class="fin-sheet__cols">
+        <div class="fin-sheet__col">
+          <div class="fin-sheet__section">What we have</div>
+          <div class="fin-sheet__row">
+            <span>Gil on hand</span>
+            <span class="num">{{ totals.cashOnHand | number }}</span>
+          </div>
+          <div class="fin-sheet__row">
+            <span>Owed to us</span>
+            <span class="num">{{ totals.owedToUs | number }}</span>
+          </div>
+          <div class="fin-sheet__row fin-sheet__row--total">
+            <span></span>
+            <span class="num">{{ totals.cashOnHand + totals.owedToUs | number }}</span>
+          </div>
+        </div>
+
+        <div class="fin-sheet__col">
+          <div class="fin-sheet__section">What we owe</div>
+          <div class="fin-sheet__row">
+            <span>Owed to members</span>
+            <span class="num">{{ totals.weOwe | number }}</span>
+          </div>
+          @if (totals.owedToMembers.length > 0) {
+            <!-- open: the sheet itself is now behind a disclosure, so hiding the names behind a
+                 SECOND one meant two clicks to answer "who do we owe". -->
+            <details class="fin-details fin-sheet__who" open>
+              <summary>Who</summary>
+              <div class="fin-sheet__members">
+                @for (owed of totals.owedToMembers; track owed.characterName) {
+                  <div class="fin-sheet__row">
+                    <span>{{ owed.characterName }}</span>
+                    <span class="num">{{ owed.amount | number }}</span>
+                  </div>
+                }
+              </div>
+            </details>
+          }
+          <div class="fin-sheet__row fin-sheet__row--total">
+            <span></span>
+            <span class="num">{{ totals.weOwe | number }}</span>
+          </div>
+        </div>
+      </div>
+      <!-- The bottom line of the sheet, so it belongs to the sheet: inside the disclosure with the
+           two columns that produce it, not stranded under a collapsed card. -->
+      <div class="fin-sheet fin-sheet--answer">
+        <div class="fin-sheet__row fin-sheet__row--worth">
+          <span>What we're worth</span>
+          <span class="num">{{ totals.netWorth | number }}</span>
+        </div>
+      </div>
+      <div class="fin-basis">{{ totals.basisNote }}</div>
+    </details>
+
+    @if (showCheckGil() && canManage()) {
+      <form class="inline-form" (submit)="$event.preventDefault(); submitCheckGil()">
+        <div class="inline-form__row">
+          <label>
+            <span>How much gil is actually there?</span>
+            <input type="text" inputmode="numeric" name="countedGil" autocomplete="off"
+                   [value]="countedGilText" (input)="onCountedGilInput($event)" />
+          </label>
+        </div>
+        <div class="fin-basis">
+          @if (difference() === 0) {
+            The books already say {{ countedGil | number }}. Nothing to record.
+          } @else if (difference() > 0) {
+            That is {{ difference() | number }} gil more than the books say. Recording the difference.
+          } @else {
+            That is {{ -difference() | number }} gil less than the books say. Recording the difference.
+          }
+        </div>
+        <div class="inline-form__actions">
+          <button type="submit" class="btn primary sm" [disabled]="treasury.busySave() || difference() === 0">
+            Record the difference
+          </button>
+          <button type="button" class="btn ghost sm" (click)="toggleCheckGil()">Cancel</button>
+        </div>
+      </form>
+    }
+  </div>
+
+}
+
+<!--
+  Items lands here — between the two summary cards and the transactions list, because selling one is
+  what moves the numbers above it, and the transactions list is long enough to bury anything under it.
+
+  Projected rather than rendered by this component, and deliberately OUTSIDE the summary() guards on
+  either side, so the two halves of the tab stay independent: Items still shows when Gil is switched
+  off for a linkshell, and it does not blink out while the treasury payload is loading.
+
+  A slot rather than splitting this component in two: the transactions card below is ~330 lines of
+  this template over most of the component's state, and none of that wants moving just to reorder.
+-->
+<ng-content />
+
+@if (summary()) {
+  <!-- Card 3: the transactions. -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Transactions</div>
+    </div>
+
+    @if (showForm() && canManage()) {
+      <form class="inline-form" (submit)="$event.preventDefault(); submit(true)">
+        @if (fixingEntry(); as fixing) {
+          <div class="fin-basis">
+            Fixing entry {{ entryRef(fixing.entryNumber) }}. Enter what it should have said — the original stays in
+            the list with an opposite entry beside it, so nothing disappears.
+          </div>
+        }
+
+        <label>
+          <span>What happened?</span>
+          <select
+            name="transactionKind"
+            [ngModel]="transactionKind()"
+            (ngModelChange)="transactionKind.set($event)">
+            @for (group of kindGroups(); track group.label) {
+              <optgroup [label]="group.label">
+                @for (kind of group.kinds; track kind.key) {
+                  <option [value]="kind.key">{{ kind.label }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+        </label>
+        @if (selectedKind(); as kind) {
+          <div class="fin-help">{{ kind.help }}</div>
+        }
+
+        <div class="inline-form__row">
+          <label>
+            <span>Amount</span>
+            <input type="number" name="amount" [(ngModel)]="amount" min="1" />
+          </label>
+          <label>
+            <span>Date</span>
+            <input type="datetime-local" name="transactionDate" [(ngModel)]="transactionDate" />
+          </label>
+          @if (showsSingleMember()) {
+            <!-- The typed name doubles as the search term, so it is one box rather than a filter
+                 plus a select. mousedown is swallowed so a click lands before blur closes the menu. -->
+            <div class="fin-memberpick">
+              <label>
+                <span>Member</span>
+                <input
+                  type="text"
+                  name="member"
+                  autocomplete="off"
+                  placeholder="Search members…"
+                  [ngModel]="member()"
+                  (ngModelChange)="member.set($event); memberPickerOpen.set(true)"
+                  (focus)="memberPickerOpen.set(true)"
+                  (blur)="closeMemberPicker()" />
+              </label>
+              @if (memberPickerOpen() && filteredMemberOptions().length > 0) {
+                <div class="fin-memberpick__list">
+                  @for (person of filteredMemberOptions(); track person.characterName) {
+                    <button
+                      type="button"
+                      class="fin-memberpick__row"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="chooseMember(person)">
+                      <span class="fin-memberpick__name">{{ person.characterName }}</span>
+                      @if (settlesMemberDebt() && person.owed !== 0) {
+                        <span class="fin-memberpick__owed num">{{ person.owed | number }}</span>
+                      } @else if (person.rank) {
+                        <span class="fin-memberpick__rank">{{ person.rank }}</span>
+                      }
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Settling hands over what was already promised, so the figure is not the officer's to
+             remember. Shown even after it is filled in, because a part payment is legitimate. -->
+        @if (settlesMemberDebt() && owedToChosenMember() !== 0) {
+          <div class="fin-help">
+            {{ member() }} is owed {{ owedToChosenMember() | number }} gil.
+          </div>
+        }
+
+        <!-- Sharing one amount between several members. Buttons rather than checkboxes: the only
+             checkbox style in this app is a toggle switch, which reads wrong for a roster. -->
+        @if (isSplittable()) {
+          <div class="fin-payout">
+            <div class="fin-payout__head">
+              <span>Who gets a share</span>
+              <input
+                type="search"
+                class="fin-payout__search"
+                placeholder="Search members…"
+                [ngModel]="memberFilter()"
+                (ngModelChange)="memberFilter.set($event)"
+                name="memberFilter" />
+              <span class="fin-payout__count">{{ pickedIds().size }} selected</span>
+              @if (pickedIds().size > 0) {
+                <button type="button" class="btn ghost sm" (click)="clearPickedMembers()">Clear</button>
+              }
+            </div>
+
+            @if (unresolvedMembers().length > 0) {
+              <div class="fin-payout__warn">
+                No longer in the linkshell: {{ unresolvedMembers().join(', ') }}. Pick who should get
+                their share instead, or drop them.
+                <button type="button" class="btn ghost sm" (click)="dismissUnresolved()">Drop them</button>
+              </div>
+            }
+
+            @if (filteredMembers().length > 0) {
+              <div class="fin-payout__list">
+                @for (person of filteredMembers(); track person.membershipId) {
+                  <button
+                    type="button"
+                    role="checkbox"
+                    class="fin-payout__row {{ pickedIds().has(person.membershipId) ? 'is-picked' : '' }}"
+                    [attr.aria-checked]="pickedIds().has(person.membershipId)"
+                    (click)="toggleMember(person.membershipId)">
+                    <span class="fin-payout__tick" aria-hidden="true"></span>
+                    <span class="fin-payout__name">{{ person.characterName }}</span>
+                    @if (person.rank) { <span class="fin-payout__rank">{{ person.rank }}</span> }
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="fin-help">No members match your search.</div>
+            }
+
+            @if (shares().length > 0) {
+              <div class="fin-payout__shares">
+                @for (row of shares(); track row.member.membershipId) {
+                  <span class="fin-payout__share">
+                    {{ row.member.characterName }}
+                    <strong>{{ row.share | number }}</strong>
+                  </span>
+                }
+              </div>
+            }
+
+            @if (splitBlocker(); as blocker) {
+              <div class="fin-payout__warn">{{ blocker }}</div>
+            }
+          </div>
+        }
+
+        <label>
+          <span>Note</span>
+          <textarea name="note" [(ngModel)]="note" rows="2"></textarea>
+        </label>
+
+        @if (fixingEntry()) {
+          <label>
+            <span>What was wrong?</span>
+            <input type="text" name="reason" [(ngModel)]="reason" placeholder="Typed an extra zero" />
+          </label>
+        }
+
+        <!-- Plain-words confirmation of what is about to happen. Free confidence for someone who just
+             picked an option they are not sure about. -->
+        @if (preview(); as sentence) {
+          <div class="fin-preview">{{ sentence }}</div>
+        }
+
+        <div class="inline-form__actions">
+          @if (fixingEntry()) {
+            <button
+              type="submit"
+              class="btn primary sm"
+              [disabled]="treasury.busySave() || !reason.trim() || !!splitBlocker()">Fix</button>
+          } @else {
+            <button
+              type="submit"
+              class="btn primary sm"
+              [disabled]="treasury.busySave() || !!splitBlocker()">Confirm</button>
+            <button
+              type="button"
+              class="btn ghost sm"
+              [disabled]="treasury.busySave() || !!splitBlocker()"
+              (click)="submit(false)">
+              Save as draft
+            </button>
+          }
+          <button type="button" class="btn ghost sm" (click)="closeForm()">Cancel</button>
+        </div>
+      </form>
+    }
+
+    @if (page(); as loaded) {
+      <div class="fin-toolbar">
+        <input
+          type="search"
+          class="fin-search"
+          placeholder="Search entry #, note, category, member…"
+          [ngModel]="search()"
+          (ngModelChange)="onSearch($event)" />
+        <div class="fin-filter">
+          @for (chip of filters; track chip.key) {
+            <button
+              type="button"
+              class="btn sm {{ filter() === chip.key ? 'primary' : 'ghost' }}"
+              (click)="setFilter(chip.key)">{{ chip.label }}</button>
+          }
+        </div>
+      </div>
+
+      @if (entries().length > 0) {
+        <div class="fin-scroll">
+          @for (group of groupedEntries(); track group.key) {
+            <div class="fin-daygroup">
+              <div class="fin-day-head">{{ group.label }}</div>
+              <ul class="entry-list">
+                @for (entry of entries(); track entry.id) {
+                  @if (activity.localDayKey(entry.transactionDate) === group.key) {
+                    <li class="entry-item entry-item--{{ entry.cashDelta < 0 ? 'out' : 'in' }}">
+                      <div class="entry-item__main">
+                        <strong>{{ entry.whatHappened }}</strong>
+                        <!-- A minus sign, not parentheses: "(5,820,000)" reads as a footnote marker. -->
+                        @if (entry.cashDelta === 0) {
+                          <span class="tag default num">{{ entry.amount | number }}</span>
+                        } @else {
+                          <span class="tag {{ entry.cashDelta < 0 ? 'warning' : 'success' }} num">
+                            {{ entry.cashDelta | number }}
+                          </span>
+                        }
+                        @if (entry.status === 'Draft') {
+                          <span class="tag default">Draft</span>
+                        }
+                        @if (entry.isReversed) {
+                          <span class="tag warning">Reversed</span>
+                        }
+                        @if (entry.reversesEntryNumber) {
+                          <span class="tag default">Reverses {{ entryRef(entry.reversesEntryNumber) }}</span>
+                        }
+                      </div>
+
+                      @if (entry.memo) { <div class="entry-item__sub">{{ entry.memo }}</div> }
+                      @if (entry.correctionReason) {
+                        <div class="entry-item__sub fin-reason">{{ entry.correctionReason }}</div>
+                      }
+
+                      <div class="entry-item__meta">
+                        <span>{{ entryRef(entry.entryNumber) }}</span>
+                        @if (entry.recipients.length > 1) {
+                          <span>&middot; {{ recipientSummary(entry) }}</span>
+                        } @else if (entry.counterpartyCharacterName) {
+                          <span>&middot; {{ entry.counterpartyCharacterName }}</span>
+                        }
+                        <span>&middot; Entered by {{ entry.enteredByCharacterName || 'Unknown' }}</span>
+                        @if (activity.formatDateTime(entry.transactionDate); as when) {
+                          <span>&middot; {{ when }}</span>
+                        }
+                      </div>
+
+                      <!-- The two halves, for the one officer who wants to see them. Collapsed by
+                           default: nobody logging a Kirin's Osode sale needs to know. -->
+                      <details class="fin-details">
+                        <summary>{{ entry.recipients.length > 1 ? 'Show who got what' : 'Show the bookkeeping details' }}</summary>
+                        <div class="fin-halves">
+                          @for (half of entry.lines; track half.lineNumber) {
+                            <div class="fin-half">
+                              <span>{{ half.accountName }}</span>
+                              <!-- A split writes one line per member on the SAME category, so the
+                                   name is the only thing telling those rows apart. -->
+                              @if (half.counterpartyCharacterName) {
+                                <span class="fin-half__member">{{ half.counterpartyCharacterName }}</span>
+                              }
+                              <span class="num">{{ half.presentedAmount >= 0 ? '+' : '' }}{{ half.presentedAmount | number }}</span>
+                              <span class="fin-half__class">{{ half.classLabel }}</span>
+                            </div>
+                          }
+                        </div>
+                      </details>
+
+                      @if (canManage()) {
+                        <div class="entry-item__actions">
+                          @if (entry.status === 'Draft') {
+                            <button type="button" class="btn ghost sm"
+                              [disabled]="treasury.busyEntryId() === entry.id"
+                              (click)="beginEditDraft(entry)">Edit</button>
+                            <button type="button" class="btn ghost sm"
+                              [disabled]="treasury.busyEntryId() === entry.id"
+                              (click)="confirmEntry(entry)">Confirm</button>
+                            <button type="button" class="btn ghost sm"
+                              [disabled]="treasury.busyEntryId() === entry.id"
+                              (click)="discardDraft(entry)">Discard</button>
+                          } @else if (!entry.isReversed) {
+                            <button type="button" class="btn ghost sm"
+                              [disabled]="treasury.busyEntryId() === entry.id"
+                              (click)="beginFix(entry)">Fix</button>
+                            <button type="button" class="btn ghost sm"
+                              [disabled]="treasury.busyEntryId() === entry.id"
+                              (click)="reverseEntry(entry)">Reverse</button>
+                          }
+                        </div>
+                      }
+                    </li>
+                  }
+                }
+              </ul>
+            </div>
+          }
+        </div>
+
+        @if (pageCount() > 1) {
+          <div class="fin-pager">
+            <button type="button" class="btn ghost sm" (click)="prevPage()" [disabled]="pageIndex() === 0">‹ Prev</button>
+            <span class="fin-pager__label">
+              Page {{ pageIndex() + 1 }} of {{ pageCount() }} · {{ loaded.totalEntries | number }} entries
+            </span>
+            <button type="button" class="btn ghost sm" (click)="nextPage()"
+              [disabled]="pageIndex() >= pageCount() - 1">Next ›</button>
+          </div>
+        }
+      } @else {
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state-desc">
+            @if (loaded.totalEntries === 0 && !search() && filter() === 'all') {
+              Nothing recorded yet. Track gil coming in and going out to keep the treasury accurate.
+            } @else {
+              No entries match your search.
+            }
+          </div>
+        </div>
+      }
+    } @else {
+      <div class="empty-state empty-state--compact">
+        <div class="empty-state-desc">Loading the treasury…</div>
+      </div>
+    }
+  </div>
+}

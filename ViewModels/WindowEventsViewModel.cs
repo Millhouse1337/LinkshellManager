@@ -73,6 +73,15 @@ public sealed class WindowSnapshotRow
     public string? CapturedByCharacterName { get; set; }
     public string? PrimaryZone { get; set; }
     public int EntryCount { get; set; }
+
+    // The spawn window this capture was taken in, off the event's fixed grid. Null on camps with no
+    // cadence (Sky gods, farm NMs, ad-hoc posts) — the UI then shows no window tag at all.
+    public int? WindowNumber { get; set; }
+
+    // Ready-to-render label: "Window 3 of 25", or plain "Window 3" if the total isn't known.
+    // Null whenever WindowNumber is.
+    public string? WindowLabel { get; set; }
+
     public List<AttendanceSnapshotEntryRow> Entries { get; set; } = new();
 }
 

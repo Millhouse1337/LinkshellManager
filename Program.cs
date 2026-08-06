@@ -120,25 +120,34 @@ builder.Services.ConfigureApplicationCookie(options =>
     // check) sends the cookie handler's HTML redirect, which fetch follows to a
     // 200 HTML page — the client then chokes on "Unexpected token '<'" trying to
     // JSON.parse it. MVC pages keep the normal redirect behavior.
-    options.Events.OnRedirectToLogin = context =>
+    options.Events.OnRedirectToLogin = async context =>
     {
         if (context.Request.Path.StartsWithSegments("/api"))
         {
+            // Give the SPA/addon a readable JSON body instead of an empty 401 —
+            // the client already surfaces a `{ error }` string.
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return Task.CompletedTask;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(
+                "{\"error\":\"Your session has expired. Reload and sign in again.\"}");
+            return;
         }
         context.Response.Redirect(context.RedirectUri);
-        return Task.CompletedTask;
     };
-    options.Events.OnRedirectToAccessDenied = context =>
+    options.Events.OnRedirectToAccessDenied = async context =>
     {
         if (context.Request.Path.StartsWithSegments("/api"))
         {
+            // Every `/api` permission denial (ApiController `Forbid()`) funnels
+            // through here. A generic friendly body turns the bare "status 403"
+            // into something a user can act on, without editing each call site.
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return Task.CompletedTask;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(
+                "{\"error\":\"You don't have permission to do that. If you think you should, ask a linkshell leader to update your role.\"}");
+            return;
         }
         context.Response.Redirect(context.RedirectUri);
-        return Task.CompletedTask;
     };
 });
 
@@ -236,6 +245,18 @@ builder.Services.AddScoped<DkpPoolProvisioner>();
 builder.Services.AddScoped<DkpPoolResolver>();
 builder.Services.AddScoped<DkpPoolBalanceService>();
 builder.Services.AddScoped<DkpLedgerWriter>();
+// Gil treasury: the one place "how much gil does this linkshell have" is answered. Same
+// derived-balance doctrine as DkpPoolBalanceService above — nothing is stored, so there is no
+// cached total to drift. Five call sites used to compute this independently and four of them
+// disagreed; one of those numbers gates whether a gil auction may be created.
+builder.Services.AddScoped<LedgerAccountProvisioner>();
+builder.Services.AddScoped<LedgerPeriodGuard>();
+builder.Services.AddScoped<TreasuryBalanceService>();
+builder.Services.AddScoped<TreasuryJournalWriter>();
+builder.Services.AddScoped<ItemSaleRecorder>();
+// Charts (Sky, Sea, …). Shared by the Activity API and the website's ChartsController so the two
+// surfaces cannot derive a different Farming Credit Ledger from the same rows.
+builder.Services.AddScoped<ChartBoardService>();
 // Shared save logic for the pools config (Activity + web), and the catalog of event types an
 // officer can assign — including the free-text ones their own events actually used.
 builder.Services.AddScoped<DkpPoolEventTypeCatalog>();
@@ -258,8 +279,21 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>("database", tags: new[] { "ready" });
 builder.Services.AddScoped<WindowEventDkpLedgerService>();
+// Builds the attendance-snapshot sections shared by the Event System page and Attendance History.
+builder.Services.AddScoped<AttendanceSectionsBuilder>();
 builder.Services.AddScoped<MemberActivityService>();
 builder.Services.AddScoped<HnmAutoEventService>();
+// The two HNM earn formulas — "what did this camp owe?", per attendance mode. Neither pays any
+// more: End Camp hands the roster to HnmCampReviewHandoffService, which stages it as a pending row
+// in the Event System page's attendance sections, and an officer's Post is what credits DKP. The old
+// WdProcessingBackgroundService (auto-finalize once the Awaiting-Processing grace elapsed) is gone
+// with the grace — the review step replaced the timer.
+builder.Services.AddScoped<WdCampFinalizer>();
+builder.Services.AddScoped<HnmStandardCampFinalizer>();
+builder.Services.AddScoped<HnmCampReviewHandoffService>();
+// Shared "pop / end an HNM camp" (log ToD, re-point to next repop, stop the camp) — used by the
+// Discord Pop/End Camp modal and the Activity End-Camp form so both behave identically.
+builder.Services.AddScoped<HnmCampPopService>();
 builder.Services.AddSingleton<DiscordWebhookQueue>();
 builder.Services.AddScoped<DiscordSnapshotPublisher>();
 builder.Services.AddHostedService<DiscordWebhookBackgroundService>();
@@ -315,6 +349,17 @@ builder.Services.AddSingleton<LinkshellChangeNotifier>();
 
 // Starts events flagged "Auto start at start time" once their StartTime passes.
 builder.Services.AddHostedService<EventAutoStartBackgroundService>();
+
+// Marches a live HNM camp's window counter on its monster's built-in cadence (wyrms 60 min × 25,
+// kings/dragons 10 min × 7) and keeps the board's "Next window N <countdown>" line pointing at the
+// real next boundary, so a camp advances without anyone pressing anything.
+//
+// This was previously left unregistered because it double-advanced the window alongside the board's
+// manual "Next Window" button (auto stepped it, then the officer's click stepped it again, stacking
+// an extra interval onto the countdown). That conflict is gone for good: the manual step buttons no
+// longer exist, so this service is the SOLE owner of Event.HnmWindowNumber. Event.HnmClearedWindow
+// still tracks the wyrm roster clear so it happens exactly once per window.
+builder.Services.AddHostedService<HnmWindowAdvanceBackgroundService>();
 
 // Re-posts standing HNM signup boards before the next predicted pop (from new ToDs).
 builder.Services.AddHostedService<HnmRecurringBoardBackgroundService>();

@@ -1,0 +1,67 @@
+/* ---- DKP grouping ------------------------------------------------------------
+   A pool is a wallet; each event type earns into exactly one of them. The
+   one-<select>-per-event-type layout is load-bearing: it makes double-assigning
+   an event type unrepresentable, rather than something we validate after.
+
+   Moved here with the section itself, out of configurations-tab.component.scss. */
+.pool-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-1);
+}
+
+.pool-row,
+.pool-assign-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+// Column headers over the group rows — same flex columns, no box.
+.pool-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.pool-assign-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.pool-preview {
+  padding: 10px 12px;
+  background: var(--accent-weak);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-warning {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warning);
+}
+
+// Was .routes-error while this lived beside the Discord channel routes card, whose styles it
+// borrowed. Renamed with the move so it doesn't depend on a neighbour it no longer has.
+.pool-error {
+  color: var(--danger);
+  font-size: 12px;
+}

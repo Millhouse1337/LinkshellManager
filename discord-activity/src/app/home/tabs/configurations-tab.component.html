@@ -3,10 +3,19 @@
         <div>
           <div class="section-label">Settings</div>
           <div class="section-title">{{ viewTitle() }}</div>
-          @if (activeLinkshellName(); as activeName) {
-            <div class="section-sub">
-              Currently configuring <span class="tag accent">{{ activeName }}</span>
+          <!-- The addon pairs the whole account, so naming one linkshell here
+               would be misleading. Every other settings view genuinely is
+               per-linkshell and keeps the "Currently configuring" line. -->
+          @if (view() === 'addon') {
+            <div class="section-sub" style="font-size:16px;font-weight:700;color:var(--fg-1)">
+              Addon pairing applies to all your linkshells
             </div>
+          } @else {
+            @if (activeLinkshellName(); as activeName) {
+              <div class="section-sub">
+                Currently configuring <span class="tag accent">{{ activeName }}</span>
+              </div>
+            }
           }
         </div>
         <div class="section-head-right">
@@ -176,275 +185,288 @@
               </section>
             </div>
 
-            <div style="display:flex;gap:28px 24px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between">
+            <!-- Every setting below is its own bordered card, the same shell as the Loot
+                 structure / Linkshell type cards above, laid out 4 per row. -->
+            <div class="customize-cards-grid">
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
-                <div class="customize-form__section" style="flex:0 0 260px">
-                  <strong>DKP rounding increment</strong>
-                  <p class="muted">Rounds earned DKP to the nearest increment.</p>
-                  <label class="customize-form__field">
-                    <select name="dkpRoundingIncrementDraft"
-                      [ngModel]="customizeDraft.dkpRoundingIncrement"
-                      (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
-                      <option value="Quarter">Nearest Quarter (0.25)</option>
-                      <option value="Half">Nearest Half (0.5)</option>
-                    </select>
-                  </label>
-                  <p class="muted" style="margin-top:8px">
-                    📥 <strong>Importing existing DKP?</strong> Open LinkshellManager on the web →
-                    <em>Customize Linkshell → Import DKP</em> to upload a spreadsheet of your current
-                    balances.
-                  </p>
-                </div>
+                <section class="card">
+                  <div class="card-head"><div class="card-title">DKP rounding increment</div></div>
+                  <div class="card-body customize-form__section">
+                    <p class="muted">Rounds earned DKP to the nearest increment.</p>
+                    <label class="customize-form__field">
+                      <select name="dkpRoundingIncrementDraft"
+                        [ngModel]="customizeDraft.dkpRoundingIncrement"
+                        (ngModelChange)="customizeDraft.dkpRoundingIncrement = $event; onCustomizeFieldChange()">
+                        <option value="Quarter">Nearest Quarter (0.25)</option>
+                        <option value="Half">Nearest Half (0.5)</option>
+                      </select>
+                    </label>
+                    <p class="muted" style="margin-top:8px">
+                      📥 <strong>Importing existing DKP?</strong> Open LinkshellManager on the web →
+                      <em>Customize Linkshell → Import DKP</em> to upload a spreadsheet of your current
+                      balances.
+                    </p>
+                  </div>
+                </section>
               }
 
-              <div class="customize-form__section" style="flex:0 0 280px">
-                <strong>Event board theme</strong>
-                <p class="muted">Colour palette for the event signup board image posted to Discord.</p>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
-                  @for (theme of eventBoardThemes; track theme.key) {
-                    <label class="customize-form__option" style="align-items:center;gap:8px;padding:8px;border-radius:10px;border:1px solid"
-                      [style.border-color]="customizeDraft.eventBoardTheme === theme.key ? theme.accent : 'var(--border, rgba(255,255,255,0.12))'">
-                      <input type="radio" name="eventBoardThemeDraft" [value]="theme.key"
-                        [ngModel]="customizeDraft.eventBoardTheme"
-                        (ngModelChange)="customizeDraft.eventBoardTheme = $event; onCustomizeFieldChange()" />
-                      <span style="width:26px;height:26px;border-radius:7px;flex-shrink:0"
-                        [style.background]="theme.bg"
-                        [style.border]="'2px solid ' + theme.accent"
-                        [style.box-shadow]="'0 0 8px ' + theme.accent"></span>
-                      <strong>{{ theme.label }}</strong>
-                    </label>
-                  }
-                </div>
-              </div>
-
-              <div class="customize-form__section" style="flex:0 1 auto;min-width:280px">
-                <strong>Feature toggles</strong>
-                <p class="muted">Hide sections your linkshell doesn't use.</p>
-                <div class="customize-form__toggles">
-                <!-- Charts and Missions aren't built yet: locked off + (TBA). Re-enable the
-                     ngModel bindings (and drop the guard in isFeatureEnabled) when they ship. -->
-                <label class="customize-form__toggle" style="opacity:.55;cursor:not-allowed"
-                  title="Not developed yet — coming soon.">
-                  <input type="checkbox" disabled />
-                  <span>Charts tab <span class="muted">(TBA)</span></span>
-                </label>
-                <label class="customize-form__toggle" style="opacity:.55;cursor:not-allowed"
-                  title="Not developed yet — coming soon.">
-                  <input type="checkbox" disabled />
-                  <span>Missions tab <span class="muted">(TBA)</span></span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableAuctionsDraft"
-                    [ngModel]="customizeDraft.enableAuctions"
-                    (ngModelChange)="customizeDraft.enableAuctions = $event; onCustomizeFieldChange()" />
-                  <span>Auctions tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableTodsDraft"
-                    [ngModel]="customizeDraft.enableToDs"
-                    (ngModelChange)="customizeDraft.enableToDs = $event; onCustomizeFieldChange()" />
-                  <span>ToDs tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableEventsDraft"
-                    [ngModel]="customizeDraft.enableEvents"
-                    (ngModelChange)="customizeDraft.enableEvents = $event; onCustomizeFieldChange()" />
-                  <span>Events tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableDkpDraft"
-                    [ngModel]="customizeDraft.enableDkp"
-                    (ngModelChange)="customizeDraft.enableDkp = $event; onCustomizeFieldChange()" />
-                  <span>DKP tab</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableItemsDraft"
-                    [ngModel]="customizeDraft.enableItems"
-                    (ngModelChange)="customizeDraft.enableItems = $event; onCustomizeFieldChange()" />
-                  <span>Items</span>
-                </label>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="enableRevenueDraft"
-                    [ngModel]="customizeDraft.enableRevenue"
-                    (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
-                  <span>Revenue</span>
-                </label>
-              </div>
-              </div>
-
-              <div class="customize-form__section" style="flex:0 0 280px">
-                <strong>Member Activity Tracking</strong>
-                <p class="muted">
-                  Show an Active/Inactive badge per member based on event attendance. A member goes
-                  <strong>Inactive</strong> after N consecutive absences from events that count, and back to
-                  <strong>Active</strong> after M consecutive credited attendances.
-                </p>
-                <label class="customize-form__toggle" style="margin-bottom:10px">
-                  <input type="checkbox" name="enableActivityTrackingDraft"
-                    [ngModel]="customizeDraft.enableActivityTracking"
-                    (ngModelChange)="customizeDraft.enableActivityTracking = $event; onCustomizeFieldChange()" />
-                  <span>Enable activity tracking</span>
-                </label>
-                @if (customizeDraft.enableActivityTracking) {
-                  <div style="display:flex;gap:16px;flex-wrap:wrap">
-                    <label class="customize-form__field" style="flex:0 0 220px">
-                      <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Absences before Inactive</span>
-                      <input type="number" min="1" step="1" name="inactiveAfterAbsencesDraft"
-                        [ngModel]="customizeDraft.inactiveAfterAbsences"
-                        (ngModelChange)="customizeDraft.inactiveAfterAbsences = $event; onCustomizeFieldChange()" />
-                    </label>
-                    <label class="customize-form__field" style="flex:0 0 220px">
-                      <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Attendances back to Active</span>
-                      <input type="number" min="1" step="1" name="activeAfterAttendancesDraft"
-                        [ngModel]="customizeDraft.activeAfterAttendances"
-                        (ngModelChange)="customizeDraft.activeAfterAttendances = $event; onCustomizeFieldChange()" />
-                    </label>
-                  </div>
-                }
-              </div>
-
-              <div class="customize-form__section" style="flex:0 0 280px">
-                <strong>Outside Party Signup</strong>
-                <p class="muted">
-                  Let Discord-server members who have <strong>never launched the app</strong> sign up for
-                  events from the party board, identified by their Discord account. Their first signup adds them
-                  to your roster as a placeholder member, so they <strong>earn DKP and count toward attendance</strong>
-                  like anyone else (and aren't re-asked for their name next time).
-                </p>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="outsidePartySignupEnabledDraft"
-                    [ngModel]="customizeDraft.outsidePartySignupEnabled"
-                    (ngModelChange)="customizeDraft.outsidePartySignupEnabled = $event; onCustomizeFieldChange()" />
-                  <span>Allow outside (non-account) Discord signups</span>
-                </label>
-              </div>
-
-              <div class="customize-form__section" style="flex:0 0 280px">
-                <strong>Fill alliances in order</strong>
-                <p class="muted">
-                  When someone signs up for a later alliance while an open slot their job can fill is still
-                  free in an earlier alliance, they're warned and offered that earlier slot first. A soft,
-                  job-aware nudge (they can still sign up where they chose); no effect on single-alliance events.
-                </p>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="fillAlliancesInOrderDraft"
-                    [ngModel]="customizeDraft.fillAlliancesInOrder"
-                    (ngModelChange)="customizeDraft.fillAlliancesInOrder = $event; onCustomizeFieldChange()" />
-                  <span>Nudge members to fill earlier alliances first</span>
-                </label>
-              </div>
-
-              <div class="customize-form__section" style="flex:0 0 280px">
-                <strong>HNM Outside Sign Up</strong>
-                <p class="muted">
-                  A separate switch for <strong>HNM signup boards</strong>. Turning this on adds the HNM event type
-                  when creating an event and lets outside Discord members sign up to HNM boards. HNM is
-                  <strong>roster memory only</strong> — players are remembered so they don't retype their name, but
-                  HNM signups earn <strong>no DKP and no attendance credit</strong>. Works independently of Outside
-                  Party Signup above.
-                </p>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="hnmOutsideSignupEnabledDraft"
-                    [ngModel]="customizeDraft.hnmOutsideSignupEnabled"
-                    (ngModelChange)="customizeDraft.hnmOutsideSignupEnabled = $event; onCustomizeFieldChange()" />
-                  <span>Allow HNM outside sign-ups (roster only — no DKP)</span>
-                </label>
-              </div>
-
-              <div class="customize-form__section" style="flex:0 0 280px">
-                <strong>Components V2 boards <span class="muted">(experimental)</span></strong>
-                <p class="muted">
-                  Post Discord event sign-up boards as Discord <strong>Components V2</strong> messages: the rendered
-                  board sits in a <strong>full-width media gallery</strong> (no embed frame) and is drawn on a
-                  <strong>wider canvas</strong>, so it reads larger. Same buttons and signup flow. Discord won't let a
-                  board switch modes once posted, so this only affects boards posted <strong>after</strong> you turn it on.
-                </p>
-                <label class="customize-form__toggle">
-                  <input type="checkbox" name="useComponentsV2BoardsDraft"
-                    [ngModel]="customizeDraft.useComponentsV2Boards"
-                    (ngModelChange)="customizeDraft.useComponentsV2Boards = $event; onCustomizeFieldChange()" />
-                  <span>Use Components V2 event boards</span>
-                </label>
-              </div>
-            </div>
-
-            @if (canCustomizeSelectedLinkshell()) {
-              <div class="card">
-                <div class="card-head">
-                  <div class="card-title">💬 After-event discussion channel</div>
-                  @if (activeLinkshellName(); as activeName) {
-                    <span class="tag accent" title="Discussion channel for the currently active linkshell">{{ activeName }}</span>
-                  }
-                </div>
-                <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
-                  <p class="muted" style="font-size:12px;margin:0">
-                    Optional. New comments on a completed event are mirrored to this channel. Leave blank to keep discussion in-app only.
-                  </p>
-                  <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                    <label class="route-field grow" style="max-width:340px">
-                      <span>Discussion channel</span>
-                      @if (discordChannelsAvailable().length > 0) {
-                        <select name="discussionChannel" [(ngModel)]="discussionChannelDraft" [ngModelOptions]="{standalone: true}">
-                          <option value="">— none (in-app only) —</option>
-                          @for (channel of discordChannelsAvailable(); track channel.id) {
-                            <option [value]="channel.id">#{{ channel.name }}</option>
-                          }
-                        </select>
-                      } @else {
-                        <input type="text" inputmode="numeric" maxlength="20" placeholder="Channel ID (blank = none)"
-                          name="discussionChannel" [(ngModel)]="discussionChannelDraft" [ngModelOptions]="{standalone: true}" />
-                      }
-                    </label>
-                    <button type="button" class="btn primary" (click)="saveDiscussionChannel()"
-                      [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">Save</button>
-                  </div>
-                </div>
-              </div>
-            }
-
-            <div class="customize-form__row" style="margin-top:24px">
-              <button type="button"
-                      (click)="todHideSectionOpen = !todHideSectionOpen"
-                      [attr.aria-expanded]="todHideSectionOpen ? 'true' : 'false'"
-                      style="width:100%;display:flex;align-items:center;gap:8px;padding:0;background:transparent;border:0;color:var(--fg);font:inherit;font-weight:600;font-size:13px;text-align:left;cursor:pointer;margin-bottom:4px">
-                <span style="display:inline-block;width:10px;font-size:10px;transition:transform 0.15s ease;color:var(--fg-3)"
-                      [style.transform]="todHideSectionOpen ? 'rotate(90deg)' : 'rotate(0deg)'">▶</span>
-                <span>Hide ToD Mobs</span>
-              </button>
-              @if (todHideSectionOpen) {
-              <div class="customize-form__row-body">
-                <div style="font-size:12px;color:var(--fg-3);margin-bottom:10px">
-                  Toggle a monster on to hide it from the Tracked Windows panel on the Dashboard and ToDs tab.
-                </div>
-                @for (group of todMonsterGroups; track group.label) {
-                  <div style="margin-bottom:10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-                    <!-- Section header is a button so the whole strip is clickable.
-                         Chevron rotates 90deg when expanded. -->
-                    <button type="button"
-                            (click)="toggleTodHideGroup(group.label)"
-                            [attr.aria-expanded]="todHideGroupExpanded[group.label] ? 'true' : 'false'"
-                            style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 12px;background:transparent;border:0;color:var(--fg-2);font:inherit;text-align:left;cursor:pointer">
-                      <span
-                        style="display:inline-block;width:10px;font-size:10px;transition:transform 0.15s ease"
-                        [style.transform]="todHideGroupExpanded[group.label] ? 'rotate(90deg)' : 'rotate(0deg)'">▶</span>
-                      <span style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">{{ group.label }}</span>
-                    </button>
-                    @if (todHideGroupExpanded[group.label]) {
-                      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 14px;padding:0 12px 12px">
-                        @for (monster of group.names; track monster) {
-                          <label class="customize-form__toggle">
-                            <input type="checkbox"
-                              [name]="'hiddenTod_' + monster"
-                              [ngModel]="isMonsterHidden(monster)"
-                              (ngModelChange)="onMonsterHiddenChange(monster, $event)" />
-                            <span>{{ monster }}</span>
-                          </label>
-                        }
-                      </div>
+              <section class="card">
+                <div class="card-head"><div class="card-title">Event board theme</div></div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">Colour palette for the event signup board image posted to Discord.</p>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
+                    @for (theme of eventBoardThemes; track theme.key) {
+                      <label class="customize-form__option" style="align-items:center;gap:8px;padding:8px;border-radius:10px;border:1px solid"
+                        [style.border-color]="customizeDraft.eventBoardTheme === theme.key ? theme.accent : 'var(--border, rgba(255,255,255,0.12))'">
+                        <input type="radio" name="eventBoardThemeDraft" [value]="theme.key"
+                          [ngModel]="customizeDraft.eventBoardTheme"
+                          (ngModelChange)="customizeDraft.eventBoardTheme = $event; onCustomizeFieldChange()" />
+                        <span style="width:26px;height:26px;border-radius:7px;flex-shrink:0"
+                          [style.background]="theme.bg"
+                          [style.border]="'2px solid ' + theme.accent"
+                          [style.box-shadow]="'0 0 8px ' + theme.accent"></span>
+                        <strong>{{ theme.label }}</strong>
+                      </label>
                     }
                   </div>
-                }
-              </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head"><div class="card-title">Feature toggles</div></div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">Hide sections your linkshell doesn't use.</p>
+                  <div class="customize-form__toggles">
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableEndgameDraft"
+                      [ngModel]="customizeDraft.enableEndgame"
+                      (ngModelChange)="customizeDraft.enableEndgame = $event; onCustomizeFieldChange()" />
+                    <span>Charts tab</span>
+                  </label>
+                  <!-- Missions isn't built yet: locked off + (TBA). Re-enable the ngModel binding
+                       (and drop the guard in isFeatureEnabled) when it ships. -->
+                  <label class="customize-form__toggle" style="opacity:.55;cursor:not-allowed"
+                    title="Not developed yet — coming soon.">
+                    <input type="checkbox" disabled />
+                    <span>Missions tab <span class="muted">(TBA)</span></span>
+                  </label>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableAuctionsDraft"
+                      [ngModel]="customizeDraft.enableAuctions"
+                      (ngModelChange)="customizeDraft.enableAuctions = $event; onCustomizeFieldChange()" />
+                    <span>Auctions tab</span>
+                  </label>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableTodsDraft"
+                      [ngModel]="customizeDraft.enableToDs"
+                      (ngModelChange)="customizeDraft.enableToDs = $event; onCustomizeFieldChange()" />
+                    <span>ToDs tab</span>
+                  </label>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableEventsDraft"
+                      [ngModel]="customizeDraft.enableEvents"
+                      (ngModelChange)="customizeDraft.enableEvents = $event; onCustomizeFieldChange()" />
+                    <span>Events tab</span>
+                  </label>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableDkpDraft"
+                      [ngModel]="customizeDraft.enableDkp"
+                      (ngModelChange)="customizeDraft.enableDkp = $event; onCustomizeFieldChange()" />
+                    <span>DKP tab</span>
+                  </label>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableItemsDraft"
+                      [ngModel]="customizeDraft.enableItems"
+                      (ngModelChange)="customizeDraft.enableItems = $event; onCustomizeFieldChange()" />
+                    <span>Items</span>
+                  </label>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="enableRevenueDraft"
+                      [ngModel]="customizeDraft.enableRevenue"
+                      (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
+                    <!-- The flag gates gil going out as well as coming in, so "Revenue" undersold it. -->
+                    <span>Finances</span>
+                  </label>
+                </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head"><div class="card-title">Member Activity Tracking</div></div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">
+                    Show an Active/Inactive badge per member based on event attendance. A member goes
+                    <strong>Inactive</strong> after N consecutive absences from events that count, and back to
+                    <strong>Active</strong> after M consecutive credited attendances.
+                  </p>
+                  <label class="customize-form__toggle" style="margin-bottom:10px">
+                    <input type="checkbox" name="enableActivityTrackingDraft"
+                      [ngModel]="customizeDraft.enableActivityTracking"
+                      (ngModelChange)="customizeDraft.enableActivityTracking = $event; onCustomizeFieldChange()" />
+                    <span>Enable activity tracking</span>
+                  </label>
+                  @if (customizeDraft.enableActivityTracking) {
+                    <div style="display:flex;gap:16px;flex-wrap:wrap">
+                      <label class="customize-form__field" style="flex:0 0 220px">
+                        <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Absences before Inactive</span>
+                        <input type="number" min="1" step="1" name="inactiveAfterAbsencesDraft"
+                          [ngModel]="customizeDraft.inactiveAfterAbsences"
+                          (ngModelChange)="customizeDraft.inactiveAfterAbsences = $event; onCustomizeFieldChange()" />
+                      </label>
+                      <label class="customize-form__field" style="flex:0 0 220px">
+                        <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Attendances back to Active</span>
+                        <input type="number" min="1" step="1" name="activeAfterAttendancesDraft"
+                          [ngModel]="customizeDraft.activeAfterAttendances"
+                          (ngModelChange)="customizeDraft.activeAfterAttendances = $event; onCustomizeFieldChange()" />
+                      </label>
+                    </div>
+                  }
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head"><div class="card-title">Outside Party Signup</div></div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">
+                    Let Discord-server members who have <strong>never launched the app</strong> sign up for
+                    events from the party board, identified by their Discord account. Their first signup adds them
+                    to your roster as a placeholder member, so they <strong>earn DKP and count toward attendance</strong>
+                    like anyone else (and aren't re-asked for their name next time).
+                  </p>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="outsidePartySignupEnabledDraft"
+                      [ngModel]="customizeDraft.outsidePartySignupEnabled"
+                      (ngModelChange)="customizeDraft.outsidePartySignupEnabled = $event; onCustomizeFieldChange()" />
+                    <span>Allow outside (non-account) Discord signups</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head"><div class="card-title">Fill alliances in order</div></div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">
+                    When someone signs up for a later alliance while an open slot their job can fill is still
+                    free in an earlier alliance, they're warned and offered that earlier slot first. A soft,
+                    job-aware nudge (they can still sign up where they chose); no effect on single-alliance events.
+                  </p>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="fillAlliancesInOrderDraft"
+                      [ngModel]="customizeDraft.fillAlliancesInOrder"
+                      (ngModelChange)="customizeDraft.fillAlliancesInOrder = $event; onCustomizeFieldChange()" />
+                    <span>Nudge members to fill earlier alliances first</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="card">
+                <div class="card-head">
+                  <div class="card-title">Components V2 boards <span class="muted">(experimental)</span></div>
+                </div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">
+                    Post Discord event sign-up boards as Discord <strong>Components V2</strong> messages: the rendered
+                    board sits in a <strong>full-width media gallery</strong> (no embed frame) and is drawn on a
+                    <strong>wider canvas</strong>, so it reads larger. Same buttons and signup flow. Discord won't let a
+                    board switch modes once posted, so this only affects boards posted <strong>after</strong> you turn it on.
+                  </p>
+                  <label class="customize-form__toggle">
+                    <input type="checkbox" name="useComponentsV2BoardsDraft"
+                      [ngModel]="customizeDraft.useComponentsV2Boards"
+                      (ngModelChange)="customizeDraft.useComponentsV2Boards = $event; onCustomizeFieldChange()" />
+                    <span>Use Components V2 event boards</span>
+                  </label>
+                </div>
+              </section>
+
+              <!-- Saves on its own button (saveDiscussionChannel), NOT with the main form — it's a
+                   standalone ngModel, so it stays out of customizeDraft/customizeDirty. -->
+              <section class="card">
+                <div class="card-head"><div class="card-title">After-event discussion channel</div></div>
+                <div class="card-body customize-form__section">
+                  <p class="muted">
+                    Optional. New comments on a completed event are mirrored to this channel. Leave blank
+                    to keep discussion in-app only.
+                  </p>
+                  <label class="route-field">
+                    <span>Discussion channel</span>
+                    @if (discordChannelsAvailable().length > 0) {
+                      <select name="discussionChannel" [(ngModel)]="discussionChannelDraft" [ngModelOptions]="{standalone: true}">
+                        <option value="">— none (in-app only) —</option>
+                        @for (channel of discordChannelsAvailable(); track channel.id) {
+                          <option [value]="channel.id">#{{ channel.name }}</option>
+                        }
+                      </select>
+                    } @else {
+                      <input type="text" inputmode="numeric" maxlength="20" placeholder="Channel ID (blank = none)"
+                        name="discussionChannel" [(ngModel)]="discussionChannelDraft" [ngModelOptions]="{standalone: true}" />
+                    }
+                  </label>
+                  <button type="button" class="btn primary" style="justify-self:start"
+                    (click)="saveDiscussionChannel()"
+                    [disabled]="activity.busyLinkshellId() === customizeTargetLinkshellId()">Save</button>
+                </div>
+              </section>
+            </div>
+
+            <div class="customize-form__row tod-timings" style="margin-top:24px">
+              <button type="button" class="tod-timings__toggle" (click)="todTimingsOpen = !todTimingsOpen"
+                [attr.aria-expanded]="todTimingsOpen" aria-controls="tod-timings-content">
+                <span class="tod-timings__toggle-chevron" [class.is-open]="todTimingsOpen" aria-hidden="true">&#9656;</span>
+                <span class="tod-timings__intro">
+                  <strong>ToD Cooldowns</strong>
+                  <span class="muted">Set the default cooldown and repop interval for each monster.</span>
+                </span>
+              </button>
+              @if (todTimingsOpen) {
+                <div id="tod-timings-content" class="tod-timings__content">
+                  <div class="tod-timings__content-actions">
+                    <button type="button" class="btn ghost sm" (click)="openNewTodMonsterDialog()">+ New Monster</button>
+                  </div>
+                  @for (group of todMonsterGroups(); track group.label) {
+                    <section class="tod-timings__section">
+                      <header class="tod-timings__section-header">
+                        <span class="tod-timings__section-mark" aria-hidden="true">{{ group.label.charAt(0) }}</span>
+                        <h4>{{ group.label }}</h4>
+                        <span class="tod-timings__section-line"></span>
+                      </header>
+                      <div class="tod-timings__grid">
+                        @for (monster of group.names; track monster) {
+                          <article class="tod-timings__monster">
+                            <header class="tod-timings__monster-header">
+                              <strong>{{ monster }}</strong>
+                              @if (isCustomTodMonster(monster)) {
+                                <button type="button" class="btn ghost sm tod-timings__delete"
+                                  (click)="deleteCustomTodMonster(monster)">Delete</button>
+                              }
+                              <span class="tod-timings__monster-mark" aria-hidden="true">{{ monster.charAt(0) }}</span>
+                            </header>
+                            <label>
+                              <span>Cooldown hours</span>
+                              <input type="number" min="0" step="1" [name]="'todCooldownHours_' + monster"
+                                [ngModel]="todCooldownHours(monster)" (ngModelChange)="updateTodCooldownHours(monster, $event)" />
+                            </label>
+                            <label>
+                              <span>Cooldown mins</span>
+                              <input type="number" min="0" max="59" step="1" [name]="'todCooldownMinutes_' + monster"
+                                [ngModel]="todCooldownMinutes(monster)" (ngModelChange)="updateTodCooldownMinutes(monster, $event)" />
+                            </label>
+                            <label>
+                              <span>Interval hours</span>
+                              <input type="number" min="0" step="1" [name]="'todIntervalHours_' + monster"
+                                [(ngModel)]="todMonsterTiming(monster).intervalHours" (ngModelChange)="onCustomizeFieldChange()" />
+                            </label>
+                            <label>
+                              <span>Interval mins</span>
+                              <input type="number" min="0" max="59" step="1" [name]="'todIntervalMinutes_' + monster"
+                                [(ngModel)]="todMonsterTiming(monster).intervalMinutes" (ngModelChange)="onCustomizeFieldChange()" />
+                            </label>
+                          </article>
+                        }
+                      </div>
+                    </section>
+                  }
+                </div>
               }
             </div>
 
@@ -457,8 +479,324 @@
               </button>
             </div>
           </form>
+
+          <dialog #newTodMonsterDialog class="event-edit-modal-dialog tod-new-monster-dialog">
+            <div class="card-head">
+              <div class="card-title">New ToD Monster</div>
+              <button type="button" class="btn ghost sm" (click)="closeNewTodMonsterDialog()">Close</button>
+            </div>
+            <form class="card-body tod-new-monster-form" (ngSubmit)="addNewTodMonster()">
+              <label class="field">
+                <span class="form-label">Category</span>
+                <select class="form-select" [(ngModel)]="newTodMonsterCategory" name="newTodMonsterCategory">
+                  @for (category of newTodMonsterCategories; track category) {
+                    <option [value]="category">{{ category }}</option>
+                  }
+                </select>
+              </label>
+              <label class="field">
+                <span class="form-label">Monster name</span>
+                <input class="form-input" [(ngModel)]="newTodMonsterName" name="newTodMonsterName" maxlength="128" required />
+              </label>
+              <div class="tod-new-monster-form__timings">
+                <label class="field">
+                  <span class="form-label">Cooldown hours</span>
+                  <input class="form-input" type="number" min="0" step="1" [(ngModel)]="newTodMonsterCooldownHours" name="newTodMonsterCooldownHours" required />
+                </label>
+                <label class="field">
+                  <span class="form-label">Cooldown mins</span>
+                  <input class="form-input" type="number" min="0" max="59" step="1" [(ngModel)]="newTodMonsterCooldownMinutes" name="newTodMonsterCooldownMinutes" required />
+                </label>
+                <label class="field">
+                  <span class="form-label">Interval hours</span>
+                  <input class="form-input" type="number" min="0" step="1" [(ngModel)]="newTodMonsterIntervalHours" name="newTodMonsterIntervalHours" required />
+                </label>
+                <label class="field">
+                  <span class="form-label">Interval mins</span>
+                  <input class="form-input" type="number" min="0" max="59" step="1" [(ngModel)]="newTodMonsterIntervalMinutes" name="newTodMonsterIntervalMinutes" required />
+                </label>
+              </div>
+              @if (newTodMonsterError) {
+                <p class="form-error">{{ newTodMonsterError }}</p>
+              }
+              <div class="form-actions">
+                <button type="button" class="btn ghost" (click)="closeNewTodMonsterDialog()">Cancel</button>
+                <button type="submit" class="btn primary">Add Monster</button>
+              </div>
+            </form>
+          </dialog>
         }
       </div>
+
+      <!-- HNM-only settings. Split out of Customize Linkshell into its own card, but bound to the
+           same customizeDraft — so either card's Save persists the whole settings payload. -->
+      @if (canCustomizeSelectedLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">🐉 HNM Settings</div>
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Editing the currently active linkshell">{{ activeName }}</span>
+            }
+          </div>
+          <div class="card-body">
+            <form class="customize-form" (ngSubmit)="$event.preventDefault(); saveCustomizeDraft()">
+              <!-- Every HNM setting is its own bordered card, the same shell as the Customize
+                   Linkshell cards above. They all bind to the same customizeDraft, so the single
+                   Save at the bottom still persists the whole payload. -->
+              <div class="customize-cards-grid">
+                <section class="card">
+                  <div class="card-head"><div class="card-title">HNM Outside Sign Up</div></div>
+                  <div class="card-body customize-form__section">
+                    <p class="muted">
+                      A separate switch for <strong>HNM signup boards</strong>. Turning this on adds the HNM event type
+                      when creating an event and lets outside Discord members sign up to HNM boards. HNM is
+                      <strong>roster memory only</strong> — players are remembered so they don't retype their name, but
+                      HNM signups earn <strong>no DKP and no attendance credit</strong>. Works independently of Outside
+                      Party Signup in Customize Linkshell.
+                    </p>
+                    <label class="customize-form__toggle">
+                      <input type="checkbox" name="hnmOutsideSignupEnabledDraft"
+                        [ngModel]="customizeDraft.hnmOutsideSignupEnabled"
+                        (ngModelChange)="customizeDraft.hnmOutsideSignupEnabled = $event; onCustomizeFieldChange()" />
+                      <span>Allow HNM outside sign-ups (roster only — no DKP)</span>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="card">
+                  <div class="card-head">
+                    <div class="card-title">HNM Attendance Mode <span class="muted">(Manual Check In)</span></div>
+                  </div>
+                  <div class="card-body customize-form__section">
+                    <p class="muted">
+                      <strong>Manual Check In</strong>: members self-serve <strong>Check In</strong> from a button on the
+                      Discord camp board, marking the window they arrived. DKP is <strong>per window attended</strong>
+                      (a fraction like 0.25) plus optional <strong>claim</strong> / <strong>kill</strong> bonuses.
+                      <strong>Standard</strong> scores from the addon's window scans:
+                      <strong>open</strong> to everyone scanned in window 1,
+                      <strong>close</strong> to everyone in the camp's last scan, plus
+                      <strong>claim</strong> / <strong>kill</strong> for the outcome entered on the End Camp form.
+                      Leave a bonus at 0 to switch it off.
+                      (HNM Outside Sign Up should be on so account-less members can Check In.)
+                      <br /><br />
+                      Either way these amounts are only what a camp <strong>proposes</strong>. Ending a camp no
+                      longer pays anyone: it posts the roster to <strong>Current Field Activity</strong> on the
+                      Event System tab as a pending row, and DKP moves when an officer reviews it and hits
+                      <strong>Post</strong> — so a camp with every bonus at 0 still shows up there and can be
+                      priced by hand.
+                      Changing this applies to new boards and to any camp that hasn't started yet — a camp
+                      already running keeps its current mode until it pops, because switching mid-camp
+                      would strand the attendance already collected.
+                    </p>
+                    <label class="customize-form__field">
+                      <select name="hnmAttendanceModeDraft"
+                        [ngModel]="customizeDraft.hnmAttendanceMode"
+                        (ngModelChange)="customizeDraft.hnmAttendanceMode = $event; onCustomizeFieldChange()">
+                        <option value="Standard">Standard (current behavior)</option>
+                        <option value="Wd">Manual Check In (per-window check-in)</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <!-- Applies to BOTH modes, hence its own card rather than living under one
+                     mode's block. -->
+                <section class="card">
+                  <div class="card-head"><div class="card-title">Automatic window snapshots</div></div>
+                  <div class="card-body customize-form__section">
+                    <label class="customize-form__toggle">
+                      <input type="checkbox" name="hnmAutoSnapshotEnabledDraft"
+                        [ngModel]="customizeDraft.hnmAutoSnapshotEnabled"
+                        (ngModelChange)="customizeDraft.hnmAutoSnapshotEnabled = $event; onCustomizeFieldChange()" />
+                      <span>Enable automatic window snapshots</span>
+                    </label>
+                    <p class="muted">
+                      When on, an officer running the LSM addon can <strong>arm</strong> auto-posting on a live camp.
+                      About the delay below after each window opens, the addon captures <strong>their alliance</strong>
+                      (not the whole zone) and posts it as that window's attendance snapshot.
+                      Arming is <strong>per-officer and per-camp</strong> — never automatic — so people in the zone who
+                      shouldn't be counted stay out. If the camp runs more than one alliance,
+                      <strong>one officer in each alliance</strong> must arm. Only members who can moderate live events
+                      can arm.
+                      <br />
+                      <strong>Standard</strong>: these snapshots are what the open / close / claim / kill bonuses are paid
+                      from. <strong>Manual Check In</strong>: they are a <strong>record only</strong> — DKP still comes
+                      from Check In / Check Out.
+                    </p>
+                    @if (customizeDraft.hnmAutoSnapshotEnabled) {
+                      <label class="customize-form__field" style="max-width:180px">
+                        <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Capture delay (seconds)</span>
+                        <input type="number" min="5" max="300" step="5" name="hnmAutoSnapshotDelaySecondsDraft"
+                          [ngModel]="customizeDraft.hnmAutoSnapshotDelaySeconds"
+                          (ngModelChange)="customizeDraft.hnmAutoSnapshotDelaySeconds = $event; onCustomizeFieldChange()" />
+                      </label>
+                    }
+                  </div>
+                </section>
+
+                <!-- Scoring for whichever mode is selected. The card title carries the mode so the
+                     bare bonus fields below always say which scheme they belong to. -->
+                <section class="card">
+                  <div class="card-head">
+                    <div class="card-title">
+                      @if (customizeDraft.hnmAttendanceMode === 'Wd') {
+                        Manual Check In scoring
+                      } @else {
+                        Standard scoring
+                      }
+                    </div>
+                  </div>
+                  <div class="card-body customize-form__section">
+                    @if (customizeDraft.hnmAttendanceMode === 'Standard') {
+                      <p class="muted">
+                        <strong>Regular window</strong> is the base rate EVERY window a member is scanned
+                        in pays — including the ones in between, which used to be worth nothing unless an
+                        officer priced them one at a time. <strong>Open</strong> and <strong>close</strong>
+                        are added on top of it. Leave it at 0 to keep the open/close-only payout.
+                      </p>
+                      <div style="display:flex;gap:16px;flex-wrap:wrap">
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Regular window</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardWindowBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardWindowBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardWindowBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardOpenBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardOpenBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardOpenBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardCloseBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardCloseBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardCloseBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Claim bonus</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardClaimBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardClaimBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardClaimBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Kill bonus</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardKillBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardKillBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardKillBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                      </div>
+                    }
+
+                    @if (customizeDraft.hnmAttendanceMode === 'Wd') {
+                      <p class="muted">
+                        <strong>DKP / window</strong> is paid for every window between a member's
+                        <strong>Check In</strong> and <strong>Check Out</strong>. <strong>Open</strong> is
+                        added once for anyone checked in from window 1; <strong>close</strong> once for
+                        anyone still checked in at the camp's last window. Leave a bonus at 0 to switch
+                        it off.
+                      </p>
+                      <div style="display:flex;gap:16px;flex-wrap:wrap">
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">DKP / window</span>
+                          <input type="number" min="0" step="0.05" name="wdDkpPerWindowDraft"
+                            [ngModel]="customizeDraft.wdDkpPerWindow"
+                            (ngModelChange)="customizeDraft.wdDkpPerWindow = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
+                          <input type="number" min="0" step="0.05" name="wdOpenBonusDraft"
+                            [ngModel]="customizeDraft.wdOpenBonus"
+                            (ngModelChange)="customizeDraft.wdOpenBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
+                          <input type="number" min="0" step="0.05" name="wdCloseBonusDraft"
+                            [ngModel]="customizeDraft.wdCloseBonus"
+                            (ngModelChange)="customizeDraft.wdCloseBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Claim bonus</span>
+                          <input type="number" min="0" step="0.05" name="wdClaimBonusDraft"
+                            [ngModel]="customizeDraft.wdClaimBonus"
+                            (ngModelChange)="customizeDraft.wdClaimBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Kill bonus</span>
+                          <input type="number" min="0" step="0.05" name="wdKillBonusDraft"
+                            [ngModel]="customizeDraft.wdKillBonus"
+                            (ngModelChange)="customizeDraft.wdKillBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                      </div>
+                    }
+                  </div>
+                </section>
+              </div>
+
+              <!-- Row 2: the read-only reference pair. Its own flex row rather than another
+                   customize-cards-grid so the monster table keeps the wide column it needs and
+                   the short prose card beside it stays its natural height. -->
+              <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px">
+                <section class="card" style="flex:0 0 280px;margin:0;min-width:0">
+                  <div class="card-head">
+                    <div class="card-title">Spawn windows <span class="muted">(built-in)</span></div>
+                  </div>
+                  <div class="card-body customize-form__section">
+                    <p class="muted">
+                      Window counts and auto-advance cadence are built in per monster — nothing to configure.
+                      Window 1 opens at the camp's start time and window N opens (N−1) × cadence later.
+                      Boards march their window automatically; officers can still click
+                      <strong>Next Window</strong> to move ahead early. Monsters not listed run a single
+                      window and advance only by hand.
+                    </p>
+                  </div>
+                </section>
+
+                <!-- Read-only per-monster setups, served from HnmConfig via the overview payload so
+                     these numbers always match what the boards actually run. -->
+                <section class="card" style="flex:1 1 300px;margin:0;min-width:280px">
+                  <div class="card-head">
+                    <div class="card-title">Window setups <span class="muted">(per monster)</span></div>
+                  </div>
+                  <div class="card-body customize-form__section">
+                    @if (hnmWindowSetups().length > 0) {
+                      <table class="hnm-window-setups">
+                        <thead>
+                          <tr>
+                            <th scope="col">Monster</th>
+                            <th scope="col">Windows</th>
+                            <th scope="col">Cadence</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (setup of hnmWindowSetups(); track setup.monster) {
+                            <tr>
+                              <td>{{ setup.monster }}</td>
+                              <td>{{ setup.windows }}</td>
+                              <td>{{ setup.minutes }} min</td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    } @else {
+                      <p class="muted">Window setups unavailable — reload the app to fetch them.</p>
+                    }
+                  </div>
+                </section>
+              </div>
+
+              <div class="customize-form__actions">
+                <button type="submit" class="btn primary" [disabled]="!customizeDirty">
+                  {{ customizeDirty ? 'Save changes' : 'Saved' }}
+                </button>
+                <button type="button" class="btn ghost" (click)="syncCustomizeDraft()" [disabled]="!customizeDirty">
+                  Discard
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      }
 
       @if (canCustomizeSelectedLinkshell()) {
         <div class="card">
@@ -748,149 +1086,10 @@
         </div>
       }
 
-      @if (canCustomizeSelectedLinkshell()) {
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">💰 DKP grouping</div>
-            @if (activeLinkshellName(); as activeName) {
-              <span class="tag accent">{{ activeName }}</span>
-            }
-          </div>
-          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
-            <p class="muted" style="font-size:12px;margin:0">
-              Create a DKP Group. Customize what event categories are grouped together so that DKP
-              earned and DKP spent can be separated based on event type.
-            </p>
-
-            <p class="muted" style="font-size:12px;margin:0">
-              Every event type starts in the <em>Default</em> group, so all event DKP is pooled
-              together until you create another group and move event types into it.
-            </p>
-
-            <div class="pool-section-label">Groups</div>
-            <!-- Column headers, aligned to the .pool-row flex columns below. -->
-            <div class="pool-row-head">
-              <div style="flex:1;min-width:0">Group Name</div>
-              <div style="flex:0 0 150px">Group Color</div>
-              <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              @for (pool of poolDrafts; track $index) {
-                <div class="pool-row">
-                  @if (pool.isDefault) {
-                    <!-- The default group is permanent: the catch-all every unassigned event type,
-                         plus adjustments and imports, land in. It can't be renamed or removed. -->
-                    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px"
-                      title="The catch-all group: every event type you don't assign, plus adjustments and imports, land here. It can't be renamed or removed.">
-                      <span>{{ pool.name }}</span>
-                    </div>
-                  } @else {
-                    <input type="text" [(ngModel)]="pool.name" (ngModelChange)="markPoolsDirty()"
-                      maxlength="64" placeholder="Enter a Group Name" style="flex:1;min-width:0"
-                      title="What to call this group. Members see this name (e.g. Endgame, Sky/Sea)." />
-                  }
-                  <div style="flex:0 0 150px;display:flex;align-items:center;gap:8px"
-                    title="A colour to tell this group apart at a glance.">
-                    <span style="width:14px;height:14px;border-radius:4px;flex:0 0 auto;border:1px solid var(--border)"
-                      [style.background]="poolSwatchColor(pool.accent)"></span>
-                    <select [(ngModel)]="pool.accent" (ngModelChange)="markPoolsDirty()" style="flex:1;min-width:0">
-                      @for (accent of poolAccents(); track accent) {
-                        <option [value]="accent">{{ accent }}</option>
-                      }
-                    </select>
-                  </div>
-                  @if (pool.isDefault) {
-                    <!-- No Remove for the default group. Keep the column width so rows stay aligned. -->
-                    <button type="button" class="btn ghost sm" style="flex:0 0 auto;visibility:hidden" tabindex="-1" aria-hidden="true">Remove</button>
-                  } @else {
-                    <button type="button" class="btn ghost sm" style="flex:0 0 auto" (click)="removePool($index)"
-                      title="Remove this group">Remove</button>
-                  }
-                </div>
-              }
-            </div>
-            <div style="display:flex;justify-content:flex-end">
-              <button type="button" class="btn ghost sm" (click)="addPool()">+ Add New Group</button>
-            </div>
-
-            <div class="pool-section-label">Event types</div>
-            <p class="muted" style="font-size:12px;margin:0">
-              Anything left on <em>Default</em> earns into the Default group — including event types you
-              haven't run yet, and any custom name typed into the event form's "Other" field.
-            </p>
-            <div style="display:flex;flex-direction:column;gap:6px">
-              @for (type of poolEventTypes(); track type.key) {
-                <div class="pool-assign-row">
-                  <div class="pool-assign-name">
-                    <span>{{ type.key }}</span>
-                    @if (type.isCustom) {
-                      <span class="tag" style="font-size:10px;font-weight:400">custom</span>
-                    }
-                    @if (type.earnedTotal > 0) {
-                      <span class="muted" style="font-size:11px">{{ type.earnedTotal | number:'1.0-2' }} DKP earned</span>
-                    }
-                  </div>
-                  <!-- [ngModel]/[ngValue], not [value]: a plain [value] on a native <select> doesn't
-                       reliably reflect the -1 ("Default") selection, so the control renders blank. -->
-                  <select [ngModel]="poolByEventType[type.key]"
-                    (ngModelChange)="setPoolForEventType(type.key, $event)"
-                    style="min-width:170px"
-                    title="Which group this event type earns into — and pays its loot out of. Leave on Default to use the default group.">
-                    <option [ngValue]="-1">Default</option>
-                    @for (pool of poolDrafts; track $index) {
-                      @if (!pool.isDefault) {
-                        <option [ngValue]="$index">{{ pool.name || 'Unnamed group' }}</option>
-                      }
-                    }
-                  </select>
-                </div>
-              }
-            </div>
-
-            <!-- The preview is a SUMMARY, not a per-member before/after table. Pool balances are
-                 derived from the ledger, so re-partitioning it can move DKP between pools but
-                 provably cannot change anyone's total — a table of unchanged totals would only
-                 imply otherwise. What matters is where the DKP moves, and which pools end up unable
-                 to pay for the loot they're charged for. -->
-            @if (poolPreview(); as preview) {
-              <div class="pool-preview">
-                @if (preview.moves.length === 0) {
-                  <div style="font-size:12px">No DKP moves between groups.</div>
-                } @else {
-                  <div style="font-size:12px;font-weight:600;margin-bottom:6px">
-                    {{ preview.affectedLedgerRows }} ledger rows across {{ preview.affectedMembers }} members move.
-                    Nobody's total DKP changes.
-                  </div>
-                  @for (move of preview.moves; track move.eventType) {
-                    <div style="font-size:12px" class="muted">
-                      {{ move.eventType }} ({{ move.earnedTotal | number:'1.0-2' }} DKP earned):
-                      {{ move.fromPool }} → {{ move.toPool }}
-                    </div>
-                  }
-                }
-                @for (warning of preview.warnings; track warning) {
-                  <div class="pool-warning">⚠ {{ warning }}</div>
-                }
-              </div>
-            }
-
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <button type="button" class="btn ghost sm" (click)="previewDkpPools()"
-                [disabled]="activity.busyDkpPools() || !!dkpPoolsError()"
-                title="See what this would move before committing to it">
-                Preview changes
-              </button>
-              <button type="button" class="btn primary" (click)="saveDkpPools()"
-                [disabled]="activity.busyDkpPools() || !!dkpPoolsError()">
-                {{ activity.busyDkpPools() ? 'Saving…' : 'Save DKP grouping' }}
-              </button>
-              @if (dkpPoolsError(); as err) {
-                <span class="routes-error">{{ err }}</span>
-              }
-            </div>
-          </div>
-        </div>
-      }
+      <!-- (The "DKP grouping" card used to sit here. It moved to the DKP tab, where it is one of
+           that tab's three views alongside the per-member ledger and the DKP Sheet — it is a
+           question about the DKP economy, not about Discord wiring. See
+           tabs/dkp-grouping-tab.component.*) -->
       }
       <!-- ===== Permissions view (its own tab) ===== -->
       @if (view() === 'permissions') {
@@ -1079,9 +1278,13 @@
               <li>
                 <span class="addon-steps__num">3</span>
                 <div>
-                  <h4>Pair the linkshell</h4>
+                  <h4>Pair the addon (once)</h4>
                   <p>Click <span class="addon-chip">+ Get Code</span> below, then run
-                    <code>/lsm link &lt;code&gt;</code> in FFXI.</p>
+                    <code>/lsm link &lt;code&gt;</code> in FFXI. One code pairs
+                    <strong>every linkshell you belong to</strong> — no need to repeat
+                    it per linkshell.</p>
+                  <p>The addon then lists whichever of them are on your two equipped
+                    pearls. If a linkshell's members aren't showing, equip its pearl.</p>
                 </div>
               </li>
               <li>
@@ -1117,13 +1320,22 @@
             <div class="card-title">Game Addon (lsm)</div>
             <p class="muted" style="font-size:12px;margin:4px 0 0">
               Generate a one-time pairing code, then in FFXI type <code>/lsm link &lt;code&gt;</code>
-              to connect the addon to this linkshell.
+              to connect the addon. <strong>One code covers every linkshell you belong to</strong> —
+              you only need to do this once, not per linkshell.
+            </p>
+            <p class="muted" style="font-size:12px;margin:6px 0 0">
+              In game, the addon only lists the linkshells on your two equipped pearls. If a
+              linkshell's members aren't showing up, check that its pearl is equipped.
+            </p>
+            <p class="muted" style="font-size:12px;margin:6px 0 0">
+              Revoking disconnects the addon from <strong>every linkshell that code paired</strong>,
+              not just this one.
             </p>
           </div>
           <div class="card-head-right">
-            @if (activeLinkshellName(); as activeName) {
-              <span class="tag accent" title="Pairing codes apply to the currently active linkshell">{{ activeName }}</span>
-            }
+            <!-- No linkshell chip here: the code pairs every linkshell you
+                 belong to, so tagging the card with one name implied the
+                 pairing was scoped to it. -->
             @if (canManageAddonTokens()) {
               <button type="button" class="btn primary sm" (click)="openAddonPairingModal()">
                 + Get Code
@@ -1146,6 +1358,7 @@
               <thead>
                 <tr>
                   <th>Token</th>
+                  <th>Linkshells</th>
                   <th>Created</th>
                   <th>Last used</th>
                   <th class="num"></th>
@@ -1155,6 +1368,14 @@
                 @for (token of addonTokens(); track token.id) {
                   <tr>
                     <td><code>{{ token.prefix }}…</code></td>
+                    <!-- One code pairs several linkshells, so name the ones it
+                         covers instead of implying the selected one. -->
+                    <td>
+                      {{ formatAddonTokenLinkshells(token) }}
+                      @if (token.mine === false) {
+                        <span class="tag">another member</span>
+                      }
+                    </td>
                     <td>{{ formatAddonTokenDate(token.createdAt) }}</td>
                     <td>{{ formatAddonTokenDate(token.lastUsedAt) }}</td>
                     <td class="num">
@@ -1200,7 +1421,8 @@
         @if (!addonGeneratedCode) {
           <p class="muted" style="font-size:13px;margin:0">
             Generate a one-time code, then in FFXI type
-            <code>/lsm link &lt;code&gt;</code> to connect the addon to this linkshell.
+            <code>/lsm link &lt;code&gt;</code> to connect the addon. This pairs
+            <strong>every linkshell you belong to</strong>, not just this one.
           </p>
         }
         @if (addonGeneratedCode) {

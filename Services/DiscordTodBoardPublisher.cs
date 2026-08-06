@@ -65,17 +65,18 @@ public sealed class DiscordTodBoardPublisher
         var tods = await _db.Tods
             .AsNoTracking()
             .Where(t => t.LinkshellId == linkshellId)
-            .Select(t => new { t.Id, t.MonsterName, t.DayNumber, t.Time, t.RepopTime, t.Claim, t.Cooldown })
+            .Select(t => new { t.Id, t.MonsterName, t.DayNumber, t.Time, t.TimeStamp, t.RepopTime, t.Claim, t.Cooldown })
             .ToListAsync(cancellationToken);
 
-        // Latest row per monster (Time desc, Id desc — same as the web list),
-        // hidden monsters removed, ordered by soonest repop (nulls last).
+        // Latest row per monster (Time ?? TimeStamp desc, Id desc — same as the web list),
+        // hidden monsters removed, ordered by soonest repop (nulls last). The TimeStamp fallback
+        // keeps a "Not entered" ToD (camp ended without a kill) as the monster's newest row.
         var rows = tods
             .Where(t => !string.IsNullOrWhiteSpace(t.MonsterName)
                         && !hidden.Contains(t.MonsterName!.Trim()))
             .GroupBy(t => t.MonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(g => g
-                .OrderByDescending(t => t.Time ?? DateTime.MinValue)
+                .OrderByDescending(t => t.Time ?? t.TimeStamp ?? DateTime.MinValue)
                 .ThenByDescending(t => t.Id)
                 .First())
             .OrderBy(t => t.RepopTime ?? DateTime.MaxValue)
@@ -114,7 +115,7 @@ public sealed class DiscordTodBoardPublisher
                 }
                 else
                 {
-                    line = $"{meta} — _no repop time_";
+                    line = $"{meta} — _Not entered_";
                 }
 
                 if (description.Length + line.Length + 1 > MaxDescription)

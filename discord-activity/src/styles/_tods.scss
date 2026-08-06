@@ -47,6 +47,27 @@
   background: var(--accent-weak);
 }
 
+/* Both ToD forms: summary on the left, the read-only repop time filling the space on the right. */
+.tod-repop-card--with-time {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+  align-items: center;
+  gap: 16px;
+}
+
+.tod-repop-card__info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tod-repop-card__repop {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .tod-repop-card--with-time { grid-template-columns: 1fr; }
+}
+
 .tod-repop-card__label {
   color: var(--accent);
   font-size: 10px;

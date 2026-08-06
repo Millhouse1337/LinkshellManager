@@ -13,17 +13,27 @@ import {
   ActivityStatusLedgerEntry,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { ActivityEvent, ActivityPartySetupSlot } from '../../discord/discord-activity.types';
+import {
+  ActivityClaimShieldCapture,
+  ActivityEvent,
+  ActivityLinkedSnapshot,
+  ActivityPartySetupSlot,
+  ActivityWindowEvent,
+} from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
 import { EventHistoryPanelComponent } from '../sidebar-panels/event-history-panel.component';
+import { AttendanceSectionsComponent } from './attendance-sections.component';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
+import { TodFormComponent } from './tod-form.component';
 import { PartySetupService } from '../../discord/party-setup.service';
+import { WindowEventService } from '../../discord/window-event.service';
 import {
   EVENT_JOB_TYPE_OPTIONS,
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from '../event-job-options';
 import {
+  attendanceApplies,
   breakSessionInfo,
   formatBreakDuration,
   formatDkp,
@@ -31,9 +41,19 @@ import {
   parseDate
 } from '../activity-home.helpers';
 
+// One entry in the Attendance Windows strip. `window` is null for a window the camp REACHED but
+// never posted a roster for — those still get a tab, because the gap is the thing an officer needs
+// to see. See attendanceWindowTabs().
+interface AttendanceWindowTab {
+  sequenceNumber: number;
+  label: string;
+  window: ActivityAttendanceWindow | null;
+  attendeeCount: number;
+}
+
 @Component({
   selector: 'app-events-tab',
-  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent],
+  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -43,9 +63,11 @@ export class EventsTabComponent {
 
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetups = inject(PartySetupService);
+  protected readonly windows = inject(WindowEventService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
   private readonly queuePanel = viewChild.required(ActivityQueuePanelComponent);
+  private readonly todForm = viewChild(TodFormComponent);
 
   protected readonly mainJobOptions = [...EVENT_MAIN_JOB_OPTIONS];
   protected readonly subJobOptions = [...EVENT_SUB_JOB_OPTIONS];
@@ -102,6 +124,49 @@ export class EventsTabComponent {
         void this.partySetups.loadEventBoard(eventId);
       }
     });
+
+    // Attendance snapshots are NOT on the overview payload, so this tab has to fetch them itself.
+    // The fetch lives here rather than in AttendanceSectionsComponent because that component is
+    // mounted twice (live + archive slices) and would otherwise fire two requests. The service
+    // dedupes against AutoRefreshService's own tick.
+    effect(() => {
+      const linkshellId = this.primaryLinkshellId();
+      if (!linkshellId || !this.attendanceVisible()) return;
+      queueMicrotask(() => void this.windows.ensureLoaded(linkshellId));
+    });
+  }
+
+  // ----- Attendance sections (merged in from the old Attendance System tab) -----
+
+  private primaryLinkshellId(): number {
+    const overview = this.activity.overview();
+    return overview?.primaryLinkshell?.id ?? overview?.appUser?.primaryLinkshellId ?? 0;
+  }
+
+  protected attendanceVisible(): boolean {
+    return attendanceApplies(this.activity.overview());
+  }
+
+  // Every OPEN attendance event is an unposted payout awaiting an officer, so all of them belong in
+  // Current Field Activity — not just the ones traceable to a camp. Filtering on a camp link would
+  // in fact show almost nothing: a camp-handoff row is only written at End Camp, by which point the
+  // camp has already dropped out of liveEvents(), and the rows that DO arrive mid-camp (`/lsm now`)
+  // carry no event link at all. Newest capture first, so a card still collecting snapshots sits
+  // above one from three days ago.
+  protected liveAttendanceEvents(): ActivityWindowEvent[] {
+    if (!this.attendanceVisible()) return [];
+    return [...(this.windows.data()?.openEvents ?? [])].sort(
+      (a, b) => new Date(b.lastCapturedAtUtc).getTime() - new Date(a.lastCapturedAtUtc).getTime()
+    );
+  }
+
+  // The "no live events running" card must not sit above a list of attendance cards, and must not
+  // flash before the first window-events fetch settles. A failed fetch still leaves data() null but
+  // clears busy(), so the empty state does eventually appear rather than hanging on a spinner.
+  protected showNoLiveActivity(): boolean {
+    if (this.liveEvents().length > 0) return false;
+    if (this.attendanceVisible() && this.windows.data() === null && this.windows.busy()) return false;
+    return this.liveAttendanceEvents().length === 0;
   }
 
   // ----- Settings / loot helpers (read-only mirrors) -----
@@ -152,22 +217,166 @@ export class EventsTabComponent {
 
   // ----- Event lists -----
 
-  // True HNM events (EventType="HNM") live in the dedicated HNM tab, so they're
-  // dropped from the generic Events tab to mirror the server-side filter.
-  private isHnmEvent(event: { type?: string | null }): boolean {
+  // HNM camps ARE shown here now (a started camp used to fall into a dead zone visible in no
+  // section). isHnmEvent still switches the live card between the generic layout and the camp
+  // variant (window N of M + next-window countdown + End Camp).
+  protected isHnmEvent(event: { type?: string | null }): boolean {
     return (event.type ?? '').trim().toUpperCase() === 'HNM';
+  }
+
+  // Canonical "does the Break Room apply?" test — the ONLY thing the template branches on for
+  // break / withdraw UI. Comes straight from the server (Services/EventBreakPolicy) so the app
+  // can never show a control the endpoints would reject with a 400.
+  //
+  // A windowed (HNM) camp credits attendance per posted window, so there is no timer to pause and
+  // the whole Lobby / Active Room / Break Room concept is meaningless for it. The local fallback
+  // mirrors the server predicate (windowed OR HNM-typed) and only runs against a server that
+  // predates the flag.
+  protected supportsBreakRoom(event: ActivityEvent): boolean {
+    return event.supportsBreakRoom ?? ((event.windowCount ?? 1) <= 1 && !this.isHnmEvent(event));
+  }
+
+  // Members left in a break state on a windowed camp — only possible from an older build, before
+  // break-creating actions were refused there. Officers get a one-click clear; the strip erases
+  // itself once the last one is resolved. This is the ONLY break-related control allowed to render
+  // on a windowed event, and it is undo-only (it can never put someone back on break).
+  protected stuckBreakParticipants(event: ActivityEvent): ActivityEventParticipant[] {
+    if (this.supportsBreakRoom(event)) {
+      return [];
+    }
+    return (event.participants ?? []).filter(participant => participant.isOnBreak);
+  }
+
+  // ----- Live HNM camp helpers -----
+
+  // "Window N of M" for a live camp. Uses hnmFocusWindow (what the Discord board shows), NOT
+  // hnmWindowNumber — the raw counter reads one lower and made the app disagree with the board.
+  //
+  // A 2-post camp reads "Open" / "Close" instead: those two are roster snapshots, not a numbered
+  // sequence, and calling them Window 1 and Window 2 reads like a count of the kings'/dragons'
+  // seven SPAWN windows, which they aren't. Mirrors HnmConfig.GetDefaultWindowLabel server-side
+  // and constants.window_label in the addon — all three must agree or one camp gets three names.
+  protected campWindowLabel(event: ActivityEvent): string {
+    const focus = event.hnmFocusWindow ?? event.hnmWindowNumber ?? 1;
+    if (event.windowCount === 2) {
+      // Once the Close is in, the camp is done posting whatever the cadence counter says.
+      // Without this a Close-only camp read "Open" — naming a window it will never have and
+      // can no longer accept — because focus tracks the clock, not what was posted.
+      return this.campClosePosted(event) || focus > 1 ? 'Close' : 'Open';
+    }
+    return `Window ${focus} of ${event.windowCount}`;
+  }
+
+  // How many roster reads this camp takes — 2 on a Standard king/dragon (Open + Close), against
+  // the 7 SPAWN windows windowCount reports. Everything that NAMES or COUNTS a posted window goes
+  // by this; only the "Window N of M" camp heading goes by windowCount.
+  //
+  // Falls back to windowCount for a payload from a server predating the split, which is exactly
+  // what the code here read before the two were separated.
+  protected postCount(event: ActivityEvent): number {
+    return event.attendancePostCount ?? event.windowCount ?? 1;
+  }
+
+  // A two-post camp whose Close has landed. Both the addon and the server refuse further
+  // windows at that point, so the card must stop implying one is outstanding.
+  protected campClosePosted(event: ActivityEvent): boolean {
+    return this.postCount(event) === 2
+        && this.attendanceWindowsFor(event).some(w => w.sequenceNumber === 2);
+  }
+
+  // Manual Check In camp. Credit comes from Check In / Check Out window range only — the Manual
+  // Check In roster never reads the posted window snapshots, so on these camps the Attendance
+  // Windows card is a record, not the payout source.
+  protected isWdCamp(event: ActivityEvent): boolean {
+    return (event.attendanceMode ?? '').trim().toLowerCase() === 'wd';
+  }
+
+  // Countdown to the next window opening (mm:ss via the 1s `now` signal), or null when the camp
+  // isn't on a timed cadence, is on its final window, or has already popped.
+  protected campNextWindowCountdown(event: ActivityEvent): string | null {
+    if (event.wdFinalizedAt) {
+      return null;
+    }
+    const nextAt = parseDate(event.nextWindowAt);
+    if (nextAt == null) {
+      return null;
+    }
+    const remaining = nextAt - this.now();
+    return remaining <= 0 ? 'due now' : formatElapsed(remaining);
+  }
+
+  // The line under the window label. THREE states, where the template used to render two:
+  // anything without a countdown fell through to "final window", including a camp that has
+  // no window schedule at all — so a run that had just started, with nothing posted yet,
+  // announced itself as being on its last window.
+  //
+  // A camp on a real cadence only runs out of nextWindowAt on its final window. So a null
+  // countdown BELOW the last window means there is no cadence to count, not that the camp
+  // is finishing — and for those the useful thing to say is whether the current window's
+  // snapshot has landed, since that's the only thing anyone is waiting on.
+  protected campWindowStatus(event: ActivityEvent): string {
+    // Checked BEFORE the countdown on purpose. A closed two-post camp can still be sitting on
+    // a cadence that has a next window scheduled, and "next window 4:12" on a camp that
+    // accepts no more posts is the same lie in a different sentence.
+    if (this.campClosePosted(event)) {
+      return 'posted';
+    }
+    const countdown = this.campNextWindowCountdown(event);
+    if (countdown) {
+      return `next window ${countdown}`;
+    }
+    const focus = event.hnmFocusWindow ?? event.hnmWindowNumber ?? 1;
+    if (focus >= (event.windowCount ?? 1)) {
+      return 'final window';
+    }
+    return this.attendanceWindowsFor(event).some(w => w.sequenceNumber === focus)
+      ? 'posted'
+      : 'not posted yet';
+  }
+
+  // Two-click confirm for deleting a live HNM camp outright (no ToD). The Discord iframe blocks the
+  // native confirm(), so we surface an inline Confirm/Keep like the withdraw flow. Delete discards the
+  // board entirely — no ToD, no history, no DKP — for cleaning up test/mistaken camps.
+  protected readonly pendingDeleteEventId = signal<number | null>(null);
+  protected requestDeleteCamp(eventId: number): void { this.pendingDeleteEventId.set(eventId); }
+  protected abortDeleteCamp(): void { this.pendingDeleteEventId.set(null); }
+  protected async confirmDeleteCamp(eventId: number): Promise<void> {
+    this.pendingDeleteEventId.set(null);
+    await this.activity.deleteEvent(eventId);
+  }
+
+  // Open the shared board ToD form in "End Camp" mode (pop window pre-filled to the current window).
+  protected openEndCamp(event: ActivityEvent): void {
+    const monster = event.assignedMonsterName ?? event.partySetupAssignedMonsterName ?? null;
+    if (!monster) {
+      this.activity.actionError.set('This HNM camp has no monster assigned, so it can’t be ended here.');
+      return;
+    }
+    this.todForm()?.openForBoard(
+      event.linkshellId, monster, event.id, event.dayNumber ?? null, event.hnmWindowNumber ?? 1,
+      event.repeatOnTod ?? false, event.repeatLeadHours ?? null);
+  }
+
+  // An HNM camp that has popped is no longer "running": a Standard defeat un-commences the board
+  // (so it's excluded by the commencement check), and a Manual Check In camp is stamped finalized
+  // at End Camp. This keeps popped/defeated boards out of the live section while they wait in the
+  // queue for re-post — their roster is meanwhile pending review in the attendance cards on this tab.
+  private isEndedCamp(event: ActivityEvent): boolean {
+    return this.isHnmEvent(event) && (Boolean(event.hnmAwaitingRepost) || Boolean(event.wdFinalizedAt));
   }
 
   protected liveEvents() {
     return (this.activity.overview()?.activeEvents ?? [])
       .filter(event => Boolean(event.commencementStartTime))
-      .filter(event => !this.isHnmEvent(event));
+      .filter(event => !this.isEndedCamp(event));
   }
 
+  // Mirrors the embedded queue panel's own filter so the "N queued" chip matches the rendered list.
+  // A Standard defeated board is un-commenced (so it lands here for Edit ToD); a running/awaiting
+  // camp keeps its commencement and stays in the live section.
   protected queuedEvents() {
     return (this.activity.overview()?.activeEvents ?? [])
-      .filter(event => !event.commencementStartTime)
-      .filter(event => !this.isHnmEvent(event));
+      .filter(event => !event.commencementStartTime);
   }
 
   protected isLiveEventCollapsed(eventId: number): boolean {
@@ -450,8 +659,8 @@ export class EventsTabComponent {
 
   // ----- Attendance windows -----
 
-  protected hasAttendanceWindows(event: { windowCount?: number; attendanceWindows?: ActivityAttendanceWindow[] }): boolean {
-    return (event.windowCount ?? 1) > 1 && (event.attendanceWindows?.length ?? 0) > 0;
+  protected hasAttendanceWindows(event: ActivityEvent): boolean {
+    return (event.windowCount ?? 1) > 1 && this.attendanceWindowTabs(event).length > 0;
   }
 
   protected attendanceWindowsFor(event: { attendanceWindows?: ActivityAttendanceWindow[] }): ActivityAttendanceWindow[] {
@@ -462,19 +671,320 @@ export class EventsTabComponent {
     return window.label && window.label.trim().length > 0 ? window.label : `Window ${window.sequenceNumber}`;
   }
 
-  protected activeAttendanceWindow(event: { id: number; attendanceWindows?: ActivityAttendanceWindow[] }): ActivityAttendanceWindow | null {
-    const windows = this.attendanceWindowsFor(event);
-    if (windows.length === 0) return null;
-    const desiredSeq = this.activeWindowByEvent()[event.id];
-    if (desiredSeq != null) {
-      const match = windows.find(w => w.sequenceNumber === desiredSeq);
-      if (match) return match;
+  // Every window the camp has SAT THROUGH, not only the ones someone was around to post.
+  //
+  // The card used to render the posted rows and nothing else, so a camp where only window 6 landed
+  // showed a single tab and read as a camp that had run one window. Windows 1–5 happened; nobody
+  // recorded them. That gap is the thing an officer needs to see — it's what tells them to go back
+  // and file one — and hiding it made a half-covered camp look complete.
+  //
+  // The bound is hnmWindowNumber (the server's OPENED counter, clamped to the spawn count), not the
+  // post high-water mark. And these monsters show within seconds of a boundary, so a window that has
+  // been reached is a window whose chance is already spent — every one of them is a past window with
+  // a definite answer, which is exactly what makes it worth a tab.
+  //
+  // Numbered camps only. A 2-post king/dragon names its windows Open / Close while its counter walks
+  // the seven SPAWN windows underneath, so synthesizing 1..opened there would invent five windows
+  // that camp can never have — the same phantom-tab trap the addon's strip is written around.
+  protected attendanceWindowTabs(event: ActivityEvent): AttendanceWindowTab[] {
+    const posted = new Map(this.attendanceWindowsFor(event).map(w => [w.sequenceNumber, w]));
+    const sequences = new Set<number>(posted.keys());
+
+    if (this.postCount(event) > 2) {
+      const reached = Math.min(
+        Math.max(1, event.hnmWindowNumber ?? 1),
+        Math.max(1, event.windowCount ?? 1));
+      for (let seq = 1; seq <= reached; seq++) {
+        sequences.add(seq);
+      }
     }
-    return windows[windows.length - 1];
+
+    return [...sequences].sort((a, b) => a - b).map(seq => {
+      const window = posted.get(seq) ?? null;
+      return {
+        sequenceNumber: seq,
+        label: window ? this.attendanceWindowLabel(window) : `Window ${seq}`,
+        window,
+        attendeeCount: window?.attendees.length ?? 0,
+      };
+    });
   }
 
-  protected isActiveAttendanceWindow(event: { id: number; attendanceWindows?: ActivityAttendanceWindow[] }, window: ActivityAttendanceWindow): boolean {
-    return this.activeAttendanceWindow(event)?.id === window.id;
+  // ----- Attendance windows: what the window pays -----
+  //
+  // "How much DKP did this window give?" has two different answers, because the two attendance
+  // modes pay off different evidence:
+  //
+  //   Standard — the snapshots ARE the payroll. HnmStandardCampFinalizer pays an open bonus for
+  //              being scanned in window 1 and a close bonus for being scanned in the close
+  //              window; every window in between is worth nothing on its own.
+  //   Manual Check In — the snapshots are a record only. WdCampFinalizer pays a flat per-window
+  //              rate across each member's Check In..Check Out range, whether or not the addon
+  //              happened to scan them that window.
+  //
+  // Claim and kill bonuses are excluded from both, matching wdDkpSoFar: neither is decided until
+  // End Camp, so folding them in would show a number that changes for a reason nothing on screen
+  // explains. The footer under the table says so.
+
+  // The window a Standard camp closes out on, resolved against what has been posted SO FAR.
+  //
+  // HnmStandardCampFinalizer.ResolveCloseWindow takes the pop window when a snapshot exists for
+  // it and the latest posted window otherwise — and since the addon only ever posts windows that
+  // have already opened, both branches land on the highest posted sequence. So this is the close
+  // the finalizer would pick if the camp ended right now, and it walks forward on its own as
+  // later windows are posted.
+  private closeWindowSequence(event: ActivityEvent): number {
+    const windows = this.attendanceWindowsFor(event);
+    return windows.length === 0 ? 0 : Math.max(...windows.map(window => window.sequenceNumber));
+  }
+
+  // What ONE window pays each attendee: the officer's explicit price when they set one, else what
+  // the camp's model pays for that sequence. One place, so the cell, the note and the total cannot
+  // disagree with each other.
+  //
+  // MIRROR of HnmStandardCampFinalizer.WindowValue — the same rule in two languages, including the
+  // precedence: an explicit amount REPLACES the open / close bonus, it does not add to it. A
+  // control labelled "DKP this window" that showed 5 and paid 5.5 would be lying about its name.
+  // The two must move together.
+  private windowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
+    if (window.dkpAmount != null) return Math.max(0, window.dkpAmount);
+    const closeWindow = this.closeWindowSequence(event);
+    // The regular-window rate is the BASE every window pays; open and close add to it rather than
+    // replacing it. Same order as HnmStandardCampFinalizer.WindowValue.
+    return this.standardBonus(event, 'window')
+      + (window.sequenceNumber === 1 ? this.standardBonus(event, 'open') : 0)
+      + (closeWindow > 0 && window.sequenceNumber === closeWindow ? this.standardBonus(event, 'close') : 0);
+  }
+
+  // Per-camp override first, else the linkshell default — the precedence both finalizers apply.
+  // 'window' shares Event.hnmPerWindowOverride with the Manual Check In rate: one column per
+  // amount, and the camp's mode picks which linkshell setting it falls back to.
+  private standardBonus(event: ActivityEvent, which: 'window' | 'open' | 'close'): number {
+    const settings = this.linkshellSettingsFor(event.linkshellId);
+    let value: number | null | undefined;
+    switch (which) {
+      case 'window': value = event.hnmPerWindowOverride ?? settings?.hnmStandardWindowBonus; break;
+      case 'open': value = event.hnmOpenBonusOverride ?? settings?.hnmStandardOpenBonus; break;
+      case 'close': value = event.hnmCloseBonusOverride ?? settings?.hnmStandardCloseBonus; break;
+    }
+    return Math.max(0, value ?? 0);
+  }
+
+  // What one attendee earned from THIS window, or null when the window carries no credit for
+  // them. Null renders as an em dash rather than 0 — "this window pays nothing here" and "this
+  // window is priced at zero" read identically otherwise, and only one of them is a settings
+  // problem an officer can fix. An explicitly-priced window is never null: pricing a window is
+  // what makes it pay everyone on it, including a middle window that used to pay nobody.
+  protected attendanceWindowDkp(
+    event: ActivityEvent,
+    window: ActivityAttendanceWindow,
+    attendee: { characterName?: string | null },
+  ): number | null {
+    if (this.isWdCamp(event)) {
+      // Credit follows the check-in range, not the scan. Someone the addon caught at camp who
+      // never checked in is paid nothing for the window they're standing in — which is exactly
+      // the discrepancy this card exists to make visible.
+      const participant = (event.participants ?? []).find(p =>
+        (p.characterName ?? '').trim().toLowerCase() === (attendee.characterName ?? '').trim().toLowerCase()
+        && (attendee.characterName ?? '').trim().length > 0);
+      if (!participant) return null;
+
+      const arrival = Math.max(1, participant.wdArrivalWindow ?? 1);
+      const departure = participant.wdDepartureWindow ?? Number.MAX_SAFE_INTEGER;
+      const seq = window.sequenceNumber;
+      return seq >= arrival && seq <= departure ? this.wdPerWindowRate(event) : null;
+    }
+
+    // An officer priced this window by hand, so it pays everyone scanned in it — that IS what
+    // pricing a window means, and it's the one case where a middle window is worth something.
+    if (window.dkpAmount != null) return this.windowValue(event, window);
+
+    // Standard: window 1 pays the open bonus, the close window pays the close bonus, and a camp
+    // with a single posted window is both at once — so they add rather than branch. A regular
+    // window pays the camp's per-window rate on top of whichever of those apply.
+    //
+    // A middle window on a camp with NO per-window rate still returns null so it renders as an em
+    // dash rather than a 0 — "this window pays nobody" and "this window is priced at zero" read
+    // identically otherwise, and only one of them is a settings problem an officer can fix.
+    const closeWindow = this.closeWindowSequence(event);
+    const isOpen = window.sequenceNumber === 1;
+    const isClose = closeWindow > 0 && window.sequenceNumber === closeWindow;
+    if (!isOpen && !isClose && this.standardBonus(event, 'window') <= 0) return null;
+    return this.windowValue(event, window);
+  }
+
+  // Display form of the above. A separate helper because 0 is FALSY and 0 is a real answer here:
+  // `@if (attendanceWindowDkp(...); as dkp)` in the template would quietly show "priced at zero"
+  // as "pays nothing", which is the one distinction the null return exists to preserve.
+  protected attendanceWindowDkpLabel(
+    event: ActivityEvent,
+    window: ActivityAttendanceWindow,
+    attendee: { characterName?: string | null },
+  ): string {
+    const dkp = this.attendanceWindowDkp(event, window, attendee);
+    return dkp == null ? '—' : EventsTabComponent.trimDkp(dkp);
+  }
+
+  // Two decimals at most, trailing zeros dropped — what `| number:'1.0-2'` renders, for the
+  // places (the note below) that build a sentence in TS instead of going through the pipe.
+  private static trimDkp(value: number): string {
+    return Number(value.toFixed(2)).toString();
+  }
+
+  // Sum of the column, so the window reads as a single payout instead of a list of rows to add up.
+  protected attendanceWindowDkpTotal(event: ActivityEvent, window: ActivityAttendanceWindow): number {
+    return window.attendees.reduce((sum, attendee) => sum + (this.attendanceWindowDkp(event, window, attendee) ?? 0), 0);
+  }
+
+  // One line of "why is the column that number" under the table. Standard names the gates the
+  // window pays on; Manual Check In names the rate. A middle window says outright that it pays
+  // nobody, so a column of dashes reads as the rule rather than as missing data.
+  protected attendanceWindowDkpNote(event: ActivityEvent, window: ActivityAttendanceWindow): string {
+    // Said first and said plainly, because a priced window ignores every rule the sentences below
+    // describe — reading "0 open + 0 close" under a window paying 5 would be worse than silence.
+    if (window.dkpAmount != null) {
+      return `${EventsTabComponent.trimDkp(window.dkpAmount)} DKP per attendee `
+        + `(set for this window — replaces the open / close bonus)`;
+    }
+
+    if (this.isWdCamp(event)) {
+      const rate = EventsTabComponent.trimDkp(this.wdPerWindowRate(event));
+      return `${rate} DKP per window, credited from Check In to Check Out`;
+    }
+
+    const parts: string[] = [];
+    // The regular-window rate leads, because it is what EVERY window pays; the open and close are
+    // named after it as the extras they are.
+    const windowRate = this.standardBonus(event, 'window');
+    if (windowRate > 0) {
+      parts.push(`${EventsTabComponent.trimDkp(windowRate)} window`);
+    }
+    if (window.sequenceNumber === 1) {
+      parts.push(`${EventsTabComponent.trimDkp(this.standardBonus(event, 'open'))} open`);
+    }
+    const closeWindow = this.closeWindowSequence(event);
+    if (closeWindow > 0 && window.sequenceNumber === closeWindow) {
+      // Said out loud because it MOVES: the close is the latest window posted so far, so this
+      // line stops being true about this tab the moment the next snapshot lands.
+      parts.push(`${EventsTabComponent.trimDkp(this.standardBonus(event, 'close'))} close (latest window posted)`);
+    }
+    return parts.length === 0
+      ? 'Middle windows carry no bonus — only the open and the close pay'
+      : `${parts.join(' + ')} DKP per attendee`;
+  }
+
+  // ----- Manual Check In: late arrivals -----
+
+  // Anyone who checked in AFTER the camp opened. Window 1 arrivals were there from the start,
+  // so they aren't "late" and would bury the handful of rows this panel exists to show.
+  // Sorted by arrival so the most recent joiner is at the bottom, next to the running total.
+  protected wdLateArrivals(event: ActivityEvent): ActivityEventParticipant[] {
+    if (!this.isWdCamp(event)) return [];
+    return (event.participants ?? [])
+      .filter(p => (p.wdArrivalWindow ?? 0) > 1)
+      .sort((a, b) => (a.wdArrivalWindow ?? 0) - (b.wdArrivalWindow ?? 0));
+  }
+
+  // How many checked in at the open — shown as a count so the late list reads as a subset
+  // rather than as the whole roster.
+  protected wdOnTimeCount(event: ActivityEvent): number {
+    if (!this.isWdCamp(event)) return 0;
+    return (event.participants ?? []).filter(p => p.wdArrivalWindow === 1).length;
+  }
+
+  // The window credit is measured against RIGHT NOW: the one that has already opened.
+  //
+  // hnmWindowNumber, NOT hnmFocusWindow — End Camp treats the opened window as the pop window,
+  // so this is the same number the payout will actually be computed from. Using the awaited
+  // window would promise everyone one window more DKP than they are going to get.
+  private wdCurrentWindow(event: ActivityEvent): number {
+    return Math.max(1, event.hnmWindowNumber ?? 1);
+  }
+
+  // Windows this member is credited for so far: arrival..min(departure, current), inclusive.
+  // Mirrors WdCampFinalizer.WindowsCredited, which is the authority at payout.
+  protected wdWindowsCredited(event: ActivityEvent, participant: ActivityEventParticipant): number {
+    const arrival = Math.max(1, participant.wdArrivalWindow ?? 1);
+    const last = Math.min(participant.wdDepartureWindow ?? this.wdCurrentWindow(event), this.wdCurrentWindow(event));
+    return arrival > last ? 0 : last - arrival + 1;
+  }
+
+  // Per-window rate: the camp's own override first, else the linkshell default — the same
+  // precedence WdCampFinalizer applies (Event.HnmPerWindowOverride ?? Linkshell.WdDkpPerWindow).
+  protected wdPerWindowRate(event: ActivityEvent): number {
+    if (event.hnmPerWindowOverride != null) return event.hnmPerWindowOverride;
+    return this.linkshellSettingsFor(event.linkshellId)?.wdDkpPerWindow ?? 0.25;
+  }
+
+  // What this member has earned SO FAR — rate × windows credited.
+  //
+  // The open / close / claim / kill bonuses are deliberately NOT included. Claim and kill aren't
+  // known until End Camp; close depends on the camp's final window, which is still moving; and the
+  // open would be the only one of the four that could appear here, which reads as an arbitrary
+  // half-answer. Folding any of them in would show a number that changes for a reason nothing on
+  // screen explains. The footer says they're still to come.
+  protected wdDkpSoFar(event: ActivityEvent, participant: ActivityEventParticipant): number {
+    return this.wdWindowsCredited(event, participant) * this.wdPerWindowRate(event);
+  }
+
+  // "Open" / "Close" / "Window 3" for an arrival, named the way the window tabs are so the
+  // two read as one timeline. Falls back to the plain number when no window has been posted
+  // under that sequence yet — a check-in can run ahead of the roster post.
+  protected wdArrivalLabel(event: ActivityEvent, participant: ActivityEventParticipant): string {
+    const seq = participant.wdArrivalWindow ?? 1;
+    const window = this.attendanceWindowsFor(event).find(w => w.sequenceNumber === seq);
+    return window ? this.attendanceWindowLabel(window) : `Window ${seq}`;
+  }
+
+  // Snapshots an officer attached to this camp from the Event System's unlinked list.
+  // Read-only here — the link is presentational and the roster that pays out is still
+  // edited on the attendance event.
+  protected linkedSnapshotsFor(event: { linkedSnapshots?: ActivityLinkedSnapshot[] }): ActivityLinkedSnapshot[] {
+    return event.linkedSnapshots ?? [];
+  }
+
+  // ----- Claim shield -----
+
+  protected claimShieldsFor(event: { claimShieldCaptures?: ActivityClaimShieldCapture[] }): ActivityClaimShieldCapture[] {
+    return event.claimShieldCaptures ?? [];
+  }
+
+  // Which posted window the lottery landed in, named the same way the tabs
+  // above are ("Open" / "Close" / "Window 3") so the two read as one timeline.
+  // The server picked the window; this only borrows its label.
+  protected claimWindowLabel(
+    event: { attendanceWindows?: ActivityAttendanceWindow[] },
+    capture: ActivityClaimShieldCapture,
+  ): string {
+    const seq = capture.nearestWindowSequence;
+    if (seq == null) return '';
+    const window = this.attendanceWindowsFor(event).find(w => w.sequenceNumber === seq);
+    return window ? this.attendanceWindowLabel(window) : `Window ${seq}`;
+  }
+
+  // Which tab the pane is showing. Defaults to the newest window that actually HOLDS a roster
+  // rather than to the last tab: now that unposted windows get tabs too, opening the card on the
+  // trailing one would greet an officer with "no roster was posted" on most live camps, hiding the
+  // snapshot they came to look at. Only a camp with nothing posted at all falls back to the last.
+  protected activeAttendanceWindowTab(event: ActivityEvent): AttendanceWindowTab | null {
+    const tabs = this.attendanceWindowTabs(event);
+    if (tabs.length === 0) return null;
+    const desiredSeq = this.activeWindowByEvent()[event.id];
+    if (desiredSeq != null) {
+      const match = tabs.find(t => t.sequenceNumber === desiredSeq);
+      if (match) return match;
+    }
+    const withRoster = tabs.filter(t => t.window != null);
+    return withRoster.length > 0 ? withRoster[withRoster.length - 1] : tabs[tabs.length - 1];
+  }
+
+  protected activeAttendanceWindow(event: ActivityEvent): ActivityAttendanceWindow | null {
+    return this.activeAttendanceWindowTab(event)?.window ?? null;
+  }
+
+  // Compared on SEQUENCE, not on window id: an unposted tab has no id to compare.
+  protected isActiveAttendanceWindow(event: ActivityEvent, tab: AttendanceWindowTab): boolean {
+    return this.activeAttendanceWindowTab(event)?.sequenceNumber === tab.sequenceNumber;
   }
 
   protected setActiveAttendanceWindow(eventId: number, sequenceNumber: number): void {
@@ -501,6 +1011,61 @@ export class EventsTabComponent {
     const ok = await this.activity.removeAttendanceWindowAttendee(attendeeId);
     if (ok) {
       await this.activity.refreshOverview();
+    }
+  }
+
+  // ----- Pricing one window by hand -----
+  //
+  // Explicit Apply, unlike the addon's Apply-less box: there the next Post carries the value, so
+  // typing IS committing. Here there is no subsequent action to piggyback on, and a control that
+  // saved on every keystroke would write "1", "12", "125" on the way to 1.25.
+  //
+  // Keyed by window id, and only for windows the officer has actually started editing — an absent
+  // entry means "show what the server holds", so a refresh elsewhere isn't fought by a stale draft.
+  private readonly windowDkpDrafts = signal<Record<number, string>>({});
+  protected readonly windowDkpSaving = signal(false);
+
+  protected windowDkpDraft(window: ActivityAttendanceWindow): string {
+    const draft = this.windowDkpDrafts()[window.id];
+    if (draft !== undefined) return draft;
+    return window.dkpAmount == null ? '' : EventsTabComponent.trimDkp(window.dkpAmount);
+  }
+
+  protected setWindowDkpDraft(window: ActivityAttendanceWindow, event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.windowDkpDrafts.update(map => ({ ...map, [window.id]: value }));
+  }
+
+  protected async saveWindowDkp(window: ActivityAttendanceWindow): Promise<void> {
+    const raw = this.windowDkpDraft(window).trim();
+    // Blank means "no price of its own", which is the same instruction as Use default — so Apply
+    // on an emptied box clears rather than erroring at the officer about a missing number.
+    const amount = raw === '' ? null : Number(raw);
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return;
+    await this.writeWindowDkp(window, amount);
+  }
+
+  protected async clearWindowDkp(window: ActivityAttendanceWindow): Promise<void> {
+    await this.writeWindowDkp(window, null);
+  }
+
+  private async writeWindowDkp(window: ActivityAttendanceWindow, amount: number | null): Promise<void> {
+    if (this.windowDkpSaving()) return;
+    this.windowDkpSaving.set(true);
+    try {
+      const ok = await this.activity.setAttendanceWindowDkp(window.id, amount);
+      if (ok) {
+        // Drop the draft so the field re-reads the server's value — which may differ from what was
+        // typed, since the server snaps to the linkshell's rounding grid on write.
+        this.windowDkpDrafts.update(map => {
+          const next = { ...map };
+          delete next[window.id];
+          return next;
+        });
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.windowDkpSaving.set(false);
     }
   }
 

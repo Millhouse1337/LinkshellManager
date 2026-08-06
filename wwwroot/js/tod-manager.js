@@ -23,7 +23,13 @@
             const now = Date.now();
             countdownElements.forEach((el) => {
                 const endTime = Date.parse(el.dataset.endUtc);
-                if (Number.isNaN(endTime)) { el.textContent = '—'; return; }
+                // No repop to count down to = the ToD was never entered. Clear is-ready too, so a
+                // missing repop can never render as the green "Ready" pill.
+                if (Number.isNaN(endTime)) {
+                    el.textContent = 'Not entered';
+                    el.classList.remove('is-ready');
+                    return;
+                }
                 const remaining = endTime - now;
                 const isReady = remaining <= 0;
                 el.textContent = isReady ? 'Ready' : formatCountdown(remaining);
@@ -151,15 +157,16 @@
         }
 
         function getCooldownHours() {
+            if (cooldownSelect && cooldownSelect.value === '84 Hour') return 84;
             return cooldownSelect && cooldownSelect.value === '72 Hour' ? 72 : 22;
         }
 
-        // Picking a long-window HNM auto-fills its 72h / 1h defaults; anything
-        // else falls back to the common 22h / 10m. The user can still override.
+        // Wyrms auto-fill their 84h / 1h defaults; other long-window HNMs use 72h.
+        // Everything else falls back to the common 22h / 10m. The user can still override.
         function applyMonsterDefaults() {
             if (!monsterSelect || !monsterSelect.value) return;
             if (longWindowMonsters.has(monsterSelect.value)) {
-                if (cooldownSelect) cooldownSelect.value = '72 Hour';
+                if (cooldownSelect) cooldownSelect.value = '84 Hour';
                 if (intervalSelect) intervalSelect.value = '1 Hour';
             } else {
                 if (cooldownSelect) cooldownSelect.value = '22 Hour';

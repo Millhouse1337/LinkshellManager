@@ -232,28 +232,48 @@ public static class EventBoardHtmlBuilder
             sb.Append("</div>");  // .alliance-group
         }
 
-        // "Also attending — no slot" overflow (general AppUserEvent roster).
-        var slotNames = new HashSet<string>(
-            slotSignups.Values.Where(s => !string.IsNullOrWhiteSpace(s.CharacterName)).Select(s => s.CharacterName!.Trim()),
-            StringComparer.OrdinalIgnoreCase);
-        var extra = generalSignups
-            .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
-            .ToList();
-        if (extra.Count > 0)
+        if (DiscordEventMessageBuilder.IsWd(ev))
         {
-            sb.Append("""<div class="extra"><div class="extra-title">Also Attending</div><div class="extra-list">""");
-            foreach (var g in extra)
+            // Manual Check In boards: the "X'd In" roster grouped by arrival window (mirrors the embed).
+            var xin = generalSignups
+                .Where(g => g.WdArrivalWindow is not null && !string.IsNullOrWhiteSpace(g.CharacterName))
+                .ToList();
+            if (xin.Count > 0)
             {
-                var roleClass = RoleClass(g.JobType);
-                var combo = GeneralCombo(g);
-                sb.Append($"""<div class="extra-member"><span class="gem sm g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="extra-name">{Enc(g.CharacterName)}</span>""");
-                if (!string.IsNullOrEmpty(combo))
+                sb.Append($"""<div class="extra"><div class="extra-title">Checked In ({xin.Count})</div><div class="extra-list">""");
+                foreach (var grp in xin.GroupBy(g => g.WdArrivalWindow!.Value).OrderBy(grp => grp.Key))
                 {
-                    sb.Append($"""<span class="extra-jobs">{Enc(combo)}</span>""");
+                    var names = string.Join(", ", grp.Select(g => Enc(g.CharacterName)));
+                    sb.Append($"""<div class="extra-member"><span class="extra-name">Window {grp.Key}:</span><span class="extra-jobs">{names}</span></div>""");
                 }
-                sb.Append("</div>");
+                sb.Append("</div></div>");
             }
-            sb.Append("</div></div>");
+        }
+        else
+        {
+            // "Also attending — no slot" overflow (general AppUserEvent roster).
+            var slotNames = new HashSet<string>(
+                slotSignups.Values.Where(s => !string.IsNullOrWhiteSpace(s.CharacterName)).Select(s => s.CharacterName!.Trim()),
+                StringComparer.OrdinalIgnoreCase);
+            var extra = generalSignups
+                .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
+                .ToList();
+            if (extra.Count > 0)
+            {
+                sb.Append("""<div class="extra"><div class="extra-title">Also Attending</div><div class="extra-list">""");
+                foreach (var g in extra)
+                {
+                    var roleClass = RoleClass(g.JobType);
+                    var combo = GeneralCombo(g);
+                    sb.Append($"""<div class="extra-member"><span class="gem sm g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="extra-name">{Enc(g.CharacterName)}</span>""");
+                    if (!string.IsNullOrEmpty(combo))
+                    {
+                        sb.Append($"""<span class="extra-jobs">{Enc(combo)}</span>""");
+                    }
+                    sb.Append("</div>");
+                }
+                sb.Append("</div></div>");
+            }
         }
 
         sb.Append("</div></div></body></html>");

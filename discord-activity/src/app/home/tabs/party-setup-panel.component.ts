@@ -161,9 +161,10 @@ export class PartySetupPanelComponent {
         core = slot.role ? `Any ${slot.role}` : 'Any Role';
         break;
       case 'Job':
-        // "PC" (Player's Choice) keeps the slot label on one line — e.g. "MNK/PC".
+        // A free sub reads "ANY" — terse enough to keep the slot label on one
+        // line (e.g. "MNK/ANY") and the same word the image board uses.
         core = slot.mainJob
-          ? `${slot.mainJob}/${slot.subJob ? slot.subJob : 'PC'}`
+          ? `${slot.mainJob}/${slot.subJob ? slot.subJob : 'ANY'}`
           : 'Any job';
         break;
       default:
@@ -212,8 +213,9 @@ export class PartySetupPanelComponent {
     return (this.detail()?.alliances.length ?? 0) > 1;
   }
 
-  // Show "Make me alliance lead" for a member who holds a slot in this alliance but
-  // isn't already its lead. Mirrors the Discord button's slot gate + the web board.
+  // Show "Make me alliance lead" for someone already LEADING a party in this alliance
+  // who isn't already its lead. Alliance lead is the party leaders' rung, so a plain
+  // seated member doesn't get the button (the server rejects it either way).
   protected canTakeAllianceLead(alliance: ActivityPartySetupAlliance): boolean {
     if (!this.isEventBoard() || this.editEnabled() || this.readOnly() || !this.multiAlliance()) {
       return false;
@@ -222,7 +224,9 @@ export class PartySetupPanelComponent {
     if (!me || alliance.leadAppUserId === me) {
       return false;
     }
-    return alliance.parties.some(p => p.slots.some(s => s.signedUpAppUserId === me));
+    return alliance.parties.some(
+      p => p.slots.some(s => s.signedUpAppUserId === me && s.signedUpIsPartyLeader === true)
+    );
   }
 
   protected async makeAllianceLead(): Promise<void> {

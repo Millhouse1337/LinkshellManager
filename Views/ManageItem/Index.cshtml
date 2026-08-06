@@ -4,6 +4,16 @@
     ViewData["BodyClass"] = "lsm-page";
     var canManage = (bool)(ViewBag.CanManage ?? false);
     var linkshellName = ViewBag.LinkshellName as string;
+
+    // Stockpile is what the linkshell still holds; Sold is the archive. Sold items are kept — the gil
+    // entry points at them, and "what did that Osode go for" is a real question — but a stash you can
+    // still sell from should not be padded out with things already gone.
+    var showingSold = string.Equals(ViewBag.View as string, "sold", StringComparison.OrdinalIgnoreCase);
+    var stockpile = Model.Where(item => !item.IsSold).ToList();
+    // Most recently sold first: the archive only grows, and the newest sale is the interesting one.
+    var sold = Model.Where(item => item.IsSold).OrderByDescending(item => item.UpdatedAt).ToList();
+    var shown = showingSold ? sold : stockpile;
+    var soldTotal = sold.Sum(item => item.SoldPrice ?? 0);
 }
 
 <div class="page-head fade d1">
@@ -15,7 +25,12 @@
                 <span>@linkshellName</span>
                 <span class="dot"> · </span>
             }
-            <span><span class="num">@Model.Count()</span> item@(Model.Count() == 1 ? "" : "s")</span>
+            <span><span class="num">@stockpile.Count</span> item@(stockpile.Count == 1 ? "" : "s") in the stash</span>
+            @if (sold.Count > 0)
+            {
+                <span class="dot"> · </span>
+                <span><span class="num">@sold.Count</span> sold</span>
+            }
         </div>
     </div>
     @if (canManage)
@@ -52,8 +67,38 @@ else
 {
     <div class="card fade d2">
         <div class="card-head">
-            <div class="card-title">Inventory</div>
+            <div style="display:flex;gap:6px;align-items:center">
+                <a class="btn sm @(showingSold ? "ghost" : "primary")" asp-action="Index">Stockpile</a>
+                <a class="btn sm @(showingSold ? "primary" : "ghost")"
+                   asp-action="Index" asp-route-view="sold">Sold</a>
+            </div>
+            <span class="tag">
+                @if (showingSold)
+                {
+                    @($"{sold.Count} sold · {soldTotal:N0} gil")
+                }
+                else
+                {
+                    @($"{stockpile.Count} items · {stockpile.Sum(item => item.Quantity)} qty")
+                }
+            </span>
         </div>
+
+        @if (shown.Count == 0)
+        {
+            <div class="empty" style="padding:24px 16px">
+                @if (showingSold)
+                {
+                    <span>Nothing sold yet. Items move here once they are marked sold, with what they went for.</span>
+                }
+                else
+                {
+                    <span>Everything in the stash has been sold. The Sold tab has the @sold.Count of them.</span>
+                }
+            </div>
+        }
+        else
+        {
         <table class="table themed">
             <thead>
                 <tr>
@@ -69,9 +114,9 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var item in Model)
+                @foreach (var item in shown)
                 {
-                    <tr style="@(item.IsSold ? "opacity:.6" : "")">
+                    <tr>
                         <td style="font-weight:500">
                             @item.ItemName
                             @if (item.IsSold)
@@ -111,7 +156,7 @@ else
                                     else
                                     {
                                         <form asp-action="Unsell" asp-route-id="@item.Id" method="post" style="display:inline"
-                                              onsubmit="return confirm('Undo this sale? The matching income entry will be removed from Finances.');">
+                                              onsubmit="return confirm('Undo this sale? An opposite entry cancels the gil out in the Treasury — the original stays in the list, so nothing disappears.');">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn ghost sm">Unsell</button>
                                         </form>
@@ -128,6 +173,7 @@ else
                 }
             </tbody>
         </table>
+        }
     </div>
 }
 

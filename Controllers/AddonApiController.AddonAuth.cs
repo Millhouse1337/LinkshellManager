@@ -40,18 +40,33 @@ public sealed partial class AddonApiController
         // pairing code, (2) a per-IP rate limit on this endpoint (see
         // [EnableRateLimiting]), and (3) a 32-char alphabet × 8-char length
         // search space (~1.1e12). Users are warned not to share pairing codes.
-        var result = await _auth.RedeemPairingCodeAsync(request.Code, cancellationToken);
-        if (result is null)
+        // One code pairs EVERY linkshell the issuing user belongs to, so a
+        // member of several doesn't have to generate and redeem a code per
+        // linkshell. Tokens are still minted per-linkshell (see the service);
+        // only the count changes, not how requests are authorized.
+        var results = await _auth.RedeemPairingCodeForAllAsync(request.Code, cancellationToken);
+        if (results.Count == 0)
         {
             return BadRequest(new { error = "Pairing code is invalid, expired, or already used." });
         }
 
+        // The redeemed linkshell stays in the top-level fields so an addon
+        // built before `pairings` existed keeps working unchanged; newer
+        // addons read the array and store all of them.
+        var primary = results[0];
         return Ok(new
         {
-            token = result.RawToken,
-            linkshellId = result.Linkshell.Id,
-            linkshellName = result.Linkshell.LinkshellName,
-            label = result.Record.Label
+            token = primary.RawToken,
+            linkshellId = primary.Linkshell.Id,
+            linkshellName = primary.Linkshell.LinkshellName,
+            label = primary.Record.Label,
+            pairings = results.Select(r => new
+            {
+                token = r.RawToken,
+                linkshellId = r.Linkshell.Id,
+                linkshellName = r.Linkshell.LinkshellName,
+                label = r.Record.Label
+            }).ToList()
         });
     }
 
@@ -86,7 +101,21 @@ public sealed partial class AddonApiController
             // Drives addon section visibility (Create Event / presets /
             // Queued / Active / HNM type). Normalized so the addon never
             // has to handle null. The addon fail-opens to "Both" anyway.
-            linkshellType = LinkshellTypes.Normalize(linkshell?.LinkshellType)
+            linkshellType = LinkshellTypes.Normalize(linkshell?.LinkshellType),
+            // Manual Check In HNM attendance mode (Standard | Wd). In Manual Check In mode, HNM attendance
+            // is Discord-button-driven (self-serve x-in), so the addon can hide its
+            // leader-driven "post window" UI. Normalized; fail-closed to Standard.
+            attendanceMode = HnmAttendanceModes.Normalize(linkshell?.HnmAttendanceMode),
+            // Automatic per-window attendance snapshots. This says only "officers MAY arm" —
+            // arming stays an explicit per-officer, per-camp action in the addon, because a camp
+            // can have people in the zone who must not be counted. Fail-closed on a null
+            // linkshell so a broken lookup can never silently enable capture.
+            //
+            // This endpoint is the ONLY channel linkshell settings reach the addon through, and
+            // the addon's /me sweep is gated on pairing rather than launcher-open — which is what
+            // lets an armed camp keep posting with the launcher closed.
+            hnmAutoSnapshotEnabled = linkshell?.HnmAutoSnapshotEnabled == true,
+            hnmAutoSnapshotDelaySeconds = Math.Clamp(linkshell?.HnmAutoSnapshotDelaySeconds ?? 20, 5, 300)
         });
     }
 }

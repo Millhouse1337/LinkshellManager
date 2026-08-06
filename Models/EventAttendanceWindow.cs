@@ -19,8 +19,9 @@ public class EventAttendanceWindow
     // 1-based ordinal within the parent event (1..GetWindowCount).
     public int SequenceNumber { get; set; }
 
-    // "On Time" / "Claim/Kill" for 2-window HNMs; null for numbered (24-window) HNMs
-    // — view layer falls back to "Window {SequenceNumber}".
+    // "Open" / "Close" for 2-window HNMs; null for numbered (24-window) HNMs — view layer
+    // falls back to "Window {SequenceNumber}". Rows written before the rename still hold
+    // "On Time" / "Claim/Kill"; read them through HnmConfig.NormalizeWindowLabel, never raw.
     [MaxLength(64)]
     public string? Label { get; set; }
 

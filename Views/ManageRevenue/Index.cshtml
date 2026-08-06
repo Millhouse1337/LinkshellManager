@@ -5,6 +5,8 @@
     var canManage = (bool)(ViewBag.CanManage ?? false);
     var linkshellName = ViewBag.LinkshellName as string;
     var totalValue = (long)(ViewBag.TotalValue ?? 0L);
+    var moneyIn = (long)(ViewBag.MoneyIn ?? 0L);
+    var moneyOut = (long)(ViewBag.MoneyOut ?? 0L);
 }
 
 <div class="page-head fade d1">
@@ -18,7 +20,11 @@
             }
             <span><span class="num">@Model.Count()</span> entr@(Model.Count() == 1 ? "y" : "ies")</span>
             <span class="dot"> · </span>
-            <span>Total <span class="num">@totalValue.ToString("N0")</span></span>
+            <span>In <span class="num">@moneyIn.ToString("N0")</span></span>
+            <span class="dot"> · </span>
+            <span>Out <span class="num">@moneyOut.ToString("N0")</span></span>
+            <span class="dot"> · </span>
+            <span>Gil on hand <span class="num">@totalValue.ToString("N0")</span></span>
         </div>
     </div>
     @if (canManage)

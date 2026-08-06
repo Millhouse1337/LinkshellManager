@@ -209,7 +209,7 @@
                                         }
                                     </select>
                                     <select data-field="SubJob" name="Slots[@flat].SubJob" class="form-select ps-slot__sel ps-slot__job">
-                                        <option value="">Select sub job</option>
+                                        <option value="">Any sub job</option>
                                         @foreach (var j in Model.SubJobOptions)
                                         {
                                             <option value="@j" selected="@(string.Equals(j, slot.SubJob, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">@j</option>

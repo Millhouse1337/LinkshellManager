@@ -28,10 +28,12 @@
     @foreach (var alliance in Model.Board.Alliances)
     {
         var multiAlliance = Model.Board.Alliances.Count > 1;
-        // Whether the current viewer holds a slot anywhere in this alliance (gates the
-        // "Make me alliance lead" button, mirroring the Discord button's slot gate).
-        var iHoldSlotHere = !string.IsNullOrEmpty(Model.CurrentUserId)
-            && alliance.Parties.SelectMany(p => p.Slots).Any(s => s.SignedUpAppUserId == Model.CurrentUserId);
+        // Whether the current viewer LEADS a party in this alliance — alliance lead is
+        // the party leaders' rung, so a plain seated member can't take it (the server
+        // rejects it too; this just keeps the button off boards where it'd only fail).
+        var iLeadAPartyHere = !string.IsNullOrEmpty(Model.CurrentUserId)
+            && alliance.Parties.SelectMany(p => p.Slots)
+                .Any(s => s.SignedUpAppUserId == Model.CurrentUserId && s.SignedUpIsPartyLeader);
         var iAmAllianceLead = !string.IsNullOrEmpty(Model.CurrentUserId) && alliance.LeadAppUserId == Model.CurrentUserId;
         <div class="event-ps-alliance" data-alliance-id="@alliance.AllianceId">
             <div class="event-ps-alliance-title">
@@ -40,9 +42,9 @@
                 {
                     <span class="event-ps-alliance-lead ps-view-only" title="Alliance lead">👑 Alliance Lead: @alliance.LeadCharacterName</span>
                 }
-                @* "Make me alliance lead" — shown to a member who holds a slot in this alliance
-                   but isn't already its lead. Posts to MakeAllianceLead and reloads the board. *@
-                @if (multiAlliance && iHoldSlotHere && !iAmAllianceLead)
+                @* "Make me alliance lead" — shown to a party leader in this alliance who
+                   isn't already its lead. Posts to MakeAllianceLead and reloads the board. *@
+                @if (multiAlliance && iLeadAPartyHere && !iAmAllianceLead)
                 {
                     <form class="ps-view-only" asp-controller="Event" asp-action="MakeAllianceLead" method="post" style="display:inline">
                         @Html.AntiForgeryToken()
@@ -110,7 +112,7 @@
                                                 @foreach (var j in Model.MainJobOptions) { <option value="@j" selected="@(string.Equals(j, slot.MainJob, StringComparison.OrdinalIgnoreCase))">@j</option> }
                                             </select>
                                             <select data-job-sub>
-                                                <option value="">Player's choice</option>
+                                                <option value="">Any sub job</option>
                                                 @foreach (var j in Model.SubJobOptions) { <option value="@j" selected="@(string.Equals(j, slot.SubJob, StringComparison.OrdinalIgnoreCase))">@j</option> }
                                             </select>
                                             <button type="button" class="btn xs primary" data-job-save>Save</button>

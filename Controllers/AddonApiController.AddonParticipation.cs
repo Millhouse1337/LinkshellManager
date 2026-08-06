@@ -82,6 +82,15 @@ public sealed partial class AddonApiController
 
         var participation = ctx.Participation!;
         var eventEntity = ctx.EventEntity!;
+
+        // Deliberately HERE and not inside ResolveBreakContextAsync: that helper is shared with
+        // ReturnFromBreakAsync, which must stay open on a windowed event so an officer can still
+        // clear a break state left behind by an older addon build.
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+        {
+            return BadRequest(new { error = EventBreakPolicy.WindowedRejectionMessage });
+        }
+
         if (participation.IsOnBreak == true)
         {
             return BadRequest(new { error = "That participant is already on break." });
@@ -277,6 +286,16 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        // Automatic per-window snapshots are moderators-only, enforced HERE and not just by the
+        // addon hiding its Arm button — the addon caches this permission from /me for up to 60s,
+        // and a cache is not a permission boundary. Without this stop, a client whose role is
+        // revoked mid-camp would silently queue a PendingAttendanceWindowSubmission every single
+        // window (7 per king camp, 25 per wyrm) and bury the approval queue.
+        if (!canModerate && request.Auto)
+        {
+            return Forbid();
+        }
+
         if (!canModerate)
         {
             var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
@@ -314,7 +333,19 @@ public sealed partial class AddonApiController
         EventAttendanceWindow? attendanceWindow = null;
         if (request.WindowSequence is int windowSequence)
         {
-            var maxWindows = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
+            // Same effective count the board, the Activity DTO and the addon's event list use.
+            // The old expression (WindowCountOverride ?? GetWindowCount(EventName)) returned 2 for
+            // kings/dragons, so an addon-created board that never stamped WindowCountOverride
+            // rejected every post past window 2 with "out of range".
+            //
+            // Range check only. A snapshot is filed against the SPAWN window it was taken in —
+            // window 1 is the pop, window 5 is fifty minutes later — so the ceiling is the spawn
+            // count. How many posts the camp takes is the separate number below.
+            var maxWindows = DiscordEventMessageBuilder.EffectiveWindowCount(eventEntity);
+            // How many roster reads this camp takes (2 on a Standard king/dragon). Names the
+            // window and decides whether the Close ends the posting; both are about posts, not
+            // pop chances.
+            var postCount = DiscordEventMessageBuilder.AttendancePostCount(eventEntity);
             if (windowSequence < 1 || windowSequence > maxWindows)
             {
                 return BadRequest(new { error = $"Window sequence {windowSequence} is out of range for this event (max {maxWindows})." });
@@ -327,20 +358,91 @@ public sealed partial class AddonApiController
 
             if (attendanceWindow is null)
             {
+                // On a 2-post camp the Close is the end of the camp, so it ends the posting.
+                //
+                // The addon stops offering the buttons, but that is not enough on its own: a
+                // second officer's client only refreshes its event list, never its per-window
+                // rosters (those rehydrate on event RE-SELECTION), so their launcher keeps
+                // offering [Post Open] indefinitely after someone else posts the Close. Without
+                // this, their click silently creates the Open the first officer deliberately
+                // did not post — and hands everyone on it an open bonus.
+                //
+                // Deliberately scoped twice over:
+                //   * to the CREATE path — a non-null attendanceWindow means this batch is
+                //     landing in a window that already exists, which is the addon's per-window
+                //     "add a member" backfill. That must keep working, including on the Close.
+                //   * to a 2-POST camp — one that takes an Open and a Close. On a camp that posts
+                //     per window a later window is routine and an earlier one is a legitimate
+                //     correction. This reads the post count, not the spawn count: a king/dragon
+                //     is a 2-post camp with 7 spawn windows, and testing it against the spawn
+                //     count meant the guard never fired on exactly the camps it was written for.
+                if (postCount == 2 && await _dbContext.EventAttendanceWindows.AnyAsync(
+                        w => w.EventId == eventId && w.SequenceNumber == 2, cancellationToken))
+                {
+                    return BadRequest(new
+                    {
+                        error = "The Close window has been posted, so this camp accepts no further "
+                              + "windows. To credit someone who was missed, add them to the Close window."
+                    });
+                }
+
                 attendanceWindow = new EventAttendanceWindow
                 {
                     EventId = eventId,
                     SequenceNumber = windowSequence,
-                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, maxWindows),
+                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, postCount),
                     PostedAt = nowUtc,
                     PostedBySource = AddonSource
                 };
                 _dbContext.EventAttendanceWindows.Add(attendanceWindow);
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
+
+            // What the officer typed into "Dkp this window" before pressing Post. It rides on the
+            // post rather than a separate PATCH because THIS request is what creates the window
+            // row — pricing it anywhere else leaves a moment where the window exists at the wrong
+            // price, and the addon used to bridge that gap by PATCHing Event.DkpPerHour, a column
+            // this camp's payout ignores entirely.
+            //
+            // Applied on the backfill branch too, so re-posting into an existing window can
+            // correct its price. Null means "leave it alone", which is what the ARMED automatic
+            // capture always sends — nobody typed a rate.
+            if (request.WindowDkp is { } typedWindowDkp
+                && !double.IsNaN(typedWindowDkp)
+                && !double.IsInfinity(typedWindowDkp)
+                && typedWindowDkp >= 0
+                && HnmCampPricing.HonoursWindowAmount(eventEntity))
+            {
+                // Fetched inside the guard rather than Include'd on the event above: this is the
+                // one branch that needs it, and it only runs when an officer actually typed a rate.
+                var increment = await _dbContext.Linkshells
+                    .Where(l => l.Id == eventEntity.LinkshellId)
+                    .Select(l => l.DkpRoundingIncrement)
+                    .FirstOrDefaultAsync(cancellationToken);
+                attendanceWindow.DkpAmount =
+                    DkpRounding.Round(typedWindowDkp, DkpRounding.StepFor(increment));
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
         }
 
         var verifiedBy = (token.Label ?? "lsm-addon") + " (lsm)";
+
+        // What one window is actually worth, for the "+N DKP" line the addon prints after a post.
+        // Null when the number would be fiction, and the addon suppresses the whole block.
+        //
+        // An EXPLICITLY-PRICED window pays exactly that per attendee even on a Standard camp, so
+        // report it — that number is stored on the window and HnmStandardCampFinalizer will pay it.
+        //
+        // A Standard-mode HNM camp with NO explicit price pays nothing per window:
+        // HnmStandardCampFinalizer deliberately ignores DkpPerHour and pays only the
+        // open/close/claim/kill bonuses at End Camp. Reporting DkpPerHour here told officers
+        // "+1 DKP awarded" on every window post for a payout that never happens. Claim/Kill-style
+        // non-HNM windowed events DO pay windowsAttended × DkpPerHour via EndEventCoreAsync, so
+        // they keep reporting it.
+        var paysPerWindow = !(string.Equals(eventEntity.EventType, "HNM", StringComparison.OrdinalIgnoreCase)
+                              && !DiscordEventMessageBuilder.IsWd(eventEntity));
+        double? perWindowDkp = attendanceWindow?.DkpAmount
+            ?? (attendanceWindow is not null && paysPerWindow ? eventEntity.DkpPerHour : null);
 
         var matched = 0;
         var alreadyVerified = 0;
@@ -461,16 +563,21 @@ public sealed partial class AddonApiController
                 .Where(ue => ue.EventId == eventId && resolvedAppUserIds.Contains(ue.AppUserId!))
                 .ToDictionaryAsync(ue => ue.AppUserId!, cancellationToken);
 
-        // Pre-load all per-window credits for participants we already know about so the
-        // "already attended this window" check becomes an in-memory lookup.
-        var existingWindowCreditPairs = attendanceWindow is null || existingByAppUserId.Count == 0
-            ? new HashSet<int>()
+        // Pre-load who is already credited for this window so the "already attended this window"
+        // check is an in-memory lookup.
+        //
+        // Keyed on the DENORMALIZED AppUserId, not the participation id. A roster clear (the wyrm
+        // camps clear every window) deletes a member's AppUserEvent and the next scan creates a
+        // fresh one — so keying on the participation would let the same person be credited twice
+        // for one window under two different participation rows. It also means dedupe still works
+        // against rows whose participation has since been cleared away.
+        var existingWindowAppUserIds = attendanceWindow is null
+            ? new HashSet<string>(StringComparer.Ordinal)
             : (await _dbContext.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindowId == attendanceWindow.Id
-                    && existingByAppUserId.Values.Select(v => v.Id).Contains(w.AppUserEventId))
-                .Select(w => w.AppUserEventId)
+                .Where(w => w.EventAttendanceWindowId == attendanceWindow.Id && w.AppUserId != null)
+                .Select(w => w.AppUserId!)
                 .ToListAsync(cancellationToken))
-                .ToHashSet();
+                .ToHashSet(StringComparer.Ordinal);
 
         foreach (var (entry, membership, _) in resolvedEntries)
         {
@@ -522,8 +629,10 @@ public sealed partial class AddonApiController
             // Per-window join row: silently skip if the user was already credited for this window.
             if (attendanceWindow is not null)
             {
-                if (participation.Id != 0 && existingWindowCreditPairs.Contains(participation.Id))
+                if (!existingWindowAppUserIds.Add(membership.AppUserId!))
                 {
+                    // Add returns false when already present — covers both a prior post of this
+                    // window and a duplicate name inside this same batch.
                     alreadyVerified++;
                     continue;
                 }
@@ -532,6 +641,10 @@ public sealed partial class AddonApiController
                 {
                     AppUserEvent = participation,
                     EventAttendanceWindow = attendanceWindow,
+                    // Denormalized so the snapshot survives a roster clear deleting the
+                    // participation above — see AppUserEventWindow.AppUserEventId.
+                    AppUserId = membership.AppUserId,
+                    CharacterName = participation.CharacterName ?? membership.CharacterName,
                     VerifiedAt = nowUtc,
                     VerifiedBy = verifiedBy,
                     Zone = string.IsNullOrWhiteSpace(entry.Zone) ? null : entry.Zone.Trim()
@@ -542,7 +655,7 @@ public sealed partial class AddonApiController
                     characterName = participation.CharacterName,
                     jobName       = participation.JobName,
                     subJobName    = participation.SubJobName,
-                    dkpEarned     = eventEntity.DkpPerHour ?? 0
+                    dkpEarned     = perWindowDkp
                 });
             }
 
@@ -577,8 +690,10 @@ public sealed partial class AddonApiController
             ledgerEntryIds = ledgerIds,
             windowSequence = attendanceWindow?.SequenceNumber,
             windowId = attendanceWindow?.Id,
-            windowLabel = attendanceWindow?.Label,
-            dkpPerWindow = attendanceWindow is not null ? eventEntity.DkpPerHour : null,
+            // Normalized, not raw — a window written before the Open/Close rename would otherwise
+            // report its old "On Time" / "Claim/Kill" name back to the addon.
+            windowLabel = HnmConfig.NormalizeWindowLabel(attendanceWindow?.Label),
+            dkpPerWindow = perWindowDkp,
             creditedAttendees
         });
     }

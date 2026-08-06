@@ -11,10 +11,26 @@ public class AppUserEventWindow
     [Key]
     public int Id { get; set; }
 
-    public int AppUserEventId { get; set; }
+    // NULLABLE, with SetNull on delete (see ApplicationDbContext). A snapshot has to OUTLIVE the
+    // participation it was taken from: the 25-window wyrm camps clear their roster every window
+    // (EventPartySignupService.ClearWindowRosterAsync), and while this cascaded, every hour's
+    // snapshots were deleted along with the participations — so a Standard wyrm camp could only
+    // ever pay from its final hour, and automatic per-window snapshots would have thrown away 24
+    // of every 25 windows they captured.
+    public int? AppUserEventId { get; set; }
 
     [ForeignKey(nameof(AppUserEventId))]
     public AppUserEvent? AppUserEvent { get; set; }
+
+    // WHO this snapshot recorded, denormalized so the row still identifies a person after the
+    // participation is gone. Stamped at creation from the resolved membership. AppUserId is what
+    // HnmStandardCampFinalizer folds on to award credit; CharacterName is for display and for
+    // account-less ("outside") scans that have no AppUserId.
+    [MaxLength(450)]
+    public string? AppUserId { get; set; }
+
+    [MaxLength(256)]
+    public string? CharacterName { get; set; }
 
     public int EventAttendanceWindowId { get; set; }
 

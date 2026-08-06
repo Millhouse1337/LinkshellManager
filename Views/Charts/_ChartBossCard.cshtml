@@ -1,0 +1,90 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.ChartBossCardContext
+@{
+    var boss = Model.Boss;
+    var isMiniNm = boss.Kind == ChartBossKinds.MiniNm;
+    var isFinal = boss.Kind == ChartBossKinds.Final;
+    var hasRewards = boss.Rewards.Count > 0 || !string.IsNullOrWhiteSpace(boss.ReferenceNote);
+
+    // Theme keys are unique across the WHOLE catalog, so this is a stable per-card element id even
+    // on a board with two finales. Using the boss name would break on spaces and apostrophes.
+    var rewardsId = $"chart-rewards-{boss.ThemeKey}";
+}
+
+@* Every kind is a grid card of the same width; kind picks the chrome only — the tag (stock vs item
+   count) and the footer (totals vs a finale's reward drawer). Twin of the @for in the Activity's
+   chart-board-section.component.html. *@
+<article class="card chart-card @(isFinal ? "chart-final" : null) is-@boss.ThemeKey">
+    <div class="card-head">
+        <div class="chart-card__heading">
+            <img class="chart-card__emblem" src="@boss.EmblemPath" alt="@boss.Boss" loading="lazy" />
+            <div>
+                <div class="chart-card__name">@boss.Boss</div>
+                @* Which card this one's drops feed, in the TARGET card's hue rather than this card's:
+                   is-@LeadsToThemeKey re-sets --boss on the badge itself, and every .is-* rule in
+                   lsm-theme.css sets nothing but --boss. Both values must be present — an arrow the
+                   catalog could not resolve renders nothing rather than a badge with no hue. *@
+                @if (!string.IsNullOrWhiteSpace(boss.LeadsTo) && !string.IsNullOrWhiteSpace(boss.LeadsToThemeKey))
+                {
+                    <div class="chart-card__leads-to is-@boss.LeadsToThemeKey" aria-label="Drops feed @boss.LeadsTo">
+                        <span aria-hidden="true">→</span>@boss.LeadsTo
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(boss.Subtitle))
+                {
+                    <div class="chart-card__subtitle">@boss.Subtitle</div>
+                }
+            </div>
+        </div>
+        @* A Mini NM is farmed rather than popped, so stock is the headline, not item count. *@
+        @if (isMiniNm)
+        {
+            <span class="tag chart-count">@boss.TotalQuantity held</span>
+        }
+        else
+        {
+            <span class="tag chart-count">@boss.TotalItems @(boss.TotalItems == 1 ? "Item" : "Items")</span>
+        }
+    </div>
+
+    <partial name="_ChartBossTable" model="Model" />
+
+    @if (isFinal)
+    {
+        @* Reference text, not tracked data, so it hangs off a collapsed strip: open it stretches the
+           row, closed the finale is exactly as tall as the cards beside it. Reuses the page's
+           generic .chart-toggle / .chart-drawer script. *@
+        if (hasRewards)
+        {
+            <div class="chart-card__footer chart-rewards__bar">
+                <button type="button" class="chart-rewards__toggle chart-toggle" data-target="@rewardsId">
+                    <span class="chart-rewards__chevron">›</span> Rewards
+                </button>
+                <strong>@boss.Rewards.Count</strong>
+            </div>
+            <aside id="@rewardsId" class="chart-rewards chart-drawer" hidden>
+                <ul>
+                    @foreach (var reward in boss.Rewards)
+                    {
+                        <li><span>◈</span> @reward</li>
+                    }
+                </ul>
+                @if (!string.IsNullOrWhiteSpace(boss.ReferenceNote))
+                {
+                    <div class="chart-rewards__note">@boss.ReferenceNote</div>
+                }
+            </aside>
+        }
+    }
+    else
+    {
+        @* Every non-finale card, Mini NM included. A Mini NM used to skip this, which left it shorter
+           than the cards beside it and its grid row with a hole in it. Its header already headlines
+           stock, so "Total Qty" repeats that one number — a card the same shape as its neighbours is
+           worth the repetition. *@
+        <div class="chart-card__footer">
+            <span>Total Items: <strong>@boss.TotalItems</strong></span>
+            <span>Total Qty: <strong>@boss.TotalQuantity</strong></span>
+        </div>
+    }
+</article>

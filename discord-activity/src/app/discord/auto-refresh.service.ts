@@ -6,7 +6,9 @@ import { DiscordActivityService } from './discord-activity.service';
 import { formatActionError } from './discord-activity.helpers';
 import { DkpSheetService } from './dkp-sheet.service';
 import { PartySetupService } from './party-setup.service';
+import { TreasuryService } from './treasury.service';
 import { WindowEventService } from './window-event.service';
+import { attendanceApplies } from '../home/activity-home.helpers';
 import type { TabName } from '../home/activity-home.types';
 
 // Centralized visibility-aware polling that keeps every tab "feeling live"
@@ -33,6 +35,7 @@ export class AutoRefreshService {
   private readonly partySetup = inject(PartySetupService);
   private readonly dkpSheet = inject(DkpSheetService);
   private readonly auction = inject(AuctionService);
+  private readonly treasury = inject(TreasuryService);
 
   private readonly NORMAL_MS = 25_000;
   private readonly FAST_MS = 5_000;
@@ -119,12 +122,12 @@ export class AutoRefreshService {
       return this.activity.auctions().some(a => (a.status ?? '').toLowerCase() === 'live');
     }
     if (tab === 'timed-events') {
+      // A commenced camp is a ticking clock, so it earns the fast cadence. An OPEN attendance event
+      // deliberately does NOT: it's a pending-review queue that sits open for hours or days until an
+      // officer posts it, so counting it here would pin the app's busiest tab at 5s permanently for
+      // any linkshell with one lingering unposted roster. New snapshots still arrive via the change
+      // feed within about a second either way.
       return (this.activity.overview()?.activeEvents ?? []).some(e => !!e.commencementStartTime);
-    }
-    if (tab === 'window-events') {
-      // Open (unposted) events are the live surface — closed events are stable
-      // history and don't need fast cadence.
-      return (this.windows.data()?.openEvents ?? []).length > 0;
     }
     return false;
   }
@@ -186,8 +189,12 @@ export class AutoRefreshService {
   // overview refresh, so they need nothing extra here.
   private async loadForTab(tab: TabName | null, linkshellId: number): Promise<void> {
     switch (tab) {
-      case 'window-events':
-        await this.windows.load(linkshellId);
+      case 'timed-events':
+        // Camps ride the overview refresh above, but the attendance sections embedded in this tab
+        // have their own endpoint. Skipped for Sky/Sea/Dynamis, where those sections never render.
+        if (attendanceApplies(this.activity.overview())) {
+          await this.windows.loadIfStale(linkshellId);
+        }
         break;
       case 'party-setup':
         await this.partySetup.loadList(linkshellId);
@@ -197,6 +204,12 @@ export class AutoRefreshService {
         break;
       case 'auctions':
         await this.auction.loadAuctions(linkshellId);
+        break;
+      case 'treasury':
+        // Gil reads from its own paged endpoint, not the overview payload, so it has to be refreshed
+        // explicitly. Items still ride the overview. `reload` repeats whatever page, search and filter
+        // the officer is currently looking at rather than snapping them back to page one.
+        await this.treasury.reload();
         break;
       default:
         break;

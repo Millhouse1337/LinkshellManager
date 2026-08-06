@@ -81,7 +81,9 @@ else
         @if (Model.EnableRevenue)
         {
             <div class="stat-cell">
-                <div class="stat-cell-label">Revenue</div>
+                @* "Revenue" was never what this number was — it is the gil the linkshell holds, and it
+                   also disagreed with the Finances page, which summed raw values and ignored outflows. *@
+                <div class="stat-cell-label">@LinkshellManagerDiscordApp.Services.TreasuryLabels.CashOnHand</div>
                 <div class="stat-cell-value">@Model.RevenueTotal.ToString("N0")</div>
             </div>
         }
@@ -93,7 +95,7 @@ else
             <div class="stat-cell-label">Upcoming Auctions</div>
             <div class="stat-cell-value">@Model.UpcomingAuctionsCount</div>
         </div>
-        @if (Model.LinkshellType != "SkySeaDynamis")
+        @if (Model.EnableToDs)
         {
             <div class="stat-cell">
                 <div class="stat-cell-label">Upcoming ToDs</div>
@@ -424,7 +426,7 @@ else
         </div>
 
         <div class="col">
-            @if (Model.EnableToDs && Model.LinkshellType != "SkySeaDynamis")
+            @if (Model.EnableToDs)
             {
             <div class="card fade d3">
                 <div class="card-head">

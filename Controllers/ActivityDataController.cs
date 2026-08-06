@@ -39,6 +39,12 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly DkpPoolBalanceService _dkpPoolBalances;
     private readonly DkpPoolEditor _dkpPoolEditor;
     private readonly DkpPoolEventTypeCatalog _dkpPoolEventTypes;
+    private readonly TreasuryBalanceService _treasury;
+    private readonly TreasuryJournalWriter _treasuryJournal;
+    private readonly LedgerAccountProvisioner _ledgerAccounts;
+    private readonly LedgerPeriodGuard _ledgerPeriods;
+    private readonly ItemSaleRecorder _itemSales;
+    private readonly ChartBoardService _chartBoards;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -60,7 +66,13 @@ public sealed partial class ActivityDataController : ControllerBase
         DkpPoolResolver dkpPools,
         DkpPoolBalanceService dkpPoolBalances,
         DkpPoolEditor dkpPoolEditor,
-        DkpPoolEventTypeCatalog dkpPoolEventTypes)
+        DkpPoolEventTypeCatalog dkpPoolEventTypes,
+        TreasuryBalanceService treasury,
+        TreasuryJournalWriter treasuryJournal,
+        LedgerAccountProvisioner ledgerAccounts,
+        LedgerPeriodGuard ledgerPeriods,
+        ItemSaleRecorder itemSales,
+        ChartBoardService chartBoards)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -82,6 +94,12 @@ public sealed partial class ActivityDataController : ControllerBase
         _dkpPoolBalances = dkpPoolBalances;
         _dkpPoolEditor = dkpPoolEditor;
         _dkpPoolEventTypes = dkpPoolEventTypes;
+        _treasury = treasury;
+        _treasuryJournal = treasuryJournal;
+        _ledgerAccounts = ledgerAccounts;
+        _ledgerPeriods = ledgerPeriods;
+        _itemSales = itemSales;
+        _chartBoards = chartBoards;
     }
 
     [HttpGet("antiforgery")]

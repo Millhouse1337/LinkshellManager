@@ -19,8 +19,14 @@
     var memberDkpDefault = Model.DkpAmount ?? 1.5;
 }
 
-<article class="card fade d4 we-card" style="margin-top:14px">
-    <header class="we-card__head">
+@* Collapsible: the header is the <summary>, everything below folds away. Every card starts
+   COLLAPSED — a linkshell runs many attendance events at once and each carries a full roster
+   table, so the page opens as a scannable list of headers. Native <details> needs no JS for
+   that; the script at the bottom only adds memory, since this page is form-heavy (rename,
+   close, post to sheet all reload it) and an officer mid-edit shouldn't have their card fold
+   shut on every round-trip. *@
+<details class="card fade d4 we-card" data-we-card="@Model.Id" style="margin-top:14px">
+    <summary class="we-card__head" title="Click to expand or collapse this event">
         <div class="we-card__title-group">
             <span class="attendance-crystal" aria-hidden="true"></span>
             <h3 class="we-card__title">@Dash(Model.Name)</h3>
@@ -37,6 +43,11 @@
                 <span class="tag">Closed</span>
             }
         </div>
+        @* Expand/collapse affordance, centred between the title and the counts. The whole
+           summary bar is clickable — this is the visual cue for it. *@
+        <span class="we-card__caret" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
         <div class="we-card__counts">
             <span class="we-count">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
@@ -47,82 +58,49 @@
                 @Model.SnapshotCount snapshot@(Model.SnapshotCount == 1 ? "" : "s")
             </span>
         </div>
-    </header>
+    </summary>
 
     @if (canManage)
     {
         <div class="we-card__controls">
-            <form asp-action="Rename" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id"
-                  method="post" class="we-action-form we-rename-form">
-                @Html.AntiForgeryToken()
-                <input class="input we-rename-input" type="text" name="name" value="@Model.Name" maxlength="128" required />
-                <button type="submit" class="btn sm">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                    Rename
-                </button>
-            </form>
+            @* The name is the only editable field left (Default DKP is per-snapshot now), so it
+               moved into the dialog below rather than sitting inline beside Close / Delete.
+               The DKP form stays — it carries the per-member overrides and is what the Save /
+               Post to DKP sheet buttons submit — but it now has no visible inputs of its own. *@
             @if (alreadyPosted)
             {
                 <form id="@dkpFormId"
                       class="we-card__form"
-                      asp-action="EditPostedDetails"
+                      asp-controller="WindowEvents" asp-action="EditPostedDetails"
                       asp-route-linkshellId="@linkshellId"
                       asp-route-windowEventId="@Model.Id"
                       method="post"
-                      onsubmit="return confirm('Update DKP / Entry Type on the @(Model.CombinedMemberCount) already-posted row(s)? This rewrites cells J and K in the sheet and adjusts DKP totals.');">
+                      onsubmit="return confirm('Update DKP on the @(Model.CombinedMemberCount) already-posted row(s)? This rewrites the sheet and adjusts DKP totals.');">
                     @Html.AntiForgeryToken()
-                    <label class="we-field">
-                        <span class="we-field__label">Default DKP</span>
-                        <input class="input we-field__input" type="number" name="dkpAmount" step="0.25" min="0"
-                               value="@(Model.DkpAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "1.5")"
-                               required />
-                    </label>
-                    <label class="we-field">
-                        <span class="we-field__label">Entry type</span>
-                        <select class="form-select we-field__select" name="entryType" required>
-                            <option value="">(select)</option>
-                            @foreach (var type in WindowEventEntryTypes.All)
-                            {
-                                <option value="@type" selected="@(Model.EntryType == type)">@type</option>
-                            }
-                        </select>
-                    </label>
                 </form>
             }
             else
             {
                 <form id="@dkpFormId" class="we-card__form" method="post">
                     @Html.AntiForgeryToken()
-                    <label class="we-field">
-                        <span class="we-field__label">Default DKP</span>
-                        <input class="input we-field__input" type="number" name="dkpAmount" step="0.25" min="0"
-                               value="@(Model.DkpAmount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "1.5")"
-                               required />
-                    </label>
-                    <label class="we-field">
-                        <span class="we-field__label">Entry type</span>
-                        <select class="form-select we-field__select" name="entryType" required>
-                            <option value="">(select)</option>
-                            @foreach (var type in WindowEventEntryTypes.All)
-                            {
-                                <option value="@type" selected="@(Model.EntryType == type)">@type</option>
-                            }
-                        </select>
-                    </label>
                 </form>
             }
 
             <div class="we-card__actions">
+                <button type="button" class="btn sm" data-we-edit-open="@Model.Id">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    Edit Event
+                </button>
                 @if (isClosed)
                 {
-                    <form asp-action="Reopen" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
+                    <form asp-controller="WindowEvents" asp-action="Reopen" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="btn sm">Reopen</button>
                     </form>
                 }
                 else
                 {
-                    <form asp-action="Close" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
+                    <form asp-controller="WindowEvents" asp-action="Close" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="btn sm ghost">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
@@ -130,7 +108,7 @@
                         </button>
                     </form>
                 }
-                <form asp-action="Delete" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post"
+                <form asp-controller="WindowEvents" asp-action="Delete" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id" method="post"
                       onsubmit="return confirm('Are you sure you want to delete this event @(Model.Name ?? "(unnamed)") ?');">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="btn sm danger-outline" title="Delete Event" aria-label="Delete Event">
@@ -140,13 +118,33 @@
                 </form>
             </div>
         </div>
+
+        @* Edit event dialog. Native <dialog> so it needs no framework; the button above opens
+           it via showModal(). Only the name is editable — Default DKP is per-snapshot now. *@
+        <dialog class="we-edit-dialog" data-we-edit-dialog="@Model.Id">
+            <form asp-controller="WindowEvents" asp-action="Rename" asp-route-linkshellId="@linkshellId" asp-route-windowEventId="@Model.Id"
+                  method="post" class="we-edit-dialog__form">
+                @Html.AntiForgeryToken()
+                <h4 class="we-edit-dialog__title">Edit event</h4>
+                <label class="we-edit-dialog__field">
+                    <span>Event name</span>
+                    <input class="input" type="text" name="name" value="@Model.Name" maxlength="128" required autofocus />
+                </label>
+                <div class="we-edit-dialog__actions">
+                    <button type="button" class="btn sm ghost" data-we-edit-cancel>Cancel</button>
+                    <button type="submit" class="btn sm primary">Save</button>
+                </div>
+            </form>
+        </dialog>
     }
 
     <section class="we-roster">
         <div class="we-roster__subtitle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
             <span class="we-roster__subtitle-main">Combined roster</span>
-            <span class="we-roster__subtitle-help">— excludes duplicates and ignored snapshots</span>
+            @* Distinct people across every counted snapshot — the row count of the table below, and
+               so the number of members this event will actually pay. *@
+            <span class="we-roster__subtitle-help">@Model.CombinedMemberCount member@(Model.CombinedMemberCount == 1 ? "" : "s")</span>
         </div>
         <div class="we-table__scroll">
             <table class="we-table">
@@ -216,7 +214,10 @@
                 else
                 {
                     <button type="submit" form="@dkpFormId" class="btn sm primary"
-                            formaction="@Url.Action("PostToSheet", new { linkshellId, windowEventId = Model.Id })"
+                            @* Controller named explicitly: this partial now renders from EventController
+                               (Event System page) as well as WindowEventsController, and an ambient-controller
+                               Url.Action would post to /Event/PostToSheet and 404. *@
+                            formaction="@Url.Action("PostToSheet", "WindowEvents", new { linkshellId, windowEventId = Model.Id })"
                             onclick="return confirm('Post @(Model.CombinedMemberCount) row(s) to the DKP sheet AttInput tab? This cannot be undone.');">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 19V5"/><polyline points="5 12 12 5 19 12"/></svg>
                         Post to DKP sheet
@@ -234,7 +235,7 @@
                 var snapshotDeleteForm = $"snapshot-delete-{snapshot.Id}";
                 if (canManage)
                 {
-                    <form id="@snapshotDeleteForm" asp-action="DeleteSnapshot"
+                    <form id="@snapshotDeleteForm" asp-controller="WindowEvents" asp-action="DeleteSnapshot"
                           asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
                           method="post" class="we-hidden-form"
                           onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
@@ -247,6 +248,10 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
                         </span>
                         <span class="we-snapshot__title">
+                            @if (snapshot.WindowLabel is not null)
+                            {
+                                <span class="tag we-snapshot__window">@snapshot.WindowLabel</span>
+                            }
                             <strong>@snapshot.CapturedAtDisplay</strong>
                             <span class="we-snapshot__meta">· posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong> · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
                             @if (snapshot.SnapshotStatus != AttendanceSnapshotStatuses.Active)
@@ -278,32 +283,38 @@
         </section>
     }
 
-    @if (canManage)
-    {
-        // Keeps per-row DKP inputs in sync with the Default DKP value above
-        // for any row the officer hasn't manually touched. Once an officer
-        // edits an individual row, that row stops following the default.
-        <script>
-            (function () {
-                var form = document.getElementById('@dkpFormId');
-                if (!form) return;
-                var defaultInput = form.querySelector('input[name="dkpAmount"]');
-                if (!defaultInput) return;
-                var followers = document.querySelectorAll(
-                    'input.js-member-dkp[data-window-event-form="@dkpFormId"]');
-                followers.forEach(function (f) {
-                    f.addEventListener('input', function () {
-                        f.dataset.followsDefault = 'false';
-                    });
-                });
-                defaultInput.addEventListener('input', function () {
-                    followers.forEach(function (f) {
-                        if (f.dataset.followsDefault === 'true') {
-                            f.value = defaultInput.value;
-                        }
-                    });
-                });
-            })();
-        </script>
-    }
-</article>
+    @* The "cascade Default DKP into every untouched per-row input" script lived here. It's gone
+       with the input it watched — each snapshot row now carries its own DKP outright, which is
+       the point of moving DKP to per-snapshot. *@
+
+    @* Edit-event dialog wiring: the card's Edit button opens it, Cancel/backdrop close it. *@
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var dialog = document.querySelector('dialog[data-we-edit-dialog="@Model.Id"]');
+            var open = document.querySelector('button[data-we-edit-open="@Model.Id"]');
+            if (!dialog || !open || typeof dialog.showModal !== 'function') return;
+            open.addEventListener('click', function () { dialog.showModal(); });
+            var cancel = dialog.querySelector('[data-we-edit-cancel]');
+            if (cancel) cancel.addEventListener('click', function () { dialog.close(); });
+            // Click outside the form (i.e. on the backdrop area of the dialog box) closes it.
+            dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
+        })();
+    </script>
+
+    @* Remember open/closed across the full-page reloads every action on this card triggers. *@
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var card = document.querySelector('details[data-we-card="@Model.Id"]');
+            if (!card || !window.localStorage) return;
+            var key = 'we-card-open:@Model.Id';
+            try {
+                var saved = window.localStorage.getItem(key);
+                if (saved === 'open') { card.open = true; }
+                else if (saved === 'closed') { card.open = false; }
+            } catch (e) { /* private mode — fall back to the server-rendered default */ }
+            card.addEventListener('toggle', function () {
+                try { window.localStorage.setItem(key, card.open ? 'open' : 'closed'); } catch (e) { /* no-op */ }
+            });
+        })();
+    </script>
+</details>

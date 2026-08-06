@@ -281,6 +281,10 @@ public sealed partial class ActivityDataController
         {
             linkshell.HiddenTodMonsters = SerializeHiddenTodMonsters(request.HiddenTodMonsters);
         }
+        if (request.TodMonsterTimings is not null)
+        {
+            linkshell.TodMonsterTimings = SerializeTodMonsterTimings(request.TodMonsterTimings);
+        }
         // Member activity tracking (null = leave unchanged). Thresholds clamp to >= 1
         // to match the web Customize page and MemberActivityService's own guard.
         if (request.EnableActivityTracking.HasValue)
@@ -335,6 +339,54 @@ public sealed partial class ActivityDataController
             {
                 return BadRequest(new { error = "Discord Server ID must be the numeric server ID (digits only). Leave blank to clear it." });
             }
+        }
+
+        // Manual Check In HNM attendance (null = leave unchanged). Mode fails closed to Standard;
+        // scoring values clamp to >= 0.
+        if (!string.IsNullOrWhiteSpace(request.HnmAttendanceMode))
+        {
+            if (!HnmAttendanceModes.IsValid(request.HnmAttendanceMode.Trim()))
+            {
+                return BadRequest(new { error = "HNM Attendance Mode must be Standard or Wd." });
+            }
+            var previousMode = HnmAttendanceModes.Normalize(linkshell.HnmAttendanceMode);
+            linkshell.HnmAttendanceMode = HnmAttendanceModes.Normalize(request.HnmAttendanceMode);
+
+            // Event.AttendanceMode is stamped per camp at creation, so without this the flip only
+            // affected boards created afterwards — an officer who switched to Manual Check In saw
+            // nothing change on the board sitting in front of them. Re-stamp the camps that haven't
+            // started; running ones keep their mode until they pop (switching mid-camp would strand
+            // the attendance already collected — see ReStampNotStartedCampsAsync).
+            //
+            // Only on an ACTUAL change: otherwise every unrelated Customize save would mark each
+            // queued camp Modified and enqueue a Discord board re-render for it. Staged here so the
+            // linkshell row, the re-stamps, and the save-hook's board edits share one save below.
+            if (!string.Equals(previousMode, linkshell.HnmAttendanceMode, StringComparison.Ordinal))
+            {
+                await HnmEventSeeder.ReStampNotStartedCampsAsync(
+                    _dbContext, linkshellId, linkshell.HnmAttendanceMode, cancellationToken);
+            }
+        }
+        if (request.WdDkpPerWindow.HasValue) linkshell.WdDkpPerWindow = Math.Max(0d, request.WdDkpPerWindow.Value);
+        if (request.WdClaimBonus.HasValue) linkshell.WdClaimBonus = Math.Max(0d, request.WdClaimBonus.Value);
+        if (request.WdKillBonus.HasValue) linkshell.WdKillBonus = Math.Max(0d, request.WdKillBonus.Value);
+        if (request.WdOpenBonus.HasValue) linkshell.WdOpenBonus = Math.Max(0d, request.WdOpenBonus.Value);
+        if (request.WdCloseBonus.HasValue) linkshell.WdCloseBonus = Math.Max(0d, request.WdCloseBonus.Value);
+
+        // Standard-mode HNM bonuses (null = leave unchanged), clamped to >= 0 like the Manual Check In values.
+        if (request.HnmStandardOpenBonus.HasValue) linkshell.HnmStandardOpenBonus = Math.Max(0d, request.HnmStandardOpenBonus.Value);
+        if (request.HnmStandardCloseBonus.HasValue) linkshell.HnmStandardCloseBonus = Math.Max(0d, request.HnmStandardCloseBonus.Value);
+        if (request.HnmStandardClaimBonus.HasValue) linkshell.HnmStandardClaimBonus = Math.Max(0d, request.HnmStandardClaimBonus.Value);
+        if (request.HnmStandardKillBonus.HasValue) linkshell.HnmStandardKillBonus = Math.Max(0d, request.HnmStandardKillBonus.Value);
+        if (request.HnmStandardWindowBonus.HasValue) linkshell.HnmStandardWindowBonus = Math.Max(0d, request.HnmStandardWindowBonus.Value);
+
+        // Automatic per-window snapshots (null = leave unchanged). The delay is clamped rather
+        // than just floored: under 5s the armed addon races the server's own 30s window-advance
+        // tick, and over 300s it could fall outside the kings/dragons' 10-minute window entirely.
+        if (request.HnmAutoSnapshotEnabled.HasValue) linkshell.HnmAutoSnapshotEnabled = request.HnmAutoSnapshotEnabled.Value;
+        if (request.HnmAutoSnapshotDelaySeconds.HasValue)
+        {
+            linkshell.HnmAutoSnapshotDelaySeconds = Math.Clamp(request.HnmAutoSnapshotDelaySeconds.Value, 5, 300);
         }
 
         var memberships = await _dbContext.AppUserLinkshells

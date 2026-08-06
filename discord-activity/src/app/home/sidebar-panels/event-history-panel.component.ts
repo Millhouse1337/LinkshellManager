@@ -1,7 +1,8 @@
 import { DatePipe } from '@angular/common';
-import { Component, Input, inject, signal } from '@angular/core';
+import { Component, Input, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { AutoRefreshService } from '../../discord/auto-refresh.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import type {
   ActivityEditEventHistoryInput,
@@ -22,18 +23,38 @@ import type {
   imports: [FormsModule, DatePipe],
   template: `
     <div class="evt-history">
+      <!-- No Refresh button of its own: the header's Refresh drives this panel too, via the
+           refreshSignal effect below. -->
       <div class="evt-history__head">
         <h3>Past events</h3>
-        <button type="button" class="ghost sm" (click)="load()" [disabled]="loading()">
-          {{ loading() ? 'Loading…' : 'Refresh' }}
-        </button>
       </div>
 
       @if (!loading() && histories().length === 0) {
         <p class="notice">No completed events yet.</p>
       }
 
-      @for (h of histories(); track h.id) {
+      @if (histories().length > 0) {
+        <div class="evt-tools">
+          <span class="evt-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="search" name="evtSearch" [ngModel]="search()" (ngModelChange)="onSearch($event)"
+                   placeholder="Search by name, type or location…" aria-label="Search past events" />
+          </span>
+          <span class="evt-tally">
+            {{ filtered().length }} of {{ histories().length }}
+          </span>
+        </div>
+      }
+
+      @if (histories().length > 0 && filtered().length === 0) {
+        <p class="notice">No past events match “{{ search() }}”.</p>
+      }
+
+      <!-- Fixed-height scroller: a linkshell accumulates hundreds of closed events, and the
+           page itself shouldn't grow without bound. Paged underneath so the scroller never
+           holds more than one page. -->
+      <div class="evt-scroll" [class.is-empty]="pageItems().length === 0">
+      @for (h of pageItems(); track h.id) {
         <div class="event-card" [class.event-card--open]="expandedId() === h.id">
           <button type="button" class="event-head" (click)="toggle(h)">
             <span class="event-title">
@@ -274,12 +295,59 @@ import type {
           }
         </div>
       }
+      </div>
+
+      @if (totalPages() > 1) {
+        <div class="evt-pager">
+          <button type="button" class="ghost sm" [disabled]="currentPage() === 1" (click)="goToPage(currentPage() - 1)">‹ Prev</button>
+          <span class="evt-pager__at">Page {{ currentPage() }} of {{ totalPages() }}</span>
+          <button type="button" class="ghost sm" [disabled]="currentPage() === totalPages()" (click)="goToPage(currentPage() + 1)">Next ›</button>
+        </div>
+      }
     </div>
   `,
   styles: [`
     .evt-history { margin-top: 12px; }
     .evt-history__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
     .evt-history__head h3 { margin: 0; font-size: 14px; }
+
+    /* Search + tally */
+    .evt-tools { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .evt-search {
+      display: inline-flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 0;
+      padding: 0 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+    }
+    .evt-search:focus-within { border-color: var(--accent); }
+    .evt-search svg { width: 15px; height: 15px; flex: 0 0 auto; color: var(--fg-3); }
+    /* Beat the component-wide input rule (full-width, own border) — the wrapper owns the frame. */
+    .evt-search input {
+      flex: 1 1 auto; min-width: 0; width: auto;
+      border: 0; background: transparent; padding: 9px 0;
+    }
+    .evt-search input:focus { outline: none; border: 0; }
+    .evt-search input::-webkit-search-cancel-button { cursor: pointer; }
+    .evt-tally { color: var(--fg-3); font-size: 12px; white-space: nowrap; }
+
+    /* Scroller — one page of cards at a time, so the panel keeps a stable height however many
+       events a linkshell accumulates. Framed and inset so it reads as a bounded container
+       rather than the page simply running off the bottom. */
+    .evt-scroll {
+      max-height: 840px; overflow-y: auto; overscroll-behavior: contain;
+      padding: 12px; border: 1px solid var(--border); border-radius: 12px;
+      background: rgba(0, 0, 0, .18);
+    }
+    .evt-scroll.is-empty { display: none; }
+    .evt-scroll > .event-card:last-child { margin-bottom: 0; }
+    /* Slim scrollbar so the frame doesn't gain a chunky native gutter. */
+    .evt-scroll::-webkit-scrollbar { width: 10px; }
+    .evt-scroll::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+    .evt-scroll::-webkit-scrollbar-thumb:hover { background: var(--fg-4); background-clip: content-box; }
+
+    /* Pager */
+    .evt-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; }
+    .evt-pager__at { color: var(--fg-3); font-size: 12px; min-width: 92px; text-align: center; }
+    .evt-pager button:disabled { opacity: .45; cursor: default; }
+    .evt-pager button:disabled:hover { background: rgba(79, 124, 255, .10); }
 
     /* Reset / shared buttons */
     button { font: inherit; }
@@ -374,7 +442,10 @@ import type {
     .duration span { color: var(--fg-3); font-size: 12px; }
 
     /* Split */
-    .split { display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px; }
+    /* margin-bottom matches .panel's: the grid zeroes the margin on the panels inside it, so
+       without one here the Discussion panel below sits flush against the split. */
+    .split { display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px; margin-bottom: 14px; }
+    .split:last-child { margin-bottom: 0; }
     .split .panel { margin-bottom: 0; }
     .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .section-head h3 { margin: 0; }
@@ -473,11 +544,74 @@ import type {
 })
 export class EventHistoryPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
+  private readonly autoRefresh = inject(AutoRefreshService);
+
+  // Null until the effect's first run. Closed-event history is NOT part of the overview payload, so
+  // the header Refresh used to leave this panel stale — which is why it carried a Refresh button of
+  // its own. Reloading off refreshSignal covers the header button, the background timer and the
+  // live change-feed alike, so the local button is redundant and gone.
+  private lastRefreshTick: number | null = null;
+
+  constructor() {
+    effect(() => {
+      const tick = this.autoRefresh.refreshSignal();
+      const isFirstRun = this.lastRefreshTick === null;
+      this.lastRefreshTick = tick;
+      // Skip the first run: the linkshellId input setter owns the initial load, and reloading here
+      // as well would fire two identical requests on every mount.
+      if (isFirstRun || !this._linkshellId) return;
+      queueMicrotask(() => void this.load());
+    });
+  }
 
   protected readonly histories = signal<ActivityEventHistory[]>([]);
   protected readonly canManage = signal(false);
   protected readonly loading = signal(false);
   protected readonly expandedId = signal<number | null>(null);
+
+  // ----- Search + pagination -----
+  // The server hands back the linkshell's whole closed-event history in one call, so both are
+  // client-side over that list. Search covers the three fields shown on the collapsed row.
+  // Deliberately small: a page has to fit the scroller without the pager being a rarity only
+  // linkshells with 10+ closed events ever see. Search is what narrows a long history.
+  private static readonly PageSize = 5;
+  protected readonly search = signal('');
+  private readonly requestedPage = signal(1);
+
+  protected readonly filtered = computed(() => {
+    const query = this.search().trim().toLowerCase();
+    const all = this.histories();
+    if (!query) { return all; }
+    return all.filter(h =>
+      (h.eventName ?? '').toLowerCase().includes(query)
+      || (h.eventType ?? '').toLowerCase().includes(query)
+      || (h.eventLocation ?? '').toLowerCase().includes(query));
+  });
+
+  protected readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.filtered().length / EventHistoryPanelComponent.PageSize)));
+
+  // Clamped rather than stored: filtering down to fewer pages while sitting on a high page
+  // would otherwise strand the user on an empty view.
+  protected readonly currentPage = computed(() =>
+    Math.min(Math.max(1, this.requestedPage()), this.totalPages()));
+
+  protected readonly pageItems = computed(() => {
+    const start = (this.currentPage() - 1) * EventHistoryPanelComponent.PageSize;
+    return this.filtered().slice(start, start + EventHistoryPanelComponent.PageSize);
+  });
+
+  protected onSearch(value: string): void {
+    this.search.set(value ?? '');
+    this.requestedPage.set(1);
+  }
+
+  protected goToPage(page: number): void {
+    this.requestedPage.set(Math.min(Math.max(1, page), this.totalPages()));
+    // An event expanded on the page we just left would otherwise stay open behind the scenes
+    // and re-appear when the user pages back — collapse so each page starts clean.
+    this.expandedId.set(null);
+  }
 
   // Per-event edit drafts + per-attendee DKP drafts (keyed by id).
   protected readonly edit: Record<number, ActivityEditEventHistoryInput> = {};

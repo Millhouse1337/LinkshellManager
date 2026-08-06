@@ -19,16 +19,45 @@ import {
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
-import { combinedMonsterOptions } from './activity-home.types';
+import { combinedMonsterOptions, isHnmTierMonster } from './activity-home.types';
 import { PartySetupService } from '../discord/party-setup.service';
 import type { ActivityPartySetupListRow } from '../discord/discord-activity.types';
+import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
 import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';
 import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
 import { TodFormComponent } from './tabs/tod-form.component';
 
+// Every per-camp HNM payout override, across both attendance modes. Listed once so
+// resetting can clear all of them regardless of which mode's fields are on screen.
+const HNM_BONUS_KEYS = [
+  'hnmOpenBonusOverride',
+  'hnmCloseBonusOverride',
+  'hnmClaimBonusOverride',
+  'hnmKillBonusOverride',
+  'hnmPerWindowOverride'
+] as const;
+
+type HnmBonusKey = (typeof HNM_BONUS_KEYS)[number];
+
+// One editable amount in the Camp DKP panel. `suffix` trails the number on the collapsed
+// chips ("0.5 per window", "0.5 for claim"); `label` heads the input when editing.
+interface HnmBonusField {
+  readonly key: HnmBonusKey;
+  readonly label: string;
+  readonly suffix: string;
+  readonly hint: string;
+}
+
 @Component({
   selector: 'app-activity-queue-panel',
-  imports: [CommonModule, FormsModule, PartySetupPanelComponent, PartySetupEditorComponent, TodFormComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MarkdownTextareaComponent,
+    PartySetupPanelComponent,
+    PartySetupEditorComponent,
+    TodFormComponent
+  ],
   templateUrl: './activity-queue-panel.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -76,32 +105,17 @@ export class ActivityQueuePanelComponent {
     countsTowardActive: true,
     monsterName: null,
     repeatOnTod: false,
-    repeatLeadHours: 1,
-    dayNumber: null
+    dayNumber: null,
+    // Null = pay the linkshell's HNM bonus. Only non-null once "Change DKP" is used.
+    hnmOpenBonusOverride: null,
+    hnmCloseBonusOverride: null,
+    hnmClaimBonusOverride: null,
+    hnmKillBonusOverride: null,
+    hnmPerWindowOverride: null
   };
 
   // Free-text monster name when "Other" is picked in the HNM monster dropdown.
   protected customMonsterName = '';
-
-  // Repeat-on-ToD lead time entered as hours/minutes/seconds; combined into the wire's
-  // fractional-hours repeatLeadHours on submit, and split back from it on edit.
-  protected repeatLeadH = 1;
-  protected repeatLeadM = 0;
-  protected repeatLeadS = 0;
-
-  private repeatLeadAsHours(): number {
-    const h = Math.max(0, Math.floor(Number(this.repeatLeadH) || 0));
-    const m = Math.max(0, Math.floor(Number(this.repeatLeadM) || 0));
-    const s = Math.max(0, Math.floor(Number(this.repeatLeadS) || 0));
-    return h + m / 60 + s / 3600;
-  }
-
-  private setRepeatLeadFromHours(hours: number | null | undefined): void {
-    const totalSec = Math.max(0, Math.round((hours ?? 1) * 3600));
-    this.repeatLeadH = Math.floor(totalSec / 3600);
-    this.repeatLeadM = Math.floor((totalSec % 3600) / 60);
-    this.repeatLeadS = totalSec % 60;
-  }
 
   // Base manual event types. "HNM" is appended only when the active linkshell has
   // Outside Party Signup enabled (see eventTypeOptionsForForm) — a manual HNM event
@@ -147,13 +161,29 @@ export class ActivityQueuePanelComponent {
   }
 
   protected onEventTypeSelectionChange(value: string): void {
+    const previous = this.eventTypeSelection;
     this.eventTypeSelection = value;
     if (value === 'Other') {
       this.createModel.eventType = '';
+    } else if (value === 'NM') {
+      // An NM camp is stored as EventType "HNM", exactly as the addon files its NMS presets
+      // (render/callbacks_attendance.lua maps both HNMS and NMS to "HNM"). The tier is a
+      // question about which monster list to show, not about what the event IS: a stored
+      // type of "NM" would drop these camps out of every HNM path at once -- the sign-up
+      // board's window controls, the timed auto-advance, the HNM DKP pool, and any Discord
+      // channel route filtered on HNM.
+      this.createModel.eventType = 'HNM';
     } else {
       this.createModel.eventType = value;
     }
     this.eventTypeError = false;
+
+    // Switching between the two tiers re-cuts the monster list, so a monster picked from the
+    // old tier is no longer on offer. Clear it rather than post a Behemoth as an NM.
+    if ((value === 'NM') !== (previous === 'NM')) {
+      this.createModel.monsterName = null;
+      this.customMonsterName = '';
+    }
 
     // HNM signup boards have no end/duration/DKP — blank those so a stale value
     // doesn't post. Leaving HNM clears the monster + repeat state.
@@ -185,21 +215,35 @@ export class ActivityQueuePanelComponent {
     return !!link?.settings?.hnmOutsideSignupEnabled;
   }
 
+  // HNM and NM are appended together: both make the same kind of camp and both are gated on
+  // the same HNM Outside Sign Up setting. They differ only in which monsters they offer.
   protected eventTypeOptionsForForm(): string[] {
     const base = [...this.eventTypeOptions];
-    return this.isHnmSignupEnabledForSelected() ? [...base, 'HNM'] : base;
+    return this.isHnmSignupEnabledForSelected() ? [...base, 'HNM', 'NM'] : base;
   }
 
   protected isHnmSelected(): boolean {
     return (this.createModel.eventType ?? '').trim().toUpperCase() === 'HNM';
   }
 
-  // The canonical monsters (from the party-setup list payload) + the "Other" sentinel.
-  // The three merge pairs are always shown as ONE combined "Base/Stronger" entry; the Day
-  // input only changes what the sign-up board prints (server-side), not this list.
+  // Whether the NM button is the one lit, as opposed to HNM. Read off the BUTTON, not off
+  // createModel.eventType -- an NM camp is stored as EventType "HNM" (see
+  // onEventTypeSelectionChange), so the stored type cannot tell the two apart.
+  protected isNmTierSelected(): boolean {
+    return this.eventTypeSelection === 'NM';
+  }
+
+  // The canonical monsters (from the party-setup list payload) + the "Other" sentinel,
+  // narrowed to the tier the chosen button names: HNM offers the wyrms and the three NQ/HQ
+  // families, NM offers everything else. The three merge pairs are always shown as ONE
+  // combined "Base/Stronger" entry; the Day input only changes what the sign-up board prints
+  // (server-side), not this list.
   protected monsterOptions(): string[] {
     const raw = this.partySetups.list()?.monsterOptions ?? [];
-    return [...combinedMonsterOptions(raw), 'Other'];
+    const wantHnmTier = !this.isNmTierSelected();
+    const inTier = combinedMonsterOptions(raw)
+      .filter(monster => isHnmTierMonster(monster) === wantHnmTier);
+    return [...inTier, 'Other'];
   }
 
   // Native-select change handler for the monster dropdown. Driven by the option's
@@ -225,6 +269,104 @@ export class ActivityQueuePanelComponent {
       return this.customMonsterName.trim().length > 0;
     }
     return true;
+  }
+
+  // ===== HNM camp DKP =====
+  //
+  // What a camp pays is configured once per linkshell, in whichever shape its attendance
+  // mode uses. The form lists those amounts as this camp's defaults; "Change DKP" opens
+  // them for editing and what the officer types is stored per-camp on the event, which
+  // both finalizers prefer over the linkshell value.
+  //
+  // The two modes pay on the same SHAPE now — a per-window rate plus open / close / claim / kill —
+  // so both lists carry all five. What differs is which linkshell setting each override falls back
+  // to (hnmLinkshellBonus below) and what "earning" one means: Standard reads the addon's window
+  // scans, Manual Check In reads the member's Check In / Check Out range. One override column per
+  // amount, shared across the modes; a camp only ever runs in one of them.
+  private static readonly STANDARD_BONUS_FIELDS = [
+    { key: 'hnmPerWindowOverride', label: 'Regular window', suffix: 'per window', hint: 'Every window the member is scanned in, open and close included' },
+    { key: 'hnmOpenBonusOverride', label: 'Open', suffix: 'for open', hint: 'On the roster when the camp opens' },
+    { key: 'hnmCloseBonusOverride', label: 'Close', suffix: 'for close', hint: 'On the roster when the camp closes' },
+    { key: 'hnmClaimBonusOverride', label: 'Claim', suffix: 'for claim', hint: 'Camp claimed, and present at close' },
+    { key: 'hnmKillBonusOverride', label: 'Kill', suffix: 'for kill', hint: 'Camp killed, and present at close' }
+  ] as const;
+
+  private static readonly MANUAL_CHECK_IN_BONUS_FIELDS = [
+    { key: 'hnmPerWindowOverride', label: 'Per window', suffix: 'per window', hint: 'Each window the member is checked in for' },
+    { key: 'hnmOpenBonusOverride', label: 'Open', suffix: 'for open', hint: 'Checked in from window 1' },
+    { key: 'hnmCloseBonusOverride', label: 'Close', suffix: 'for close', hint: 'Still checked in at the camp\'s last window' },
+    { key: 'hnmClaimBonusOverride', label: 'Claim', suffix: 'for claim', hint: 'Paid once when the camp is claimed' },
+    { key: 'hnmKillBonusOverride', label: 'Kill', suffix: 'for kill', hint: 'Paid once when the camp is killed' }
+  ] as const;
+
+  protected hnmDkpOverrideOpen = false;
+
+  protected hnmBonusFields(): readonly HnmBonusField[] {
+    return this.isWdAttendanceMode()
+      ? ActivityQueuePanelComponent.MANUAL_CHECK_IN_BONUS_FIELDS
+      : ActivityQueuePanelComponent.STANDARD_BONUS_FIELDS;
+  }
+
+  private selectedLinkshellSettings() {
+    return this.linkshellMemberships().find(link => link.id === this.createModel.linkshellId)?.settings;
+  }
+
+  // Fail-closed to Standard, matching the server (Linkshell.HnmAttendanceMode).
+  protected isWdAttendanceMode(): boolean {
+    return (this.selectedLinkshellSettings()?.hnmAttendanceMode ?? 'Standard') === 'Wd';
+  }
+
+  // The linkshell default for one amount — what the camp pays when nothing is overridden.
+  //
+  // EVERY key reads from the pair belonging to the active mode: the linkshell stores its Standard
+  // and Manual Check In amounts separately even though the override column is shared, so which
+  // default an override falls back to is decided by the camp's mode and nothing else. Mirrors
+  // HnmCampPricing.StandardBonuses / WdAmounts, which is the authority at payout.
+  protected hnmLinkshellBonus(key: HnmBonusKey): number {
+    const settings = this.selectedLinkshellSettings();
+    const isWd = this.isWdAttendanceMode();
+    switch (key) {
+      case 'hnmOpenBonusOverride':
+        return (isWd ? settings?.wdOpenBonus : settings?.hnmStandardOpenBonus) ?? 0;
+      case 'hnmCloseBonusOverride':
+        return (isWd ? settings?.wdCloseBonus : settings?.hnmStandardCloseBonus) ?? 0;
+      case 'hnmPerWindowOverride':
+        return (isWd ? settings?.wdDkpPerWindow ?? 0.25 : settings?.hnmStandardWindowBonus ?? 0);
+      case 'hnmClaimBonusOverride':
+        return (isWd ? settings?.wdClaimBonus : settings?.hnmStandardClaimBonus) ?? 0;
+      case 'hnmKillBonusOverride':
+        return (isWd ? settings?.wdKillBonus : settings?.hnmStandardKillBonus) ?? 0;
+    }
+  }
+
+  // What this camp will actually pay: its own override, else the linkshell's.
+  protected hnmEffectiveBonus(key: HnmBonusKey): number {
+    return this.createModel[key] ?? this.hnmLinkshellBonus(key);
+  }
+
+  protected hasHnmBonusOverrides(): boolean {
+    return this.hnmBonusFields().some(field => this.createModel[field.key] != null);
+  }
+
+  // Opening seeds each box with the linkshell default, so the officer edits real numbers
+  // rather than blanks and every field is explicit about what the camp pays.
+  protected openHnmDkpOverride(): void {
+    if (!this.hasHnmBonusOverrides()) {
+      for (const field of this.hnmBonusFields()) {
+        this.createModel[field.key] = this.hnmLinkshellBonus(field.key);
+      }
+    }
+    this.hnmDkpOverrideOpen = true;
+  }
+
+  // Clearing every override sends nulls, which the server reads as "back to the linkshell
+  // default" rather than "leave whatever was there". Clears BOTH modes' keys, so switching
+  // a linkshell's mode can't strand an override the panel no longer shows.
+  protected resetHnmDkpOverride(): void {
+    for (const key of HNM_BONUS_KEYS) {
+      this.createModel[key] = null;
+    }
+    this.hnmDkpOverrideOpen = false;
   }
 
   protected onPartySetupNotSpecifiedChange(checked: boolean): void {
@@ -282,6 +424,13 @@ export class ActivityQueuePanelComponent {
     }
     const hours = (end.getTime() - start.getTime()) / 3_600_000;
     this.createModel.duration = hours >= 0 ? Math.round(hours * 100) / 100 : null;
+  }
+
+  // ± buttons on the DKP/hour stepper. The middle stays a typable number input,
+  // so this only has to clamp at zero — negative payouts are never intended.
+  protected adjustDkpPerHour(delta: number): void {
+    const current = Number(this.createModel.dkpPerHour) || 0;
+    this.createModel.dkpPerHour = Math.max(0, current + delta);
   }
 
   // Human-readable Start→End span for the read-only Duration field ("3h 30m").
@@ -548,8 +697,9 @@ export class ActivityQueuePanelComponent {
         ...this.createModel,
         partySetupId: nextPartySetupId,
         monsterName,
-        repeatOnTod: this.canRepeatOnTod() && !!this.createModel.repeatOnTod,
-        repeatLeadHours: this.repeatLeadAsHours()
+        // No lead here: this form only switches recurrence on/off. The lead lives on the
+        // End Camp / Post ToD form, and omitting it leaves whatever was set there intact.
+        repeatOnTod: this.canRepeatOnTod() && !!this.createModel.repeatOnTod
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -583,7 +733,11 @@ export class ActivityQueuePanelComponent {
     assignedMonsterName?: string | null;
     dayNumber?: number | null;
     repeatOnTod?: boolean;
-    repeatLeadHours?: number | null;
+    hnmOpenBonusOverride?: number | null;
+    hnmCloseBonusOverride?: number | null;
+    hnmClaimBonusOverride?: number | null;
+    hnmKillBonusOverride?: number | null;
+    hnmPerWindowOverride?: number | null;
   }): void {
     this.activity.clearActionState();
     this.isCreateOpen = true;
@@ -602,8 +756,10 @@ export class ActivityQueuePanelComponent {
     }
     this.eventTypeError = false;
     this.createModel.eventLocation = event.location ?? '';
-    this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null);
-    this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null);
+    // Seconds included: both inputs are step="1", and an HNM pop time is second-precise —
+    // re-filling at :00 would quietly move the camp's start every time it was edited.
+    this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null, true);
+    this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null, true);
     // Addon-created (HNM) events come back with no end time; the "N/A" toggle
     // reflects that, and the duration is derived from Start + End below.
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
@@ -612,12 +768,12 @@ export class ActivityQueuePanelComponent {
     this.partySetupNotSpecified = event.partySetupId == null;
     this.createModel.autoStart = event.autoStart ?? false;
     this.createModel.countsTowardActive = event.countsTowardActive ?? true;
-    // HNM repeat-board fields so editing preserves the monster + repeat-on-ToD + lead time.
+    // HNM repeat-board fields so editing preserves the monster + repeat-on-ToD. The lead
+    // time isn't shown here (End Camp owns it) and isn't sent back, so it survives an edit.
     this.createModel.monsterName = event.assignedMonsterName ?? null;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.dayNumber ?? null;
     this.createModel.repeatOnTod = !!event.repeatOnTod;
-    this.setRepeatLeadFromHours(event.repeatLeadHours);
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
@@ -625,6 +781,14 @@ export class ActivityQueuePanelComponent {
     this.recomputeDuration();
     this.createModel.dkpPerHour = event.dkpPerHour ?? 0;
     this.createModel.details = event.details ?? '';
+    // A camp priced by hand reopens with "Change DKP" already expanded, so the numbers
+    // that will actually be paid are visible instead of hidden behind a button.
+    this.createModel.hnmOpenBonusOverride = event.hnmOpenBonusOverride ?? null;
+    this.createModel.hnmCloseBonusOverride = event.hnmCloseBonusOverride ?? null;
+    this.createModel.hnmClaimBonusOverride = event.hnmClaimBonusOverride ?? null;
+    this.createModel.hnmKillBonusOverride = event.hnmKillBonusOverride ?? null;
+    this.createModel.hnmPerWindowOverride = event.hnmPerWindowOverride ?? null;
+    this.hnmDkpOverrideOpen = this.hasHnmBonusOverrides();
     // External callers (e.g. live-event Edit on the events tab) reach this
     // method through a viewChild — Angular's OnPush check for the queue panel
     // wouldn't otherwise run on this synchronous mutation.
@@ -676,14 +840,11 @@ export class ActivityQueuePanelComponent {
     this.createModel.countsTowardActive = true;
     this.createModel.monsterName = null;
     this.createModel.repeatOnTod = false;
-    this.createModel.repeatLeadHours = 1;
     this.createModel.dayNumber = null;
-    this.repeatLeadH = 1;
-    this.repeatLeadM = 0;
-    this.repeatLeadS = 0;
     this.customMonsterName = '';
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;
+    this.resetHnmDkpOverride();
   }
 
   // Opens the confirm dialog and resolves once the user chooses. Any pending

@@ -1,0 +1,28 @@
+@{
+    ViewData["Title"] = "Access denied";
+    var returnUrl = ViewBag.ReturnUrl as string;
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">Access denied</h1>
+        <div class="page-sub"><span>You don't have permission to view this page</span></div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
+    </div>
+</div>
+
+<div class="card fade d2" style="padding:20px;max-width:640px">
+    <p style="margin:0 0 12px">You don't have permission to do that.</p>
+    <p class="muted" style="margin:0 0 20px">
+        If you think you should have access, ask a linkshell leader to update your role's permissions.
+    </p>
+    <div style="display:flex;gap:8px">
+        @if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            <a class="btn ghost" href="@returnUrl">Go back</a>
+        }
+        <a class="btn primary" asp-controller="Dashboard" asp-action="Index">Go to dashboard</a>
+    </div>
+</div>

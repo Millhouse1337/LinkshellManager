@@ -14,92 +14,37 @@ namespace LinkshellManagerDiscordApp.Controllers;
 [Authorize]
 public sealed class WindowEventsController : Controller
 {
-    private const int MaxUnlinkedSnapshots = 100;
-
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
     private readonly TimeZoneConversionService _timeZones;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
+    private readonly AttendanceSectionsBuilder _attendanceSections;
 
     public WindowEventsController(
         ApplicationDbContext db,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        WindowEventDkpLedgerService windowEventDkpLedger)
+        WindowEventDkpLedgerService windowEventDkpLedger,
+        AttendanceSectionsBuilder attendanceSections)
     {
         _db = db;
         _userManager = userManager;
         _timeZones = timeZones;
         _windowEventDkpLedger = windowEventDkpLedger;
+        _attendanceSections = attendanceSections;
     }
 
+    // The standalone "Attendance Events" page is gone: open attendance events and unlinked snapshots
+    // now render on the Event System page, since snapshots only ever come from HNM activity and an
+    // officer shouldn't have to leave the camp to review the roster it produced.
+    //
+    // This action survives as a redirect rather than being deleted because every POST in this
+    // controller ends in `RedirectToAction(nameof(Index), new { linkshellId })` — two dozen of them.
+    // Forwarding here keeps all of those landing on the merged page with no edit apiece, and keeps
+    // any bookmark or external link working.
     [HttpGet("/linkshells/{linkshellId:int}/window-events")]
-    public async Task<IActionResult> Index(int linkshellId, CancellationToken cancellationToken)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-
-        var membership = await _db.AppUserLinkshells
-            .AsNoTracking()
-            .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
-        if (membership is null) return Forbid();
-
-        var linkshell = await _db.Linkshells
-            .AsNoTracking()
-            .Where(l => l.Id == linkshellId)
-            .Select(l => new { l.LinkshellName })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (linkshell is null) return NotFound();
-
-        var canManage = IsLeaderOrOfficer(membership);
-        var zone = _timeZones.Resolve(user.TimeZone);
-
-        var openEvents = await _db.WindowEvents
-            .AsNoTracking()
-            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Open)
-            .OrderByDescending(e => e.LastCapturedAtUtc)
-            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
-            .Include(e => e.MemberDkpOverrides)
-            .ToListAsync(cancellationToken);
-
-        // Closed events live on the dedicated, searchable Attendance History
-        // page (History action) so this page stays focused on what's open.
-        var unlinked = await _db.AttendanceSnapshots
-            .AsNoTracking()
-            .Where(s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
-            .OrderByDescending(s => s.CapturedAtUtc)
-            .Take(MaxUnlinkedSnapshots)
-            .Include(s => s.Entries)
-            .ToListAsync(cancellationToken);
-
-        // Linkshell roster character names, for the "Add a character by name…"
-        // typeahead on the snapshot editor. Only fetched for managers (the
-        // only ones who can edit a snapshot's roster).
-        var rosterNames = canManage
-            ? await _db.AppUserLinkshells
-                .AsNoTracking()
-                .Where(link => link.LinkshellId == linkshellId
-                               && link.CharacterName != null
-                               && link.CharacterName != "")
-                .Select(link => link.CharacterName!)
-                .Distinct()
-                .OrderBy(name => name)
-                .ToListAsync(cancellationToken)
-            : new List<string>();
-
-        var vm = new WindowEventsViewModel
-        {
-            LinkshellId = linkshellId,
-            LinkshellName = linkshell.LinkshellName,
-            CanManage = canManage,
-            OpenEvents = openEvents.Select(e => MapWindowEvent(e, zone)).ToList(),
-            ClosedEvents = new(),
-            UnlinkedSnapshots = unlinked.Select(s => MapSnapshot(s, zone)).ToList(),
-            RosterCharacterNames = rosterNames,
-        };
-
-        return View(vm);
-    }
+    public IActionResult Index(int linkshellId)
+        => RedirectToAction("Index", "Event");
 
     // Searchable archive of CLOSED Window Events ("Attendance History").
     // Search matches the event name, the character who created it, any
@@ -123,43 +68,18 @@ public sealed class WindowEventsController : Controller
             .FirstOrDefaultAsync(cancellationToken);
         if (linkshell is null) return NotFound();
 
-        var zone = _timeZones.Resolve(user.TimeZone);
-        var query = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
-
-        var closed = await _db.WindowEvents
-            .AsNoTracking()
-            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Closed)
-            .OrderByDescending(e => e.LastCapturedAtUtc)
-            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
-            .Include(e => e.MemberDkpOverrides)
-            .ToListAsync(cancellationToken);
-
-        var rows = closed.Select(e => MapWindowEvent(e, zone)).ToList();
-        if (query is not null)
-        {
-            rows = rows.Where(r =>
-                (r.Name?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
-                || (r.CreatedByCharacterName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
-                || r.Snapshots.Any(s => s.CapturedByCharacterName?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
-                || r.CombinedMembers.Any(m => m.CharacterName.Contains(query, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-        }
-
-        const int pageSize = 20;
-        var totalCount = rows.Count;
-        var pageNumber = Math.Clamp(page <= 0 ? 1 : page, 1, Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize)));
-
-        var vm = new WindowEventsHistoryViewModel
-        {
-            LinkshellId = linkshellId,
-            LinkshellName = linkshell.LinkshellName,
-            CanManage = IsLeaderOrOfficer(membership),
-            Query = query,
-            Page = pageNumber,
-            PageSize = pageSize,
-            TotalCount = totalCount,
-            Events = rows.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList(),
-        };
+        // Query, search and paging live in AttendanceSectionsBuilder so this page and the archive
+        // block on /Event stay identical. Page size stays at 20 here — that block uses 10, since it
+        // shares a page with the live board.
+        var vm = await _attendanceSections.BuildClosedAsync(
+            linkshellId,
+            linkshell.LinkshellName,
+            IsLeaderOrOfficer(membership),
+            _timeZones.Resolve(user.TimeZone),
+            q,
+            page,
+            pageSize: 20,
+            cancellationToken);
 
         return View(vm);
     }
@@ -246,26 +166,23 @@ public sealed class WindowEventsController : Controller
             TempData["WindowEventError"] = "This Window Event is already posted. Use Edit to change DKP or Entry Type.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
-        if (!dkpAmount.HasValue || dkpAmount.Value < 0)
-        {
-            TempData["WindowEventError"] = "DKP amount is required and must be zero or greater.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
-        }
-        if (!WindowEventEntryTypes.IsValid(entryType))
-        {
-            TempData["WindowEventError"] =
-                $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
-        }
+        // The card no longer carries a Default DKP input (DKP is set per snapshot). Resolve keeps
+        // the stored baseline — or seeds it — instead of rejecting the save, and never yields
+        // null, so there is nothing left to reject here.
+        var resolvedDkp = WindowEventDkp.Resolve(dkpAmount, windowEvent.DkpAmount);
+        // The form no longer carries Entry Type — it's auto-tagged from the monster at creation.
+        // Resolve keeps the stored value (or re-derives it) instead of rejecting the save, and
+        // always yields a valid tag, so there is nothing left to reject here.
+        entryType = WindowEventEntryTypes.Resolve(entryType, windowEvent.EntryType, windowEvent.Name);
         if (!TryValidateMemberDkp(memberDkp, out var memberDkpError))
         {
             TempData["WindowEventError"] = memberDkpError;
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
 
-        windowEvent.DkpAmount = dkpAmount.Value;
+        windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
-        ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
+        ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
         await _db.SaveChangesAsync(cancellationToken);
 
         TempData["WindowEventStatus"] = $"Saved DKP details for \"{windowEvent.Name}\".";
@@ -299,35 +216,36 @@ public sealed class WindowEventsController : Controller
             TempData["WindowEventError"] = "This Window Event hasn't been posted yet. Use Save to set draft values.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
-        if (!dkpAmount.HasValue || dkpAmount.Value < 0)
-        {
-            TempData["WindowEventError"] = "DKP amount is required and must be zero or greater.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
-        }
-        if (!WindowEventEntryTypes.IsValid(entryType))
-        {
-            TempData["WindowEventError"] =
-                $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
-        }
+        // The card no longer carries a Default DKP input (DKP is set per snapshot). Resolve keeps
+        // the stored baseline — or seeds it — instead of rejecting the save, and never yields
+        // null, so there is nothing left to reject here.
+        var resolvedDkp = WindowEventDkp.Resolve(dkpAmount, windowEvent.DkpAmount);
+        // The form no longer carries Entry Type — it's auto-tagged from the monster at creation.
+        // Resolve keeps the stored value (or re-derives it) instead of rejecting the save, and
+        // always yields a valid tag, so there is nothing left to reject here.
+        entryType = WindowEventEntryTypes.Resolve(entryType, windowEvent.EntryType, windowEvent.Name);
         if (!TryValidateMemberDkp(memberDkp, out var memberDkpError))
         {
             TempData["WindowEventError"] = memberDkpError;
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
 
-        var amountChanged = !windowEvent.DkpAmount.HasValue || Math.Abs(windowEvent.DkpAmount.Value - dkpAmount.Value) > 0.0001;
+        var amountChanged = !windowEvent.DkpAmount.HasValue || Math.Abs(windowEvent.DkpAmount.Value - resolvedDkp) > 0.0001;
+        // Still meaningful with the input gone: Resolve echoes the stored tag back for an ordinary
+        // save (so this is false), but a legacy row whose tag was null gets healed to a real value
+        // here — which SHOULD count as a change, since that's exactly the row the ledger has been
+        // silently refusing to credit.
         var typeChanged = !string.Equals(windowEvent.EntryType, entryType, StringComparison.Ordinal);
-        var overrideChanged = HasMemberDkpChange(windowEvent, dkpAmount.Value, memberDkp);
+        var overrideChanged = HasMemberDkpChange(windowEvent, resolvedDkp, memberDkp);
         if (!amountChanged && !typeChanged && !overrideChanged)
         {
             TempData["WindowEventStatus"] = "No changes to apply.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
 
-        windowEvent.DkpAmount = dkpAmount.Value;
+        windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
-        ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
+        ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
         await _db.SaveChangesAsync(cancellationToken);
 
         // Reconcile the already-credited ledger + per-member DKP by the delta.
@@ -358,17 +276,14 @@ public sealed class WindowEventsController : Controller
             .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
         if (windowEvent is null) return NotFound();
 
-        if (!dkpAmount.HasValue || dkpAmount.Value < 0)
-        {
-            TempData["WindowEventError"] = "DKP amount is required and must be zero or greater.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
-        }
-        if (!WindowEventEntryTypes.IsValid(entryType))
-        {
-            TempData["WindowEventError"] =
-                $"Entry Type must be one of: {string.Join(", ", WindowEventEntryTypes.All)}.";
-            return RedirectToAction(nameof(Index), new { linkshellId });
-        }
+        // The card no longer carries a Default DKP input (DKP is set per snapshot). Resolve keeps
+        // the stored baseline — or seeds it — instead of rejecting the save, and never yields
+        // null, so there is nothing left to reject here.
+        var resolvedDkp = WindowEventDkp.Resolve(dkpAmount, windowEvent.DkpAmount);
+        // The form no longer carries Entry Type — it's auto-tagged from the monster at creation.
+        // Resolve keeps the stored value (or re-derives it) instead of rejecting the save, and
+        // always yields a valid tag, so there is nothing left to reject here.
+        entryType = WindowEventEntryTypes.Resolve(entryType, windowEvent.EntryType, windowEvent.Name);
         if (windowEvent.PostedToSheetAt.HasValue)
         {
             TempData["WindowEventError"] = "This Window Event has already been posted to the DKP sheet.";
@@ -380,9 +295,9 @@ public sealed class WindowEventsController : Controller
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
 
-        windowEvent.DkpAmount = dkpAmount.Value;
+        windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
-        ApplyMemberDkpOverrides(windowEvent, dkpAmount.Value, memberDkp);
+        ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
         windowEvent.PostedToSheetAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -623,6 +538,7 @@ public sealed class WindowEventsController : Controller
             SubJob = Clip(string.IsNullOrWhiteSpace(subJob) ? null : subJob.Trim(), 8),
             SubJobLevel = subJobLevel,
             Zone = Clip(string.IsNullOrWhiteSpace(zone) ? null : zone.Trim(), 128),
+            AddedManually = true, // typed in by an officer, not scanned — sorts last and renders tinted
         });
         snapshot.EntryCount = snapshot.Entries.Count;
         await _db.SaveChangesAsync(cancellationToken);
@@ -725,117 +641,20 @@ public sealed class WindowEventsController : Controller
         }
     }
 
-    private WindowEventRow MapWindowEvent(WindowEvent item, DateTimeZone userZone)
-    {
-        var snapshots = item.Snapshots
-            .OrderByDescending(s => s.CapturedAtUtc)
-            .Select(s => MapSnapshot(s, userZone))
-            .ToList();
-        var overrides = item.MemberDkpOverrides
-            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
-            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
-        var combined = BuildCombinedMembers(item.Snapshots, overrides, item.DkpAmount);
+    // Row mapping moved to AttendanceSectionsBuilder when the open-events sections were folded into
+    // the Event System page — EventController needs the identical shape. These stay as forwarders so
+    // the call sites throughout this controller read the same as they always did.
+    private static WindowEventRow MapWindowEvent(WindowEvent item, DateTimeZone userZone)
+        => AttendanceSectionsBuilder.MapWindowEvent(item, userZone);
 
-        return new WindowEventRow
-        {
-            Id = item.Id,
-            Name = item.Name,
-            Status = item.Status,
-            FirstCapturedAtUtc = item.FirstCapturedAtUtc,
-            LastCapturedAtUtc = item.LastCapturedAtUtc,
-            FirstCapturedDisplay = FormatPretty(item.FirstCapturedAtUtc, userZone),
-            LastCapturedDisplay = FormatPretty(item.LastCapturedAtUtc, userZone),
-            CreatedByCharacterName = item.CreatedByCharacterName,
-            SnapshotCount = snapshots.Count,
-            ActiveSnapshotCount = snapshots.Count(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active),
-            DuplicateSnapshotCount = snapshots.Count(s =>
-                s.SnapshotStatus == AttendanceSnapshotStatuses.PossibleDuplicate ||
-                s.SnapshotStatus == AttendanceSnapshotStatuses.Duplicate),
-            IgnoredSnapshotCount = snapshots.Count(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Ignored),
-            CombinedMemberCount = combined.Count,
-            DkpAmount = item.DkpAmount,
-            EntryType = item.EntryType,
-            PostedToSheetAt = item.PostedToSheetAt,
-            PostedToSheetDisplay = item.PostedToSheetAt.HasValue
-                ? FormatPretty(item.PostedToSheetAt.Value, userZone)
-                : null,
-            Snapshots = snapshots,
-            CombinedMembers = combined,
-        };
-    }
-
-    private WindowSnapshotRow MapSnapshot(AttendanceSnapshot snapshot, DateTimeZone userZone)
-    {
-        var entries = snapshot.Entries
-            .OrderBy(e => e.CharacterName, StringComparer.OrdinalIgnoreCase)
-            .Select(e => new AttendanceSnapshotEntryRow
-            {
-                Id = e.Id,
-                CharacterName = e.CharacterName,
-                MainJob = e.MainJob,
-                MainJobLevel = e.MainJobLevel,
-                SubJob = e.SubJob,
-                SubJobLevel = e.SubJobLevel,
-                Zone = e.Zone,
-            })
-            .ToList();
-
-        return new WindowSnapshotRow
-        {
-            Id = snapshot.Id,
-            WindowEventId = snapshot.WindowEventId,
-            Name = snapshot.Name,
-            SnapshotStatus = snapshot.SnapshotStatus,
-            DuplicateOfSnapshotId = snapshot.DuplicateOfSnapshotId,
-            CapturedAtUtc = snapshot.CapturedAtUtc,
-            CapturedAtDisplay = FormatPretty(snapshot.CapturedAtUtc, userZone),
-            CapturedByCharacterName = snapshot.CapturedByCharacterName,
-            EntryCount = snapshot.EntryCount,
-            PrimaryZone = entries
-                .Where(e => !string.IsNullOrWhiteSpace(e.Zone))
-                .GroupBy(e => e.Zone!, StringComparer.OrdinalIgnoreCase)
-                .OrderByDescending(g => g.Count())
-                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.Key)
-                .FirstOrDefault(),
-            Entries = entries,
-        };
-    }
+    private static WindowSnapshotRow MapSnapshot(AttendanceSnapshot snapshot, DateTimeZone userZone)
+        => AttendanceSectionsBuilder.MapSnapshot(snapshot, userZone);
 
     private static List<WindowCombinedMemberRow> BuildCombinedMembers(
         IEnumerable<AttendanceSnapshot> snapshots,
         IDictionary<string, double>? memberDkpOverrides = null,
         double? defaultDkpAmount = null)
-    {
-        return snapshots
-            .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
-            .SelectMany(s => s.Entries.Select(e => new { Snapshot = s, Entry = e }))
-            .GroupBy(x => x.Entry.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g =>
-            {
-                var latest = g.OrderByDescending(x => x.Snapshot.CapturedAtUtc).First().Entry;
-                double? overrideAmount = null;
-                if (memberDkpOverrides is not null && memberDkpOverrides.TryGetValue(g.Key, out var found))
-                {
-                    overrideAmount = found;
-                }
-                return new WindowCombinedMemberRow
-                {
-                    CharacterName = g.Key,
-                    MainJob = latest.MainJob,
-                    MainJobLevel = latest.MainJobLevel,
-                    SubJob = latest.SubJob,
-                    SubJobLevel = latest.SubJobLevel,
-                    Zone = latest.Zone,
-                    SnapshotCount = g.Select(x => x.Snapshot.Id).Distinct().Count(),
-                    DkpAmountOverride = overrideAmount,
-                    EffectiveDkpAmount = overrideAmount ?? defaultDkpAmount,
-                };
-            })
-            .ToList();
-    }
+        => AttendanceSectionsBuilder.BuildCombinedMembers(snapshots, memberDkpOverrides, defaultDkpAmount);
 
     private async Task<IActionResult?> RequireOfficerAsync(int linkshellId, CancellationToken cancellationToken)
     {
@@ -969,18 +788,5 @@ public sealed class WindowEventsController : Controller
     private static DateTime Max(DateTime a, DateTime b) => a >= b ? a : b;
 
     private static string FormatPretty(DateTime utc, DateTimeZone zone)
-    {
-        var instant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
-        var local = instant.InZone(zone);
-        var localDateTime = local.ToDateTimeUnspecified();
-        var zoneName = zone.GetZoneInterval(instant).Name;
-        var day = localDateTime.Day;
-        var suffix = (day % 100) is >= 11 and <= 13
-            ? "th"
-            : (day % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" };
-        var month = localDateTime.ToString("MMMM", CultureInfo.InvariantCulture);
-        var time = localDateTime.ToString("h:mm", CultureInfo.InvariantCulture);
-        var meridian = localDateTime.ToString("tt", CultureInfo.InvariantCulture).ToLowerInvariant();
-        return $"{month} {day}{suffix} {localDateTime.Year} {time}{meridian} {zoneName}";
-    }
+        => AttendanceSectionsBuilder.FormatPretty(utc, zone);
 }

@@ -42,9 +42,7 @@ public partial class AuctionController
             .Sum(item => item.GilAmount!.Value);
         if (requestedGil > 0)
         {
-            var availableGil = await _context.RevenueEntries
-                .Where(entry => entry.LinkshellId == model.LinkshellId)
-                .SumAsync(entry => entry.EntryType == "Expense" ? -entry.Value : entry.Value);
+            var availableGil = await _treasury.GetCashOnHandAsync(model.LinkshellId, HttpContext.RequestAborted);
             if (availableGil <= 0)
             {
                 ModelState.AddModelError(string.Empty, "This linkshell has no gil in its treasury to auction.");
@@ -388,13 +386,16 @@ public partial class AuctionController
             return RedirectToAction(nameof(Index));
         }
 
-        // Starting bid is a suggested opening, not a floor: the first bid is
-        // accepted at any positive amount. After that, each bid must beat the
-        // current high by at least 1.
+        // Starting bid is the floor — no bid may come in under it. After that, each
+        // bid must also beat the current high by at least 1.
         var currentHigh = auctionItem.CurrentHighestBid ?? 0;
-        if (currentHigh > 0 && bidAmount <= currentHigh)
+        var startingBid = auctionItem.StartingBidDkp ?? 0;
+        var minimumBid = Math.Max(startingBid, currentHigh + 1);
+        if (bidAmount < minimumBid)
         {
-            TempData["AuctionError"] = $"Bid amount must be greater than the current high bid of {currentHigh}.";
+            TempData["AuctionError"] = currentHigh > 0 && minimumBid == currentHigh + 1
+                ? $"Bid amount must be greater than the current high bid of {currentHigh}."
+                : $"Bid amount must be at least the starting bid of {startingBid} DKP.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -635,24 +636,26 @@ public partial class AuctionController
                     SourceAuctionHistory: auctionHistory),
                 HttpContext.RequestAborted);
 
-            // Gil auctions pay out of the treasury: the winner spent DKP, and
-            // the linkshell hands over the listed gil. Record that as a negative
-            // RevenueEntry so it shows in Manage Revenue and lowers the total.
+            // Gil auctions pay out of the treasury: the winner spent DKP, and the linkshell hands over
+            // the listed gil. Positive amount, direction carried by which categories the two halves
+            // name — the old row stored a negative value under an "Auction Payout" type, which was a
+            // third vocabulary in a column that already held two, and which the Activity's own totals
+            // then silently dropped.
             if (item.GilAmount.HasValue && item.GilAmount.Value > 0)
             {
-                _context.RevenueEntries.Add(new RevenueEntry
-                {
-                    LinkshellId = auction.LinkshellId,
-                    LinkshellName = auction.Linkshell?.LinkshellName,
-                    EntryType = "Auction Payout",
-                    Category = "Gil",
-                    Value = -item.GilAmount.Value,
-                    Details = $"Gil auction: {item.ItemName} won by {winner.CharacterName} for {item.CurrentHighestBid.GetValueOrDefault()} DKP.",
-                    OccurredAt = closedAt,
-                    CreatedByAppUserId = user.Id,
-                    CreatedByCharacterName = winner.CharacterName,
-                    CreatedAt = closedAt
-                });
+                await _treasuryJournal.RecordAsync(
+                    auction.LinkshellId,
+                    new TreasuryEntryRequest(
+                        TreasuryTransactionKinds.PaidGilToMember,
+                        item.GilAmount.Value,
+                        closedAt,
+                        Memo: $"Gil auction: {item.ItemName} won by {winner.CharacterName} for {item.CurrentHighestBid.GetValueOrDefault()} DKP.",
+                        CounterpartyAppUserId: winner.AppUserId,
+                        CounterpartyCharacterName: winner.CharacterName,
+                        Source: JournalEntrySources.GilAuction,
+                        SourceAuctionItemId: item.Id),
+                    new TreasuryActor(user.Id, user.CharacterName),
+                    HttpContext.RequestAborted);
             }
         }
 

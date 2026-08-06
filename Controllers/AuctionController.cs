@@ -19,6 +19,8 @@ public partial class AuctionController : Controller
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
     private readonly DkpPoolBalanceService _dkpPoolBalances;
+    private readonly TreasuryBalanceService _treasury;
+    private readonly TreasuryJournalWriter _treasuryJournal;
 
     public AuctionController(
         ApplicationDbContext context,
@@ -26,7 +28,9 @@ public partial class AuctionController : Controller
         TimeZoneConversionService timeZones,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
-        DkpPoolBalanceService dkpPoolBalances)
+        DkpPoolBalanceService dkpPoolBalances,
+        TreasuryBalanceService treasury,
+        TreasuryJournalWriter treasuryJournal)
     {
         _context = context;
         _userManager = userManager;
@@ -34,6 +38,8 @@ public partial class AuctionController : Controller
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
+        _treasury = treasury;
+        _treasuryJournal = treasuryJournal;
     }
 
     private async Task<AuctionViewModel> BuildAuctionViewModelAsync(AppUser user, AuctionViewModel? source = null)

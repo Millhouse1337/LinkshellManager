@@ -42,13 +42,15 @@
                   <div class="tod-meta-label">Countdown</div>
                   <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
                 </div>
+                <!-- "Not entered" = the camp ended without anyone seeing it die, so no time and
+                     no repop were recorded. Never show a synthesized timestamp here. -->
                 <div class="tod-meta-cell">
                   <div class="tod-meta-label">Time of death</div>
-                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || 'Unavailable' }}</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || notEntered }}</div>
                 </div>
                 <div class="tod-meta-cell">
                   <div class="tod-meta-label">Repop starts</div>
-                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || 'Unavailable' }}</div>
+                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || notEntered }}</div>
                 </div>
               </div>
               @if (group.latest.imagePath) {
@@ -115,7 +117,7 @@
                               Day (Not Specified)
                             }
                           </span>
-                          <span class="tod-history-time num">{{ activity.formatDateTimeWithSeconds(hist.time) || 'Unavailable' }}</span>
+                          <span class="tod-history-time num">{{ activity.formatDateTimeWithSeconds(hist.time) || notEntered }}</span>
                         </div>
                         <div class="tod-history-meta">
                           <span class="tod-history-stats">

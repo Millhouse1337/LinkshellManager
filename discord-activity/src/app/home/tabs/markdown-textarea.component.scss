@@ -1,0 +1,121 @@
+/* Toolbar + textarea rendered as one joined control. The palette is inherited
+   from the surrounding .cem modal when there is one, with fallbacks so the
+   component still reads correctly anywhere else. */
+
+.mdta {
+  --mdta-field: var(--cem-field, #0a0f16);
+  --mdta-line: var(--cem-field-line, #22303f);
+  --mdta-bar: var(--cem-summary, #0b1119);
+  --mdta-fg: var(--cem-fg, #eaf1f8);
+  --mdta-fg-2: var(--cem-fg-2, #8697ab);
+  --mdta-muted: var(--cem-muted, #4e5d6e);
+  --mdta-accent: var(--cem-sel-line, #3e6bd6);
+
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--mdta-field);
+  border: 1px solid var(--mdta-line);
+  border-radius: 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.mdta:focus-within {
+  border-color: var(--mdta-accent);
+  box-shadow: 0 0 0 3px rgba(62, 107, 214, 0.18);
+}
+
+/* ===== Toolbar ===== */
+.mdta__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 5px 6px;
+  background: var(--mdta-bar);
+  border-bottom: 1px solid var(--mdta-line);
+  border-radius: 9px 9px 0 0;
+}
+
+.mdta__divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 5px;
+  background: var(--mdta-line);
+}
+
+.mdta__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--mdta-fg-2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.mdta__btn:hover {
+  background: rgba(62, 107, 214, 0.14);
+  border-color: var(--mdta-line);
+  color: var(--mdta-fg);
+}
+
+.mdta__btn:active {
+  background: rgba(62, 107, 214, 0.24);
+}
+
+.mdta__btn:focus-visible {
+  outline: 2px solid var(--mdta-accent);
+  outline-offset: 1px;
+}
+
+.mdta__glyph {
+  font-size: 13.5px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.mdta__glyph--bold { font-weight: 800; }
+.mdta__glyph--italic { font-style: italic; font-family: Georgia, "Times New Roman", serif; }
+.mdta__glyph--underline { text-decoration: underline; text-underline-offset: 2px; }
+.mdta__glyph--strike { text-decoration: line-through; }
+.mdta__glyph--tight { font-size: 11.5px; letter-spacing: -0.02em; }
+
+.mdta__count {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdta-muted);
+  white-space: nowrap;
+}
+
+.mdta__count--over {
+  color: #ff8a80;
+}
+
+/* ===== Textarea ===== */
+.mdta__area {
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0 0 9px 9px;
+  color: var(--mdta-fg);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  outline: none;
+  resize: vertical;
+}
+
+.mdta__area::placeholder {
+  color: var(--mdta-muted);
+}

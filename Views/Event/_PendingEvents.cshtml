@@ -1,0 +1,38 @@
+@model EventSystemPageViewModel
+@{
+    // Section 2: the queue. Events that haven't commenced, including a defeated HNM board waiting
+    // to re-post (it un-commences on defeat, so it lands here for Edit ToD). Mirrors the
+    // Activity's queue panel heading — "Queue" / "Pending Events".
+}
+
+<div class="page-head fade d3" id="pending-events" style="margin-top:22px;margin-bottom:12px">
+    <div>
+        <h2 class="page-title" style="font-size:16px">Pending Events</h2>
+        <div class="page-sub">
+            <span><span class="num">@Model.PendingCount</span> queued</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn primary sm" asp-action="Create">+ Create event</a>
+    </div>
+</div>
+
+@if (Model.PendingEvents.Count == 0)
+{
+    <div class="card fade d3">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No events queued</div>
+            <div style="margin-bottom:12px">Create an event to begin scheduling linkshell runs.</div>
+            <a class="btn primary" asp-action="Create">Create event</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="fade d3" style="display:grid;gap:16px">
+        @foreach (var item in Model.PendingEvents)
+        {
+            @await Html.PartialAsync("_TimedEventCard", item)
+        }
+    </div>
+}

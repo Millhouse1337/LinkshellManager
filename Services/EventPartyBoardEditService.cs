@@ -238,11 +238,13 @@ public static class EventPartyBoardEditService
         }
 
         // A slot dragged to a different party loses any party-leader crown (it would
-        // otherwise carry leadership into a party that may already have one); an officer
-        // can re-designate. Leadership for both parties is then re-resolved.
+        // otherwise carry leadership into a party that may already have one) and, with
+        // it, any alliance crown — which must not ride along into another alliance
+        // either. An officer can re-designate. Leadership for both parties is then
+        // re-resolved.
         var movedSignup = await db.EventPartySlotSignups
             .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == slot.Id, cancellationToken);
-        if (movedSignup is not null) { movedSignup.IsPartyLeader = false; }
+        if (movedSignup is not null) { EventPartySignupService.ClearLeadership(movedSignup); }
 
         slot.PartySetupPartyId = targetPartyId;
         targetSlots.Insert(Math.Clamp(targetIndex, 0, targetSlots.Count), slot);

@@ -1,0 +1,364 @@
+<!--
+  The item table is one ng-template reused by all three card kinds (Standard grid card, MiniNm, and
+  the board's Final encounter). They differ in their chrome, never in how a pop item is shown.
+-->
+<ng-template #itemTable let-boss>
+  @if (boss.items.length === 0) {
+    <!-- No "Add one" here: adding is the one button at the top right, so there is one way in rather
+         than one per empty card, and an empty card stays the same height as a full one. -->
+    <div class="chart-card__empty">No pop items tracked yet.</div>
+  } @else {
+    <!--
+      WHAT IT IS and HOW MANY, nothing else — and one line per item, with the copies summed. A card
+      is one of five in a row: a column per fact squeezed the item's own name into three wrapped
+      lines, and three people holding a Gem of the South printed the same word three times.
+
+      Who holds which copy, who is credited for it, and every button that edits a row live in the Pop
+      Item Holdings table below, which has the whole page width to say them in. This is the
+      at-a-glance view; that is the detail view, and the only one that writes.
+    -->
+    <table class="chart-item-table">
+      <thead>
+        <tr>
+          <th>Pop Item</th>
+          <th>Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of itemsFor(boss.boss); track item.name) {
+          <tr>
+            <td data-label="Pop Item"><span class="chart-item__name">{{ item.name }}</span></td>
+            <td data-label="Qty"><span class="chart-item__qty">{{ item.quantity }}</span></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</ng-template>
+
+<div class="section-head">
+  <div>
+    <div class="section-label">Charts</div>
+    <div class="section-title">{{ chart()?.boardLabel || boardKey() }} Pop Item Tracker</div>
+  </div>
+
+  <div class="section-head-right">
+    @if (chart()?.lastUpdatedUtc) {
+      <span class="chart-updated">Updated {{ chart()!.lastUpdatedUtc | date:'short' }}</span>
+    }
+    @if (canManage()) {
+      <button type="button" class="btn sm primary" (click)="toggleForm()">
+        {{ showForm() && editingItemId() === null ? 'Close' : 'Add pop item' }}
+      </button>
+    }
+  </div>
+</div>
+
+@if (charts.busyLoad() && !chart()) {
+  <div class="empty-state">Loading the chart…</div>
+}
+
+@if (showForm() && canManage()) {
+  <!-- chart-form-card lifts the card's `overflow: hidden`, which would otherwise clip the credit
+       dropdown where it hangs past the bottom of the card. -->
+  <div class="card chart-form-card">
+    <div class="card-head">
+      <div class="card-title">{{ editingItemId() === null ? 'Add a pop item' : 'Edit pop item' }}</div>
+    </div>
+    <div class="card-body">
+      <form class="chart-form" (ngSubmit)="submitForm()">
+        <div class="chart-form__field">
+          <label for="chart-boss">Boss</label>
+          <select id="chart-boss" name="boss"
+                  [ngModel]="formBoss()" (ngModelChange)="onBossChange($event)">
+            @for (boss of bosses(); track boss.boss) {
+              <option [value]="boss.boss">{{ boss.boss }}</option>
+            }
+          </select>
+        </div>
+
+        <!--
+          A picker when the board says what pops what (Sky), free text when it does not (every other
+          board today). The list comes off the payload, so this template never names an item itself.
+        -->
+        <div class="chart-form__field">
+          <label for="chart-item">Pop item</label>
+          @if (picksPopItem()) {
+            <select id="chart-item" name="itemName"
+                    [ngModel]="formItemName()" (ngModelChange)="formItemName.set($event)" required>
+              <option value="">Pick a pop item…</option>
+              @for (option of popItemChoices(); track option.name) {
+                <option [value]="option.name">{{ option.label }}</option>
+              }
+            </select>
+          } @else {
+            <input id="chart-item" name="itemName" type="text"
+                   [ngModel]="formItemName()" (ngModelChange)="formItemName.set($event)" required />
+          }
+        </div>
+
+        <!--
+          A dropdown of our own rather than a <datalist>: a datalist popup is sized by the browser
+          and no CSS reaches it, so a roster of mains plus two alts each ran off the screen. This one
+          is capped at twelve rows and scrolls. Still a free-text box underneath — an unsynced
+          character is a real member who can really be holding a pop item.
+        -->
+        <div class="chart-form__field chart-combo">
+          <label for="chart-holder">Held by</label>
+          <input id="chart-holder" name="holder" type="text" autocomplete="off"
+                 [ngModel]="formHolder()" (ngModelChange)="formHolder.set($event)"
+                 (focus)="holderOpen.set(true)" placeholder="Character name or alt" />
+
+          @if (holderOpen() && holderMatches().length) {
+            <div class="chart-combo__panel">
+              @for (choice of holderMatches(); track choice.name) {
+                <button type="button" class="chart-combo__row" (click)="pickHolder(choice.name)">
+                  <span class="chart-combo__name">{{ choice.name }}</span>
+                  @if (choice.altOf) {
+                    <span class="chart-combo__hint">alt of {{ choice.altOf }}</span>
+                  }
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="chart-form__field">
+          <label for="chart-qty">Qty</label>
+          <input id="chart-qty" name="quantity" type="number" min="0" [(ngModel)]="formQuantity" />
+        </div>
+
+        <!--
+          Farming credit, picked while the row is written. A button plus a panel rather than a native
+          <select multiple>: crediting a whole farm night is the common case, and ctrl-clicking
+          fifteen names is not that. Writes the same COMPLETE list the per-row Credits drawer does.
+        -->
+        <div class="chart-form__field chart-multiselect">
+          <label for="chart-credit-picker">Farming credit</label>
+          <button id="chart-credit-picker" type="button" class="chart-multiselect__toggle"
+                  (click)="toggleFormCredits()" [attr.aria-expanded]="formCreditsOpen()">
+            <span class="chart-multiselect__value" [class.is-empty]="formCreditNames().length === 0"
+                  [title]="formCreditNames().join(' / ')">{{ formCreditsSummary() }}</span>
+            <span class="chart-multiselect__chevron" [class.is-open]="formCreditsOpen()">›</span>
+          </button>
+
+          @if (formCreditsOpen()) {
+            <div class="chart-multiselect__panel">
+              @if (roster().length === 0) {
+                <div class="chart-multiselect__none">No members on the roster to credit.</div>
+              } @else {
+                <div class="chart-multiselect__actions">
+                  <button type="button" class="btn sm ghost" (click)="creditEveryoneOnForm()">Everyone</button>
+                  <button type="button" class="btn sm ghost" (click)="clearFormCredits()">None</button>
+                </div>
+                <div class="chart-multiselect__list">
+                  @for (member of roster(); track member.membershipId) {
+                    <label class="chart-multiselect__row">
+                      <input type="checkbox"
+                             [checked]="isFormCredited(member.characterName)"
+                             (change)="toggleFormCredit(member.characterName)" />
+                      {{ member.characterName }}
+                    </label>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="chart-form__field">
+          <label for="chart-notes">Notes</label>
+          <input id="chart-notes" name="notes" type="text" [(ngModel)]="formNotes" placeholder="Optional" />
+        </div>
+
+        <div class="chart-form__actions">
+          <button type="button" class="btn sm ghost" (click)="cancelForm()">Cancel</button>
+          <button type="submit" class="btn sm primary"
+                  [disabled]="charts.busySave() || !formItemName().trim()">
+            {{ editingItemId() === null ? 'Add item' : 'Save changes' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!--
+  ONE grid, in the order the board declared its bosses, so the catalog decides what sits where.
+  Every boss is a grid item whatever its kind — a Mini NM and the finale fill the slots the last row
+  of jailers leaves free instead of stacking full-width underneath it. Kind picks the chrome (stock
+  vs item count in the tag, the finale's reward drawer), never the width or the order.
+
+  A group heading is a grid item too, spanning every track (grid-column: 1 / -1). Deliberately NOT a
+  grid per group: auto-fit resolves its column count per CONTAINER, so a six-card group and a
+  four-card group stop lining up with each other at most widths. This way the card markup, its width
+  and the whole layout are exactly what they were before groups existed — a board that declares no
+  groups is ONE run with a null label, which is why Sky and Sea are untouched.
+-->
+<!-- ONE card template, rendered from BOTH containers below. It was inline in the grid loop until the
+     path columns needed the same card in a second place, and a copy would have been two card
+     layouts to keep in step. -->
+<ng-template #bossCard let-boss>
+  @if (boss.kind !== 'Final') {
+        <article class="card chart-card" [ngClass]="'is-' + boss.themeKey">
+          <div class="card-head">
+            <div class="chart-card__heading">
+              <img class="chart-card__emblem" [src]="boss.emblemPath" [alt]="boss.boss" loading="lazy" />
+              <div>
+                <div class="chart-card__name">{{ boss.boss }}</div>
+                <!--
+                  Which card this one's drops feed. Tinted in the TARGET's hue, not this card's:
+                  is-<targetKey> on the BADGE re-scopes --boss for this element only, and every
+                  .is-* rule sets nothing but --boss / --boss-weak, which is exactly what makes that
+                  work. Both values come off the payload already resolved — this template never maps
+                  a boss name to a colour. Both must be present: a link the server could not resolve
+                  renders nothing rather than an arrow with no hue.
+                -->
+                @if (boss.leadsTo && boss.leadsToThemeKey) {
+                  <div class="chart-card__leads-to" [ngClass]="'is-' + boss.leadsToThemeKey"
+                       [attr.aria-label]="'Drops feed ' + boss.leadsTo">
+                    <span aria-hidden="true">→</span>{{ boss.leadsTo }}
+                  </div>
+                }
+                @if (boss.subtitle) {
+                  <div class="chart-card__subtitle" [title]="boss.subtitle">{{ boss.subtitle }}</div>
+                }
+              </div>
+            </div>
+            <!-- A Mini NM is farmed rather than popped, so stock is the headline, not item count. -->
+            @if (boss.kind === 'MiniNm') {
+              <span class="tag chart-count">{{ boss.totalQuantity }} held</span>
+            } @else {
+              <!-- Distinct items, matching the lines on the card — totalItems counts ROWS, and the
+                   card folds several rows of one item into one line. -->
+              <span class="tag chart-count">{{ itemsFor(boss.boss).length }} {{ itemsFor(boss.boss).length === 1 ? 'Item' : 'Items' }}</span>
+            }
+          </div>
+
+          <div class="card-body chart-card__body">
+            <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
+          </div>
+
+          <!-- Every non-finale card, Mini NM included. A Mini NM used to skip this, which left it
+               shorter than the cards beside it and its grid row with a hole in it. Its header already
+               headlines stock, so "Total Qty" repeats that one number — a card the same shape as its
+               neighbours is worth the repetition. -->
+          <div class="chart-card__footer">
+            <span>Total Items: <strong>{{ itemsFor(boss.boss).length }}</strong></span>
+            <span>Total Qty: <strong>{{ boss.totalQuantity }}</strong></span>
+          </div>
+        </article>
+      } @else {
+        <!-- Final encounter: same card shape as the rest. Its reward list is reference text, not
+             tracked data, so it hangs off a collapsed footer strip — open it stretches the row,
+             closed the finale is exactly as tall as the boss cards beside it. -->
+        <article class="card chart-card chart-final" [ngClass]="'is-' + boss.themeKey">
+          <div class="card-head">
+            <div class="chart-card__heading">
+              <img class="chart-card__emblem" [src]="boss.emblemPath" [alt]="boss.boss" loading="lazy" />
+              <div>
+                <div class="chart-card__name">{{ boss.boss }}</div>
+                <!--
+                  Which card this one's drops feed. Tinted in the TARGET's hue, not this card's:
+                  is-<targetKey> on the BADGE re-scopes --boss for this element only, and every
+                  .is-* rule sets nothing but --boss / --boss-weak, which is exactly what makes that
+                  work. Both values come off the payload already resolved — this template never maps
+                  a boss name to a colour. Both must be present: a link the server could not resolve
+                  renders nothing rather than an arrow with no hue.
+                -->
+                @if (boss.leadsTo && boss.leadsToThemeKey) {
+                  <div class="chart-card__leads-to" [ngClass]="'is-' + boss.leadsToThemeKey"
+                       [attr.aria-label]="'Drops feed ' + boss.leadsTo">
+                    <span aria-hidden="true">→</span>{{ boss.leadsTo }}
+                  </div>
+                }
+                @if (boss.subtitle) {
+                  <div class="chart-card__subtitle" [title]="boss.subtitle">{{ boss.subtitle }}</div>
+                }
+              </div>
+            </div>
+            <span class="tag chart-count">{{ boss.totalItems }} {{ boss.totalItems === 1 ? 'Item' : 'Items' }}</span>
+          </div>
+
+          <div class="card-body chart-card__body">
+            <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
+          </div>
+
+          @if (boss.rewards.length || boss.referenceNote) {
+            <div class="chart-card__footer chart-rewards__bar">
+              <button type="button" class="chart-rewards__toggle" (click)="toggleRewards(boss.boss)"
+                      [attr.aria-expanded]="rewardsOpenBoss() === boss.boss">
+                <span class="chart-rewards__chevron" [class.is-open]="rewardsOpenBoss() === boss.boss">›</span> Rewards
+              </button>
+              <strong>{{ boss.rewards.length }}</strong>
+            </div>
+            @if (rewardsOpenBoss() === boss.boss) {
+              <aside class="chart-rewards">
+                <ul>
+                  @for (reward of boss.rewards; track reward) {
+                    <li><span>◈</span> {{ reward }}</li>
+                  }
+                </ul>
+                @if (boss.referenceNote) {
+                  <div class="chart-rewards__note">{{ boss.referenceNote }}</div>
+                }
+              </aside>
+            }
+          }
+        </article>
+      }
+</ng-template>
+
+<!--
+  Path columns, when the board declares any (Sky). Each run is one COLUMN: its heading, then its
+  cards stacked under it. ONE grid filled column-wise rather than a container per column — a grid row
+  is as tall as its tallest card and every column shares those rows, which is what makes the tiers
+  line up sideways. A container per column would let each size its own cards and the tiers would
+  drift apart.
+-->
+@if (pathGroups().length) {
+  <div class="chart-paths" [style.--chart-path-rows]="pathRowCount()">
+    @for (group of pathGroups(); track group.label) {
+      <h3 class="chart-path-heading">{{ group.label }}</h3>
+
+      @for (boss of group.bosses; track boss.boss) {
+        <ng-container [ngTemplateOutlet]="bossCard" [ngTemplateOutletContext]="{ $implicit: boss }" />
+      }
+    }
+  </div>
+}
+
+<!--
+  Everything not drawn as a column. On a path board that is the finale run, centred under the columns
+  and sized in COLUMN widths so it lines up with them — a lone card takes two columns, which is what
+  stops Kirin sitting in the corner of a five-track row looking like an afterthought. On every other
+  board there are no path columns and this is the ordinary grid, exactly as it always was.
+-->
+<div [class]="trailingContainerClass()" [style.--chart-path-count]="pathGroups().length || null">
+  @for (group of trailingGroups(); track group.label) {
+    @if (group.label) {
+      <h3 class="chart-group-heading">{{ group.label }}</h3>
+    }
+
+    @for (boss of group.bosses; track boss.boss) {
+      <ng-container [ngTemplateOutlet]="bossCard" [ngTemplateOutletContext]="{ $implicit: boss }" />
+
+      <!-- A zero-height full-width flex item: the only way to force a line break mid-row in a wrap
+           container, and it costs nothing when the row would have broken there anyway. -->
+      @if (boss.endsRow) {
+        <div class="chart-row-break"></div>
+      }
+    }
+  }
+</div>
+
+@if (chart(); as loaded) {
+  <!-- Built from the same bosses the cards above render, not from a second projection: one set of
+       rows read two ways, so the two halves of the page cannot disagree. It owns the row buttons —
+       Edit comes back here because the form it opens lives at the top of this board. -->
+  <app-chart-holdings-section
+    [bosses]="loaded.bosses"
+    [boardLabel]="loaded.boardLabel"
+    [canManage]="canManage()"
+    (edit)="beginEdit($event)" />
+}

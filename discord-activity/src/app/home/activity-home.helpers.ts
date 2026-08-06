@@ -10,6 +10,28 @@ import type {
   ActivityStatusLedgerEntry,
   ActivityTodLootInput
 } from '../discord/discord-activity.service';
+import type { ActivityLinkshellSettings, ActivityOverview } from '../discord/discord-activity.types';
+
+// ----- Linkshell type -----
+//
+// Lives here rather than on ActivityHomeComponent because three separate places need it now that
+// attendance renders inside the Event System tab: the shell, that tab, and the refresh timer that
+// decides whether to fetch window-event data at all.
+
+export function primaryLinkshellSettings(
+  overview: ActivityOverview | null | undefined
+): ActivityLinkshellSettings | null {
+  const primaryId = overview?.appUser?.primaryLinkshellId;
+  if (primaryId == null) return null;
+  return overview?.linkshells?.find(l => l.id === primaryId)?.settings ?? null;
+}
+
+// Sky/Sea/Dynamis linkshells run timed events only — they never post HNM snapshots — so the
+// attendance sections are irrelevant to them and are hidden entirely. Unknown/absent settings
+// fail open to "show", matching the server's LinkshellTypes.Normalize.
+export function attendanceApplies(overview: ActivityOverview | null | undefined): boolean {
+  return primaryLinkshellSettings(overview)?.linkshellType !== 'SkySeaDynamis';
+}
 
 export function breakSessionInfo(
   participant: ActivityEventParticipant,
@@ -93,6 +115,47 @@ export function formatElapsed(totalMilliseconds: number): string {
   const seconds = totalSeconds % 60;
 
   return [hours, minutes, seconds].map(value => value.toString().padStart(2, '0')).join(':');
+}
+
+// ----- ToD tracker -----
+//
+// Shown wherever a ToD has no recorded Time of Death / repop: the camp ended without anyone
+// seeing the mob die (the window closed, or another linkshell took it), so nothing was entered.
+// Deliberately NOT "Unavailable" or "Ready" — a blank countdown used to render as a green
+// "Ready", which read as "it's poppable now" when the truth is "we don't know".
+export const TOD_NOT_ENTERED = 'Not entered';
+
+// Milliseconds until a ToD's repop, or null when it has no repop to count down to.
+// Distinct from "0 ms remaining": null means not-entered, 0 means the window is open.
+export function todRemainingMs(repopTime: string | null | undefined, nowMs: number): number | null {
+  const targetTime = parseDate(repopTime);
+  if (targetTime === null) {
+    return null;
+  }
+
+  return Math.max(0, targetTime - nowMs);
+}
+
+export function todCountdownLabel(repopTime: string | null | undefined, nowMs: number): string {
+  const remaining = todRemainingMs(repopTime, nowMs);
+  if (remaining === null) {
+    return TOD_NOT_ENTERED;
+  }
+
+  return remaining <= 0 ? 'Ready' : formatElapsed(remaining);
+}
+
+// Only a real repop that has already arrived counts as ready — a not-entered ToD must not
+// light up the green "window open" treatment.
+export function isTodReady(repopTime: string | null | undefined, nowMs: number): boolean {
+  return todRemainingMs(repopTime, nowMs) === 0;
+}
+
+// Sort key for "which ToD is this monster's most recent". A not-entered ToD has no `time`, but
+// it's still the newest thing that happened to that monster, so fall back to when the row was
+// written — otherwise the pop it superseded would keep showing as current with a stale countdown.
+export function todSortKey(tod: { time?: string | null; timeStamp?: string | null }): number {
+  return parseDate(tod.time) ?? parseDate(tod.timeStamp) ?? 0;
 }
 
 export function formatDkp(totalMilliseconds: number, dkpPerHour?: number | null): string {

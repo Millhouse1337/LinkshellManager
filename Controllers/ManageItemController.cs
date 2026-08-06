@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,14 +14,20 @@ public class ManageItemController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly ItemSaleRecorder _itemSales;
 
-    public ManageItemController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public ManageItemController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        ItemSaleRecorder itemSales)
     {
         _context = context;
         _userManager = userManager;
+        _itemSales = itemSales;
     }
 
-    public async Task<IActionResult> Index()
+    // `view=sold` shows the archive of things already gone; anything else shows what is still held.
+    public async Task<IActionResult> Index(string? view = null)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -45,6 +52,7 @@ public class ManageItemController : Controller
                     Notes = i.Notes,
                     CreatedByCharacterName = i.CreatedByCharacterName,
                     CreatedAt = i.CreatedAt,
+                    UpdatedAt = i.UpdatedAt,
                     IsSold = i.IsSold,
                     SoldPrice = i.SoldPrice,
                     SoldByCharacterName = i.SoldByCharacterName,
@@ -55,6 +63,7 @@ public class ManageItemController : Controller
 
         ViewBag.CanManage = canManage;
         ViewBag.LinkshellName = user.PrimaryLinkshellName;
+        ViewBag.View = view;
         return View(items);
     }
 
@@ -218,36 +227,17 @@ public class ManageItemController : Controller
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == item.LinkshellId);
         var characterName = membership?.CharacterName ?? user.CharacterName;
-        var now = DateTime.UtcNow;
 
-        var entry = new RevenueEntry
-        {
-            LinkshellId = item.LinkshellId,
-            LinkshellName = item.LinkshellName,
-            EntryType = "Income",
-            Category = "Item Sale",
-            Value = salePrice,
-            Details = item.Quantity > 1 ? $"Sold: {item.ItemName} (x{item.Quantity})" : $"Sold: {item.ItemName}",
-            OccurredAt = now,
-            CreatedByAppUserId = user.Id,
-            CreatedByCharacterName = characterName,
-            CreatedAt = now
-        };
-        _context.RevenueEntries.Add(entry);
-        await _context.SaveChangesAsync();
-
-        item.IsSold = true;
-        item.SoldPrice = salePrice;
-        item.SoldAt = now;
-        item.SoldByCharacterName = characterName;
-        item.RevenueEntryId = entry.Id;
-        item.UpdatedAt = now;
-        await _context.SaveChangesAsync();
+        // Shared with the Activity's mark-sold endpoint, so the two surfaces cannot record a sale
+        // differently.
+        await _itemSales.RecordSaleAsync(
+            item, salePrice, new TreasuryActor(user.Id, characterName), HttpContext.RequestAborted);
 
         return RedirectToAction(nameof(Index));
     }
 
-    // Undo a sale: remove the linked income entry and clear the sold flags.
+    // Undo a sale: the treasury entry is reversed, not deleted, so the record that the item was once
+    // sold — and for how much — survives.
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Unsell(int id)
@@ -259,20 +249,15 @@ public class ManageItemController : Controller
         if (item is null) return NotFound();
         if (!await CanManageAsync(user.Id, item.LinkshellId)) return Forbid();
 
-        if (item.RevenueEntryId.HasValue)
-        {
-            var entry = await _context.RevenueEntries.FirstOrDefaultAsync(e => e.Id == item.RevenueEntryId.Value);
-            if (entry is not null) _context.RevenueEntries.Remove(entry);
-        }
-        item.IsSold = false;
-        item.SoldPrice = null;
-        item.SoldAt = null;
-        item.SoldByCharacterName = null;
-        item.RevenueEntryId = null;
-        item.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        var membership = await _context.AppUserLinkshells
+            .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == item.LinkshellId);
+        await _itemSales.ReverseSaleAsync(
+            item,
+            new TreasuryActor(user.Id, membership?.CharacterName ?? user.CharacterName),
+            HttpContext.RequestAborted);
 
-        return RedirectToAction(nameof(Index));
+        // Unselling happens from the Sold archive, so stay there rather than bouncing to the stash.
+        return RedirectToAction(nameof(Index), new { view = "sold" });
     }
 
     private async Task<bool> CanManageAsync(string appUserId, int? linkshellId)

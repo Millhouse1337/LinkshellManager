@@ -7,7 +7,9 @@ public class TodManagerViewModel
     public const string FiveMinuteCooldown = "5 Min";
     public const string TwoHourCooldown = "2 Hour";
     public const string TwentyTwoHourCooldown = "22 Hour";
+    public const string SeventyOneHourCooldown = "71 Hour";
     public const string SeventyTwoHourCooldown = "72 Hour";
+    public const string EightyFourHourCooldown = "84 Hour";
     public const string OneHourInterval = "1 Hour";
     public const string TenMinuteInterval = "10 Min";
 
@@ -27,8 +29,12 @@ public class TodManagerViewModel
         "Tiamat",
         "Vrtra",
         "Bloodsucker",
+        "Boroka",
+        "Bune",
+        "Capricious Cassie",
         "King Arthro",
         "King Vinegarroon",
+        "Roc",
         "Serket",
         "Shikigami Weapon",
         "Simurgh",
@@ -40,7 +46,9 @@ public class TodManagerViewModel
         FiveMinuteCooldown,
         TwoHourCooldown,
         TwentyTwoHourCooldown,
-        SeventyTwoHourCooldown
+        SeventyOneHourCooldown,
+        SeventyTwoHourCooldown,
+        EightyFourHourCooldown
     };
 
     public static IReadOnlyList<string> SupportedIntervals { get; } = new[]

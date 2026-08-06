@@ -43,6 +43,17 @@ public class AppUserEvent
 
     public bool IsQuickJoin { get; set; }
 
+    // Manual Check In attendance: the window this member first CHECKED IN for. Credit at finalize
+    // = windows from arrival through their departure (or the camp's pop/last window), inclusive.
+    // Re-tapping "Check In" at a later window overwrites this (the "late arrival" correction).
+    // Null = hasn't checked in / not a Manual Check In event.
+    public int? WdArrivalWindow { get; set; }
+
+    // Manual Check In: the window this member CHECKED OUT in (left mid-camp). Credit runs
+    // arrival..departure inclusive. Null = still present (credited through the pop/last window).
+    // Cleared when they Check In again (they came back).
+    public int? WdDepartureWindow { get; set; }
+
     public bool? IsVerified { get; set; }
 
     public string? Proctor { get; set; }

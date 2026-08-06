@@ -1,0 +1,135 @@
+@model EventSystemPageViewModel
+@{
+    // Section 3b: closed TIMED events, the web twin of the Activity's "Past events" panel.
+    //
+    // Takes the whole page model rather than just PastEvents because every link here has to carry
+    // the attendance archive's query and page, or paging one section would silently reset the other.
+    var past = Model.PastEvents;
+    var att = Model.ClosedAttendance;
+    var from = past.TotalCount == 0 ? 0 : ((past.Page - 1) * past.PageSize) + 1;
+    var to = Math.Min(past.Page * past.PageSize, past.TotalCount);
+
+    // EventHistory's own relative-time wording (no "in " prefix, em-dash for unknown) — the timed
+    // event card upstairs uses a different one, for future times.
+    string RelativeTime(DateTime? when)
+    {
+        if (!when.HasValue) return "—";
+        var delta = when.Value - DateTime.UtcNow;
+        var abs = delta.Duration();
+        var suffix = delta.TotalSeconds < 0 ? " ago" : "";
+        if (abs.TotalMinutes < 60) return $"{(int)abs.TotalMinutes}m{suffix}";
+        if (abs.TotalHours < 24) return $"{(int)abs.TotalHours}h{suffix}";
+        if (abs.TotalDays < 14) return $"{(int)abs.TotalDays}d{suffix}";
+        return when.Value.ToString("MMM d");
+    }
+}
+
+<div class="page-head fade d5" id="past-events" style="margin-top:22px;margin-bottom:12px">
+    <div>
+        <h2 class="page-title" style="font-size:16px">Past events</h2>
+        <div class="page-sub">
+            <span><span class="num">@past.UnfilteredCount</span> completed</span>
+        </div>
+    </div>
+</div>
+
+@if (past.UnfilteredCount > 0)
+{
+    <div class="card fade d5" style="margin-bottom:14px">
+        <div style="padding:12px 16px">
+            <form method="get" asp-action="Index" data-anchor="past-events"
+                  style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input type="hidden" name="attQ" value="@att?.Query" />
+                <input type="hidden" name="attPage" value="@(att?.Page ?? 1)" />
+                <input class="input" type="text" name="pastQ" value="@past.Query"
+                       placeholder="Search by name, type or location…" style="min-width:280px;flex:1" />
+                <button type="submit" class="btn primary sm">Search</button>
+                @if (!string.IsNullOrWhiteSpace(past.Query))
+                {
+                    <a class="btn ghost sm" asp-action="Index"
+                       asp-route-attQ="@att?.Query" asp-route-attPage="@(att?.Page ?? 1)"
+                       asp-fragment="past-events">Clear</a>
+                }
+                <span style="margin-left:auto;font-size:12px;color:var(--fg-3)">
+                    @past.TotalCount of @past.UnfilteredCount
+                </span>
+            </form>
+        </div>
+    </div>
+}
+
+<div class="card fade d5">
+    @if (past.Items.Count == 0)
+    {
+        <div class="empty">
+            @if (string.IsNullOrWhiteSpace(past.Query))
+            {
+                <text>No completed events yet.</text>
+            }
+            else
+            {
+                <text>No past events match "<strong>@past.Query</strong>".</text>
+            }
+        </div>
+    }
+    else
+    {
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>Event</th>
+                    <th>Type</th>
+                    <th>Location</th>
+                    <th>Ended</th>
+                    <th>When</th>
+                    <th style="text-align:right"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var history in past.Items)
+                {
+                    var end = history.EndTime ?? history.TimeStamp;
+                    <tr>
+                        <td style="font-weight:500">@history.EventName</td>
+                        <td><span class="tag">@history.EventType</span></td>
+                        <td>@history.EventLocation</td>
+                        <td>@(end?.ToString("g") ?? "—")</td>
+                        <td style="color:var(--fg-3);font-size:12px">@RelativeTime(end)</td>
+                        <td style="text-align:right">
+                            <a class="btn ghost sm" asp-controller="EventHistory" asp-action="Details"
+                               asp-route-id="@history.Id">Details</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@if (past.TotalPages > 1)
+{
+    <div class="fade d5" style="display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px">
+        @if (past.Page > 1)
+        {
+            <a class="btn ghost sm" asp-action="Index"
+               asp-route-pastQ="@past.Query" asp-route-pastPage="@(past.Page - 1)"
+               asp-route-attQ="@att?.Query" asp-route-attPage="@(att?.Page ?? 1)"
+               asp-fragment="past-events">← Prev</a>
+        }
+        <span style="font-size:13px;color:var(--fg-3)">Page @past.Page of @past.TotalPages</span>
+        @if (past.Page < past.TotalPages)
+        {
+            <a class="btn ghost sm" asp-action="Index"
+               asp-route-pastQ="@past.Query" asp-route-pastPage="@(past.Page + 1)"
+               asp-route-attQ="@att?.Query" asp-route-attPage="@(att?.Page ?? 1)"
+               asp-fragment="past-events">Next →</a>
+        }
+    </div>
+}
+
+@if (past.Items.Count > 0)
+{
+    <div style="display:flex;justify-content:center;margin-top:10px">
+        <a class="btn ghost sm" asp-controller="EventHistory" asp-action="Index">Open full Event History</a>
+    </div>
+}

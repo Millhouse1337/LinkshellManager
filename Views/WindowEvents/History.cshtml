@@ -20,7 +20,11 @@
         </div>
     </div>
     <div class="page-actions">
-        <a class="btn ghost sm" asp-controller="WindowEvents" asp-action="Index" asp-route-linkshellId="@Model.LinkshellId">← Attendance Events</a>
+        @* Open attendance events live on the Event System page now, so point straight at it rather
+           than bouncing through the WindowEvents/Index redirect. The fragment lands on that page's
+           archive block, which shows the same closed events this page does. *@
+        <a class="btn ghost sm" asp-controller="Event" asp-action="Index"
+           asp-fragment="attendance-archive">← Event System</a>
     </div>
 </div>
 

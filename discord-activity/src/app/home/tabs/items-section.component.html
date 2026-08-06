@@ -1,0 +1,137 @@
+<!-- Treasury > Items -->
+<div class="section-head">
+  <div>
+    <div class="section-label">Treasury</div>
+    <div class="section-title">Items</div>
+  </div>
+  @if (canManage) {
+    <button type="button" class="btn primary sm" (click)="toggleForm()">
+      {{ showForm() ? 'Cancel' : (editingItemId() !== null ? 'Editing...' : '+ Add Item') }}
+    </button>
+  }
+</div>
+
+<div class="card">
+  <!-- Stockpile is what is still here; Sold is the archive. Nothing is deleted by selling — it moves. -->
+  <div class="card-head">
+    <div class="card-head-right">
+      <button type="button" class="btn sm {{ view() === 'stockpile' ? 'primary' : 'ghost' }}"
+              (click)="setView('stockpile')">Stockpile</button>
+      <button type="button" class="btn sm {{ view() === 'sold' ? 'primary' : 'ghost' }}"
+              (click)="setView('sold')">Sold</button>
+    </div>
+    @if (view() === 'sold') {
+      <span class="tag default num">
+        {{ soldItems().length }} sold &middot; {{ soldTotal().toLocaleString() }} gil
+      </span>
+    } @else {
+      <span class="tag default num">{{ stockpile().length }} items &middot; {{ totalQuantity() }} qty</span>
+    }
+  </div>
+
+  @if (showForm() && canManage) {
+    <form class="inline-form" (submit)="$event.preventDefault(); submit()">
+      <div class="inline-form__row">
+        <label>
+          <span>Name</span>
+          <input type="text" name="itemName" [(ngModel)]="itemName" required />
+        </label>
+        <label>
+          <span>Type</span>
+          <select name="itemTypeSelection"
+                  [ngModel]="itemTypeSelection"
+                  (ngModelChange)="onItemTypeSelectionChange($event)">
+            <option value="">Select type...</option>
+            @for (option of itemTypeOptions; track option) {
+              <option [value]="option">{{ option }}</option>
+            }
+          </select>
+          @if (itemTypeSelection === 'Other') {
+            <input type="text" name="itemType" [(ngModel)]="itemType"
+                   placeholder="Specify type" maxlength="128" />
+          }
+        </label>
+        <label>
+          <span>Quantity</span>
+          <input type="number" name="itemQuantity" [(ngModel)]="itemQuantity" min="0" />
+        </label>
+      </div>
+      <label>
+        <span>Notes</span>
+        <textarea name="itemNotes" [(ngModel)]="itemNotes" rows="2"></textarea>
+      </label>
+      <div class="inline-form__actions">
+        <button type="submit" class="btn primary sm"
+                [disabled]="activity.busyItemSave() || activity.busyItemId() !== null">
+          {{ editingItemId() !== null ? 'Save changes' : 'Add item' }}
+        </button>
+        <button type="button" class="btn ghost sm" (click)="toggleForm()">Cancel</button>
+      </div>
+    </form>
+  }
+
+  @if (visibleItems().length > 0) {
+    <ul class="entry-list">
+      @for (item of visibleItems(); track item.id) {
+        <li class="entry-item">
+          <div class="entry-item__main">
+            <strong>{{ item.itemName }}</strong>
+            @if (item.itemType) { <span class="tag default">{{ item.itemType }}</span> }
+            <span class="tag default num">{{ item.quantity }}</span>
+            @if (item.isSold) {
+              <span class="tag accent">Sold {{ (item.soldPrice ?? 0).toLocaleString() }} gil</span>
+            }
+          </div>
+          @if (item.notes) { <div class="entry-item__sub">{{ item.notes }}</div> }
+          <div class="entry-item__meta">
+            <span>Added by {{ item.createdByCharacterName || 'Unknown' }}</span>
+            @if (activity.formatDateTime(item.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
+          </div>
+
+          @if (canManage) {
+            @if (sellingItemId() === item.id) {
+              <div class="entry-item__actions" style="align-items:center;gap:8px;flex-wrap:wrap">
+                <input type="number" min="0" step="1" inputmode="numeric" placeholder="Sale price (gil)"
+                       [(ngModel)]="sellPrice" style="max-width:160px" />
+                <button type="button" class="btn primary sm" (click)="confirmSell(item.id)"
+                        [disabled]="activity.busyItemId() === item.id">
+                  {{ activity.busyItemId() === item.id ? 'Saving…' : 'Confirm sale' }}
+                </button>
+                <button type="button" class="btn ghost sm" (click)="cancelSell()">Cancel</button>
+              </div>
+            } @else {
+              <div class="entry-item__actions">
+                @if (!item.isSold) {
+                  <button type="button" class="btn primary sm" (click)="beginSell(item.id)"
+                          [disabled]="activity.busyItemId() === item.id">Sell</button>
+                  <button type="button" class="btn ghost sm" (click)="beginEdit(item)"
+                          [disabled]="activity.busyItemId() === item.id">Edit</button>
+                } @else {
+                  <!-- Undoing a sale reverses the gil entry rather than deleting it. -->
+                  <button type="button" class="btn ghost sm" (click)="unsellItem(item.id)"
+                          [disabled]="activity.busyItemId() === item.id">Unsell</button>
+                }
+                <button type="button" class="btn ghost sm" (click)="deleteItem(item.id)"
+                        [disabled]="activity.busyItemId() === item.id">Delete</button>
+              </div>
+            }
+          }
+        </li>
+      }
+    </ul>
+  } @else {
+    <div class="empty-state empty-state--compact">
+      @if (view() === 'sold') {
+        <div class="empty-state-desc">
+          Nothing sold yet. Items move here once they are marked sold, with what they went for.
+        </div>
+      } @else if (soldItems().length > 0) {
+        <div class="empty-state-desc">
+          Everything in the stash has been sold. The Sold tab has the {{ soldItems().length }} of them.
+        </div>
+      } @else {
+        <div class="empty-state-desc">No items tracked yet. Add items to manage loot drops and inventory.</div>
+      }
+    </div>
+  }
+</div>

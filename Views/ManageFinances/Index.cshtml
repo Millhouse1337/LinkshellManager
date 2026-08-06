@@ -1,0 +1,353 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.ManageFinancesViewModel
+@{
+    ViewData["Title"] = TreasuryLabels.Title;
+    ViewData["BodyClass"] = "lsm-page";
+    var error = TempData["TreasuryError"] as string;
+    // Chip labels and their query values. "In" and "out" mean the direction gil actually moved, not a
+    // string match on a type column — matching a string is what used to hide entries under both chips.
+    var filters = new[]
+    {
+        (Key: (string?)null, Label: "All"),
+        (Key: (string?)"in", Label: TreasuryLabels.MoneyIn),
+        (Key: (string?)"out", Label: TreasuryLabels.MoneyOut),
+        (Key: (string?)"drafts", Label: "Drafts"),
+        (Key: (string?)"reversed", Label: TreasuryLabels.ReversedChip),
+    };
+}
+
+<div class="page-head fade d1">
+    <div>
+        <h1 class="page-title">@TreasuryLabels.Title</h1>
+        <div class="page-sub">
+            @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
+            {
+                <span>@Model.LinkshellName</span>
+                <span class="dot"> · </span>
+            }
+            <span><span class="num">@Model.TotalEntries.ToString("N0")</span> entr@(Model.TotalEntries == 1 ? "y" : "ies")</span>
+            <span class="dot"> · </span>
+            <span>@TreasuryLabels.BasisNote</span>
+        </div>
+    </div>
+    @if (Model.CanManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-action="Record">@TreasuryLabels.RecordAction</a>
+        </div>
+    }
+</div>
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="card fade d1" style="padding:12px 16px;color:var(--danger)">@error</div>
+}
+
+@* Card 1: what the linkshell has. Holdings only — the flow figures live in their own card, because a
+   balance and a movement over a period are different kinds of number and stacking them invites reading
+   one as the other. *@
+<div class="card fade d2">
+    @* What moved is the headline and the sheet is the working, so the flow chips live INSIDE the
+       <summary> — they are the whole of what a collapsed card shows — and everything else is the
+       disclosure. A native <details> rather than script: this page is server-rendered and has no JS
+       of its own.
+
+       open: expanded is the default. Collapsing is there for someone who wants the flow figures
+       alone, not the state the page opens in. *@
+    <details class="lsm-balance" open>
+        <summary class="lsm-balance__summary">
+            <div class="card-head lsm-balance__head">
+                <span class="card-title">@TreasuryLabels.BalanceCard</span>
+                <span class="lsm-balance__chev" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                </span>
+                <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    @if (Model.Balances)
+                    {
+                        <span class="tag success">@TreasuryLabels.BooksBalance</span>
+                    }
+                    else
+                    {
+                        <span class="tag" style="color:var(--danger)">@TreasuryLabels.DoesNotBalance</span>
+                    }
+                    @if (Model.UncategorizedCount > 0)
+                    {
+                        <span class="tag">@TreasuryLabels.Uncategorized @Model.UncategorizedCount</span>
+                    }
+                    @if (Model.LockedThrough.HasValue)
+                    {
+                        <span class="tag">Locked through @Model.LockedThrough.Value.ToString("MMM d, yyyy")</span>
+                    }
+                </span>
+            </div>
+
+            @* What moved, in and out. Inside the summary so it is the whole of what a collapsed card
+               shows: the period's flow is the headline, the sheet below is the working. *@
+            <div class="lsm-flow">
+                <span class="tag success num">@TreasuryLabels.MoneyIn @Model.MoneyIn.ToString("N0")</span>
+                <span class="tag warning num">@TreasuryLabels.MoneyOut @Model.MoneyOut.ToString("N0")</span>
+                <span class="tag num">@TreasuryLabels.NetChange @Model.NetChange.ToString("N0")</span>
+            </div>
+        </summary>
+
+        @* Have on the left, owe on the right — the two sides read against each other rather than as
+           one long column where the second heading is below the fold.
+
+           Every line shows, including zeros: a subtotal over conditionally-hidden components does not
+           add up on screen, and a liability that disappears at zero reads as "there is no such thing"
+           rather than "there is none right now". *@
+        <div class="lsm-sheet__cols">
+            <div class="lsm-sheet__col">
+                <div class="lsm-sheet__section">@TreasuryLabels.WhatWeHave</div>
+                <div class="lsm-sheet__row">
+                    <span>@TreasuryLabels.CashOnHand</span>
+                    <span class="num">@Model.CashOnHand.ToString("N0")</span>
+                </div>
+                <div class="lsm-sheet__row">
+                    <span>@TreasuryLabels.OwedToUs</span>
+                    <span class="num">@Model.OwedToUs.ToString("N0")</span>
+                </div>
+                <div class="lsm-sheet__row lsm-sheet__row--total">
+                    <span></span>
+                    <span class="num">@((Model.CashOnHand + Model.OwedToUs).ToString("N0"))</span>
+                </div>
+            </div>
+
+            <div class="lsm-sheet__col">
+                <div class="lsm-sheet__section">@TreasuryLabels.WhatWeOweSection</div>
+                <div class="lsm-sheet__row">
+                    <span>@TreasuryLabels.OwedToMembers</span>
+                    <span class="num">@Model.WeOwe.ToString("N0")</span>
+                </div>
+                @if (Model.OwedToMembers.Count > 0)
+                {
+                    @* open: the sheet itself is now behind a disclosure, so hiding the names behind a
+                       SECOND one meant two clicks to answer "who do we owe". *@
+                    <details class="lsm-sheet__who" open>
+                        <summary>@TreasuryLabels.ShowWhoWeOwe</summary>
+                        <div class="lsm-sheet__members">
+                            @foreach (var owed in Model.OwedToMembers)
+                            {
+                                <div class="lsm-sheet__row">
+                                    <span>@owed.CharacterName</span>
+                                    <span class="num">@owed.Amount.ToString("N0")</span>
+                                </div>
+                            }
+                        </div>
+                    </details>
+                }
+                <div class="lsm-sheet__row lsm-sheet__row--total">
+                    <span></span>
+                    <span class="num">@Model.WeOwe.ToString("N0")</span>
+                </div>
+            </div>
+        </div>
+        @* The bottom line of the sheet, so it belongs to the sheet: inside the disclosure with the
+           two columns that produce it, not stranded under a collapsed card. *@
+        <div class="lsm-sheet lsm-sheet--answer">
+            <div class="lsm-sheet__row lsm-sheet__row--worth">
+                <span>@TreasuryLabels.NetWorth</span>
+                <span class="num">@Model.NetWorth.ToString("N0")</span>
+            </div>
+        </div>
+    </details>
+</div>
+
+@* margin-top so this card does not sit flush against the balance sheet above — .card carries no
+   margin of its own, so stacked cards need the gap stated here. *@
+<div class="card fade d3" style="margin-top:16px">
+    <div class="card-head">
+        <div class="card-title">@TreasuryLabels.TransactionsCard</div>
+    </div>
+
+    <form asp-action="Index" method="get"
+          style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <input type="search" name="search" value="@Model.Search" class="form-control" style="max-width:280px"
+               placeholder="Search entry #, note, category, member…" />
+        <input type="hidden" name="filter" value="@Model.Filter" />
+        <button type="submit" class="btn ghost sm">Search</button>
+        <span style="flex:1"></span>
+        @foreach (var chip in filters)
+        {
+            var active = string.Equals(Model.Filter ?? "", chip.Key ?? "", StringComparison.OrdinalIgnoreCase);
+            <a class="btn sm @(active ? "primary" : "ghost")"
+               asp-action="Index" asp-route-filter="@chip.Key" asp-route-search="@Model.Search">@chip.Label</a>
+        }
+    </form>
+
+    @if (Model.Entries.Count == 0)
+    {
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">
+                @(Model.TotalEntries == 0 ? "Nothing recorded yet" : TreasuryLabels.EmptySearch)
+            </div>
+            @if (Model.TotalEntries == 0 && Model.CanManage)
+            {
+                <div style="margin-bottom:12px">@TreasuryLabels.EmptyState</div>
+                <a class="btn primary" asp-action="Record">@TreasuryLabels.RecordAction</a>
+            }
+        </div>
+    }
+    else
+    {
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>@TreasuryLabels.Date</th>
+                    <th>@TreasuryLabels.EntryNumberField</th>
+                    <th>@TreasuryLabels.WhatHappened</th>
+                    <th>@TreasuryLabels.Note</th>
+                    <th>@TreasuryLabels.Member</th>
+                    <th>@TreasuryLabels.EnteredBy</th>
+                    <th style="text-align:right">@TreasuryLabels.Amount</th>
+                    @if (Model.CanManage)
+                    {
+                        <th style="text-align:right">Actions</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in Model.Entries)
+                {
+                    <tr>
+                        <td style="font-size:12px;color:var(--fg-3)">@entry.TransactionDate.ToString("MMM d, yyyy")</td>
+                        <td class="num" style="font-size:12px;color:var(--fg-3)">@TreasuryLabels.EntryReference(entry.EntryNumber)</td>
+                        <td>
+                            <span>@entry.WhatHappened</span>
+                            @if (entry.IsDraft)
+                            {
+                                <span class="tag">@TreasuryLabels.DraftChip</span>
+                            }
+                            @if (entry.IsReversed)
+                            {
+                                <span class="tag warning">@TreasuryLabels.ReversedChip</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(entry.ReversesEntryNumber))
+                            {
+                                <span class="tag">Reverses @TreasuryLabels.EntryReference(entry.ReversesEntryNumber)</span>
+                            }
+                            @* The two halves, for the one officer who wants to see them. Collapsed by
+                               default: nobody logging a Kirin's Osode sale needs to know. *@
+                            <details style="margin-top:4px">
+                                <summary style="font-size:11px;color:var(--fg-4);cursor:pointer">@(entry.Recipients.Count > 1 ? TreasuryLabels.ShowSplitDetails : TreasuryLabels.ShowDetails)</summary>
+                                <div style="font-size:11px;color:var(--fg-3);margin-top:4px">
+                                    @foreach (var half in entry.Halves)
+                                    {
+                                        <div>
+                                            @half.CategoryName
+                                            @* A split writes one line per member on the SAME category,
+                                               so the name is the only thing telling them apart. *@
+                                            @if (!string.IsNullOrWhiteSpace(half.Member))
+                                            {
+                                                <span class="lsm-half__member">@half.Member</span>
+                                            }
+                                            <span class="num">@(half.Amount >= 0 ? "+" : "")@half.Amount.ToString("N0")</span>
+                                            <span style="color:var(--fg-4)">(@half.ClassLabel)</span>
+                                        </div>
+                                    }
+                                </div>
+                            </details>
+                        </td>
+                        <td style="color:var(--fg-3)">
+                            @(entry.Memo ?? "")
+                            @if (!string.IsNullOrWhiteSpace(entry.CorrectionReason))
+                            {
+                                <div style="font-size:11px;color:var(--fg-4)">@entry.CorrectionReason</div>
+                            }
+                        </td>
+                        @* A split names everyone who got a share, kept to a line. *@
+                        <td style="font-size:12px;color:var(--fg-3)"
+                            title="@(entry.Recipients.Count > 1 ? string.Join(", ", entry.Recipients) : null)">
+                            @if (entry.Recipients.Count > 3)
+                            {
+                                @($"{string.Join(", ", entry.Recipients.Take(3))} +{entry.Recipients.Count - 3} more")
+                            }
+                            else if (entry.Recipients.Count > 1)
+                            {
+                                @string.Join(", ", entry.Recipients)
+                            }
+                            else
+                            {
+                                @(entry.Member ?? "")
+                            }
+                        </td>
+                        <td style="font-size:12px;color:var(--fg-3)">@(entry.EnteredBy ?? "")</td>
+                        @* A minus sign, not parentheses: a hobbyist reads "(5,820,000)" as a footnote
+                           marker, not as gil leaving. *@
+                        <td class="num" style="text-align:right;font-weight:500">
+                            @if (entry.CashDelta == 0)
+                            {
+                                <span style="color:var(--fg-4)">@entry.Amount.ToString("N0")</span>
+                            }
+                            else
+                            {
+                                <span style="color:@(entry.CashDelta < 0 ? "var(--warning)" : "var(--success)")">
+                                    @entry.CashDelta.ToString("N0")
+                                </span>
+                            }
+                        </td>
+                        @if (Model.CanManage)
+                        {
+                            <td style="text-align:right">
+                                <div style="display:inline-flex;gap:6px;flex-wrap:wrap">
+                                    @if (entry.IsDraft)
+                                    {
+                                        <a class="btn ghost sm" asp-action="EditDraft" asp-route-id="@entry.Id">@TreasuryLabels.EditDraftAction</a>
+                                        <form asp-action="Confirm" asp-route-id="@entry.Id" method="post" style="display:inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn ghost sm">@TreasuryLabels.ConfirmAction</button>
+                                        </form>
+                                        <form asp-action="Discard" asp-route-id="@entry.Id" method="post" style="display:inline"
+                                              data-confirm="@TreasuryLabels.DiscardConfirm">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)">@TreasuryLabels.DiscardDraftAction</button>
+                                        </form>
+                                    }
+                                    else if (!entry.IsReversed)
+                                    {
+                                        <a class="btn ghost sm" asp-action="Fix" asp-route-id="@entry.Id">@TreasuryLabels.FixAction</a>
+                                        <form asp-action="Reverse" asp-route-id="@entry.Id" method="post" style="display:inline"
+                                              data-confirm="@TreasuryLabels.ReverseConfirm">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)">@TreasuryLabels.ReverseAction</button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (Model.PageCount > 1)
+        {
+            <div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:12px">
+                @if (Model.Page > 0)
+                {
+                    <a class="btn ghost sm" asp-action="Index" asp-route-page="@(Model.Page - 1)"
+                       asp-route-search="@Model.Search" asp-route-filter="@Model.Filter">‹ Prev</a>
+                }
+                <span style="font-size:12px;color:var(--fg-3)">Page @(Model.Page + 1) of @Model.PageCount</span>
+                @if (Model.Page < Model.PageCount - 1)
+                {
+                    <a class="btn ghost sm" asp-action="Index" asp-route-page="@(Model.Page + 1)"
+                       asp-route-search="@Model.Search" asp-route-filter="@Model.Filter">Next ›</a>
+                }
+            </div>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script nonce="@Html.CspNonce()">
+        // Confirm text lives on the form as data-confirm so the wording stays in TreasuryLabels rather
+        // than being duplicated inline per button.
+        document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (!window.confirm(form.getAttribute('data-confirm'))) { event.preventDefault(); }
+            });
+        });
+    </script>
+}

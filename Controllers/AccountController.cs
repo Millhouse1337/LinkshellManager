@@ -42,6 +42,18 @@ public class AccountController : Controller
     [AllowAnonymous]
     public IActionResult Register() => Redirect("/Identity/Account/Login");
 
+    // Landing page for website permission denials. The cookie handler
+    // (Program.cs OnRedirectToAccessDenied) 302s every MVC Forbid() here, so
+    // this must exist and be reachable by an already-denied user — hence
+    // [AllowAnonymous] on an otherwise [Authorize] controller.
+    [AllowAnonymous]
+    [HttpGet]
+    public IActionResult AccessDenied(string? returnUrl = null)
+    {
+        ViewBag.ReturnUrl = returnUrl;
+        return View();
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()

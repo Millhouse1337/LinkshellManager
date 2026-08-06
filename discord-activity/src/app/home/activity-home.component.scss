@@ -113,3 +113,40 @@
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
 }
 .claim-banner__text { color: var(--fg); font-size: 13px; }
+
+/* ---- DKP tab sub-views -------------------------------------------------------
+   The DKP tab holds three views of the same economy (per-member ledger, whole-
+   linkshell sheet, grouping rules). This strip picks between them in place,
+   rather than each becoming a top-level tab that would scatter one subject
+   across the main nav. Styled as a segmented control so it reads as a switch
+   WITHIN the tab, not as a second row of the tab bar above it. */
+.dkp-view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.dkp-view-tab {
+  border: none;
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: calc(var(--r-md) - 3px);
+  cursor: pointer;
+}
+
+.dkp-view-tab:hover { color: var(--fg); }
+
+.dkp-view-tab.active {
+  background: var(--accent);
+  color: #fff;
+}

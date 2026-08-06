@@ -66,8 +66,8 @@ public class EventPartySlotSignup
     // on the board) — no perms.
     public bool IsAllianceLeader { get; set; }
 
-    // When true, this signup SURVIVES an officer "Next Window" advance instead of
-    // being wiped with the rest of the roster (window-cycle HNM boards). Set by the
+    // When true, this signup SURVIVES the window turnover instead of being wiped with
+    // the rest of the roster (window-cycle HNM boards). Set by the
     // member themselves ("🔒 Stay Next Window") or an officer ("🔒 Lock Member"), and
     // cleared by unlock, Withdraw, or an officer Remove. PERSISTS across multiple
     // advances until explicitly cleared, so an all-night camper only clicks once.

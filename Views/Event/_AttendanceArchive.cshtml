@@ -1,0 +1,108 @@
+@model EventSystemPageViewModel
+@{
+    // Section 3a: the attendance archive — unlinked snapshots awaiting triage, then CLOSED
+    // attendance events. Below Pending Events because this is review leftovers, not the live
+    // board; that's exactly where the Activity mounts <app-attendance-sections section="archive">.
+    //
+    // Only rendered when Model.Attendance is non-null, so ClosedAttendance is non-null too.
+    var closed = Model.ClosedAttendance!;
+    var from = closed.TotalCount == 0 ? 0 : ((closed.Page - 1) * closed.PageSize) + 1;
+    var to = Math.Min(closed.Page * closed.PageSize, closed.TotalCount);
+}
+
+<div class="page-head fade d4" id="attendance-archive" style="margin-top:22px;margin-bottom:12px">
+    <div>
+        <h2 class="page-title" style="font-size:16px">Attendance Archive</h2>
+        <div class="page-sub">
+            <span>Unlinked snapshots and closed attendance events</span>
+        </div>
+    </div>
+</div>
+
+@* Unlinked snapshots only — the open-event cards render up in Current Field Activity. *@
+@await Html.PartialAsync("../WindowEvents/_AttendanceSections", Model.Attendance!,
+    new ViewDataDictionary(ViewData) { ["AttendanceSection"] = "archive" })
+
+<div class="card fade d4" style="margin-bottom:14px">
+    <div class="card-head">
+        @* Titled to match the Activity's closed-events block (attendance-sections.component.html). *@
+        <div class="card-title">
+            Attendance History
+            <span class="tag">@closed.TotalCount</span>
+        </div>
+    </div>
+    <div style="padding:12px 16px">
+        @* asp-fragment has no form equivalent, so the anchor is carried by the submit handler in
+           Index.cshtml via data-anchor. The other section's state rides along as hidden inputs so
+           searching here doesn't reset Past Events. *@
+        <form method="get" asp-action="Index" data-anchor="attendance-archive"
+              style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="hidden" name="pastQ" value="@Model.PastEvents.Query" />
+            <input type="hidden" name="pastPage" value="@Model.PastEvents.Page" />
+            <input class="input" type="text" name="attQ" value="@closed.Query"
+                   placeholder="Search by event name, poster, or member…" style="min-width:280px;flex:1" />
+            <button type="submit" class="btn primary sm">Search</button>
+            @if (!string.IsNullOrWhiteSpace(closed.Query))
+            {
+                <a class="btn ghost sm" asp-action="Index"
+                   asp-route-pastQ="@Model.PastEvents.Query" asp-route-pastPage="@Model.PastEvents.Page"
+                   asp-fragment="attendance-archive">Clear</a>
+            }
+            <span style="margin-left:auto;font-size:12px;color:var(--fg-3)">
+                @if (closed.TotalCount == 0) { <text>No results</text> }
+                else { <text>Showing @from–@to of @closed.TotalCount</text> }
+            </span>
+        </form>
+    </div>
+</div>
+
+@if (closed.Events.Count == 0)
+{
+    <div class="card fade d4">
+        <div class="empty" style="padding:16px">
+            @if (string.IsNullOrWhiteSpace(closed.Query))
+            {
+                <text>Closed events will appear here once an Attendance Event is closed.</text>
+            }
+            else
+            {
+                <text>No closed events match "<strong>@closed.Query</strong>".</text>
+            }
+        </div>
+    </div>
+}
+else
+{
+    @foreach (var ev in closed.Events)
+    {
+        @* IsClosed=true is load-bearing: it makes the roster read-only, which is what keeps an
+           officer from silently desyncing rows already posted to the DKP sheet. *@
+        @await Html.PartialAsync("../WindowEvents/_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+        {
+            ["LinkshellId"] = closed.LinkshellId,
+            ["CanManage"] = closed.CanManage,
+            ["IsClosed"] = true,
+        })
+    }
+
+    @if (closed.TotalPages > 1)
+    {
+        <div class="fade d4" style="display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px">
+            @if (closed.Page > 1)
+            {
+                <a class="btn ghost sm" asp-action="Index"
+                   asp-route-attQ="@closed.Query" asp-route-attPage="@(closed.Page - 1)"
+                   asp-route-pastQ="@Model.PastEvents.Query" asp-route-pastPage="@Model.PastEvents.Page"
+                   asp-fragment="attendance-archive">← Prev</a>
+            }
+            <span style="font-size:13px;color:var(--fg-3)">Page @closed.Page of @closed.TotalPages</span>
+            @if (closed.Page < closed.TotalPages)
+            {
+                <a class="btn ghost sm" asp-action="Index"
+                   asp-route-attQ="@closed.Query" asp-route-attPage="@(closed.Page + 1)"
+                   asp-route-pastQ="@Model.PastEvents.Query" asp-route-pastPage="@Model.PastEvents.Page"
+                   asp-fragment="attendance-archive">Next →</a>
+            }
+        </div>
+    }
+}

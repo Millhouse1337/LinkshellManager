@@ -13,7 +13,11 @@
             <div class="card-title">Linkshell Roster</div>
             <div class="card-head-right">
               <span class="tag accent" title="Currently active linkshell">{{ activeLinkshell.name }}</span>
-              <span class="tag default num">{{ selectedDashboardMembers().length }}</span>
+              <!-- The roster scrolls instead of paging, so this count carries what the
+                   paginator used to say: how many members the search is showing. -->
+              <span class="tag default num" title="Members shown">
+                {{ filteredDashboardMembers().length }}@if (filteredDashboardMembers().length !== selectedDashboardMembers().length) {<span> of {{ selectedDashboardMembers().length }}</span>}
+              </span>
               @if (pendingLeaveLinkshell()) {
                 <button type="button" class="btn sm danger-outline"
                   [disabled]="activity.busyLinkshellId() === activeLinkshell.id"
@@ -43,31 +47,34 @@
                 [(ngModel)]="rosterSearch"
                 name="manageRosterSearch" />
               <!--
-                App Sync filter: limits the roster to members who have actually
-                opened/synced the Discord Activity (member.hasSyncedActivity) — not
-                merely account-linked (outside-sign-up-board members get an account
-                without opening the Activity). Status is shown but never filtered on.
+                Show Jobs: swaps the roster table over to the jobs view — every
+                column but Character is dropped and each row lists that member's
+                leveled jobs (main + alts) instead. Lazy-loads the jobs data.
               -->
               <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--fg-2);white-space:nowrap;cursor:pointer">
                 <input
                   type="checkbox"
-                  [checked]="appSyncOnly()"
-                  (change)="toggleAppSync($any($event.target).checked)" />
-                App Sync
+                  [checked]="showJobs()"
+                  (change)="toggleShowJobs($any($event.target).checked)" />
+                Show Jobs
               </label>
             </div>
-            <div class="ac-roster ac-roster--with-actions">
+            <div class="ac-roster ac-roster--with-actions" [class.ac-roster--jobs]="showJobs()">
               <div class="ac-roster-head">
                 <div>Character</div>
-                <div>Rank</div>
-                <div>Status</div>
-                <div class="ac-roster-num-head">Active streak</div>
-                <div class="ac-roster-num-head">Absent streak</div>
-                <div class="ac-roster-dkp-head">DKP</div>
-                <div>Joined</div>
-                <div class="ac-roster-actions-head">Actions</div>
+                @if (showJobs()) {
+                  <div>Jobs</div>
+                } @else {
+                  <div>Rank</div>
+                  <div>Status</div>
+                  <div class="ac-roster-num-head">Active streak</div>
+                  <div class="ac-roster-num-head">Absent streak</div>
+                  <div class="ac-roster-dkp-head">DKP</div>
+                  <div>Joined</div>
+                  <div class="ac-roster-actions-head">Actions</div>
+                }
               </div>
-              @for (member of pagedDashboardMembers(); track member.id) {
+              @for (member of filteredDashboardMembers(); track member.id) {
                 <div class="ac-roster-row" [class.editing]="editingRankMemberId() === member.id">
                   <div class="ac-roster-char">
                     <div class="ac-roster-av {{ memberAvatarClass(member.characterName) }}">{{ initials(member.characterName) }}</div>
@@ -85,6 +92,40 @@
                       }
                     </div>
                   </div>
+                  @if (showJobs()) {
+                    <!-- Jobs view: this member's leveled jobs (main + each named alt),
+                         the same pills the Jobs Roster card used to render. -->
+                    <div class="ac-roster-jobs">
+                      @if (jobsRosterBusy()) {
+                        <div class="jobs-roster-member__empty">Loading jobs…</div>
+                      } @else if (jobsCharacters(member.id); as characters) {
+                        @if (characters.length === 0) {
+                          <div class="jobs-roster-member__empty">No jobs entered</div>
+                        }
+                        @for (ch of characters; track ch.label) {
+                          <div class="jobs-roster-member__character">
+                            @if (ch.isAlt) {
+                              <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
+                            }
+                            @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
+                              @if (jobs.length === 0) {
+                                <div class="jobs-roster-member__empty">No jobs entered</div>
+                              } @else {
+                                <div class="jobs-roster-member__pills">
+                                  @for (job of jobs; track job.name) {
+                                    <span class="tag default jobs-roster-member__pill" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)">
+                                      <span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>
+                                      @if (job.strong) { <span class="jr-strong" title="Merited">★</span> }
+                                    </span>
+                                  }
+                                </div>
+                              }
+                            }
+                          </div>
+                        }
+                      }
+                    </div>
+                  } @else {
                   <div class="ac-roster-rank">
                     @if (editingRankMemberId() === member.id && canEditRosterRank(member.appUserId)) {
                       <select
@@ -136,7 +177,7 @@
                   <div class="ac-roster-dkp">
                     {{ member.linkshellDkp ?? 0 }}
                     @if (member.biddableDkp != null && member.biddableDkp !== (member.linkshellDkp ?? 0)) {
-                      <div class="ac-roster-name-sub" title="Biddable now = balance − bids you're winning − DKP spent on loot in a live event">{{ member.biddableDkp }} biddable</div>
+                      <div class="ac-roster-name-sub" title="Biddable now = balance âˆ’ bids you're winning âˆ’ DKP spent on loot in a live event">{{ member.biddableDkp }} biddable</div>
                     }
                   </div>
                   <div class="ac-roster-joined">{{ formatJoined(member.dateJoined) }}</div>
@@ -191,22 +232,13 @@
                       }
                     }
                   </div>
+                  }
                 </div>
               }
               @if (filteredDashboardMembers().length === 0) {
                 <div class="ac-roster-row"><div style="grid-column: 1 / -1; color: var(--fg-3); font-size: 12px;">No members matched your search.</div></div>
               }
             </div>
-            @if (rosterTotalPages() > 1) {
-              <div class="table-paginator">
-                <button type="button" class="btn sm" [disabled]="rosterCurrentPage() <= 1" (click)="rosterPrev()">Prev</button>
-                <span class="muted" style="font-size:12px">
-                  Page {{ rosterCurrentPage() }} of {{ rosterTotalPages() }}
-                  &middot; {{ filteredDashboardMembers().length }} member{{ filteredDashboardMembers().length === 1 ? '' : 's' }}
-                </span>
-                <button type="button" class="btn sm" [disabled]="rosterCurrentPage() >= rosterTotalPages()" (click)="rosterNext()">Next</button>
-              </div>
-            }
           } @else {
             <div class="empty-state empty-state--compact">
               <div class="empty-state-desc">No members in this linkshell yet.</div>
@@ -215,318 +247,11 @@
         </div>
       }
 
-      <!-- Jobs Roster: every member's leveled jobs (from their Profile). -->
-      @if (selectedDashboardLinkshell()) {
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Jobs Roster</div>
-            <button type="button" class="btn ghost sm" (click)="toggleJobsRoster()">
-              {{ jobsRosterExpanded() ? 'Hide' : 'Show jobs' }}
-            </button>
-          </div>
-          @if (jobsRosterExpanded()) {
-            @if (jobsRosterBusy()) {
-              <div class="empty-state empty-state--compact"><div class="empty-state-desc">Loading jobs…</div></div>
-            } @else if (jobsRosterForCurrent(); as roster) {
-              @if (roster.members.length === 0) {
-                <div class="empty-state empty-state--compact"><div class="empty-state-desc">No app-linked members yet.</div></div>
-              } @else {
-                <div class="jobs-roster-toolbar">
-                  <input
-                    type="text"
-                    placeholder="Search jobs roster"
-                    [(ngModel)]="jobsRosterSearch"
-                    name="jobsRosterSearch" />
-                  <span class="tag default num">
-                    {{ filteredJobsRosterMembers().length }} member{{ filteredJobsRosterMembers().length === 1 ? '' : 's' }}
-                  </span>
-                </div>
-                @if (filteredJobsRosterMembers().length === 0) {
-                  <div class="empty-state empty-state--compact">
-                    <div class="empty-state-desc">No jobs roster members matched your search.</div>
-                  </div>
-                } @else {
-                  <div class="jobs-roster-list">
-                    @for (member of pagedJobsRosterMembers(); track member.id) {
-                      <div class="jobs-roster-member">
-                        <div class="jobs-roster-member__head">
-                        <strong>{{ member.characterName }}</strong>
-                        <span class="tag default">{{ member.rank || 'Member' }}</span>
-                        </div>
-                        @for (ch of rosterCharacters(member); track ch.label) {
-                          <div class="jobs-roster-member__character">
-                          @if (ch.isAlt) {
-                            <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
-                          }
-                          @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
-                            @if (jobs.length === 0) {
-                              <div class="jobs-roster-member__empty">No jobs entered</div>
-                            } @else {
-                              <div class="jobs-roster-member__pills">
-                                @for (job of jobs; track job.name) {
-                                  <span class="tag default jobs-roster-member__pill" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)">
-                                    <span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>
-                                    @if (job.strong) { <span class="jr-strong" title="Merited">★</span> }
-                                  </span>
-                                }
-                              </div>
-                            }
-                          }
-                          </div>
-                        }
-                      </div>
-                    }
-                  </div>
-                  @if (jobsRosterTotalPages() > 1) {
-                    <div class="table-paginator">
-                      <button type="button" class="btn sm" [disabled]="jobsRosterCurrentPage() <= 1" (click)="jobsRosterPrev()">Prev</button>
-                      <span class="muted" style="font-size:12px">
-                        Page {{ jobsRosterCurrentPage() }} of {{ jobsRosterTotalPages() }}
-                        &middot; {{ filteredJobsRosterMembers().length }} member{{ filteredJobsRosterMembers().length === 1 ? '' : 's' }}
-                      </span>
-                      <button type="button" class="btn sm" [disabled]="jobsRosterCurrentPage() >= jobsRosterTotalPages()" (click)="jobsRosterNext()">Next</button>
-                    </div>
-                  }
-                }
-              }
-            } @else {
-              <div class="empty-state empty-state--compact">
-                <button type="button" class="btn sm" (click)="ensureJobsRoster()">Load jobs roster</button>
-              </div>
-            }
-          }
-        </div>
-      }
-
       <!-- Invites section from sidebar -->
       <app-activity-sidebar-panel [visibleSections]="['invites']" />
 
-      <!-- Manage Items -->
-      <div class="section-head">
-        <div>
-          <div class="section-label">Inventory</div>
-          <div class="section-title">Manage Items</div>
-        </div>
-        @if (canManageConfigLinkshell()) {
-          <button type="button" class="btn primary sm" (click)="toggleItemForm()">
-            {{ showItemForm() ? 'Cancel' : (editingItemId() !== null ? 'Editing...' : '+ Add Item') }}
-          </button>
-        }
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Stockpile</div>
-          <span class="tag default num">{{ configItems().length }} items &middot; {{ configTotalItemQuantity() }} qty</span>
-        </div>
-        @if (showItemForm() && canManageConfigLinkshell()) {
-          <form class="inline-form" (submit)="$event.preventDefault(); submitItem()">
-            <div class="inline-form__row">
-              <label>
-                <span>Name</span>
-                <input type="text" name="itemName" [(ngModel)]="itemName" required />
-              </label>
-              <label>
-                <span>Type</span>
-                <select name="itemTypeSelection"
-                        [ngModel]="itemTypeSelection"
-                        (ngModelChange)="onItemTypeSelectionChange($event)">
-                  <option value="">Select type...</option>
-                  @for (option of itemTypeOptions; track option) {
-                    <option [value]="option">{{ option }}</option>
-                  }
-                </select>
-                @if (itemTypeSelection === 'Other') {
-                  <input type="text" name="itemType" [(ngModel)]="itemType"
-                         placeholder="Specify type" maxlength="128" />
-                }
-              </label>
-              <label>
-                <span>Quantity</span>
-                <input type="number" name="itemQuantity" [(ngModel)]="itemQuantity" min="0" />
-              </label>
-            </div>
-            <label>
-              <span>Notes</span>
-              <textarea name="itemNotes" [(ngModel)]="itemNotes" rows="2"></textarea>
-            </label>
-            <div class="inline-form__actions">
-              <button type="submit" class="btn primary sm" [disabled]="activity.busyItemSave() || activity.busyItemId() !== null">
-                {{ editingItemId() !== null ? 'Save changes' : 'Add item' }}
-              </button>
-              <button type="button" class="btn ghost sm" (click)="toggleItemForm()">Cancel</button>
-            </div>
-          </form>
-        }
-        @if (configItems().length > 0) {
-          <ul class="entry-list">
-            @for (item of configItems(); track item.id) {
-              <li class="entry-item" [style.opacity]="item.isSold ? 0.6 : 1">
-                <div class="entry-item__main">
-                  <strong>{{ item.itemName }}</strong>
-                  @if (item.itemType) { <span class="tag default">{{ item.itemType }}</span> }
-                  <span class="tag default num">{{ item.quantity }}</span>
-                  @if (item.isSold) { <span class="tag accent">Sold {{ (item.soldPrice ?? 0).toLocaleString() }} gil</span> }
-                </div>
-                @if (item.notes) { <div class="entry-item__sub">{{ item.notes }}</div> }
-                <div class="entry-item__meta">
-                  <span>Added by {{ item.createdByCharacterName || 'Unknown' }}</span>
-                  @if (activity.formatDateTime(item.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
-                </div>
-                @if (canManageConfigLinkshell()) {
-                  @if (sellingItemId() === item.id) {
-                    <div class="entry-item__actions" style="align-items:center;gap:8px;flex-wrap:wrap">
-                      <input type="number" min="0" step="1" inputmode="numeric" placeholder="Sale price (gil)"
-                             [(ngModel)]="sellPrice" style="max-width:160px" />
-                      <button type="button" class="btn primary sm" (click)="confirmSell(item.id)"
-                              [disabled]="activity.busyItemId() === item.id">
-                        {{ activity.busyItemId() === item.id ? 'Saving…' : 'Confirm sale' }}
-                      </button>
-                      <button type="button" class="btn ghost sm" (click)="cancelSell()">Cancel</button>
-                    </div>
-                  } @else {
-                    <div class="entry-item__actions">
-                      @if (!item.isSold) {
-                        <button type="button" class="btn primary sm" (click)="beginSell(item.id)" [disabled]="activity.busyItemId() === item.id">Sell</button>
-                        <button type="button" class="btn ghost sm" (click)="beginEditItem(item)" [disabled]="activity.busyItemId() === item.id">Edit</button>
-                      } @else {
-                        <button type="button" class="btn ghost sm" (click)="unsellItem(item.id)" [disabled]="activity.busyItemId() === item.id">Unsell</button>
-                      }
-                      <button type="button" class="btn ghost sm" (click)="deleteItem(item.id)" [disabled]="activity.busyItemId() === item.id">Delete</button>
-                    </div>
-                  }
-                }
-              </li>
-            }
-          </ul>
-        } @else {
-          <div class="empty-state empty-state--compact">
-            <div class="empty-state-desc">No items tracked yet. Add items to manage loot drops and inventory.</div>
-          </div>
-        }
-      </div>
-
-      <!-- Manage Revenue -->
-      <div class="section-head">
-        <div>
-          <div class="section-label">Finances</div>
-          <div class="section-title">Manage Revenue</div>
-        </div>
-        @if (canManageConfigLinkshell()) {
-          <button type="button" class="btn primary sm" (click)="toggleRevenueForm()">
-            {{ showRevenueForm() ? 'Cancel' : '+ Add Entry' }}
-          </button>
-        }
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <div class="card-title">Treasury</div>
-          <div class="revenue-totals">
-            <span class="tag success num">Income {{ configIncomeTotal() | number }}</span>
-            <span class="tag warning num">Expense {{ configExpenseTotal() | number }}</span>
-            <span class="tag default num">Net {{ configNetTotal() | number }}</span>
-          </div>
-        </div>
-        @if (showRevenueForm() && canManageConfigLinkshell()) {
-          <form class="inline-form" (submit)="$event.preventDefault(); submitRevenue()">
-            <div class="inline-form__row">
-              <label>
-                <span>Type</span>
-                <select name="revenueType" [(ngModel)]="revenueType">
-                  <option value="Income">Income</option>
-                  <option value="Expense">Expense</option>
-                </select>
-              </label>
-              <label>
-                <span>Category</span>
-                <input type="text" name="revenueCategory" [(ngModel)]="revenueCategory" placeholder="Sales, Fees, ..." />
-              </label>
-              <label>
-                <span>Value</span>
-                <input type="number" name="revenueValue" [(ngModel)]="revenueValue" min="0" />
-              </label>
-            </div>
-            <label>
-              <span>Details</span>
-              <textarea name="revenueDetails" [(ngModel)]="revenueDetails" rows="2"></textarea>
-            </label>
-            <div class="inline-form__actions">
-              <button type="submit" class="btn primary sm" [disabled]="activity.busyRevenueSave() || activity.busyRevenueId() !== null">
-                {{ editingRevenueId() !== null ? 'Update entry' : 'Save entry' }}
-              </button>
-              <button type="button" class="btn ghost sm" (click)="toggleRevenueForm()">Cancel</button>
-            </div>
-          </form>
-        }
-        @if (configRevenue().length > 0) {
-          <!-- Search + type filter: keeps a long ledger scannable. -->
-          <div class="revenue-toolbar">
-            <input
-              type="search"
-              class="revenue-search"
-              placeholder="Search category, note, member…"
-              [ngModel]="revenueSearch()"
-              (ngModelChange)="onRevenueSearch($event)" />
-            <div class="revenue-filter">
-              @for (type of ['All', 'Income', 'Expense']; track type) {
-                <button
-                  type="button"
-                  class="btn sm {{ revenueTypeFilter() === type ? 'primary' : 'ghost' }}"
-                  (click)="setRevenueTypeFilter($any(type))">{{ type }}</button>
-              }
-            </div>
-          </div>
-
-          @if (filteredRevenue().length > 0) {
-            <!-- Scrollable, date-grouped ledger (one page at a time). -->
-            <div class="revenue-scroll">
-              @for (group of groupedRevenuePage(); track group.key) {
-                <div class="revenue-daygroup">
-                  <div class="revenue-day-head">{{ group.label }}</div>
-                  <ul class="entry-list">
-                    @for (entry of group.entries; track entry.id) {
-                      <li class="entry-item entry-item--{{ entry.entryType.toLowerCase() }}">
-                        <div class="entry-item__main">
-                          <span class="tag {{ entry.entryType === 'Income' ? 'success' : 'warning' }}">{{ entry.entryType }}</span>
-                          @if (entry.category) { <strong>{{ entry.category }}</strong> }
-                          <span class="tag default num">{{ entry.value | number }}</span>
-                        </div>
-                        @if (entry.details) { <div class="entry-item__sub">{{ entry.details }}</div> }
-                        <div class="entry-item__meta">
-                          <span>By {{ entry.createdByCharacterName || 'Unknown' }}</span>
-                          @if (activity.formatDateTime(entry.occurredAt); as when) { <span>&middot; {{ when }}</span> }
-                        </div>
-                        @if (canManageConfigLinkshell()) {
-                          <div class="entry-item__actions">
-                            <button type="button" class="btn ghost sm" (click)="beginEditRevenue(entry)" [disabled]="activity.busyRevenueId() === entry.id">Edit</button>
-                            <button type="button" class="btn ghost sm" (click)="deleteRevenue(entry.id)" [disabled]="activity.busyRevenueId() === entry.id">Delete</button>
-                          </div>
-                        }
-                      </li>
-                    }
-                  </ul>
-                </div>
-              }
-            </div>
-
-            <!-- Pager: only when more than one page of results. -->
-            @if (revenuePageCount() > 1) {
-              <div class="revenue-pager">
-                <button type="button" class="btn ghost sm" (click)="revenuePrevPage()" [disabled]="revenueCurrentPage() === 0">‹ Prev</button>
-                <span class="revenue-pager__label">Page {{ revenueCurrentPage() + 1 }} of {{ revenuePageCount() }} · {{ filteredRevenue().length | number }} entries</span>
-                <button type="button" class="btn ghost sm" (click)="revenueNextPage()" [disabled]="revenueCurrentPage() >= revenuePageCount() - 1">Next ›</button>
-              </div>
-            }
-          } @else {
-            <div class="empty-state empty-state--compact">
-              <div class="empty-state-desc">No entries match your search.</div>
-            </div>
-          }
-        } @else {
-          <div class="empty-state empty-state--compact">
-            <div class="empty-state-desc">No revenue entries yet. Track income and expenses to keep the treasury up to date.</div>
-          </div>
-        }
-      </div>
+      <!-- Items and Gil moved to their own top-level Treasury tab. This tab is people again:
+           roster, ranks and invites. -->
 
       <!-- Per-member "View Profile" modal (their leveled jobs, main + alts). -->
       @if (viewingProfileBusy() || viewingProfileMember()) {

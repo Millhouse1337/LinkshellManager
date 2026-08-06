@@ -57,6 +57,25 @@ public sealed class DiscordInteractionsController : ControllerBase
     private const string OutsideAlt1FieldId = "outside_alt1";
     private const string OutsideAlt2FieldId = "outside_alt2";
 
+    // "🏁 End Camp / Enter ToD" modal (every windowed HNM board — Standard + Manual Check In).
+    // custom_id carries the eventId; the fields capture the Time of Death (with seconds), NQ/HQ
+    // (only for the three merge-pair families), and Claimed/Killed as their own Yes/No dropdowns.
+    // The pop window is NOT asked — with timed auto-advance the current window IS where it popped.
+    // The day number and the re-post lead aren't asked either: the app owns both (the event form's
+    // Day field and the ToD form's re-post toggle), so the modal passes null and leaves whatever is
+    // configured there alone. The wire ids keep the "wdpop" spelling so boards posted before this
+    // stopped being Manual Check In-only keep working.
+    private const string WdPopModalPrefix = "evt:wdpopmodal:";
+    private const string WdPopTodFieldId = "wdpop_tod";
+    private const string WdPopHqFieldId = "wdpop_hq";
+    private const string WdPopClaimFieldId = "wdpop_claim";
+    private const string WdPopKillFieldId = "wdpop_kill";
+    // Retired — no longer rendered, but still read so a modal opened before the day/re-post removal
+    // and the Outcome split is recorded correctly when it's submitted afterwards.
+    private const string WdPopDayFieldId = "wdpop_day";
+    private const string WdPopOutcomeFieldId = "wdpop_outcome";
+    private const string WdPopRepostFieldId = "wdpop_repost";
+
     // The "/lsm" slash command (posts a launch card) and its "Join" button (launches the
     // Activity for the clicker via the LAUNCH_ACTIVITY callback).
     private const string LaunchCommandName = "lsm";
@@ -71,6 +90,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private readonly SignupCharacterChoiceCache _charChoice;
     private readonly OfficerAddTargetCache _officerAddTargets;
     private readonly ManualMemberService _manualMembers;
+    private readonly TimeZoneConversionService _timeZones;
 
     // This component interaction's token, captured per request so a success
     // handler can dismiss (delete) the ephemeral picker/wizard it lives on.
@@ -97,7 +117,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         OfficerAddTargetCache officerAddTargets,
         ManualMemberService manualMembers,
         DkpPoolResolver dkpPools,
-        DkpPoolBalanceService dkpPoolBalances)
+        DkpPoolBalanceService dkpPoolBalances,
+        TimeZoneConversionService timeZones)
     {
         _verifier = verifier;
         _db = db;
@@ -110,6 +131,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         _manualMembers = manualMembers;
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
+        _timeZones = timeZones;
     }
 
     private readonly DkpPoolResolver _dkpPools;
@@ -469,25 +491,41 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         // "🔒 Stay Next Window" → the clicker toggles the lock on their OWN slot so it
-        // survives the next officer "Next Window" advance (window-cycle HNM boards).
+        // survives the next automatic window turnover (window-cycle HNM boards).
         if (customId.StartsWith(DiscordEventMessageBuilder.LockNextWindowPrefix, StringComparison.Ordinal))
         {
             var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.LockNextWindowPrefix);
             return await HandleLockNextWindowAsync(eventId, appUserId, cancellationToken);
         }
 
-        // "Next Window" (window-cycle HNM boards) → officers only: wipe signups + advance.
-        if (customId.StartsWith(DiscordEventMessageBuilder.NextWindowPrefix, StringComparison.Ordinal))
+        // "◀ View Previous Window" → anyone: read-only ephemeral of the previous window's roster
+        // snapshot. Boards posted before this change send the same id from what was "Prev Window",
+        // so an old button now opens the viewer instead of stepping the counter.
+        if (customId.StartsWith(DiscordEventMessageBuilder.ViewPrevWindowPrefix, StringComparison.Ordinal))
         {
-            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.NextWindowPrefix);
-            return await HandleNextWindowAsync(eventId, appUserId, cancellationToken);
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.ViewPrevWindowPrefix);
+            return await HandleViewPrevWindowAsync(eventId, cancellationToken);
         }
 
-        // "Prev Window" → officers only: step the window back one (undo an accidental Next).
-        if (customId.StartsWith(DiscordEventMessageBuilder.PrevWindowPrefix, StringComparison.Ordinal))
+        // "✅ Check In (this window)" (Manual Check In boards) → member self-serve attendance for the current window.
+        if (customId.StartsWith(DiscordEventMessageBuilder.XinPrefix, StringComparison.Ordinal))
         {
-            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.PrevWindowPrefix);
-            return await HandlePrevWindowAsync(eventId, appUserId, cancellationToken);
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.XinPrefix);
+            return await HandleXinAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "🚪 Check Out" (Manual Check In boards) → member leaves mid-camp; credit stops at the current window.
+        if (customId.StartsWith(DiscordEventMessageBuilder.CheckOutPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.CheckOutPrefix);
+            return await HandleCheckOutAsync(eventId, appUserId, cancellationToken);
+        }
+
+        // "🏁 Pop / End Camp" (Manual Check In boards) → officers only: open the pop-window + ToD modal.
+        if (customId.StartsWith(DiscordEventMessageBuilder.WdPopPrefix, StringComparison.Ordinal))
+        {
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.WdPopPrefix);
+            return await HandleWdPopButtonAsync(eventId, appUserId, cancellationToken);
         }
 
         // "➕ Add Member (officers)" → officers only: ephemeral picker of who to seat.
@@ -699,6 +737,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             "slotL" => HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: true, cancellationToken),
             "join" => StartGeneralJoinAsync(eventId, appUserId, cancellationToken),
             "job" => HandleJobSignupAsync(eventId, appUserId, job, cancellationToken),
+            "xin" => HandleXinAsync(eventId, appUserId, cancellationToken),
             _ => Task.FromResult(Ephemeral("That action isn't recognized."))
         };
 
@@ -724,18 +763,14 @@ public sealed class DiscordInteractionsController : ControllerBase
     // identified by Discord id and named via a one-time modal (cached per event).
     // `promptTail` ("slot:42", "join:42", "job:42:War", …) lets the picker/modal
     // resume the right flow afterwards.
-    // "Next Window" / "Prev Window" buttons on a window-cycle HNM board (Tiamat/
-    // Jormungand/Vrtra). Officers only: wipe the board's signups and step
-    // Event.HnmWindowNumber by ±1 within [1, MaxWindow], then re-post the board (new
-    // "Window N" title + empty roster) off the 3s window via the queue. Prev is the
-    // undo for an accidental Next double-click.
-    private Task<IActionResult> HandleNextWindowAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
-        => ShiftWindowAsync(eventId, appUserId, +1, cancellationToken);
-
-    private Task<IActionResult> HandlePrevWindowAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
-        => ShiftWindowAsync(eventId, appUserId, -1, cancellationToken);
-
-    private async Task<IActionResult> ShiftWindowAsync(int eventId, string? appUserId, int delta, CancellationToken cancellationToken)
+    // "◀ View Previous Window" on a window-cycle HNM board (Tiamat/Jormungand/Vrtra). READ-ONLY:
+    // replies ephemerally with the roster snapshot taken when the previous window turned over, and
+    // touches nothing. Open to everyone — it shows the same roster the board displayed publicly for
+    // that window, so there is no gate to enforce.
+    //
+    // There is no "Next Window" counterpart any more: the counter belongs to the cadence
+    // (HnmWindowAdvanceBackgroundService) alone.
+    private async Task<IActionResult> HandleViewPrevWindowAsync(int eventId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -747,61 +782,94 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        if (!DiscordEventMessageBuilder.UsesWindows(ev))
         {
             return Ephemeral("This board doesn't use windows.");
         }
-
-        // Officers only (Leader/Officer rank in the event's linkshell). A button is visible
-        // to everyone on the board, so the gate is enforced here on click.
-        var membership = string.IsNullOrEmpty(appUserId)
-            ? null
-            : await _db.AppUserLinkshells.FirstOrDefaultAsync(
-                m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
-        if (!LinkshellRanks.IsLeaderOrOfficer(membership?.Rank))
+        if (ev.HnmWindowNumber <= 1)
         {
-            return Ephemeral("Only officers can change the window.");
+            return Ephemeral("This camp is still on its first window — there's nothing before it yet.");
         }
 
-        if (delta > 0 && ev.HnmWindowNumber >= HnmConfig.MaxWindow)
+        // The newest snapshot below the live window. Normally that's exactly HnmWindowNumber - 1,
+        // but a camp that sat through a boundary while the app was down has a gap there (the
+        // advancer deliberately skips the clear rather than wipe a roster over an unwatched
+        // boundary), so take the most recent one that exists instead of assuming.
+        var previousWindow = await _db.EventWindowRosterSnapshots
+            .Where(s => s.EventId == eventId && s.WindowNumber < ev.HnmWindowNumber)
+            .Select(s => (int?)s.WindowNumber)
+            .OrderByDescending(n => n)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (previousWindow is null)
         {
-            return Ephemeral($"Already on the final window ({HnmConfig.MaxWindow}).");
-        }
-        if (delta < 0 && ev.HnmWindowNumber <= 1)
-        {
-            return Ephemeral("Already on the first window (1).");
+            return Ephemeral(
+                $"No roster was captured for a window before {ev.HnmWindowNumber} — "
+                + "either nobody was signed up, or this camp turned over while the bot was down.");
         }
 
-        // Each window is normally a fresh sign-up → wipe slot signups + no-slot attendees.
-        // EXCEPTION: a member (or an officer) can LOCK a signup ("Stay Next Window") so it
-        // survives the advance. Those rows are kept, and so is their AppUserEvent
-        // participation, so a locked camper isn't cleared and doesn't lose earned DKP when
-        // the window ticks. StayNextWindow is deliberately NOT reset — the lock persists
-        // into the next window too, until the member unlocks, withdraws, or is removed.
-        var slotSignups = await _db.EventPartySlotSignups.Where(s => s.EventId == eventId).ToListAsync(cancellationToken);
-        var keptSignups = slotSignups.Where(s => s.StayNextWindow).ToList();
-        _db.EventPartySlotSignups.RemoveRange(slotSignups.Where(s => !s.StayNextWindow));
+        var rows = await _db.EventWindowRosterSnapshots
+            .Where(s => s.EventId == eventId && s.WindowNumber == previousWindow)
+            .OrderBy(s => s.AllianceSortOrder).ThenBy(s => s.PartySortOrder).ThenBy(s => s.SlotSortOrder)
+            .ToListAsync(cancellationToken);
 
-        // Spare the participation of anyone whose slot is staying (locked outside/Discord-
-        // only signups have no AppUserEvent, so in practice this only ever keeps account rows).
-        var keptAppUserIds = keptSignups.Where(s => s.AppUserId != null).Select(s => s.AppUserId!).ToHashSet();
-        var keptDiscordIds = keptSignups.Where(s => s.DiscordUserId != null).Select(s => s.DiscordUserId!).ToHashSet();
-        var attendees = await _db.AppUserEvents.Where(p => p.EventId == eventId).ToListAsync(cancellationToken);
-        _db.AppUserEvents.RemoveRange(attendees.Where(p =>
-            !(p.AppUserId != null && keptAppUserIds.Contains(p.AppUserId))
-            && !(p.DiscordUserId != null && keptDiscordIds.Contains(p.DiscordUserId))));
-
-        // Advance only the window counter + wipe signups. The officer-entered start/pop
-        // time is left untouched — stepping windows must not silently rewrite the time
-        // they scheduled (previously each step shifted StartTime ±1h, so a board on
-        // Window 12 drifted +11h from the entered time).
-        ev.HnmWindowNumber = Math.Clamp(ev.HnmWindowNumber + delta, 1, HnmConfig.MaxWindow);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _eventQueue.Enqueue(eventId); // async board refresh (image render off the 3s window)
-        // Silent ack — no ephemeral confirmation to stack up; the board updates in place.
-        return Ok(new { type = ResponseDeferredUpdate });
+        return Ephemeral(RenderWindowSnapshot(ev, previousWindow.Value, rows));
     }
+
+    // Renders a captured window roster as plain text for the ephemeral. Grouped alliance → party in
+    // the board's own order, since that's the shape people remember seeing. Kept text-only on
+    // purpose: the live board is a rendered image, but this is a throwaway "who was on last hour?"
+    // look and must come back inside Discord's 3s interaction window.
+    private static string RenderWindowSnapshot(
+        Event ev, int windowNumber, IReadOnlyList<EventWindowRosterSnapshot> rows)
+    {
+        var effectiveMax = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var lines = new List<string>
+        {
+            $"**{ev.EventName} — Window {windowNumber} of {effectiveMax}** (now on window {ev.HnmWindowNumber})",
+        };
+        if (rows.Count == 0)
+        {
+            lines.Add("_Nobody was signed up for that window._");
+            return string.Join("\n", lines);
+        }
+
+        string? currentGroup = null;
+        foreach (var row in rows)
+        {
+            var group = $"{row.AllianceName ?? "Alliance"} · {row.PartyName ?? "Party"}";
+            if (group != currentGroup)
+            {
+                lines.Add(string.Empty);
+                lines.Add($"__{group}__");
+                currentGroup = group;
+            }
+
+            // "PLD/WAR", "PLD", or the role when no job was committed — matching how the board reads.
+            var job = row.MainJob is { Length: > 0 }
+                ? (row.SubJob is { Length: > 0 } ? $"{row.MainJob}/{row.SubJob}" : row.MainJob)
+                : row.Role;
+            var marks = string.Concat(
+                row.IsAllianceLeader || row.IsPartyLeader ? " 👑" : string.Empty,
+                row.WasLocked ? " 🔒" : string.Empty);
+            lines.Add(
+                $"• {row.CharacterName ?? "(unnamed)"}"
+                + (job is { Length: > 0 } ? $" — {job}" : string.Empty)
+                + (row.SlotLabel is { Length: > 0 } ? $" {row.SlotLabel}" : string.Empty)
+                + marks);
+        }
+
+        var locked = rows.Count(r => r.WasLocked);
+        lines.Add(string.Empty);
+        lines.Add($"_{rows.Count} signed up_" + (locked > 0 ? $" · _{locked} carried over via 🔒_" : string.Empty));
+        return string.Join("\n", lines);
+    }
+
+    // Reply for a click that arrives from a board copy predating the no-signup change
+    // (DiscordEventMessageBuilder.IsAddonSnapshotCamp). Names where credit DOES come from so the
+    // member knows what to do instead of assuming the button is broken.
+    private const string SnapshotCampNoSignupNotice =
+        "This camp doesn't use Discord sign-ups — attendance is recorded from the roster snapshots "
+        + "the LSM addon posts in game each window. Just be in the zone when a window is posted.";
 
     // Picks the outside-signup gate for an event: HNM boards are gated by
     // HnmOutsideSignupEnabled, every other event by OutsidePartySignupEnabled. The two
@@ -809,7 +877,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // signups are closed (and vice-versa).
     private async Task<bool> OutsideSignupAllowedAsync(Event ev, CancellationToken cancellationToken)
     {
-        var isHnm = string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var isHnm = DiscordEventMessageBuilder.IsHnm(ev);
         var flags = await _db.Linkshells
             .Where(l => l.Id == ev.LinkshellId)
             .Select(l => new { l.OutsidePartySignupEnabled, l.HnmOutsideSignupEnabled })
@@ -1145,6 +1213,130 @@ public sealed class DiscordInteractionsController : ControllerBase
         _discordUserId = discordUserId;
         _discordDisplayName = ResolveDiscordDisplayName(root);
 
+        // "🏁 Pop / End Camp" modal (every windowed HNM board) → officers only: log the ToD, cap
+        // credit at the pop window, record claim/kill, tear the camp down, and stage its roster as
+        // a pending review row in the Event System page's attendance sections. Delegates to the shared HnmCampPopService.
+        if (customId.StartsWith(WdPopModalPrefix, StringComparison.Ordinal))
+        {
+            var popEventId = int.TryParse(customId[WdPopModalPrefix.Length..], out var pid) ? pid : 0;
+            if (popEventId <= 0)
+            {
+                return Ephemeral("That event isn't recognized.");
+            }
+            var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == popEventId, cancellationToken);
+            if (ev is null)
+            {
+                return Ephemeral("That event is no longer open.");
+            }
+            if (!DiscordEventMessageBuilder.UsesWindows(ev))
+            {
+                return Ephemeral("This board doesn't use windows.");
+            }
+            if (ev.WdFinalizedAt is not null)
+            {
+                return Ephemeral("This camp has already been processed.");
+            }
+
+            var officerAppUserId = await _db.DiscordActivityUsers
+                .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
+                .Select(link => link.IdentityUserId!)
+                .FirstOrDefaultAsync(cancellationToken);
+            var officer = string.IsNullOrEmpty(officerAppUserId)
+                ? null
+                : await _db.AppUserLinkshells.FirstOrDefaultAsync(
+                    m => m.AppUserId == officerAppUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
+            if (!LinkshellRanks.IsLeaderOrOfficer(officer?.Rank))
+            {
+                return Ephemeral("Only officers can end the camp.");
+            }
+
+            // NQ/HQ only exists for the three merge-pair families, and it's asked even when we didn't
+            // claim (which spawn it was still drives the next pop). Claimed and Killed are separate
+            // Yes/No dropdowns now that day + re-post moved to the app and freed up the rows.
+            var hasHq = HnmConfig.HasHqVariant(ev.AssignedMonsterName);
+            bool? hq = hasHq ? ParseYesNo(ExtractModalValue(data, WdPopHqFieldId), defaultValue: false) : null;
+            var claimRaw = ExtractModalValue(data, WdPopClaimFieldId);
+            var killRaw = ExtractModalValue(data, WdPopKillFieldId);
+            // Both null (not blank) = the modal was opened while the combined Outcome field was still
+            // rendered — read that instead so an in-flight submission isn't silently mis-recorded.
+            var (claimed, killed) = claimRaw is null && killRaw is null
+                ? ParseCampOutcome(ExtractModalValue(data, WdPopOutcomeFieldId))
+                : (ParseYesNo(claimRaw, defaultValue: true), ParseYesNo(killRaw, defaultValue: true));
+
+            // Day number and re-post lead are no longer asked — these only find a value when a modal
+            // opened before that removal is submitted afterwards. Absent (the normal path) leaves
+            // both null: the board keeps its current day and its standing Repeat-on-ToD config.
+            int? dayNumber = int.TryParse(ExtractModalValue(data, WdPopDayFieldId)?.Trim(), out var dn) && dn > 0
+                ? dn : (int?)null;
+            bool? repost = null;
+            double? repostLead = null;
+            var repostRaw = ExtractModalValue(data, WdPopRepostFieldId)?.Trim();
+            if (!string.IsNullOrEmpty(repostRaw))
+            {
+                if (double.TryParse(repostRaw, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var lead) && lead > 0)
+                {
+                    repost = true;
+                    repostLead = lead;
+                }
+                else if (repostRaw.Equals("no", StringComparison.OrdinalIgnoreCase)
+                    || repostRaw.Equals("off", StringComparison.OrdinalIgnoreCase)
+                    || repostRaw == "0")
+                {
+                    repost = false;
+                }
+            }
+
+            // Time of Death: blank/"now" → now; "HH:mm[:ss]" or a full date-time → the officer's local
+            // time, converted to UTC. Unparseable → error (don't silently guess a time).
+            var officerTimeZone = string.IsNullOrEmpty(officerAppUserId)
+                ? null
+                : await _db.Users.Where(u => u.Id == officerAppUserId).Select(u => u.TimeZone).FirstOrDefaultAsync(cancellationToken);
+            if (!TryParseCampTod(ExtractModalValue(data, WdPopTodFieldId), officerTimeZone, out var todUtc, out var todError))
+            {
+                return Ephemeral(todError!);
+            }
+
+            var isWd = DiscordEventMessageBuilder.IsWd(ev);
+            var popService = HttpContext.RequestServices.GetRequiredService<HnmCampPopService>();
+            var result = await popService.PopAsync(new HnmCampPopService.Request(
+                EventId: popEventId,
+                TodTimeUtc: todUtc,
+                Cooldown: null,
+                Interval: null,
+                DayNumber: dayNumber,
+                Claimed: claimed,
+                Killed: killed,
+                PopWindow: null, // timed auto-advance → the current window is where it popped
+                Hq: hq ?? false,
+                Repost: repost,
+                RepostLeadHours: repostLead), cancellationToken);
+            if (!result.Success)
+            {
+                return Ephemeral(result.Error ?? "Couldn't end the camp.");
+            }
+
+            // No ToD = no predicted repop, so nothing re-posts and there's no "next pop" to
+            // count back from. Say so plainly rather than promising a re-post that won't come.
+            // "Event System" (not the old "Attendance System"): the snapshot review rows now render
+            // in that page's Current Field Activity section, beside the camps that produced them.
+            var tail = todUtc is null
+                ? (isWd
+                    ? "No Time of Death recorded. The roster is waiting in **Event System** — review it there and hit **Post** to pay DKP."
+                    : "No Time of Death recorded — the tracker shows **Not entered** and the board won't auto-re-post. Post the next one by hand.")
+                : (isWd
+                    ? "Board closed. The roster is waiting in **Event System** — review it there and hit **Post** to pay DKP."
+                    : "Board closed — it'll re-post before the next predicted pop. The roster is waiting in **Event System**; review it there and hit **Post** to pay DKP.");
+            var repostNote = repost == true && todUtc is not null
+                ? $" · re-posting {repostLead:0.##}h before the next pop"
+                : string.Empty;
+            var outcomeNote = claimed
+                ? (killed ? "claimed + killed" : "claimed, no kill")
+                : "no claim";
+            return Ephemeral(
+                $"🏁 Camp ended — {outcomeNote}{(hq == true ? ", HQ" : string.Empty)}.{repostNote} " + tail);
+        }
+
         // Outside Party Signup ONBOARDING modal — no linked account required. Register
         // (create or adopt + link) an "unsynced" member for this Discord user from the
         // main + alt names, then resume; ResolveSignupContextAsync now recognizes them
@@ -1274,7 +1466,39 @@ public sealed class DiscordInteractionsController : ControllerBase
         return Ephemeral("That action isn't recognized.");
     }
 
-    // Pulls a text-input value out of a MODAL_SUBMIT payload by its custom_id.
+    // Loose yes/no parse for modal text inputs (blank falls back to the default).
+    private static bool ParseYesNo(string? text, bool defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return defaultValue;
+        return text.Trim().ToLowerInvariant() switch
+        {
+            "y" or "yes" or "true" or "1" => true,
+            "n" or "no" or "false" or "0" => false,
+            _ => defaultValue,
+        };
+    }
+
+    // The End Camp modal's single "Outcome" field → (claimed, killed). "killed" = we had it and it
+    // died; "claimed" = we had it but it got away or wiped us; "missed" = somebody else claimed it.
+    // Blank or unrecognized stays on the button's happy path (killed), the same default the old
+    // separate kill field used.
+    private static (bool Claimed, bool Killed) ParseCampOutcome(string? text)
+    {
+        var s = text?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(s)) return (true, true);
+        return s switch
+        {
+            "claimed" or "claim" or "c" or "no kill" or "nokill" or "wipe" or "wiped" => (true, false),
+            "missed" or "miss" or "m" or "no claim" or "noclaim" or "none" or "no" or "n" => (false, false),
+            _ => (true, true),
+        };
+    }
+
+    // Pulls a submitted value out of a MODAL_SUBMIT payload by its custom_id. Handles both shapes a
+    // modal can render: a text input inside an action row's `components` array, and a Label-wrapped
+    // string select whose child sits under the singular `component` property. Returns null when the
+    // modal never rendered the field at all — callers lean on that to spot an in-flight submission
+    // from an older version of a form.
     private static string? ExtractModalValue(JsonElement data, string fieldId)
     {
         if (!data.TryGetProperty("components", out var rows) || rows.ValueKind != JsonValueKind.Array)
@@ -1283,21 +1507,47 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         foreach (var row in rows.EnumerateArray())
         {
-            if (!row.TryGetProperty("components", out var inputs) || inputs.ValueKind != JsonValueKind.Array)
+            // Action row → components[] (text inputs). Label → component (a single select).
+            if (row.TryGetProperty("components", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
             {
-                continue;
-            }
-            foreach (var input in inputs.EnumerateArray())
-            {
-                if (input.TryGetProperty("custom_id", out var cid)
-                    && cid.GetString() == fieldId
-                    && input.TryGetProperty("value", out var value))
+                foreach (var input in inputs.EnumerateArray())
                 {
-                    return value.GetString();
+                    if (TryReadModalField(input, fieldId, out var nested)) return nested;
                 }
             }
+            if (row.TryGetProperty("component", out var single) && TryReadModalField(single, fieldId, out var labeled))
+            {
+                return labeled;
+            }
+            // Belt and braces: some payload shapes hoist the component straight into the row.
+            if (TryReadModalField(row, fieldId, out var direct)) return direct;
         }
         return null;
+    }
+
+    // One submitted component → its value, if its custom_id matches. Text inputs carry a scalar
+    // `value`; string selects carry a `values` array, which is empty when nothing was picked — that
+    // comes back as "" (present but unanswered), which every caller's parse treats as its default.
+    private static bool TryReadModalField(JsonElement component, string fieldId, out string? value)
+    {
+        value = null;
+        if (component.ValueKind != JsonValueKind.Object
+            || !component.TryGetProperty("custom_id", out var cid)
+            || cid.GetString() != fieldId)
+        {
+            return false;
+        }
+        if (component.TryGetProperty("value", out var scalar) && scalar.ValueKind == JsonValueKind.String)
+        {
+            value = scalar.GetString();
+            return true;
+        }
+        if (component.TryGetProperty("values", out var values) && values.ValueKind == JsonValueKind.Array)
+        {
+            value = values.GetArrayLength() > 0 ? values[0].GetString() : string.Empty;
+            return true;
+        }
+        return false;
     }
 
     private async Task<IActionResult> HandleJobSignupAsync(
@@ -1312,6 +1562,13 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (ev is null)
         {
             return Ephemeral("That event is no longer open.");
+        }
+        // These camps no longer post a job select (DiscordEventMessageBuilder.Build), but a client
+        // holding an older copy of the message can still fire one — and a signup recorded here
+        // would show up on a board that has no way to display or withdraw it.
+        if (DiscordEventMessageBuilder.IsAddonSnapshotCamp(ev))
+        {
+            return Ephemeral(SnapshotCampNoSignupNotice);
         }
 
         var ctx = await ResolveSignupContextAsync(ev, appUserId, $"job:{eventId}:{job}", cancellationToken);
@@ -1351,6 +1608,328 @@ public sealed class DiscordInteractionsController : ControllerBase
         return await UpdatedEventMessageAsync(ev.Id, cancellationToken);
     }
 
+    // Manual Check In "X-in (this window)": records the clicker's arrival window on their AppUserEvent.
+    // The finalizer credits windows arrival..last, so a single click covers every later window;
+    // re-clicking a later window just overwrites the arrival (the Manual Check In "x2 -> x3" correction).
+    // Identity resolution (member / placeholder / outside onboard / character picker) is fully
+    // delegated to ResolveSignupContextAsync — the same path Sign Up uses.
+    private async Task<IActionResult> HandleXinAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That board isn't recognized.");
+        }
+
+        var ev = await _db.Events.FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
+        if (ev is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        if (!DiscordEventMessageBuilder.IsWd(ev))
+        {
+            return Ephemeral("This board doesn't use Manual Check In.");
+        }
+        if (ev.WdFinalizedAt is not null)
+        {
+            return Ephemeral("This camp has already been processed — attendance is locked.");
+        }
+
+        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"xin:{eventId}", cancellationToken);
+        if (ctx.ShouldStop)
+        {
+            return ctx.Interrupt!;
+        }
+        var characterName = ctx.CharacterName!;
+        // Credit is recorded against the window the BOARD shows — the one being awaited — so the
+        // number in this reply matches the heading directly above the button. See
+        // DiscordEventMessageBuilder.FocusWindow. HnmCampPopService stamps WdPopWindow off the
+        // same helper, so arrival and pop stay on one scale and total credit is unchanged.
+        var arrivalWindow = DiscordEventMessageBuilder.FocusWindow(ev);
+        var openedWindow = Math.Clamp(ev.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(ev));
+        var checkedInEarly = arrivalWindow > openedWindow;
+
+        // First x-in makes the camp live (mirrors the addon participation path), so the board
+        // shows "Started" and the finalizer has a sensible StartTime.
+        ev.CommencementStartTime ??= DateTime.UtcNow;
+
+        var existing = ctx.AppUserId is not null
+            ? await _db.AppUserEvents.FirstOrDefaultAsync(
+                item => item.EventId == eventId && item.AppUserId == ctx.AppUserId, cancellationToken)
+            : await _db.AppUserEvents.FirstOrDefaultAsync(
+                item => item.EventId == eventId && item.AppUserId == null && item.DiscordUserId == ctx.DiscordUserId, cancellationToken);
+        if (existing is not null)
+        {
+            existing.CharacterName = characterName;
+            existing.WdArrivalWindow = arrivalWindow; // overwrite = the late-arrival correction
+            existing.WdDepartureWindow = null;        // checking in clears any prior check-out
+            existing.IsVerified = true;
+            existing.IsQuickJoin = true;
+            existing.StartTime ??= ev.CommencementStartTime;
+        }
+        else
+        {
+            _db.AppUserEvents.Add(new AppUserEvent
+            {
+                AppUserId = ctx.AppUserId,
+                DiscordUserId = ctx.DiscordUserId,
+                EventId = eventId,
+                CharacterName = characterName,
+                WdArrivalWindow = arrivalWindow,
+                IsVerified = true,
+                IsQuickJoin = true,
+                EventDkp = 0,
+                StartTime = ev.CommencementStartTime,
+            });
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _eventQueue.Enqueue(eventId); // refresh the board roster off the 3s window
+        return Ephemeral(
+            (checkedInEarly
+                ? $"✅ You checked in **before Window {arrivalWindow} opens** — you'll get credit for Window {arrivalWindow} through the kill. "
+                : $"✅ You're checked in for **Window {arrivalWindow}** — you'll get credit for Window {arrivalWindow} through the kill. ")
+            + "Arrived late? Tap **Check In** again on a later window to correct it.");
+    }
+
+    // "🚪 Check Out" (Manual Check In boards): the member is leaving mid-camp. Records their
+    // departure window so credit stops there (they keep DKP for arrival..this window, inclusive).
+    // They can Check In again to come back.
+    private async Task<IActionResult> HandleCheckOutAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That board isn't recognized.");
+        }
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+        if (ev is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        if (!DiscordEventMessageBuilder.IsWd(ev) || ev.WdFinalizedAt is not null)
+        {
+            return Ephemeral("This board isn't accepting check-outs.");
+        }
+
+        // Find the clicker's participation by their linked account OR their Discord id (placeholder/
+        // outside members are keyed by Discord id). They must already be checked in.
+        var uid = appUserId;
+        var did = _discordUserId;
+        var existing = await _db.AppUserEvents.FirstOrDefaultAsync(p =>
+            p.EventId == eventId
+            && ((uid != null && p.AppUserId == uid) || (did != null && p.DiscordUserId == did)),
+            cancellationToken);
+        if (existing?.WdArrivalWindow is not { } arrival)
+        {
+            return Ephemeral("You're not checked in, so there's nothing to check out of.");
+        }
+
+        // Same scale as check-in and the pop window: the board's number. Clamped to >= arrival so
+        // checking out can never record a departure before the member arrived.
+        var departWindow = Math.Clamp(
+            DiscordEventMessageBuilder.FocusWindow(ev), arrival, DiscordEventMessageBuilder.EffectiveWindowCount(ev));
+        existing.WdDepartureWindow = departWindow;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _eventQueue.Enqueue(eventId);
+        return Ephemeral(
+            $"🚪 Checked out at **Window {departWindow}** — you'll get credit for Windows {arrival} through {departWindow}. " +
+            "Tap **Check In** again if you come back.");
+    }
+
+    // "🏁 End Camp / Enter ToD" (every windowed HNM board) → officers only. Opens the ToD modal.
+    private async Task<IActionResult> HandleWdPopButtonAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventId <= 0)
+        {
+            return Ephemeral("That board isn't recognized.");
+        }
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+        if (ev is null)
+        {
+            return Ephemeral("That event is no longer open.");
+        }
+        if (!DiscordEventMessageBuilder.UsesWindows(ev))
+        {
+            return Ephemeral("This board doesn't use windows.");
+        }
+        var membership = string.IsNullOrEmpty(appUserId)
+            ? null
+            : await _db.AppUserLinkshells.FirstOrDefaultAsync(
+                m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
+        if (!LinkshellRanks.IsLeaderOrOfficer(membership?.Rank))
+        {
+            return Ephemeral("Only officers can end the camp.");
+        }
+        if (ev.WdFinalizedAt is not null)
+        {
+            return Ephemeral("This camp has already been processed.");
+        }
+
+        return WdPopModal(ev);
+    }
+
+    // The End Camp / Enter ToD modal (max 5 components). Always: Time of Death (blank = now, accepts
+    // seconds) plus Claimed? and Killed? as Yes/No dropdowns. The three NQ/HQ families get an NQ/HQ
+    // dropdown too, for four rows at most. Day # and the re-post lead are deliberately absent — the
+    // app owns both (the event form's Day field, the ToD form's re-post toggle), and dropping them
+    // here is what freed the rows for a separate Claimed and Killed. The pop window isn't asked
+    // either — with timed auto-advance the current window is where it popped.
+    private IActionResult WdPopModal(Event ev)
+    {
+        static object TextRow(string fieldId, string label, string placeholder, bool required, int maxLength)
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["type"] = 4, // text input
+                ["custom_id"] = fieldId,
+                ["label"] = label,
+                ["style"] = 1, // short
+                ["min_length"] = required ? 1 : 0,
+                ["max_length"] = maxLength,
+                ["required"] = required,
+                ["placeholder"] = placeholder,
+            };
+            return new { type = 1, components = new object[] { input } };
+        }
+
+        // A modal dropdown is a string select (type 3) wrapped in a Label (type 18) — a bare select
+        // in an action row is rejected. Label's own `label` caps around 45 chars, so the longer hint
+        // goes in `description`. The first option is pre-selected as the happy path so the officer
+        // can submit without touching the field; the submit-side parse defaults to the same value.
+        static object SelectRow(string fieldId, string label, string description,
+            params (string Value, string Label)[] options)
+        {
+            var select = new Dictionary<string, object?>
+            {
+                ["type"] = 3, // string select
+                ["custom_id"] = fieldId,
+                ["required"] = false,
+                ["min_values"] = 0,
+                ["max_values"] = 1,
+                ["options"] = options
+                    .Select((option, index) => new Dictionary<string, object?>
+                    {
+                        ["label"] = option.Label,
+                        ["value"] = option.Value,
+                        ["default"] = index == 0,
+                    })
+                    .ToArray(),
+            };
+            return new Dictionary<string, object?>
+            {
+                ["type"] = 18, // label
+                ["label"] = label,
+                ["description"] = description,
+                ["component"] = select,
+            };
+        }
+
+        var fields = new List<object>
+        {
+            TextRow(WdPopTodFieldId, "Time of Death (blank = not entered)", "now, 9:05:15 PM, 21:05:15, or leave blank", false, 25),
+        };
+        if (HnmConfig.HasHqVariant(ev.AssignedMonsterName))
+        {
+            fields.Add(SelectRow(WdPopHqFieldId, "Was it HQ?",
+                "Which spawn it was — this drives the next pop even if we didn't claim.",
+                ("no", "NQ"), ("yes", "HQ")));
+        }
+        fields.Add(SelectRow(WdPopClaimFieldId, "Claimed?",
+            "No = somebody else got the claim.", ("yes", "Yes"), ("no", "No")));
+        fields.Add(SelectRow(WdPopKillFieldId, "Killed?",
+            "No = we had the claim but it got away or wiped us.", ("yes", "Yes"), ("no", "No")));
+
+        return Ok(new
+        {
+            type = ResponseModal,
+            data = new
+            {
+                custom_id = $"{WdPopModalPrefix}{ev.Id}",
+                title = "End Camp / Enter ToD",
+                components = fields.ToArray(),
+            }
+        });
+    }
+
+    // Parses the Pop / End Camp modal's free-text Time of Death in the officer's local zone.
+    // Accepts: blank (→ todUtc = null, meaning NOT ENTERED — the camp ended without anyone seeing
+    // it die, so no time and no repop get recorded); "now" (→ this moment, the explicit shortcut);
+    // a bare clock time in either 24-hour ("21:05:15") or 12-hour ("9:05:15 PM") form (today local,
+    // rolled to yesterday if that's still in the future); or a full "yyyy-MM-dd" date with either
+    // time form. Returns false with a user-facing message on unparseable input — a ToD is never
+    // silently guessed.
+    private bool TryParseCampTod(string? raw, string? timeZoneId, out DateTime? todUtc, out string? error)
+    {
+        todUtc = null;
+        error = null;
+        var s = raw?.Trim();
+        if (string.IsNullOrEmpty(s))
+        {
+            return true; // null → "Not entered"; the pop service leaves Time + RepopTime unset
+        }
+        if (s.Equals("now", StringComparison.OrdinalIgnoreCase))
+        {
+            todUtc = DateTime.UtcNow;
+            return true;
+        }
+
+        // Fold any AM/PM spelling down to the " AM"/" PM" the "tt" specifier wants, so the officer
+        // can type it however they like; a 24-hour entry passes through untouched.
+        s = NormalizeMeridiem(s);
+
+        // A bare clock time → today's date in the officer's zone at that wall-clock time.
+        if (TimeOnly.TryParseExact(
+                s,
+                new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss", "h:mm tt", "h:mm:ss tt" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var timeOnly))
+        {
+            var localNow = _timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
+            var localDt = new DateTime(localNow.Year, localNow.Month, localNow.Day,
+                timeOnly.Hour, timeOnly.Minute, timeOnly.Second, DateTimeKind.Unspecified);
+            if (localDt > localNow)
+            {
+                localDt = localDt.AddDays(-1); // a ToD later than "now" today must mean yesterday
+            }
+            todUtc = _timeZones.ToUtc(localDt, timeZoneId);
+            return todUtc.HasValue;
+        }
+
+        // Full date-time: a space or 'T' separator, with or without seconds, 24-hour or AM/PM.
+        if (DateTime.TryParseExact(
+                s,
+                new[]
+                {
+                    "yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss",
+                    "yyyy-MM-dd h:mm tt", "yyyy-MM-dd h:mm:ss tt", "yyyy-MM-ddTh:mm tt", "yyyy-MM-ddTh:mm:ss tt",
+                },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var parsed))
+        {
+            todUtc = _timeZones.ToUtc(DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified), timeZoneId);
+            return todUtc.HasValue;
+        }
+
+        error = "Enter a valid Time of Death — blank for now, `9:05:15 PM`, `21:05:15`, or `2026-07-23 9:05 PM`.";
+        return false;
+    }
+
+    // Rewrites a trailing AM/PM marker — "pm", " PM", "p.m.", bare "p" — as the " AM"/" PM" that
+    // the "tt" format specifier matches, leaving everything before it (clock time or full date-time)
+    // alone. Input with no such marker comes back unchanged, so 24-hour entries are unaffected.
+    private static readonly System.Text.RegularExpressions.Regex MeridiemSuffix = new(
+        @"^(?<head>.*\d)\s*(?<half>[ap])\.?\s*m?\.?$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static string NormalizeMeridiem(string text)
+    {
+        var match = MeridiemSuffix.Match(text);
+        return match.Success
+            ? $"{match.Groups["head"].Value.TrimEnd()} {char.ToUpperInvariant(match.Groups["half"].Value[0])}M"
+            : text;
+    }
+
     private async Task<IActionResult> HandleWithdrawAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
@@ -1363,6 +1942,12 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (ev is null)
         {
             return Ephemeral("That event is no longer open.");
+        }
+        // Same stale-message case as the job select above: there is nothing to withdraw FROM on a
+        // snapshot camp, so say why rather than silently reporting "you weren't signed up".
+        if (DiscordEventMessageBuilder.IsAddonSnapshotCamp(ev))
+        {
+            return Ephemeral(SnapshotCampNoSignupNotice);
         }
 
         var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
@@ -1811,7 +2396,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     // ── Lock Member (stay next window) ──
-    // Officers pin a member's slot so it survives the "Next Window" wipe. Same shape as
+    // Officers pin a member's slot so it survives the window-turnover wipe. Same shape as
     // Set Leader: button → seated-member picker → the select toggles the chosen slot's lock.
     private async Task<IActionResult> HandleOfficerLockStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
@@ -2300,7 +2885,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         // Needs a job pick whenever a required field isn't pinned → start the
-        // ephemeral dropdown wizard (role → main → sub). A "Player's Choice" sub
+        // ephemeral dropdown wizard (role → main → sub). An "ANY" sub
         // (slot pins the main but leaves the sub open) counts too: the member must
         // still specify which sub they're bringing, so an empty SubJob enters the
         // wizard and the pinned role/main steps are simply skipped inside it.
@@ -2695,14 +3280,22 @@ public sealed class DiscordInteractionsController : ControllerBase
         var leftPartyId = await EventPartySignupService.LeaveAsync(_db, eventId, idAppUser, cancellationToken, idDiscord);
 
         // Before the event starts there's no DKP yet, so a withdrawal is a clean full
-        // exit — also drop any "Join (no slot)" attendance they hold. Once the event is
-        // LIVE we deliberately KEEP their materialized participation: withdrawing from a
-        // slot must NOT wipe the event DKP they've earned by attending. Only the party
-        // slot is freed — they remain an attendee and can re-sign into a new slot with no
-        // DKP reset (the re-claim adopts the kept participation). An officer can still
-        // fully remove a live participant from the app if truly needed.
+        // exit — also drop any "Join (no slot)" attendance they hold.
+        //
+        // A WINDOWED camp is a full exit too, live or not. Those credit attendance per posted
+        // window rather than by time on the clock (EventBreakPolicy.IsWindowedAttendance — the same
+        // test that refuses Break Room and mid-run withdraw on the app side), so there is no
+        // accruing clock for the kept row to protect: keeping it only parked the member under
+        // "Also Attending", which reads as still-signed-up to everyone looking at the board. On a
+        // wyrm board it was doubly pointless, since the next window's roster clear deletes those
+        // rows wholesale anyway (EventPartySignupService.ClearWindowRosterAsync).
+        //
+        // Everywhere else — a timed event paying by duration — the live case still KEEPS the
+        // materialized participation: withdrawing from a slot must NOT wipe the event DKP they've
+        // earned by attending. Only the party slot is freed, and they can re-sign into a new slot
+        // with no DKP reset (the re-claim adopts the kept participation).
         var droppedAttendance = false;
-        if (!isLive)
+        if (!isLive || EventBreakPolicy.IsWindowedAttendance(ev))
         {
             var attendance = idAppUser is not null
                 ? await _db.AppUserEvents
@@ -2724,9 +3317,11 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             // Leave lives on the shared board (the same button for everyone, which
             // Discord can't hide/grey per-user), so a click with nothing to free gets a
-            // private notice instead of refreshing the board. Once live, that means they
-            // hold no slot but keep any attendance/DKP — point them at an officer.
-            return Ephemeral(isLive
+            // private notice instead of refreshing the board. On a duration-paid live event
+            // that means they hold no slot but keep attendance/DKP — point them at an officer.
+            // Windowed camps fall through to the plain "nothing to leave", because Withdraw
+            // there removes everything and so leaves nothing behind to explain.
+            return Ephemeral(isLive && !EventBreakPolicy.IsWindowedAttendance(ev)
                 ? "You're attending this live event, so your DKP stays. Withdraw only frees a party slot — ask an officer if you need to be removed entirely."
                 : "You're not signed up for this event, so there's nothing to leave.");
         }
@@ -2824,7 +3419,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     // "🔒 Stay Next Window" → the clicker toggles the lock on their OWN slot so it survives
-    // the officer "Next Window" wipe. Shared board button (Discord can't gate per-user), so
+    // the automatic window-turnover wipe. Shared board button (Discord can't gate per-user), so
     // the handler resolves the clicker (like Withdraw / Make Me Party Lead), toggles their
     // slot, and confirms privately — the board's 🔒 marker + count is the shared feedback.
     private async Task<IActionResult> HandleLockNextWindowAsync(
@@ -2840,9 +3435,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        // The button only shows on window-cycle HNM boards, but re-check on click (a stale
+        // The button only shows on Standard windowed HNM boards, but re-check on click (a stale
         // board could surface it, and there's nothing to "stay" for without a window advance).
-        if (!HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
+        if (!DiscordEventMessageBuilder.UsesWindows(ev))
         {
             return Ephemeral("This board doesn't use windows, so there's nothing to stay for.");
         }
@@ -3072,10 +3667,10 @@ public sealed class DiscordInteractionsController : ControllerBase
             .AsNoTracking()
             .Where(signup => signup.EventId == ev.Id)
             .OrderBy(signup => signup.CharacterName)
-            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType })
+            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType, signup.WdArrivalWindow })
             .ToListAsync(cancellationToken);
         var signups = rows
-            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType))
+            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType, row.WdArrivalWindow))
             .ToList();
 
         var slotSignups = ev.PartySetup is null

@@ -160,8 +160,11 @@ auto-tags common camps:
 | Anything else | Misc Camp |
 
 Repeat snapshots with the same normalized name attach to the same open Window
-Event while it is fresh. Near-identical snapshots within 8 minutes are marked
-`PossibleDuplicate` so the roster does not receive double credit.
+Event while it is fresh. Posts landing close together are folded into a single
+snapshot holding the union of their rosters — within 5 minutes on the wyrms
+(Tiamat/Jormungand/Vrtra) and 3 minutes on everything else. Nothing is flagged
+as a duplicate: DKP is credited per Window Event rather than per snapshot, so
+several officers scanning the same camp produce one roster, not double credit.
 
 ---
 
@@ -274,7 +277,7 @@ During camp:
 After camp:
   End or close the event
   Review Window Events / Event History on the web
-  Fix any PossibleDuplicate or Ignored statuses if needed
+  Check the combined roster, and Ignore any junk snapshot
 ```
 
 ---
@@ -310,7 +313,7 @@ After camp:
 | Snapshot synced but local CSV failed | The web copy is still saved. Check folder permissions under `Ashita\addons\lsm\Snapshots`. |
 | Local CSV saved but web sync failed | Check `/lsm status`, server URL, and network connectivity, then capture again if needed. |
 | ToD Tracker will not open | Enable **Display: ToD Tracker** in Settings, save, then run `/tod`. |
-| Two officers posted the same kill | Review Window Events. `PossibleDuplicate` snapshots are skipped until an officer marks them `Active`. |
+| Two officers posted the same kill | Nothing to do — posts within the merge window fold into one snapshot holding both rosters, and DKP is credited per Window Event, so nobody is paid twice. |
 | Same monster should be a new event | Close the previous Window Event first, or add a suffix such as `Fafnir D2`. |
 
 ---

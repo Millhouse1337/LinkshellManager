@@ -18,6 +18,8 @@ public partial class EventController : Controller
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
     private readonly DkpPoolBalanceService _dkpPoolBalances;
+    private readonly HnmCampReviewHandoffService _campReviewHandoff;
+    private readonly AttendanceSectionsBuilder _attendanceSections;
 
     public EventController(
         ApplicationDbContext context,
@@ -25,7 +27,9 @@ public partial class EventController : Controller
         TimeZoneConversionService timeZones,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
-        DkpPoolBalanceService dkpPoolBalances)
+        DkpPoolBalanceService dkpPoolBalances,
+        HnmCampReviewHandoffService campReviewHandoff,
+        AttendanceSectionsBuilder attendanceSections)
     {
         _context = context;
         _userManager = userManager;
@@ -33,6 +37,8 @@ public partial class EventController : Controller
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
+        _campReviewHandoff = campReviewHandoff;
+        _attendanceSections = attendanceSections;
     }
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)
     {
@@ -101,8 +107,7 @@ public partial class EventController : Controller
             MonsterOptions = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters),
             OutsidePartySignupEnabled = selectedLinkshell?.OutsidePartySignupEnabled ?? false,
             HnmOutsideSignupEnabled = selectedLinkshell?.HnmOutsideSignupEnabled ?? false,
-            RepeatOnTod = source?.RepeatOnTod ?? false,
-            RepeatLeadHours = source?.RepeatLeadHours
+            RepeatOnTod = source?.RepeatOnTod ?? false
         };
     }
 

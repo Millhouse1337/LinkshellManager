@@ -36,6 +36,10 @@
   --danger:       #ff6b6b;                      // web --red-main
   --danger-weak:  rgba(255, 107, 107, 0.12);
 
+  // Elevation for things that float over the page (dropdown menus, popovers) so they read as
+  // above the form rather than part of it. A token, not an inline rgba, per the golden rule.
+  --shadow-pop: 0 10px 24px rgba(0, 0, 0, 0.45);
+
   // Brand secondary hues (web palette). --gold-ink is dark text ON gold fills.
   --gold:      #d6a93f;   // web --gold-main
   --gold-2:    #f1c75c;
@@ -60,6 +64,129 @@
   --chart-d: #ff6b6b;
   --chart-e: #38bdf8;
   --chart-f: #8b5cf6;
+
+  // --cyan / --purple / --orange never got a -weak the way --accent/--success/--warning/--danger/
+  // --gold did.
+  --cyan-weak:   rgba(56, 189, 248, 0.14);
+  --purple-weak: rgba(139, 92, 246, 0.14);
+  --orange-weak: rgba(255, 154, 69, 0.14);
+
+  // Two genuine palette gaps, added for the Charts boards: Sea needs EIGHT distinct hues in one
+  // categorical set (six Jailer cards side by side, then the mini-NM and the final encounter), and
+  // the existing family only supplies six that read apart at card-header size. --pink is already a
+  // real palette member — it is the literal behind --av-b-1.
+  --pink:        #ec4899;  --pink-weak:   rgba(236, 72, 153, 0.14);
+  --violet:      #b57bff;  --violet-weak: rgba(181, 123, 255, 0.14);
+
+  // Charts boards. One hue per boss so a card reads as its boss at a glance. Deliberately ALIASES
+  // of the family above rather than a private set of literals: the palette does not need a second
+  // dialect, and this way a theme change reaches the boards for free.
+  //
+  // Sky — the game's elemental mapping: Suzaku fire, Genbu earth, Seiryu storm, Byakko wind,
+  // Kirin lightning.
+  --chart-suzaku: var(--danger);   --chart-suzaku-weak: var(--danger-weak);
+  --chart-genbu:  var(--success);  --chart-genbu-weak:  var(--success-weak);
+  --chart-seiryu: var(--cyan);     --chart-seiryu-weak: var(--cyan-weak);
+  --chart-byakko: var(--gold);     --chart-byakko-weak: var(--gold-weak);
+  --chart-kirin:  var(--purple);   --chart-kirin-weak:  var(--purple-weak);
+
+  // Sky farm NMs — each takes the hue of the GOD IT FEEDS, so a whole column is one colour and the
+  // board reads as four paths rather than as twelve unrelated cards.
+  //
+  // This deliberately inverts the rule the other boards follow ("no two cards under one heading
+  // share a hue"). On a board drawn as columns the heading is a column, and cards sharing a hue is
+  // the point: the colour says which path you are looking at, which is exactly what a run of one hue
+  // down a column should say. Keys stay distinct per card — only the hue behind them is shared.
+  --chart-faust:            var(--danger);  --chart-faust-weak:            var(--danger-weak);
+  --chart-brigandish-blade: var(--danger);  --chart-brigandish-blade-weak: var(--danger-weak);
+  --chart-zipacna:          var(--success); --chart-zipacna-weak:          var(--success-weak);
+  --chart-olla-grande:      var(--success); --chart-olla-grande-weak:      var(--success-weak);
+  --chart-steam-cleaner:    var(--cyan);    --chart-steam-cleaner-weak:    var(--cyan-weak);
+  --chart-mother-globe:     var(--cyan);    --chart-mother-globe-weak:     var(--cyan-weak);
+  --chart-despot:           var(--gold);    --chart-despot-weak:           var(--gold-weak);
+  --chart-ullikummi:        var(--gold);    --chart-ullikummi-weak:        var(--gold-weak);
+
+  // Sea — three path columns of three cards, then the final stage. Same rule as Sky: every card in a
+  // column takes the hue of the JAILER at the foot of it, so the colour says which path you are
+  // looking at. The final stage keeps two hues of its own — Absolute Virtue takes the one warm hue
+  // nothing else uses.
+  --chart-justice:    var(--purple);  --chart-justice-weak:    var(--purple-weak);
+  --chart-fortitude:  var(--purple);  --chart-fortitude-weak:  var(--purple-weak);
+  --chart-ixaern-drk: var(--purple);  --chart-ixaern-drk-weak: var(--purple-weak);
+  --chart-ghrah:      var(--purple);  --chart-ghrah-weak:      var(--purple-weak);
+  --chart-xzomit:     var(--purple);  --chart-xzomit-weak:     var(--purple-weak);
+
+  --chart-hope:       var(--accent);  --chart-hope-weak:       var(--accent-weak);
+  --chart-temperance: var(--accent);  --chart-temperance-weak: var(--accent-weak);
+  --chart-ixaern-mnk: var(--accent);  --chart-ixaern-mnk-weak: var(--accent-weak);
+  --chart-aern:       var(--accent);  --chart-aern-weak:       var(--accent-weak);
+  --chart-phuabo:     var(--accent);  --chart-phuabo-weak:     var(--accent-weak);
+
+  --chart-prudence:   var(--pink);    --chart-prudence-weak:   var(--pink-weak);
+  --chart-faith:      var(--pink);    --chart-faith-weak:      var(--pink-weak);
+  --chart-ixaern-drg: var(--pink);    --chart-ixaern-drg-weak: var(--pink-weak);
+  --chart-euvhi:      var(--pink);    --chart-euvhi-weak:      var(--pink-weak);
+  --chart-hpemde:     var(--pink);    --chart-hpemde-weak:     var(--pink-weak);
+
+  --chart-love:       var(--violet);  --chart-love-weak:       var(--violet-weak);
+  --chart-absolute:   var(--orange);  --chart-absolute-weak:   var(--orange-weak);
+
+  // Dynamis — ten zones, which puts the WHOLE categorical set in play at once (this is the board
+  // that proves there are exactly ten hues that read apart at card-header size). Aliases, like Sky
+  // and Sea. The nation hues are a categorical assignment, not a claim about the game's colours.
+  --chart-sandoria:   var(--danger);  --chart-sandoria-weak:   var(--danger-weak);
+  --chart-bastok:     var(--gold);    --chart-bastok-weak:     var(--gold-weak);
+  --chart-windurst:   var(--success); --chart-windurst-weak:   var(--success-weak);
+  --chart-jeuno:      var(--purple);  --chart-jeuno-weak:      var(--purple-weak);
+  --chart-beaucedine: var(--cyan);    --chart-beaucedine-weak: var(--cyan-weak);
+  --chart-xarcabard:  var(--accent);  --chart-xarcabard-weak:  var(--accent-weak);
+  --chart-valkurm:    var(--orange);  --chart-valkurm-weak:    var(--orange-weak);
+  --chart-buburimu:   var(--warning); --chart-buburimu-weak:   var(--warning-weak);
+  --chart-qufim:      var(--violet);  --chart-qufim-weak:      var(--violet-weak);
+  --chart-tavnazia:   var(--pink);    --chart-tavnazia-weak:   var(--pink-weak);
+
+  // Limbus — coloured by FLOW, the same rule Sky and Sea follow: every area that is a step toward a
+  // fight wears that fight's hue, so a glance says which run you are looking at. Apollyon's four
+  // outer areas and Proto-Omega are one colour; Temenos's towers, floors and Proto-Ultima another.
+  //
+  // The two chip areas stay OUT of both flows in the "stocking" green every farmed card on every
+  // board wears — they are not steps toward the fight, they are the farm that pays for the steps,
+  // and their own row says so too.
+  --chart-apollyon-nw:      var(--orange);  --chart-apollyon-nw-weak:      var(--orange-weak);
+  --chart-apollyon-sw:      var(--orange);  --chart-apollyon-sw-weak:      var(--orange-weak);
+  --chart-apollyon-ne:      var(--orange);  --chart-apollyon-ne-weak:      var(--orange-weak);
+  --chart-apollyon-se:      var(--orange);  --chart-apollyon-se-weak:      var(--orange-weak);
+  --chart-apollyon-central: var(--orange);  --chart-apollyon-central-weak: var(--orange-weak);
+  --chart-apollyon-cs:      var(--success); --chart-apollyon-cs-weak:      var(--success-weak);
+
+  // Violet rather than Apollyon's orange: the two flows sit on one page, and a shared hue would make
+  // fourteen cards read as one run instead of two.
+  --chart-temenos-west:  var(--violet);  --chart-temenos-west-weak:  var(--violet-weak);
+  --chart-temenos-east:  var(--violet);  --chart-temenos-east-weak:  var(--violet-weak);
+  --chart-temenos-north: var(--violet);  --chart-temenos-north-weak: var(--violet-weak);
+  --chart-temenos-1f:    var(--violet);  --chart-temenos-1f-weak:    var(--violet-weak);
+  --chart-temenos-2f:    var(--violet);  --chart-temenos-2f-weak:    var(--violet-weak);
+  --chart-temenos-3f:    var(--violet);  --chart-temenos-3f-weak:    var(--violet-weak);
+  --chart-temenos-4f:    var(--violet);  --chart-temenos-4f-weak:    var(--violet-weak);
+  --chart-temenos-b1:    var(--success); --chart-temenos-b1-weak:    var(--success-weak);
+
+  // HENM — a TIER ladder, coloured as one: a hue per tier, escalating green → gold → orange → red,
+  // so where you are on the ladder reads before you have read a single card name. Same flow rule as
+  // Sky, Sea and Limbus — cards under one heading share a hue on purpose, because the heading is the
+  // stage and the colour is what says which stage.
+  --chart-henm-rocs:      var(--success); --chart-henm-rocs-weak:      var(--success-weak);
+  --chart-henm-decapod:   var(--success); --chart-henm-decapod-weak:   var(--success-weak);
+  --chart-henm-scorpions: var(--success); --chart-henm-scorpions-weak: var(--success-weak);
+
+  --chart-henm-mammet:    var(--gold);    --chart-henm-mammet-weak:    var(--gold-weak);
+  --chart-henm-tonberry:  var(--gold);    --chart-henm-tonberry-weak:  var(--gold-weak);
+  --chart-henm-ultimega:  var(--gold);    --chart-henm-ultimega-weak:  var(--gold-weak);
+
+  --chart-henm-behemoth:  var(--orange);  --chart-henm-behemoth-weak:  var(--orange-weak);
+  --chart-henm-minogame:  var(--orange);  --chart-henm-minogame-weak:  var(--orange-weak);
+  --chart-henm-io:        var(--orange);  --chart-henm-io-weak:        var(--orange-weak);
+
+  --chart-henm-council:   var(--danger);  --chart-henm-council-weak:   var(--danger-weak);
 
   // Item-type / activity-feed dots (alias the family above).
   --dot-crafting: var(--cyan);

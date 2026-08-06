@@ -108,7 +108,7 @@
                       </select>
                       <select class="pse-input pse-select pse-slot__job" [(ngModel)]="slot.subJob"
                         [name]="'slotSub' + ai + '_' + pi + '_' + si">
-                        <option value="">Player's Choice</option>
+                        <option value="">Any sub job</option>
                         @for (j of subJobOptionsFor(slot); track j) { <option [value]="j">{{ j }}</option> }
                       </select>
                     }

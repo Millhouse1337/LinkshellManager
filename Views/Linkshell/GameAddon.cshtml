@@ -157,9 +157,13 @@
                 <li>
                     <span class="addon-steps__num">3</span>
                     <div>
-                        <h4>Pair the linkshell</h4>
+                        <h4>Pair the addon (once)</h4>
                         <p>Generate a pairing code below, then run
-                            <code>/lsm link &lt;code&gt;</code> in FFXI.</p>
+                            <code>/lsm link &lt;code&gt;</code> in FFXI. One code pairs
+                            <strong>every linkshell you belong to</strong> &mdash; no need to
+                            repeat it per linkshell.</p>
+                        <p>The addon then lists whichever of them are on your two equipped
+                            pearls. If a linkshell's members aren't showing up, equip its pearl.</p>
                     </div>
                 </li>
                 <li>
@@ -204,7 +208,16 @@
             <div style="color:var(--fg-3);font-size:12px;margin-top:2px">
                 Generate a one-time pairing code, then in FFXI type
                 <code style="background:var(--bg-2);padding:1px 6px;border-radius:4px">/lsm link &lt;code&gt;</code>
-                to connect the addon to this linkshell.
+                to connect the addon. <strong>One code covers every linkshell you belong to</strong> &mdash;
+                you only need to do this once, not per linkshell.
+            </div>
+            <div style="color:var(--fg-3);font-size:12px;margin-top:6px">
+                In game, the addon only lists the linkshells on your two equipped pearls. If a
+                linkshell's members aren't showing up, check that its pearl is equipped.
+            </div>
+            <div style="color:var(--fg-3);font-size:12px;margin-top:6px">
+                Revoking disconnects the addon from <strong>every linkshell that code paired</strong>,
+                not just this one.
             </div>
         </div>
         <div class="page-actions">
@@ -217,6 +230,7 @@
             <thead>
                 <tr>
                     <th>Token</th>
+                    <th>Linkshells</th>
                     <th>Created</th>
                     <th>Last used</th>
                     <th style="text-align:right">Actions</th>
@@ -267,7 +281,8 @@
                     <div style="color:var(--fg-2);font-size:13px;line-height:1.5;margin-top:10px">
                         Enter this code in your FFXI client as
                         <code id="addonPairCmd1">/lsm link &lt;code&gt;</code>
-                        to connect the addon to <strong id="addonPairLsName">this linkshell</strong>.
+                        to connect the addon. This pairs <strong>every linkshell you belong to</strong>,
+                        not just <span id="addonPairLsName">this one</span>.
                         This window closes automatically once the code is linked.
                     </div>
                 </div>
@@ -459,8 +474,13 @@
                     var tr = document.createElement('tr');
                     var lastUsed = t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : '—';
                     var created = new Date(t.createdAt).toLocaleString();
+                    // One pairing covers every linkshell it minted a token for, so
+                    // name them instead of leaving the row looking linkshell-less.
+                    var covers = (t.linkshells && t.linkshells.length) ? t.linkshells.join(', ') : '—';
                     tr.innerHTML =
                         '<td><code>' + escapeHtml(t.prefix) + '…</code></td>' +
+                        '<td style="font-size:12px;color:var(--fg-2)">' + escapeHtml(covers) +
+                            (t.mine ? '' : ' <span class="tag" style="margin-left:4px">another member</span>') + '</td>' +
                         '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(created) + '</td>' +
                         '<td style="font-size:12px;color:var(--fg-3)">' + escapeHtml(lastUsed) + '</td>' +
                         '<td style="text-align:right"><button type="button" class="btn warn sm" data-revoke="' + t.id + '">Revoke</button></td>';
@@ -472,7 +492,7 @@
                         if (!id) return;
                         var doRevoke = function () {
                             btn.disabled = true;
-                            fetch('/api/addon/management/tokens/' + id + '/revoke?linkshellId=' + addonLinkshellId, {
+                            fetch('/api/addon/management/tokens/' + id + '/revoke', {
                                 method: 'POST',
                                 credentials: 'same-origin',
                                 headers: withCsrf()

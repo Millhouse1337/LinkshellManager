@@ -469,10 +469,9 @@ else
                     const itemName = button.getAttribute('data-item-name');
                     const currentHighestBid = parseInt(button.getAttribute('data-current-highest-bid') || '0', 10);
                     const startingBid = parseInt(button.getAttribute('data-starting-bid') || '0', 10);
-                    // Starting bid is a suggested opening, not a floor: the first bid
-                    // only needs to be positive; later bids must beat the current high.
-                    minimumBid = currentHighestBid;
-                    const suggested = currentHighestBid > 0 ? currentHighestBid + 1 : Math.max(startingBid, 1);
+                    // Starting bid is a hard floor; later bids must also beat the current high.
+                    minimumBid = Math.max(startingBid, currentHighestBid + 1, 1);
+                    const suggested = minimumBid;
                     document.getElementById('auctionItemId').value = itemId;
                     document.getElementById('itemName').value = itemName;
                     document.getElementById('bidAmount').value = String(suggested);
@@ -482,9 +481,9 @@ else
 
             document.getElementById('makeBidForm')?.addEventListener('submit', (event) => {
                 const bidAmount = parseInt(document.getElementById('bidAmount').value || '0', 10);
-                if (bidAmount <= minimumBid) {
+                if (bidAmount < minimumBid) {
                     event.preventDefault();
-                    alert(`Bid amount must be greater than ${minimumBid}.`);
+                    alert(`Bid amount must be at least ${minimumBid}.`);
                 }
             });
 

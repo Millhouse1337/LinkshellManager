@@ -187,8 +187,12 @@ public sealed partial class ActivityDataController
 
         if (SupportedTodCooldowns.Contains(trimmed))
         {
+            if (string.Equals(trimmed, TodManagerViewModel.EightyFourHourCooldown, StringComparison.OrdinalIgnoreCase))
+                return 84d;
             if (string.Equals(trimmed, TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase))
                 return 72d;
+            if (string.Equals(trimmed, TodManagerViewModel.SeventyOneHourCooldown, StringComparison.OrdinalIgnoreCase))
+                return 71d;
             if (string.Equals(trimmed, TodManagerViewModel.TwoHourCooldown, StringComparison.OrdinalIgnoreCase))
                 return 2d;
             if (string.Equals(trimmed, TodManagerViewModel.FiveMinuteCooldown, StringComparison.OrdinalIgnoreCase))
@@ -225,6 +229,21 @@ public sealed partial class ActivityDataController
             && hours > 0;
     }
 
+    private static bool IsAcceptableTodInterval(string? interval)
+    {
+        if (string.IsNullOrWhiteSpace(interval)) return false;
+        if (SupportedTodIntervals.Contains(interval.Trim())) return true;
+
+        var match = System.Text.RegularExpressions.Regex.Match(interval,
+            @"^\s*(?:(\d+)\s*(?:Hours?|Hr|H))?\s*(?:(\d+)\s*(?:Minutes?|Mins?|Min|M))?\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!match.Success) return false;
+
+        var hours = match.Groups[1].Success ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+        var minutes = match.Groups[2].Success ? int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
+        return hours >= 0 && minutes is >= 0 and < 60 && hours + minutes > 0;
+    }
+
     internal static string GetDefaultTodCooldown(string? monsterName)
     {
         if (string.IsNullOrWhiteSpace(monsterName))
@@ -232,9 +251,21 @@ public sealed partial class ActivityDataController
             return TodManagerViewModel.TwentyTwoHourCooldown;
         }
         var trimmed = monsterName.Trim();
+        if (trimmed.Equals("Tiamat", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("Jormungand", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("Vrtra", StringComparison.OrdinalIgnoreCase))
+        {
+            return TodManagerViewModel.EightyFourHourCooldown;
+        }
         if (HnmConfig.LongWindowHnms.Contains(trimmed))
         {
             return TodManagerViewModel.SeventyTwoHourCooldown;
+        }
+        // Bloodsucker repops on a 71-hour cycle, unlike the other ground NMs it's grouped with
+        // (which all fall through to the 22-hour default below).
+        if (trimmed.Equals("Bloodsucker", StringComparison.OrdinalIgnoreCase))
+        {
+            return TodManagerViewModel.SeventyOneHourCooldown;
         }
         if (HnmConfig.SkyGods.Contains(trimmed) || HnmConfig.SeaNms.Contains(trimmed))
         {
@@ -252,6 +283,13 @@ public sealed partial class ActivityDataController
         return !string.IsNullOrWhiteSpace(monsterName) && HnmConfig.LongWindowHnms.Contains(monsterName.Trim())
             ? TodManagerViewModel.OneHourInterval
             : TodManagerViewModel.TenMinuteInterval;
+    }
+
+    // "Popped on window" off the ToD forms. Windows are 1-based, so 0/negative (or a blanked
+    // input) means the officer didn't record one.
+    private static int? NormalizePopWindow(int? popWindow)
+    {
+        return popWindow is > 0 ? popWindow : null;
     }
 
     private void DeleteUploadedTodImage(string? relativePath)

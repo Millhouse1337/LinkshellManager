@@ -29,3 +29,7 @@
 @use 'styles/tables';
 @use 'styles/auction-board';
 @use 'styles/attendance';
+@use 'styles/finances';
+@use 'styles/chart-board';
+// Last so its .event-edit-modal-dialog--flush override lands after forms.
+@use 'styles/create-event-modal';

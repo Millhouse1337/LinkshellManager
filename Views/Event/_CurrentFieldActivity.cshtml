@@ -1,0 +1,61 @@
+@model EventSystemPageViewModel
+@{
+    // Section 1 of the Event System page: the ticking surface. Live camps first, then the OPEN
+    // attendance events they produce — same order and same three counters as the Discord
+    // Activity's "Current Field Activity" (events-tab.component.html:1-14).
+    //
+    // .section-head / .section-title are Activity-only classes and don't exist in the web CSS, so
+    // this reuses the .page-head primitives rather than inventing chrome (see STYLE.md).
+}
+
+<div class="page-head fade d2" id="current-field-activity" style="margin-top:8px;margin-bottom:12px">
+    <div>
+        <h2 class="page-title" style="font-size:16px">Current Field Activity</h2>
+        <div class="page-sub">
+            <span><span class="num">@Model.LiveCount</span> live</span>
+            <span class="dot"> · </span>
+            <span><span class="num">@Model.PendingCount</span> queued</span>
+            @if (Model.LiveAttendanceCount > 0)
+            {
+                <span class="dot"> · </span>
+                <span class="tag accent">@Model.LiveAttendanceCount attendance</span>
+            }
+            @if (Model.LiveCount > 0)
+            {
+                <span class="live-dot">Live</span>
+            }
+        </div>
+    </div>
+</div>
+
+@* The empty state must not sit above a list of attendance cards — between pops that's the common
+   case. Hence ShowNoLiveActivity rather than "no live events", and hence the card loop below is
+   NOT the @@else of this branch. *@
+@if (Model.ShowNoLiveActivity)
+{
+    <div class="card fade d2">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No live events running</div>
+            <div>Start a queued event below, or create a new one, to begin.</div>
+        </div>
+    </div>
+}
+
+@if (Model.LiveEvents.Count > 0)
+{
+    <div class="fade d2" style="display:grid;gap:16px">
+        @foreach (var item in Model.LiveEvents)
+        {
+            @await Html.PartialAsync("_TimedEventCard", item)
+        }
+    </div>
+}
+
+@* Open attendance events — the alliance-wide snapshot rosters posted from the addon, plus the
+   review row an ended camp hands off. Each is an unposted payout, so it belongs on the live board
+   rather than behind its own page. *@
+@if (Model.Attendance is not null)
+{
+    @await Html.PartialAsync("../WindowEvents/_AttendanceSections", Model.Attendance,
+        new ViewDataDictionary(ViewData) { ["AttendanceSection"] = "live" })
+}

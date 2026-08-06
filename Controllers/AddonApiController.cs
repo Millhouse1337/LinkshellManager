@@ -23,6 +23,7 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly IHostEnvironment _environment;
     private readonly HnmAutoEventService _hnmAutoEvent;
     private readonly DiscordWebhookQueue _discordWebhook;
+    private readonly DiscordEventChannelQueue _eventQueue;
     private readonly GlobalSettingsService _globalSettings;
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
@@ -37,6 +38,7 @@ public sealed partial class AddonApiController : ControllerBase
         IHostEnvironment environment,
         HnmAutoEventService hnmAutoEvent,
         DiscordWebhookQueue discordWebhook,
+        DiscordEventChannelQueue eventQueue,
         GlobalSettingsService globalSettings,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
@@ -50,6 +52,7 @@ public sealed partial class AddonApiController : ControllerBase
         _environment = environment;
         _hnmAutoEvent = hnmAutoEvent;
         _discordWebhook = discordWebhook;
+        _eventQueue = eventQueue;
         _globalSettings = globalSettings;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
@@ -232,7 +235,17 @@ public sealed partial class AddonApiController : ControllerBase
         DateTime? StartUtc,
         int? DkpPerHour,
         string? Details,
-        int? WindowCount = null);
+        int? WindowCount = null,
+        // Optional reusable party-setup template to attach. Setting this is
+        // what makes the event's Discord post carry a sign-up board -- the
+        // same column and the same effect as picking one on the website.
+        int? PartySetupId = null,
+        // HNM only. The COMBINED "Base/Stronger" label ("Behemoth/King Behemoth"),
+        // matching what Event.AssignedMonsterName stores everywhere else, plus the
+        // day cycle. Null falls back to reading both out of Name -- older addon
+        // builds send neither, and the name has always carried them as text.
+        string? MonsterName = null,
+        int? DayNumber = null);
 
     public sealed record AddonAttendanceRequest(
         DateTime? RecordedAtUtc,
@@ -242,7 +255,17 @@ public sealed partial class AddonApiController : ControllerBase
         // which entry represents the token issuer so we can backfill their
         // linkshell membership / AppUser CharacterName on first attendance
         // post when those columns were left blank at signup time.
-        string? SelfCharacterName = null);
+        string? SelfCharacterName = null,
+        // True when this came from the addon's ARMED automatic per-window capture rather than an
+        // officer clicking Post. Moderators-only: a non-moderator sending this is refused outright
+        // instead of being queued for approval, so a revoked role can't flood the approval queue
+        // with one submission per window. Defaults false, so every existing caller is unaffected.
+        bool Auto = false,
+        // What this window pays each attendee, from the officer's "Dkp this window" box. Rides on
+        // the post because this request is what CREATES the window row — see the write in
+        // PostAttendanceAsync. Null means "leave the window at whatever price it already has",
+        // which is what an automatic capture and every older addon build both send.
+        double? WindowDkp = null);
 
     public sealed record AddonBreakRequest(int ParticipantId);
 

@@ -1,18 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
-  ActivityItem,
-  ActivityItemInput,
   ActivityJobsRoster,
   ActivityJobsRosterMember,
   ActivityLinkshellRole,
-  ActivityRevenueEntry,
-  ActivityRevenueInput,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import type { ActivityJobRatingOverall, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
+import { JobsRosterStore, type RosterCharacterJobs, type RosterJobPill } from '../jobs-roster.store';
 import { formatAlts, memberAvatarClass, memberInitials, memberStatusClass, rankIcon } from '../activity-home.helpers';
 import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
 
@@ -60,39 +57,14 @@ const SUB_JOB_MIN_LEVEL = 37;
       background: var(--surface-3); border: 1px solid var(--border); color: var(--fg-1);
     }
     .lsp-sub-chip .lvl { color: var(--accent); font-weight: 700; margin-left: 3px; }
-
-    /* ----- Revenue ledger: search + date grouping + pagination -----
-       The parent .card is padding:0, so each section insets itself to 14px (matching
-       the sibling .inline-form / .entry-item) to stay off the card edges. */
-    .revenue-toolbar {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      padding: 12px 14px;
-    }
-    .revenue-search { flex: 1 1 220px; min-width: 180px; }
-    .revenue-filter { display: flex; gap: 6px; flex-shrink: 0; }
-    .revenue-scroll {
-      max-height: 460px; overflow-y: auto;
-      border-top: 1px solid var(--border); background: var(--surface);
-    }
-    .revenue-daygroup { margin-bottom: 4px; }
-    /* Sticks to the top of the scroll area so the day being viewed stays labeled;
-       left inset matches the entry rows below it (14px). */
-    .revenue-day-head {
-      position: sticky; top: 0; z-index: 1;
-      padding: 8px 14px 6px; background: var(--surface);
-      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--fg-3); border-bottom: 1px solid var(--border);
-    }
-    .revenue-pager {
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      padding: 12px 14px; flex-wrap: wrap;
-      border-top: 1px solid var(--border);
-    }
-    .revenue-pager__label { font-size: 12px; color: var(--fg-3); }
+    /* The treasury's styles moved to src/styles/_finances.scss with the section itself. */
   `]
 })
 export class LinkshellTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  // Jobs pills (roster "Show Jobs" column + the profile modal) read through the
+  // shared store, so the Dashboard roster's toggle and this one share one fetch.
+  private readonly jobs = inject(JobsRosterStore);
   protected readonly formatAlts = formatAlts;
   // Shared roster helpers (avatar initials/color, status tag) — single source in
   // activity-home.helpers so every roster renders members identically. `initials`
@@ -108,17 +80,19 @@ export class LinkshellTabComponent {
   @Input({ required: true }) rosterSearchChange!: (value: string) => void;
 
   protected get rosterSearch(): string { return this.rosterSearchValue; }
-  protected set rosterSearch(value: string) { this.rosterSearchChange(value); this.rosterPage.set(1); }
+  protected set rosterSearch(value: string) { this.rosterSearchChange(value); }
 
-  // App Sync filter: limits the Linkshell Roster (Manage Team) list to members who
-  // have actually opened/synced the Discord Activity (member.hasSyncedActivity) — not
-  // merely app-linked, since outside-sign-up-board members get an appUserId without
-  // opening the Activity. Status stays visible but is never part of the filter.
-  // Mirrors the Dashboard tab's identical toggle.
-  protected readonly appSyncOnly = signal(false);
-  protected toggleAppSync(value: boolean): void {
-    this.appSyncOnly.set(value);
-    this.rosterPage.set(1);
+  // "Show Jobs" switches the Linkshell Roster table into a jobs view: every column
+  // except Character is dropped and each row instead lists that member's leveled
+  // jobs (main + alts), which is what the old standalone Jobs Roster card showed.
+  // The jobs data is lazy-loaded the first time it's switched on.
+  protected readonly showJobs = signal(false);
+  protected async toggleShowJobs(value: boolean): Promise<void> {
+    this.showJobs.set(value);
+    // The Modify editors live in the columns the jobs view hides — close any
+    // open row so a half-finished edit can't be stranded off-screen.
+    this.editingRankMemberId.set(null);
+    if (value) await this.ensureJobsRoster();
   }
 
   // ----- Re-implemented small reads via this.activity -----
@@ -160,183 +134,76 @@ export class LinkshellTabComponent {
 
   protected filteredDashboardMembers() {
     const term = this.rosterSearch.trim().toLowerCase();
-    const appSyncOnly = this.appSyncOnly();
     const members = this.selectedDashboardMembers();
+    if (!term) {
+      return members;
+    }
+
     return members.filter(member => {
-      if (appSyncOnly) {
-        if (!member.hasSyncedActivity) return false;
-      }
-      if (term) {
-        const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
-        const rankMatch = (member.rank ?? '').toLowerCase().includes(term);
-        if (!nameMatch && !rankMatch) return false;
-      }
-      return true;
+      const nameMatch = (member.characterName ?? '').toLowerCase().includes(term);
+      const rankMatch = (member.rank ?? '').toLowerCase().includes(term);
+      if (nameMatch || rankMatch) return true;
+      // With the jobs view on, the search also reaches alt names and job
+      // names/levels — what the standalone Jobs Roster search used to cover.
+      return this.showJobs() && this.matchesJobsSearch(member.id, term);
     });
   }
 
-  // Roster pagination: 10 per page. rosterPage is 1-based; every read clamps
-  // to the valid range so removing members or narrowing the search can't
-  // strand the view on an empty out-of-range page (the search setter also
-  // resets to page 1). No signal writes happen during render — clamping is
-  // pure; only the Prev/Next handlers mutate the signal.
-  protected readonly rosterPageSize = 10;
-  protected readonly rosterPage = signal(1);
-
-  protected rosterTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredDashboardMembers().length / this.rosterPageSize));
-  }
-
-  protected rosterCurrentPage(): number {
-    return Math.min(Math.max(1, this.rosterPage()), this.rosterTotalPages());
-  }
-
-  protected pagedDashboardMembers() {
-    const start = (this.rosterCurrentPage() - 1) * this.rosterPageSize;
-    return this.filteredDashboardMembers().slice(start, start + this.rosterPageSize);
-  }
-
-  protected rosterPrev(): void {
-    this.rosterPage.set(Math.max(1, this.rosterCurrentPage() - 1));
-  }
-
-  protected rosterNext(): void {
-    this.rosterPage.set(Math.min(this.rosterTotalPages(), this.rosterCurrentPage() + 1));
-  }
+  // The roster used to page 10 members at a time. It now renders every filtered
+  // member and scrolls inside its own box (.ac-roster--with-actions caps the
+  // height and pins the header), so the whole linkshell is one continuous list.
 
   protected canManageSelectedDashboard(): boolean {
     return this.canManageLinkshell(this.selectedDashboardLinkshellId());
   }
 
-  // ----- Jobs Roster (every member's leveled jobs) -----
-  // Lazy + cached per linkshell; collapsed by default so opening the Management
-  // tab doesn't fire an extra request until the user asks for it.
-  protected readonly jobsRoster = signal<ActivityJobsRoster | null>(null);
-  protected readonly jobsRosterExpanded = signal(false);
-  protected readonly jobsRosterBusy = signal(false);
-  private readonly jobsRosterLoadedFor = signal<number | null>(null);
-  protected readonly jobsRosterPageSize = 3;
-  protected readonly jobsRosterPage = signal(1);
-  protected jobsRosterSearchTerm = '';
+  // ----- Jobs data (every member's leveled jobs, rendered inline in the roster) -----
+  // Lazy + cached in JobsRosterStore, shared with the Dashboard roster's own
+  // "Show Jobs" toggle: nothing is fetched until one of them asks (or a member
+  // profile is opened), and a tab hop doesn't re-fetch.
+  protected readonly jobsRosterBusy = this.jobs.busy;
 
-  protected get jobsRosterSearch(): string {
-    return this.jobsRosterSearchTerm;
-  }
-
-  protected set jobsRosterSearch(value: string) {
-    this.jobsRosterSearchTerm = value;
-    this.jobsRosterPage.set(1);
-  }
-
-  // The cached roster, but only if it belongs to the currently-selected
-  // linkshell — guards against showing one linkshell's jobs after a switch.
   protected jobsRosterForCurrent(): ActivityJobsRoster | null {
-    return this.jobsRosterLoadedFor() === this.selectedDashboardLinkshellId() ? this.jobsRoster() : null;
+    return this.jobs.forLinkshell(this.selectedDashboardLinkshellId());
   }
 
-  protected async toggleJobsRoster(): Promise<void> {
-    const next = !this.jobsRosterExpanded();
-    this.jobsRosterExpanded.set(next);
-    if (next) await this.ensureJobsRoster();
+  protected ensureJobsRoster(): Promise<void> {
+    return this.jobs.ensure(this.selectedDashboardLinkshellId());
   }
 
-  protected async ensureJobsRoster(): Promise<void> {
-    const id = this.selectedDashboardLinkshellId();
-    if (id <= 0) return;
-    if (this.jobsRosterLoadedFor() === id && this.jobsRoster()) return;
-
-    this.jobsRosterBusy.set(true);
-    try {
-      const data = await this.activity.loadJobsRoster(id);
-      if (data) {
-        this.jobsRoster.set(data);
-        this.jobsRosterLoadedFor.set(id);
-        this.jobsRosterPage.set(1);
-      }
-    } finally {
-      this.jobsRosterBusy.set(false);
-    }
+  protected jobsRosterMember(memberId: number): ActivityJobsRosterMember | null {
+    return this.jobs.memberFor(this.selectedDashboardLinkshellId(), memberId);
   }
 
-  protected filteredJobsRosterMembers(): ActivityJobsRosterMember[] {
-    const members = this.jobsRosterForCurrent()?.members ?? [];
-    const term = this.jobsRosterSearch.trim().toLowerCase();
-    if (!term) {
-      return members;
-    }
-
-    return members.filter(member => this.matchesJobsRosterSearch(member, term));
+  // Main + alts for a roster row's Jobs cell (empty when the member has no entry).
+  protected jobsCharacters(memberId: number) {
+    return this.jobs.charactersFor(this.selectedDashboardLinkshellId(), memberId);
   }
 
-  protected jobsRosterTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredJobsRosterMembers().length / this.jobsRosterPageSize));
-  }
-
-  protected jobsRosterCurrentPage(): number {
-    return Math.min(Math.max(1, this.jobsRosterPage()), this.jobsRosterTotalPages());
-  }
-
-  protected pagedJobsRosterMembers(): ActivityJobsRosterMember[] {
-    const start = (this.jobsRosterCurrentPage() - 1) * this.jobsRosterPageSize;
-    return this.filteredJobsRosterMembers().slice(start, start + this.jobsRosterPageSize);
-  }
-
-  protected jobsRosterPrev(): void {
-    this.jobsRosterPage.set(Math.max(1, this.jobsRosterCurrentPage() - 1));
-  }
-
-  protected jobsRosterNext(): void {
-    this.jobsRosterPage.set(Math.min(this.jobsRosterTotalPages(), this.jobsRosterCurrentPage() + 1));
-  }
-
-  private matchesJobsRosterSearch(member: ActivityJobsRosterMember, term: string): boolean {
-    const namesAndRank = [
-      member.characterName,
-      member.rank,
-      member.alt1Name,
-      member.alt2Name
-    ];
-
-    if (namesAndRank.some(value => (value ?? '').toLowerCase().includes(term))) {
-      return true;
-    }
-
-    return this.rosterCharacters(member).some(character =>
-      this.leveledJobs(character.levels, character.strong)
-        .some(job => `${job.name} ${job.level}`.toLowerCase().includes(term))
-    );
+  private matchesJobsSearch(memberId: number, term: string): boolean {
+    return this.jobs.matchesSearch(this.selectedDashboardLinkshellId(), memberId, term);
   }
 
   // Main + named alts for one roster member, as labeled characters to render.
-  protected rosterCharacters(member: ActivityJobsRosterMember): { label: string; isAlt: boolean; levels: number[]; strong: boolean[]; relic: boolean[]; merit: string[]; relicName: string[] }[] {
-    const list = [{ label: member.characterName, isAlt: false, levels: member.jobLevels ?? [], strong: member.strongJobs ?? [], relic: member.relicFlags ?? [], merit: member.meritJobs ?? [], relicName: member.relicNames ?? [] }];
-    if (member.alt1Name) { list.push({ label: member.alt1Name, isAlt: true, levels: member.alt1JobLevels ?? [], strong: member.alt1StrongJobs ?? [], relic: member.alt1RelicFlags ?? [], merit: member.alt1MeritJobs ?? [], relicName: member.alt1RelicNames ?? [] }); }
-    if (member.alt2Name) { list.push({ label: member.alt2Name, isAlt: true, levels: member.alt2JobLevels ?? [], strong: member.alt2StrongJobs ?? [], relic: member.alt2RelicFlags ?? [], merit: member.alt2MeritJobs ?? [], relicName: member.alt2RelicNames ?? [] }); }
-    return list;
+  protected rosterCharacters(member: ActivityJobsRosterMember): RosterCharacterJobs[] {
+    return this.jobs.characters(member);
   }
 
   // The leveled jobs (level > 0) for one character, highest level first; each
   // carries its "strong" (merited) flag + relic flag/weapon + merit note for the pills.
-  protected leveledJobs(levels: number[] | null | undefined, strong?: boolean[] | null, relic?: boolean[] | null, merit?: string[] | null, relicName?: string[] | null): { name: string; level: number; strong: boolean; relic: boolean; merit: string; relicName: string }[] {
-    const catalog = this.jobsRosterForCurrent()?.jobCatalog ?? [];
-    const arr = levels ?? [];
-    const flags = strong ?? [];
-    const relicFlags = relic ?? [];
-    const meritNotes = merit ?? [];
-    const relicNames = relicName ?? [];
-    return catalog
-      .map((name, i) => ({ name, level: arr[i] ?? 0, strong: flags[i] ?? false, relic: relicFlags[i] ?? false, merit: meritNotes[i] ?? '', relicName: relicNames[i] ?? '' }))
-      .filter(entry => entry.level > 0)
-      .sort((a, b) => b.level - a.level);
+  protected leveledJobs(
+    levels: number[] | null | undefined,
+    strong?: boolean[] | null,
+    relic?: boolean[] | null,
+    merit?: string[] | null,
+    relicName?: string[] | null
+  ): RosterJobPill[] {
+    return this.jobs.leveledJobs(levels, strong, relic, merit, relicName);
   }
 
   // Hover tooltip for a job pill: relic (weapon name if known) + merit info.
-  protected pillTitle(job: { strong: boolean; relic: boolean; merit: string; relicName: string }): string | null {
-    const parts: string[] = [];
-    if (job.relic) { parts.push(job.relicName ? 'Relic: ' + job.relicName : 'Relic weapon'); }
-    if (job.strong && job.merit) { parts.push('Merits: ' + job.merit); }
-    else if (job.strong) { parts.push('Merited'); }
-    return parts.length ? parts.join(' · ') : null;
+  protected pillTitle(job: RosterJobPill): string | null {
+    return this.jobs.pillTitle(job);
   }
 
   // ----- Per-member "View Profile" modal -----
@@ -426,7 +293,7 @@ export class LinkshellTabComponent {
 
   // The jobs to render for a character: max-level (75) only by default, or every
   // leveled job when "Show all jobs" is on. Reuses leveledJobs() (sorted desc).
-  protected jobsToShow(ch: { levels: number[]; strong: boolean[]; relic: boolean[]; merit: string[]; relicName: string[] }) {
+  protected jobsToShow(ch: RosterCharacterJobs) {
     const all = this.leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName);
     return this.profileShowAllJobs() ? all : all.filter(job => job.level >= MAX_JOB_LEVEL);
   }
@@ -483,7 +350,7 @@ export class LinkshellTabComponent {
 
   // Catalog job name for a rating's jobIndex (uses the loaded jobs-roster catalog).
   protected ratingJobName(jobIndex: number): string {
-    return this.jobsRosterForCurrent()?.jobCatalog?.[jobIndex] ?? `Job ${jobIndex + 1}`;
+    return this.jobs.jobName(jobIndex);
   }
 
   // ----- Rank editing UI (only shown in this tab) -----
@@ -676,304 +543,6 @@ export class LinkshellTabComponent {
     }
   }
 
-  // ----- Inventory & revenue (formerly the "configurations tab" leftovers
-  // that actually appear under the Management tab) -----
-
-  protected configLinkshellId = signal<number | null>(null);
-
-  protected selectedConfigLinkshellId(): number | null {
-    const explicit = this.configLinkshellId();
-    if (explicit !== null) return explicit;
-    return (
-      this.activity.overview()?.appUser?.primaryLinkshellId ??
-      this.primaryLinkshell()?.id ??
-      this.activity.overview()?.linkshells?.[0]?.id ??
-      null
-    );
-  }
-
-  protected canManageConfigLinkshell(): boolean {
-    const id = this.selectedConfigLinkshellId();
-    return id !== null && this.canManageLinkshell(id);
-  }
-
-  protected configItems(): ActivityItem[] {
-    const id = this.selectedConfigLinkshellId();
-    if (this.primaryLinkshell()?.id !== id) return [];
-    return this.primaryLinkshell()?.items ?? [];
-  }
-
-  protected configRevenue(): ActivityRevenueEntry[] {
-    const id = this.selectedConfigLinkshellId();
-    if (this.primaryLinkshell()?.id !== id) return [];
-    return this.primaryLinkshell()?.revenueEntries ?? [];
-  }
-
-  protected configIncomeTotal(): number {
-    return this.configRevenue()
-      .filter(entry => entry.entryType === 'Income')
-      .reduce((sum, entry) => sum + (entry.value ?? 0), 0);
-  }
-
-  protected configExpenseTotal(): number {
-    return this.configRevenue()
-      .filter(entry => entry.entryType === 'Expense')
-      .reduce((sum, entry) => sum + (entry.value ?? 0), 0);
-  }
-
-  protected configNetTotal(): number {
-    return this.configIncomeTotal() - this.configExpenseTotal();
-  }
-
-  // ----- Revenue list view state: search + type filter + date grouping + pagination.
-  // The header totals stay treasury-wide (all entries); these only shape the LIST so a
-  // long ledger stays scannable instead of running off the page. -----
-  protected readonly revenuePageSize = 15;
-  protected readonly revenueSearch = signal('');
-  protected readonly revenueTypeFilter = signal<'All' | 'Income' | 'Expense'>('All');
-  protected readonly revenuePage = signal(0);
-
-  // Search- + type-filtered entries, newest first (occurredAt desc).
-  protected readonly filteredRevenue = computed<ActivityRevenueEntry[]>(() => {
-    const term = this.revenueSearch().trim().toLowerCase();
-    const type = this.revenueTypeFilter();
-    return this.configRevenue()
-      .filter(entry => type === 'All' || entry.entryType === type)
-      .filter(entry => {
-        if (!term) {
-          return true;
-        }
-        return [entry.category, entry.details, entry.createdByCharacterName, entry.entryType, String(entry.value)]
-          .some(field => (field ?? '').toString().toLowerCase().includes(term));
-      })
-      .slice()
-      .sort((left, right) => (right.occurredAt ?? '').localeCompare(left.occurredAt ?? ''));
-  });
-
-  protected readonly revenuePageCount = computed(() =>
-    Math.max(1, Math.ceil(this.filteredRevenue().length / this.revenuePageSize)));
-
-  // The current page (clamped into range — filtering can shrink the list under the
-  // stored page index) used everywhere the page number is read.
-  protected revenueCurrentPage(): number {
-    return Math.min(this.revenuePage(), this.revenuePageCount() - 1);
-  }
-
-  protected readonly pagedRevenue = computed<ActivityRevenueEntry[]>(() => {
-    const start = this.revenueCurrentPage() * this.revenuePageSize;
-    return this.filteredRevenue().slice(start, start + this.revenuePageSize);
-  });
-
-  // The current page's entries grouped into consecutive runs by viewer-local calendar
-  // day, so the list shows a date header above each day's entries.
-  protected readonly groupedRevenuePage = computed<{ key: string; label: string; entries: ActivityRevenueEntry[] }[]>(() => {
-    const groups: { key: string; label: string; entries: ActivityRevenueEntry[] }[] = [];
-    let current: { key: string; label: string; entries: ActivityRevenueEntry[] } | null = null;
-    for (const entry of this.pagedRevenue()) {
-      const key = this.activity.localDayKey(entry.occurredAt) ?? 'unknown';
-      if (!current || current.key !== key) {
-        current = { key, label: this.activity.formatDate(entry.occurredAt) ?? 'Unknown date', entries: [] };
-        groups.push(current);
-      }
-      current.entries.push(entry);
-    }
-    return groups;
-  });
-
-  protected onRevenueSearch(value: string): void {
-    this.revenueSearch.set(value);
-    this.revenuePage.set(0);
-  }
-
-  protected setRevenueTypeFilter(type: 'All' | 'Income' | 'Expense'): void {
-    this.revenueTypeFilter.set(type);
-    this.revenuePage.set(0);
-  }
-
-  protected revenuePrevPage(): void {
-    this.revenuePage.set(Math.max(0, this.revenueCurrentPage() - 1));
-  }
-
-  protected revenueNextPage(): void {
-    this.revenuePage.set(Math.min(this.revenuePageCount() - 1, this.revenueCurrentPage() + 1));
-  }
-
-  protected configTotalItemQuantity(): number {
-    return this.configItems().reduce((sum, item) => sum + (item.quantity ?? 0), 0);
-  }
-
-  protected showItemForm = signal(false);
-  protected readonly itemTypeOptions = ['Crafted Item', 'Endgame Loot Drop', 'Other'] as const;
-  protected itemName = '';
-  protected itemType = '';
-  protected itemTypeSelection = '';
-  protected itemQuantity = 1;
-  protected itemNotes = '';
-  protected editingItemId = signal<number | null>(null);
-
-  protected onItemTypeSelectionChange(value: string): void {
-    this.itemTypeSelection = value;
-    // Preset selections (e.g. "Crafted Item") flow straight through; "Other"
-    // and the empty placeholder both clear the value so the freeform input
-    // starts blank.
-    this.itemType = value && value !== 'Other' ? value : '';
-  }
-
-  protected toggleItemForm(): void {
-    this.showItemForm.update(value => !value);
-    if (!this.showItemForm()) {
-      this.resetItemForm();
-    }
-  }
-
-  protected resetItemForm(): void {
-    this.itemName = '';
-    this.itemType = '';
-    this.itemTypeSelection = '';
-    this.itemQuantity = 1;
-    this.itemNotes = '';
-    this.editingItemId.set(null);
-  }
-
-  protected beginEditItem(item: ActivityItem): void {
-    this.editingItemId.set(item.id);
-    this.itemName = item.itemName;
-    const existingType = item.itemType ?? '';
-    // Legacy items can carry any string for itemType. Map a preset match to
-    // the dropdown selection; anything else falls into the "Other" branch so
-    // the freeform input shows the saved value.
-    if ((this.itemTypeOptions as readonly string[]).includes(existingType)) {
-      this.itemTypeSelection = existingType;
-      this.itemType = existingType;
-    } else if (existingType) {
-      this.itemTypeSelection = 'Other';
-      this.itemType = existingType;
-    } else {
-      this.itemTypeSelection = '';
-      this.itemType = '';
-    }
-    this.itemQuantity = item.quantity;
-    this.itemNotes = item.notes ?? '';
-    this.showItemForm.set(true);
-  }
-
-  protected async submitItem(): Promise<void> {
-    const linkshellId = this.selectedConfigLinkshellId();
-    if (!linkshellId) return;
-    const name = this.itemName.trim();
-    if (!name) return;
-    const input: ActivityItemInput = {
-      itemName: name,
-      itemType: this.itemType.trim() || null,
-      quantity: Math.max(0, Math.floor(this.itemQuantity || 0)),
-      notes: this.itemNotes.trim() || null
-    };
-    try {
-      const editingId = this.editingItemId();
-      if (editingId !== null) {
-        await this.activity.updateItem(editingId, input);
-      } else {
-        await this.activity.createItem(linkshellId, input);
-      }
-      this.resetItemForm();
-      this.showItemForm.set(false);
-    } catch {
-      // surfaced
-    }
-  }
-
-  protected async deleteItem(itemId: number): Promise<void> {
-    try { await this.activity.deleteItem(itemId); } catch { /* surfaced */ }
-  }
-
-  // --- Sell item → auto-record income in Finances ---
-  // The item whose inline "sale price" entry is open (null = none).
-  protected readonly sellingItemId = signal<number | null>(null);
-  protected sellPrice: number | null = null;
-
-  protected beginSell(itemId: number): void {
-    this.sellPrice = null;
-    this.sellingItemId.set(itemId);
-  }
-
-  protected cancelSell(): void {
-    this.sellingItemId.set(null);
-    this.sellPrice = null;
-  }
-
-  protected async confirmSell(itemId: number): Promise<void> {
-    const price = Math.max(0, Math.floor(Number(this.sellPrice) || 0));
-    try {
-      await this.activity.markItemSold(itemId, price);
-      this.sellingItemId.set(null);
-      this.sellPrice = null;
-    } catch { /* surfaced */ }
-  }
-
-  protected async unsellItem(itemId: number): Promise<void> {
-    try { await this.activity.unsellItem(itemId); } catch { /* surfaced */ }
-  }
-
-  protected showRevenueForm = signal(false);
-  // Set while editing an existing entry; null when the form is adding a new one.
-  protected readonly editingRevenueId = signal<number | null>(null);
-  protected revenueType: 'Income' | 'Expense' = 'Income';
-  protected revenueCategory = '';
-  protected revenueValue = 0;
-  protected revenueDetails = '';
-
-  protected toggleRevenueForm(): void {
-    this.showRevenueForm.update(value => !value);
-    if (!this.showRevenueForm()) {
-      this.resetRevenueForm();
-    }
-  }
-
-  protected resetRevenueForm(): void {
-    this.editingRevenueId.set(null);
-    this.revenueType = 'Income';
-    this.revenueCategory = '';
-    this.revenueValue = 0;
-    this.revenueDetails = '';
-  }
-
-  // Loads an existing entry into the (shared) form for editing.
-  protected beginEditRevenue(entry: ActivityRevenueEntry): void {
-    this.editingRevenueId.set(entry.id);
-    this.revenueType = entry.entryType === 'Expense' ? 'Expense' : 'Income';
-    this.revenueCategory = entry.category ?? '';
-    this.revenueValue = entry.value ?? 0;
-    this.revenueDetails = entry.details ?? '';
-    this.showRevenueForm.set(true);
-  }
-
-  protected async submitRevenue(): Promise<void> {
-    const linkshellId = this.selectedConfigLinkshellId();
-    if (!linkshellId) return;
-    const value = Math.max(0, Math.floor(this.revenueValue || 0));
-    if (value <= 0) return;
-    const input: ActivityRevenueInput = {
-      entryType: this.revenueType,
-      category: this.revenueCategory.trim() || null,
-      value,
-      details: this.revenueDetails.trim() || null,
-      occurredAt: null
-    };
-    try {
-      const editingId = this.editingRevenueId();
-      if (editingId !== null) {
-        await this.activity.updateRevenueEntry(editingId, input);
-      } else {
-        await this.activity.createRevenueEntry(linkshellId, input);
-      }
-      this.resetRevenueForm();
-      this.showRevenueForm.set(false);
-    } catch {
-      // surfaced
-    }
-  }
-
-  protected async deleteRevenue(entryId: number): Promise<void> {
-    try { await this.activity.deleteRevenueEntry(entryId); } catch { /* surfaced */ }
-  }
+  // Inventory and gil used to live here too, under the tab about the linkshell's PEOPLE. Both moved
+  // to their own top-level Treasury tab: ItemsSectionComponent and FinancesSectionComponent.
 }

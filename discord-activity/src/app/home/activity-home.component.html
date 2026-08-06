@@ -138,7 +138,9 @@
           }
         </button>
       }
-      @if (isFeatureEnabled('enableEvents') && !isHnmOnly()) {
+      <!-- Shown to every linkshell type. It used to be hidden for HNM-only linkshells, but the
+           attendance snapshots they run on now live inside this tab, so hiding it would strand them. -->
+      @if (isFeatureEnabled('enableEvents')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('timed-events')"
                 [attr.aria-controls]="panelId('timed-events')"
@@ -152,18 +154,7 @@
           }
         </button>
       }
-      @if (isFeatureEnabled('enableEvents') && !isSkySeaDynamis()) {
-        <button type="button" class="tab" role="tab"
-                [id]="tabId('window-events')"
-                [attr.aria-controls]="panelId('window-events')"
-                [attr.aria-selected]="activeTab() === 'window-events'"
-                [attr.tabindex]="activeTab() === 'window-events' ? 0 : -1"
-                [class.active]="activeTab() === 'window-events'"
-                (click)="setActiveTab('window-events')">
-          Attendance System
-        </button>
-      }
-      @if (isFeatureEnabled('enableToDs') && !isSkySeaDynamis()) {
+      @if (isFeatureEnabled('enableToDs')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('tods')"
                 [attr.aria-controls]="panelId('tods')"
@@ -213,6 +204,13 @@
               [attr.tabindex]="activeTab() === 'linkshell' ? 0 : -1"
               [class.active]="activeTab() === 'linkshell'"
               (click)="setActiveTab('linkshell')">Management</button>
+      <button type="button" class="tab" role="tab"
+              [id]="tabId('treasury')"
+              [attr.aria-controls]="panelId('treasury')"
+              [attr.aria-selected]="activeTab() === 'treasury'"
+              [attr.tabindex]="activeTab() === 'treasury' ? 0 : -1"
+              [class.active]="activeTab() === 'treasury'"
+              (click)="setActiveTab('treasury')">Treasury</button>
       <button type="button" class="tab" role="tab"
               [id]="tabId('profile')"
               [attr.aria-controls]="panelId('profile')"
@@ -292,18 +290,16 @@
         [rosterSearchChange]="setDashboardRosterSearch" />
     </div>
   }
+  @if (activeTab() === 'treasury') {
+    <div role="tabpanel" [id]="panelId('treasury')" [attr.aria-labelledby]="tabId('treasury')">
+      <app-treasury-tab />
+    </div>
+  }
 
   <!-- ===== EVENTS TAB ===== -->
   @if (activeTab() === 'timed-events') {
     <div role="tabpanel" [id]="panelId('timed-events')" [attr.aria-labelledby]="tabId('timed-events')">
       <app-events-tab />
-    </div>
-  }
-
-  <!-- ===== WINDOW EVENTS TAB ===== -->
-  @if (activeTab() === 'window-events') {
-    <div role="tabpanel" [id]="panelId('window-events')" [attr.aria-labelledby]="tabId('window-events')">
-      <app-window-events-tab />
     </div>
   }
 
@@ -328,11 +324,26 @@
     </div>
   }
 
-  <!-- ===== DKP TAB (ledger/audit + the synced DKP Sheet, combined) ===== -->
+  <!-- ===== DKP TAB — one of three views, never stacked =====
+       All three are the same economy at different zoom levels: the per-member ledger ("what has
+       this member done"), the sheet ("where does everyone stand"), and grouping ("which event
+       types share a wallet"). Stacked, the sheet sat below a ledger long enough to scroll past
+       and grouping was in Configurations entirely; the strip swaps them in place. -->
   @if (activeTab() === 'dkp') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
-      <app-activity-sidebar-panel [visibleSections]="['dkp']" />
-      <app-dkp-sheet-tab />
+      <div class="dkp-view-tabs" role="tablist" aria-label="DKP views">
+        @for (view of dkpViews; track view.key) {
+          <button type="button" class="dkp-view-tab" role="tab"
+            [class.active]="dkpView() === view.key"
+            [attr.aria-selected]="dkpView() === view.key"
+            (click)="dkpView.set(view.key)">{{ view.label }}</button>
+        }
+      </div>
+      @switch (dkpView()) {
+        @case ('sheet') { <app-dkp-sheet-tab /> }
+        @case ('grouping') { <app-dkp-grouping-tab /> }
+        @default { <app-activity-sidebar-panel [visibleSections]="['dkp']" /> }
+      }
     </div>
   }
 
@@ -348,23 +359,7 @@
   <!-- ===== ENDGAME TAB ===== -->
   @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('endgame')" [attr.aria-labelledby]="tabId('endgame')">
-      <div class="section-head">
-        <div>
-          <div class="section-label">Content</div>
-          <div class="section-title">Charts</div>
-        </div>
-      </div>
-
-      <div class="coming-soon-banner">Feature Coming Soon!</div>
-
-      <div class="card">
-        <div class="card-head"><div class="card-title">Charts</div></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Sky</div></div><span class="list-chevron">&rsaquo;</span></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Sea</div></div><span class="list-chevron">&rsaquo;</span></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">HNM</div></div><span class="list-chevron">&rsaquo;</span></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Dynamis</div></div><span class="list-chevron">&rsaquo;</span></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Limbus</div></div><span class="list-chevron">&rsaquo;</span></div>
-      </div>
+      <app-charts-tab />
     </div>
   }
 

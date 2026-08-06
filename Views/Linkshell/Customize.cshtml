@@ -183,10 +183,10 @@
                     <div class="card-title" style="font-size:14px">Feature Toggles</div>
                     <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
                     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px">
-                        @* Charts and Missions aren't built yet: locked off + (TBA). Restore asp-for
-                           (and the nav gate in _Sidebar) when they ship. *@
-                        <label style="display:flex;gap:8px;align-items:center;opacity:.55;cursor:not-allowed" title="Not developed yet — coming soon."><input type="checkbox" class="switch" disabled /> Charts tab <span style="color:var(--fg-3)">(TBA)</span></label>
+                        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableEndgame" /> Charts tab</label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableHnmSection" /> HNM tab</label>
+                        @* Missions isn't built yet: locked off + (TBA). Restore asp-for (and the nav
+                           gate in _Sidebar) when it ships. *@
                         <label style="display:flex;gap:8px;align-items:center;opacity:.55;cursor:not-allowed" title="Not developed yet — coming soon."><input type="checkbox" class="switch" disabled /> Missions tab <span style="color:var(--fg-3)">(TBA)</span></label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableAuctions" /> Auctions tab</label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableToDs" /> ToDs tab</label>

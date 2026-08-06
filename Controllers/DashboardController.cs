@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,6 +14,7 @@ public class DashboardController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly TreasuryBalanceService _treasury;
 
     private static readonly string[] HnmPaletteClasses = { "a", "b", "c", "d", "e", "f" };
     private const int HnmClaimsWindowDays = 30;
@@ -36,10 +38,14 @@ public class DashboardController : Controller
     private static readonly TimeSpan SoonThreshold = TimeSpan.FromHours(3);
     private static readonly TimeSpan DefaultSpawnWindow = TimeSpan.FromHours(3);
 
-    public DashboardController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public DashboardController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        TreasuryBalanceService treasury)
     {
         _context = context;
         _userManager = userManager;
+        _treasury = treasury;
     }
 
     public async Task<IActionResult> Index(int? linkshellId = null)
@@ -124,13 +130,8 @@ public class DashboardController : Controller
             ? await _context.Items.CountAsync(item => item.LinkshellId == selectedLinkshellId.Value)
             : 0;
 
-        // Net treasury (income minus expense): an Expense entry subtracts.
-        // EntryType is the normalized "Income"/"Expense" the Activity writes;
-        // legacy/web source strings aren't "Expense", so they count as income.
         var revenueTotal = selectedLinkshellId.HasValue
-            ? await _context.RevenueEntries
-                .Where(entry => entry.LinkshellId == selectedLinkshellId.Value)
-                .SumAsync(entry => (long?)(entry.EntryType == "Expense" ? -entry.Value : entry.Value)) ?? 0L
+            ? await _treasury.GetCashOnHandAsync(selectedLinkshellId.Value, HttpContext.RequestAborted)
             : 0L;
 
         var nowUtc = DateTime.UtcNow;

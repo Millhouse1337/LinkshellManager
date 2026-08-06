@@ -53,13 +53,14 @@ export class AddonTokenService {
     }
   }
 
-  async revokeAddonToken(tokenId: number, linkshellId: number): Promise<boolean> {
+  // No linkshell id: the server authorizes the revoke against the token's own
+  // linkshell (or the caller owning it), because a pairing listed here can cover
+  // linkshells other than the selected one.
+  async revokeAddonToken(tokenId: number): Promise<boolean> {
     this.busyAddonTokens.set(true);
     this.auth.setActionError(null);
     try {
-      await this.http.postActivityAction(
-        `/api/addon/management/tokens/${tokenId}/revoke?linkshellId=${linkshellId}`
-      );
+      await this.http.postActivityAction(`/api/addon/management/tokens/${tokenId}/revoke`);
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Revoking the addon token failed.'));

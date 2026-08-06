@@ -49,8 +49,14 @@ public sealed class HnmAutoEventService
             return null;
         }
 
-        var monster = tod.MonsterName!.Trim();
-        var eventName = ComposeEventName(monster, tod.DayNumber);
+        // This event is for the NEXT pop, so it carries the next day of the cycle — day N
+        // becomes N+1, and an HQ kill spends the cycle and restarts at day 1 on the NQ half
+        // (killing Nidhogg means the next spawn is Fafnir). Using the ToD's own day here
+        // labelled every auto-event with the day that had just died.
+        var wasHq = tod.Hq;
+        var monster = (wasHq ? HnmConfig.BaseMonsterName(tod.MonsterName) : tod.MonsterName)!.Trim();
+        var nextDay = HnmConfig.NextDayNumber(tod.DayNumber, wasHq);
+        var eventName = ComposeEventName(monster, nextDay);
         var repopUtc = tod.RepopTime.Value;
 
         // Idempotency: an existing queued/live event in this LS for the same
@@ -79,6 +85,47 @@ public sealed class HnmAutoEventService
             return existing.Id;
         }
 
+        // Nothing matched the repop window, so this monster's LAST pop is what's still on the board.
+        // Recycle that row for the new pop rather than stacking a second event beside it — otherwise
+        // every kill leaves another entry in Queued Events and the old camps pile up until somebody
+        // ends them by hand.
+        //
+        // Deliberately QUEUED ONLY (CommencementStartTime == null). A live camp has attendance and
+        // DKP accruing against it, and reviving it would wipe a night people are still being paid
+        // for; that one falls through and the new pop is queued alongside it, which is the officer's
+        // cue to end the old camp. This guard is the difference between recycling a row and
+        // destroying a payout.
+        //
+        // Matched on AssignedMonsterName via MonsterMatchNames, not EventName: the name carries a
+        // "D<n>" suffix that changes every pop, which is exactly why the ±10-minute check above
+        // misses. MonsterMatchNames is symmetric across the merge pair, so a Fafnir ToD finds the
+        // event assigned to Nidhogg and vice versa.
+        var monsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+        var stale = await _db.Events
+            .Where(e => e.LinkshellId == tod.LinkshellId
+                        && e.EndTime == null
+                        && e.CommencementStartTime == null
+                        && e.AssignedMonsterName != null
+                        && monsterNames.Contains(e.AssignedMonsterName.ToLower()))
+            // Newest first, and only ever one: two rows for one monster is already a mistake, and
+            // rewriting both from a single ToD would compound it.
+            .OrderByDescending(e => e.StartTime)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (stale is not null)
+        {
+            stale.EventName = eventName;
+            await HnmEventSeeder.ReviveForNewPopAsync(
+                _db, stale, repopUtc, nextDay, monster, todId, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "HNM auto-event revived: event {EventId} ({EventName}) re-queued from tod {TodId}, repop {Repop:o}.",
+                stale.Id, eventName, todId, repopUtc);
+            return stale.Id;
+        }
+
         var priorDkpPerHour = await GetPriorDkpPerHourAsync(tod.LinkshellId, eventName, monster, cancellationToken);
 
         var creatorUserId = await ResolveCreatorUserIdAsync(tod, cancellationToken);
@@ -95,10 +142,16 @@ public sealed class HnmAutoEventService
             DkpPerHour = priorDkpPerHour,
             Details = AutoEventDetails,
             CreationSource = "Addon",
-            WindowCountOverride = HnmConfig.GetWindowCount(monster),
             SourceTodId = todId,
+            // Every other board creator stamps this; without it the auto-event has no monster,
+            // so the board can't render the NQ/HQ name for its day and End Camp rejects it
+            // ("no monster assigned"). It's what makes the day cycle above mean anything.
+            AssignedMonsterName = monster,
+            DayNumber = nextDay,
             TimeStamp = DateTime.UtcNow,
         };
+        // Seed the built-in per-monster window count + Manual Check In stamp.
+        await HnmEventSeeder.SeedHnmEventAsync(_db, autoEvent, tod.Linkshell, monster, cancellationToken);
         _db.Events.Add(autoEvent);
         await _db.SaveChangesAsync(cancellationToken);
 

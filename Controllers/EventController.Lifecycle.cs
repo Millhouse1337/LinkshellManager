@@ -14,7 +14,20 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public partial class EventController
 {
-    public async Task<IActionResult> Index()
+    // Closed attendance events share the page with the live board, so they page in tens rather than
+    // the twenties the dedicated Attendance History page uses: every card carries a combined-member
+    // table, a table per snapshot, a dialog and two inline scripts.
+    private const int ClosedAttendancePageSize = 10;
+    private const int PastEventsPageSize = 20;
+
+    // The combined Event System page. Three sections in the Discord Activity's order: Current Field
+    // Activity (live camps + open attendance events), Pending Events, then the archive (unlinked
+    // snapshots + closed attendance) and Past Events.
+    //
+    // The two archives page and search independently, hence the prefixed parameters — they bind
+    // from the query string off the default route, so no route change is needed. Each section's
+    // pager carries the OTHER section's state so paging one doesn't reset the other.
+    public async Task<IActionResult> Index(string? pastQ = null, int pastPage = 1, string? attQ = null, int attPage = 1)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -22,19 +35,40 @@ public partial class EventController
             return Challenge();
         }
 
-        ViewBag.CharacterName = user.CharacterName;
-
         var linkshellIds = await _context.AppUserLinkshells
             .Where(link => link.AppUserId == user.Id)
             .Select(link => link.LinkshellId)
             .ToListAsync();
 
-        int? selectedLinkshellId = user.PrimaryLinkshellId ?? linkshellIds.Cast<int?>().FirstOrDefault();
+        // Only a linkshell the viewer is actually IN. A stale PrimaryLinkshellId — someone who left
+        // the shell, or was removed from it — otherwise selects a linkshell whose events, rosters
+        // and history they can no longer see. EventHistoryController.Index has always applied this
+        // membership test; the events query never did.
+        int? selectedLinkshellId =
+            user.PrimaryLinkshellId is { } primaryId && linkshellIds.Contains(primaryId)
+                ? primaryId
+                : linkshellIds.Cast<int?>().FirstOrDefault();
+
+        // No linkshell means no events. The old query said "no linkshell => don't filter", which
+        // loaded every event in the database; harmless when the page was one flat list, a visibly
+        // wrong count now that the header tallies live/queued.
+        if (!selectedLinkshellId.HasValue)
+        {
+            return View(new EventSystemPageViewModel
+            {
+                CurrentCharacterName = user.CharacterName,
+                CurrentAppUserId = user.Id,
+                SignupCharacters = SignupCharacters.ForMember(user, null).ToList(),
+                SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList(),
+                SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList(),
+                SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList(),
+            });
+        }
 
         var events = await _context.Events
             .Include(evt => evt.AppUserEvents)
             .Include(evt => evt.PartySetup)
-            .Where(evt => !selectedLinkshellId.HasValue || evt.LinkshellId == selectedLinkshellId.Value)
+            .Where(evt => evt.LinkshellId == selectedLinkshellId.Value)
             .OrderBy(evt => evt.StartTime)
             .ToListAsync();
 
@@ -107,14 +141,28 @@ public partial class EventController
                 .ToDictionaryAsync(t => t.Id)
             : new Dictionary<int, Tod>();
 
-        // Drive the manage badge + slot dropdown options on the inline panel.
-        ViewBag.CurrentAppUserId = user.Id;
-        // Characters this member can sign up as (main + alts) — drives the
-        // "sign up as" picker that only appears when there's more than one.
-        ViewBag.SignupCharacters = SignupCharacters.ForMember(user, null);
-        ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
-        ViewBag.SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList();
-        ViewBag.SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList();
+        // Enabled Repeat-on-ToD leads for these linkshells, so the ToD modal opens with the
+        // monster's current re-post setting. Keyed lower-case and looked up through
+        // MonsterMatchNames, since a board may be stored under either half of a merge pair
+        // or the combined "Base/Stronger" label.
+        var repostLeadByMonster = (await _context.HnmRecurringBoards
+                .AsNoTracking()
+                .Where(b => b.LinkshellId == selectedLinkshellId.Value && b.Enabled)
+                .Select(b => new { b.MonsterName, b.LeadHours })
+                .ToListAsync())
+            .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
+            .ToDictionary(g => g.Key, g => g.First().LeadHours);
+        double? RepostLeadFor(string? monsterName)
+        {
+            foreach (var name in HnmConfig.MonsterMatchNamesLower(monsterName))
+            {
+                if (repostLeadByMonster.TryGetValue(name, out var lead))
+                {
+                    return lead;
+                }
+            }
+            return null;
+        }
 
         var viewModels = events.Select(evt =>
         {
@@ -129,8 +177,11 @@ public partial class EventController
                     .Any(s => s.SignedUpAppUserId == user.Id);
             }
 
+            var repostLead = RepostLeadFor(evt.AssignedMonsterName);
             return new EventViewModel
             {
+                BoardRepostEnabled = repostLead is not null,
+                BoardRepostLeadHours = repostLead,
                 Event = new Event
                 {
                     Id = evt.Id,
@@ -154,7 +205,11 @@ public partial class EventController
                     AssignedMonsterName = evt.AssignedMonsterName,
                     HnmDefeatedAt = ConvertUtcToUserTimeZone(evt.HnmDefeatedAt, user.TimeZone),
                     HnmRepostAt = ConvertUtcToUserTimeZone(evt.HnmRepostAt, user.TimeZone),
-                    SourceTodId = evt.SourceTodId
+                    SourceTodId = evt.SourceTodId,
+                    // The ToD modal reads DayNumber to decide whether to show the Day field and
+                    // whether HQ is possible (day 4+). It was never projected, so the field never
+                    // rendered and HQ was always offered.
+                    DayNumber = evt.DayNumber
                 },
                 PartySetupId = evt.PartySetupId,
                 LinkedPartySetupName = evt.PartySetup?.Name,
@@ -169,6 +224,7 @@ public partial class EventController
                         Interval = srcTod.Interval,
                         DayNumber = srcTod.DayNumber,
                         Claim = srcTod.Claim,
+                        Killed = srcTod.Killed,
                         Hq = srcTod.Hq
                     }
                     : null,
@@ -180,7 +236,132 @@ public partial class EventController
             };
         }).ToList();
 
-        return View(viewModels);
+        // Partition on the loaded ENTITIES, not on the projection above: the projected Event
+        // deliberately carries only what the card renders, and IsEndedCamp also reads
+        // WdFinalizedAt, which isn't among them.
+        var liveIds = events.Where(EventSystemBuckets.IsLive).Select(evt => evt.Id).ToHashSet();
+        var pendingIds = events.Where(EventSystemBuckets.IsPending).Select(evt => evt.Id).ToHashSet();
+
+        var attendance = await BuildAttendanceSectionsAsync(user, selectedLinkshellId);
+
+        var model = new EventSystemPageViewModel
+        {
+            LinkshellId = selectedLinkshellId,
+            LinkshellName = attendance?.LinkshellName,
+            LiveEvents = viewModels.Where(vm => liveIds.Contains(vm.Event.Id)).ToList(),
+            PendingEvents = viewModels.Where(vm => pendingIds.Contains(vm.Event.Id)).ToList(),
+            Attendance = attendance,
+            PastEvents = await BuildPastEventsAsync(user, selectedLinkshellId.Value, pastQ, pastPage),
+            CurrentCharacterName = user.CharacterName,
+            CurrentAppUserId = user.Id,
+            SignupCharacters = SignupCharacters.ForMember(user, null).ToList(),
+            SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList(),
+            SignUpMainJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions.ToList(),
+            SignUpSubJobOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions.ToList(),
+        };
+
+        // The closed archive only exists where the open sections do — same linkshell-type and
+        // membership gate, resolved once by BuildAttendanceSectionsAsync.
+        if (attendance is not null)
+        {
+            model.ClosedAttendance = await _attendanceSections.BuildClosedAsync(
+                selectedLinkshellId.Value,
+                attendance.LinkshellName,
+                attendance.CanManage,
+                _timeZones.Resolve(user.TimeZone),
+                attQ,
+                attPage,
+                ClosedAttendancePageSize,
+                HttpContext.RequestAborted);
+        }
+
+        return View(model);
+    }
+
+    // Past Events: the closed TIMED events, searchable by name/type/location like the Activity's
+    // history panel. Header rows only — no participant include — since the card just links through
+    // to EventHistory/Details.
+    private async Task<EventHistoryListViewModel> BuildPastEventsAsync(
+        AppUser user, int linkshellId, string? query, int page)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
+
+        var baseQuery = _context.EventHistories
+            .AsNoTracking()
+            .Where(history => history.LinkshellId == linkshellId);
+
+        var unfilteredCount = await baseQuery.CountAsync(HttpContext.RequestAborted);
+
+        if (trimmed is not null)
+        {
+            var pattern = $"%{trimmed}%";
+            baseQuery = baseQuery.Where(history =>
+                (history.EventName != null && EF.Functions.ILike(history.EventName, pattern))
+                || (history.EventType != null && EF.Functions.ILike(history.EventType, pattern))
+                || (history.EventLocation != null && EF.Functions.ILike(history.EventLocation, pattern)));
+        }
+
+        var totalCount = await baseQuery.CountAsync(HttpContext.RequestAborted);
+        var pageNumber = Math.Clamp(
+            page <= 0 ? 1 : page,
+            1,
+            Math.Max(1, (int)Math.Ceiling(totalCount / (double)PastEventsPageSize)));
+
+        var items = await baseQuery
+            .OrderByDescending(history => history.EndTime ?? history.TimeStamp)
+            .Skip((pageNumber - 1) * PastEventsPageSize)
+            .Take(PastEventsPageSize)
+            .ToListAsync(HttpContext.RequestAborted);
+
+        foreach (var history in items)
+        {
+            history.StartTime = ConvertUtcToUserTimeZone(history.StartTime, user.TimeZone);
+            history.EndTime = ConvertUtcToUserTimeZone(history.EndTime, user.TimeZone);
+        }
+
+        return new EventHistoryListViewModel
+        {
+            Query = trimmed,
+            Page = pageNumber,
+            PageSize = PastEventsPageSize,
+            TotalCount = totalCount,
+            UnfilteredCount = unfilteredCount,
+            Items = items,
+        };
+    }
+
+    // Attendance snapshots used to live behind their own "Attendance System" nav group. They only
+    // ever come from HNM activity, so the open ones now render on this page — an officer reviews the
+    // roster a camp produced without leaving the camp. Null (section omitted) when there's no active
+    // linkshell, or when it's a Sky/Sea/Dynamis linkshell, which never posts snapshots.
+    private async Task<WindowEventsViewModel?> BuildAttendanceSectionsAsync(AppUser user, int? linkshellId)
+    {
+        if (!linkshellId.HasValue) return null;
+
+        var linkshell = await _context.Linkshells
+            .AsNoTracking()
+            .Where(l => l.Id == linkshellId.Value)
+            .Select(l => new { l.LinkshellName, l.LinkshellType })
+            .FirstOrDefaultAsync();
+        if (linkshell is null) return null;
+        if (LinkshellTypes.Normalize(linkshell.LinkshellType) == LinkshellTypes.SkySeaDynamis) return null;
+
+        var membership = await _context.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId.Value);
+        if (membership is null) return null;
+
+        // Deliberately the SAME rank check WindowEventsController uses (IsLeaderOrOfficer), not the
+        // permission-flag check the Discord Activity applies. Moving the sections to this page must
+        // not quietly change who can post DKP to the sheet.
+        var canManage = LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+
+        return await _attendanceSections.BuildAsync(
+            linkshellId.Value,
+            linkshell.LinkshellName,
+            canManage,
+            _timeZones.Resolve(user.TimeZone),
+            HttpContext.RequestAborted);
     }
 
     public async Task<IActionResult> Create()
@@ -281,7 +462,8 @@ public partial class EventController
             {
                 newEvent.EventLocation = HnmConfig.ZoneFor(monsterName);
             }
-            newEvent.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+            // Seed window count (per-linkshell override or HnmConfig fallback) + Manual Check In stamp.
+            await HnmEventSeeder.SeedHnmEventAsync(_context, newEvent, null, monsterName);
             newEvent.EndTime = null;
             newEvent.Duration = null;
             newEvent.DkpPerHour = 0;
@@ -295,9 +477,11 @@ public partial class EventController
         // Repeat-on-ToD: persist/refresh (or disable) the recurring-board template.
         // Works for a custom monster too — recurrence keys on the (case-insensitive)
         // AssignedMonsterName the ToD records; UpsertAsync self-guards null/whitespace.
+        // Lead is null on purpose: the form only toggles recurrence, and UpsertAsync keeps
+        // whatever lead the End Camp / Post ToD form last set.
         if (isHnm && eventViewModel.RepeatOnTod)
         {
-            await HnmRecurringBoardService.UpsertAsync(_context, newEvent, eventViewModel.RepeatLeadHours, user.Id, HttpContext.RequestAborted);
+            await HnmRecurringBoardService.UpsertAsync(_context, newEvent, null, user.Id, HttpContext.RequestAborted);
         }
         else if (isHnm && !eventViewModel.RepeatOnTod)
         {
@@ -608,16 +792,14 @@ public partial class EventController
         model.PartySetupId = eventToEdit.PartySetupId;
         model.LinkshellId = eventToEdit.LinkshellId;
 
-        // Pre-fill the "Repeat post when ToD is updated" controls from the linkshell's
+        // Pre-fill the "Repeat post when ToD is updated" toggle from the linkshell's
         // recurring-board template for this monster (parity with the Activity edit form).
         var editMonster = eventToEdit.AssignedMonsterName?.Trim();
         if (!string.IsNullOrWhiteSpace(editMonster))
         {
-            var board = await _context.HnmRecurringBoards
-                .FirstOrDefaultAsync(b => b.LinkshellId == eventToEdit.LinkshellId
-                    && b.MonsterName.ToLower() == editMonster.ToLower());
+            var board = await HnmRecurringBoardService.FindAsync(
+                _context, eventToEdit.LinkshellId, editMonster, HttpContext.RequestAborted);
             model.RepeatOnTod = board?.Enabled == true;
-            model.RepeatLeadHours = board?.LeadHours;
         }
 
         return View(model);
@@ -696,7 +878,7 @@ public partial class EventController
             if (!string.IsNullOrWhiteSpace(monsterName))
             {
                 eventToUpdate.AssignedMonsterName = monsterName;
-                eventToUpdate.WindowCountOverride = HnmConfig.GetWindowCount(monsterName);
+                eventToUpdate.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
                 if (string.IsNullOrWhiteSpace(eventToUpdate.EventLocation))
                 {
                     eventToUpdate.EventLocation = HnmConfig.ZoneFor(monsterName);
@@ -739,7 +921,7 @@ public partial class EventController
             if (eventViewModel.RepeatOnTod
                 && !string.IsNullOrWhiteSpace(monsterName))
             {
-                await HnmRecurringBoardService.UpsertAsync(_context, eventToUpdate, eventViewModel.RepeatLeadHours, user.Id, HttpContext.RequestAborted);
+                await HnmRecurringBoardService.UpsertAsync(_context, eventToUpdate, null, user.Id, HttpContext.RequestAborted);
             }
             else if (!eventViewModel.RepeatOnTod)
             {
@@ -987,6 +1169,20 @@ public partial class EventController
             return Forbid();
         }
 
+        // Manual Check In camps end through the camp path — a normal end pays HNM boards 0 DKP and
+        // would discard the check-in credit. Hands the roster to the Event System page's attendance sections for review
+        // (an officer's Post is what credits DKP) and recycles the board.
+        if (string.Equals(eventEntity.AttendanceMode, HnmAttendanceModes.Wd, StringComparison.OrdinalIgnoreCase)
+            && eventEntity.WdFinalizedAt is null)
+        {
+            if (HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))
+                is HnmCampReviewHandoffService handoff)
+            {
+                await handoff.HandOffAndRecycleAsync(eventEntity.Id, CancellationToken.None);
+            }
+            return RedirectToAction(nameof(Index), "EventHistory");
+        }
+
         // Can't end while attendees are still pending confirmation (IsVerified == null).
         // Every pending member must be confirmed present or removed first.
         var pendingCount = eventEntity.AppUserEvents.Count(p => p.IsVerified == null);
@@ -1042,13 +1238,29 @@ public partial class EventController
         // DkpPerWindow when WindowCount > 1, and the per-participation total is
         // (windowsAttended * dkpPerWindow). Count windows attended once up front
         // so the per-participation loop below can read from a dictionary.
+        //
+        // NOTE there are TWO window-count chains in this codebase and this is the CREDIT one.
+        // The other ("display") chain is DiscordEventMessageBuilder.EffectiveWindowCount, which
+        // also consults AssignedMonsterName and DefaultWindowCadence — it feeds the Discord board,
+        // the Activity DTO and the addon event list. They can disagree for an event whose
+        // EventName differs from its AssignedMonsterName. Unifying them would move real payouts,
+        // so it is deliberately NOT done here; the divergence is usually invisible because all
+        // three creation paths stamp WindowCountOverride, which short-circuits both chains
+        // identically. Services/EventBreakPolicy takes the MAX of the two so its gate can never be
+        // looser than whichever chain a credit path consults. Keep this expression byte-identical
+        // to ActivityDataController.EndEventAsync's — a third variant is how they drifted apart.
         var windowCount = eventEntity.WindowCountOverride
             ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventEntity.EventName);
         var isWindowed = windowCount > 1;
+        // AppUserEventId is nullable since snapshots outlive a cleared roster (see
+        // AppUserEventWindow). Orphaned rows can't be credited through a participation, so they're
+        // filtered out here — this path is the Claim/Kill-style windowed events, which never clear
+        // their roster. The HNM camps that do go through HnmStandardCampFinalizer, which folds on
+        // the denormalized AppUserId instead.
         Dictionary<int, int> windowsAttendedByParticipationId = isWindowed
             ? await dbContext.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id)
-                .GroupBy(w => w.AppUserEventId)
+                .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id && w.AppUserEventId != null)
+                .GroupBy(w => w.AppUserEventId!.Value)
                 .Select(g => new { ParticipationId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.ParticipationId, x => x.Count)
             : new Dictionary<int, int>();
@@ -1100,12 +1312,15 @@ public partial class EventController
             int? windowsAttended = isWindowed
                 ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
                 : (int?)null;
-            // Pay DKP for the ACTUAL time present, snapping the DKP value (not the
-            // duration) to the linkshell's increment. Rounding the duration first
-            // floored sub-quarter-hour events to 0h and paid present members 0 DKP.
-            var eventDkp = isWindowed
-                ? (windowsAttended ?? 0) * (eventEntity.DkpPerHour ?? 0)
-                : DkpRounding.Round(durationHours * (eventEntity.DkpPerHour ?? 0), DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement));
+            // Windowed pays per window attended; timed pays for the ACTUAL time present. Shared
+            // with ActivityDataController.EndEventAsync so the two end-event paths can't drift —
+            // see EventAttendanceDkpCalculator.
+            var eventDkp = LinkshellManagerDiscordApp.Services.EventAttendanceDkpCalculator.Compute(
+                isWindowed,
+                windowsAttended ?? 0,
+                durationHours,
+                eventEntity.DkpPerHour ?? 0,
+                DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement));
 
             participation.Duration = durationHours;
             participation.EventDkp = eventDkp;

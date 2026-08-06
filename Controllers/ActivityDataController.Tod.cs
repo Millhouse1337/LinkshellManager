@@ -63,7 +63,7 @@ public sealed partial class ActivityDataController
         {
             interval = null;
         }
-        else if (!SupportedTodIntervals.Contains(interval))
+        else if (!IsAcceptableTodInterval(interval))
         {
             return BadRequest(new { error = "Select a valid interval." });
         }
@@ -156,6 +156,7 @@ public sealed partial class ActivityDataController
             LinkshellId = request.LinkshellId,
             MonsterName = monsterName,
             DayNumber = request.DayNumber,
+            PopWindow = NormalizePopWindow(request.PopWindow),
             Claim = request.Claim,
             Hq = request.Hq,
             AdditionalSeconds = additionalSeconds,
@@ -335,7 +336,7 @@ public sealed partial class ActivityDataController
         {
             interval = null;
         }
-        else if (!SupportedTodIntervals.Contains(interval))
+        else if (!IsAcceptableTodInterval(interval))
         {
             return BadRequest(new { error = "Select a valid interval." });
         }
@@ -395,6 +396,7 @@ public sealed partial class ActivityDataController
 
         tod.MonsterName = monsterName;
         tod.DayNumber = request.DayNumber;
+        tod.PopWindow = NormalizePopWindow(request.PopWindow);
         tod.Claim = request.Claim;
         tod.Hq = request.Hq;
         tod.AdditionalSeconds = Math.Max(0, request.AdditionalSeconds);

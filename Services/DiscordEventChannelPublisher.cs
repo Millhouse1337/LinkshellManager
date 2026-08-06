@@ -151,11 +151,11 @@ public sealed class DiscordEventChannelPublisher
             .AsNoTracking()
             .Where(signup => signup.EventId == eventId)
             .OrderBy(signup => signup.CharacterName)
-            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType })
+            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType, signup.WdArrivalWindow })
             .ToListAsync(cancellationToken);
 
         return rows
-            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType))
+            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType, row.WdArrivalWindow))
             .ToList();
     }
 }

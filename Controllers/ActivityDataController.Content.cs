@@ -434,30 +434,8 @@ public sealed partial class ActivityDataController
         if (salePrice < 0) { salePrice = 0; }
 
         var characterName = membership!.CharacterName ?? appUser.CharacterName;
-        var now = DateTime.UtcNow;
-        var entry = new RevenueEntry
-        {
-            LinkshellId = item.LinkshellId,
-            LinkshellName = item.LinkshellName,
-            EntryType = "Income",
-            Category = "Item Sale",
-            Value = salePrice,
-            Details = item.Quantity > 1 ? $"Sold: {item.ItemName} (x{item.Quantity})" : $"Sold: {item.ItemName}",
-            OccurredAt = now,
-            CreatedByAppUserId = appUser.Id,
-            CreatedByCharacterName = characterName,
-            CreatedAt = now
-        };
-        _dbContext.RevenueEntries.Add(entry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        item.IsSold = true;
-        item.SoldPrice = salePrice;
-        item.SoldAt = now;
-        item.SoldByCharacterName = characterName;
-        item.RevenueEntryId = entry.Id;
-        item.UpdatedAt = now;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _itemSales.RecordSaleAsync(
+            item, salePrice, new TreasuryActor(appUser.Id, characterName), cancellationToken);
 
         return Ok(new { success = true });
     }
@@ -483,31 +461,35 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        if (item.RevenueEntryId.HasValue)
-        {
-            var entry = await _dbContext.RevenueEntries.FirstOrDefaultAsync(e => e.Id == item.RevenueEntryId.Value, cancellationToken);
-            if (entry is not null) { _dbContext.RevenueEntries.Remove(entry); }
-        }
-        item.IsSold = false;
-        item.SoldPrice = null;
-        item.SoldAt = null;
-        item.SoldByCharacterName = null;
-        item.RevenueEntryId = null;
-        item.UpdatedAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var characterName = membership!.CharacterName ?? appUser.CharacterName;
+        await _itemSales.ReverseSaleAsync(
+            item, new TreasuryActor(appUser.Id, characterName), cancellationToken);
 
         return Ok(new { success = true });
     }
 
+    // --- Deprecated revenue routes ------------------------------------------------------------
+    //
+    // Kept for ONE release as shims onto the treasury endpoints, because the Angular bundle ships
+    // separately from the server and there is no API versioning: a browser holding a cached bundle
+    // still calls these. They advertise their own retirement with Deprecation/Sunset headers, and the
+    // next release replaces the bodies with 410 Gone pointing at the treasury routes.
+    //
+    // The old "Income"/"Expense" pair maps onto the catch-all categories. It has to: those two words
+    // said which DIRECTION gil moved and nothing about what happened, so there is no honest way to
+    // guess a more specific category from them.
+
     [HttpPost("linkshells/{linkshellId:int}/revenue")]
+    [Obsolete("Use POST linkshells/{linkshellId}/treasury/entries.")]
     public async Task<IActionResult> CreateRevenueEntryAsync(
         int linkshellId,
         [FromBody] ActivityCreateRevenueRequest request,
         CancellationToken cancellationToken)
     {
-        var entryType = request.EntryType?.Trim() ?? string.Empty;
-        if (!string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(entryType, "Expense", StringComparison.OrdinalIgnoreCase))
+        MarkRevenueRouteDeprecated("/api/activity/linkshells/{linkshellId}/treasury/entries");
+
+        var kind = LegacyKindFor(request.EntryType);
+        if (kind is null)
         {
             return BadRequest(new { error = "Entry type must be Income or Expense." });
         }
@@ -516,56 +498,35 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Value cannot be negative." });
         }
 
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new
-            {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage revenue."
-            });
-        }
-
-        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageTreasury, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var linkshell = await _dbContext.Linkshells.AsNoTracking().FirstOrDefaultAsync(ls => ls.Id == linkshellId, cancellationToken);
-        if (linkshell is null)
-        {
-            return NotFound(new { error = "The selected linkshell was not found." });
-        }
-
-        var normalizedType = string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase) ? "Income" : "Expense";
-        var occurredAt = request.OccurredAt?.ToUniversalTime() ?? DateTime.UtcNow;
-        var entry = new RevenueEntry
-        {
-            LinkshellId = linkshellId,
-            LinkshellName = linkshell.LinkshellName,
-            EntryType = normalizedType,
-            Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
-            Value = request.Value,
-            Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim(),
-            OccurredAt = occurredAt,
-            CreatedByAppUserId = appUser.Id,
-            CreatedByCharacterName = membership!.CharacterName ?? appUser.CharacterName,
-            CreatedAt = DateTime.UtcNow
-        };
-        _dbContext.RevenueEntries.Add(entry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true, id = entry.Id });
+        return await RecordTreasuryEntryAsync(
+            linkshellId,
+            new ActivityRecordTreasuryEntryRequest(
+                kind,
+                request.Value,
+                request.OccurredAt,
+                // The old free-text category is folded into the note so nothing the officer typed is
+                // lost, even though it no longer classifies anything.
+                Memo: JoinLegacyMemo(request.Category, request.Details),
+                CounterpartyAppUserId: null,
+                CounterpartyCharacterName: null,
+                Confirm: true),
+            cancellationToken);
     }
 
+    // A confirmed entry cannot be edited, so an old client's "update" becomes a fix: the original is
+    // reversed and a replacement recorded. That is what the caller actually wanted — the numbers to end
+    // up right — and it leaves a trail instead of quietly rewriting history.
     [HttpPost("revenue/{entryId:int}/update")]
+    [Obsolete("Use POST treasury/entries/{entryId}/fix.")]
     public async Task<IActionResult> UpdateRevenueEntryAsync(
         int entryId,
         [FromBody] ActivityCreateRevenueRequest request,
         CancellationToken cancellationToken)
     {
-        var entryType = request.EntryType?.Trim() ?? string.Empty;
-        if (!string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(entryType, "Expense", StringComparison.OrdinalIgnoreCase))
+        MarkRevenueRouteDeprecated("/api/activity/treasury/entries/{entryId}/fix");
+
+        var kind = LegacyKindFor(request.EntryType);
+        if (kind is null)
         {
             return BadRequest(new { error = "Entry type must be Income or Expense." });
         }
@@ -574,65 +535,116 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Value cannot be negative." });
         }
 
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new
-            {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage revenue."
-            });
-        }
-
-        var entry = await _dbContext.RevenueEntries.FirstOrDefaultAsync(item => item.Id == entryId, cancellationToken);
+        var entry = await _dbContext.JournalEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == entryId, cancellationToken);
         if (entry is null)
         {
-            return NotFound(new { error = "The revenue entry was not found." });
+            return NotFound(new { error = "That entry was not found." });
         }
 
-        var membership = await GetMembershipAsync(appUser.Id, entry.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageTreasury, cancellationToken))
+        // A draft can still be edited in place.
+        if (JournalEntryStatuses.IsDraft(entry.Status))
         {
-            return Forbid();
+            return await UpdateTreasuryDraftAsync(
+                entryId,
+                new ActivityRecordTreasuryEntryRequest(
+                    kind, request.Value, request.OccurredAt,
+                    JoinLegacyMemo(request.Category, request.Details), null, null, Confirm: false),
+                cancellationToken);
         }
 
-        entry.EntryType = string.Equals(entryType, "Income", StringComparison.OrdinalIgnoreCase) ? "Income" : "Expense";
-        entry.Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
-        entry.Value = request.Value;
-        entry.Details = string.IsNullOrWhiteSpace(request.Details) ? null : request.Details.Trim();
-        if (request.OccurredAt.HasValue)
-        {
-            entry.OccurredAt = request.OccurredAt.Value.ToUniversalTime();
-        }
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
+        return await FixTreasuryEntryAsync(
+            entryId,
+            new ActivityFixTreasuryEntryRequest(
+                kind,
+                request.Value,
+                request.OccurredAt,
+                JoinLegacyMemo(request.Category, request.Details),
+                CounterpartyAppUserId: null,
+                CounterpartyCharacterName: null,
+                Reason: "Edited from an older version of the app."),
+            cancellationToken);
     }
 
+    // Nothing is deleted any more. An old client's "delete" reverses the entry, which is the honest
+    // version of what it was asking for: the gil should not count, and the record that it once did
+    // should survive.
     [HttpPost("revenue/{entryId:int}/delete")]
+    [Obsolete("Use POST treasury/entries/{entryId}/reverse.")]
     public async Task<IActionResult> DeleteRevenueEntryAsync(int entryId, CancellationToken cancellationToken)
     {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new
-            {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to manage revenue."
-            });
-        }
+        MarkRevenueRouteDeprecated("/api/activity/treasury/entries/{entryId}/reverse");
 
-        var entry = await _dbContext.RevenueEntries.FirstOrDefaultAsync(item => item.Id == entryId, cancellationToken);
+        var entry = await _dbContext.JournalEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == entryId, cancellationToken);
         if (entry is null)
         {
-            return NotFound(new { error = "The revenue entry was not found." });
+            return NotFound(new { error = "That entry was not found." });
         }
 
-        var membership = await GetMembershipAsync(appUser.Id, entry.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageTreasury, cancellationToken))
+        if (JournalEntryStatuses.IsDraft(entry.Status))
         {
-            return Forbid();
+            return await DiscardTreasuryDraftAsync(entryId, cancellationToken);
         }
 
-        _dbContext.RevenueEntries.Remove(entry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
+        return await ReverseTreasuryEntryAsync(
+            entryId,
+            new ActivityReverseTreasuryEntryRequest("Deleted from an older version of the app."),
+            cancellationToken);
+    }
+
+    private static string? LegacyKindFor(string? entryType)
+    {
+        var normalized = entryType?.Trim() ?? string.Empty;
+        if (string.Equals(normalized, "Income", StringComparison.OrdinalIgnoreCase))
+        {
+            return TreasuryTransactionKinds.OtherMoneyIn;
+        }
+        return string.Equals(normalized, "Expense", StringComparison.OrdinalIgnoreCase)
+            ? TreasuryTransactionKinds.OtherMoneyOut
+            : null;
+    }
+
+    private static string? JoinLegacyMemo(string? category, string? details)
+    {
+        var parts = new[] { category?.Trim(), details?.Trim() }
+            .Where(part => !string.IsNullOrWhiteSpace(part));
+        var joined = string.Join(" · ", parts);
+        return string.IsNullOrWhiteSpace(joined) ? null : joined;
+    }
+
+    private void MarkRevenueRouteDeprecated(string replacement)
+    {
+        Response.Headers["Deprecation"] = "true";
+        Response.Headers["Link"] = $"<{replacement}>; rel=\"successor-version\"";
+        // One release. The next one turns these into 410 Gone.
+        Response.Headers["Sunset"] = DateTime.UtcNow.AddDays(30).ToString("R");
+    }
+
+    // Projects a treasury entry back into the shape the old revenue payload had, so a cached client
+    // still reads a correct balance for the one release the field survives.
+    private static ActivityRevenueEntryDto ToLegacyRevenueDto(JournalEntry entry)
+    {
+        var lines = entry.Lines.OrderBy(line => line.LineNumber).ToList();
+        var cashDelta = lines
+            .Where(line => line.AccountNumber == TreasuryAccounts.GilOnHand)
+            .Sum(line => line.Amount);
+        var category = lines
+            .FirstOrDefault(line => line.AccountNumber != TreasuryAccounts.GilOnHand)?.AccountName;
+
+        return new ActivityRevenueEntryDto(
+            entry.Id,
+            entry.LinkshellId,
+            // The old client computed its totals by matching exactly these two words.
+            cashDelta < 0 ? "Expense" : "Income",
+            category,
+            Math.Abs(cashDelta),
+            entry.Memo,
+            entry.TransactionDate,
+            entry.CreatedByAppUserId,
+            entry.ConfirmedByCharacterName ?? entry.CreatedByCharacterName,
+            entry.CreatedAt);
     }
 }

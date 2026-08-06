@@ -114,6 +114,41 @@
   grid-template-columns: minmax(170px, 1.6fr) 120px 100px 100px 112px 60px 100px minmax(180px, 1fr);
   min-width: 960px;
 }
+/* "Show Jobs" view: every column but Character is dropped, so the wide
+   management grid gives way to Character | Jobs and the table stops needing
+   horizontal scroll — the job pills wrap inside their own cell instead. */
+.panel-tab .ac-roster--with-actions.ac-roster--jobs .ac-roster-head,
+.panel-tab .ac-roster--with-actions.ac-roster--jobs .ac-roster-row {
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  min-width: 0;
+  align-items: start;
+}
+.panel-tab .ac-roster-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+/* Dashboard roster (compact, avatar in its own column): Rank/DKP/Status give way
+   to the same Jobs cell — avatar | name | jobs. */
+.panel-tab .ac-roster--scroll.ac-roster--jobs .ac-roster-head,
+.panel-tab .ac-roster--scroll.ac-roster--jobs .ac-roster-row {
+  grid-template-columns: 32px minmax(120px, 200px) minmax(0, 1fr);
+  align-items: start;
+}
+.panel-tab .ac-roster--scroll.ac-roster--jobs .ac-roster-av { margin-top: 2px; }
+/* Inside the table the pills sit tighter than they did in the old card. */
+.panel-tab .ac-roster-jobs .jobs-roster-member__character:first-child { margin-top: 0; }
+/* Phone: give the pills the width back — the management table normally scrolls
+   sideways here, but the jobs view has only two columns to fit. */
+@media (max-width: 600px) {
+  .panel-tab .ac-roster--with-actions.ac-roster--jobs .ac-roster-head,
+  .panel-tab .ac-roster--with-actions.ac-roster--jobs .ac-roster-row {
+    grid-template-columns: minmax(104px, 132px) minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px 10px;
+  }
+}
 /* Compact roster scroll (dashboard + DKP tab): show ~10 member rows then scroll,
    pinning the column headers. max-height (not a fixed height) means a short
    roster simply shows its rows with no empty filler. The base .ac-roster sets
@@ -299,4 +334,24 @@
     overflow-wrap: anywhere;
     line-height: 1.25;
   }
+}
+
+// Phone, jobs view: the 2-row mini-card above assumes the Rank/DKP/Status cells,
+// which the jobs view replaces — so opt back out of it and stack the pills under
+// the name instead. Declared after that block so it wins at equal specificity.
+@media (max-width: 600px) {
+  .panel-tab .ac-roster--jobs .ac-roster-head { display: none; }
+
+  .panel-tab .ac-roster--jobs .ac-roster-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+    grid-template-areas: none;
+    column-gap: 10px;
+    row-gap: 6px;
+    align-items: start;
+  }
+
+  .panel-tab .ac-roster--jobs .ac-roster-row > .ac-roster-av { grid-area: auto; justify-self: start; }
+  .panel-tab .ac-roster--jobs .ac-roster-row > .ac-roster-name-cell { grid-area: auto; }
+  // Pills get the full card width on their own line rather than a ~130px column.
+  .panel-tab .ac-roster--jobs .ac-roster-jobs { grid-column: 1 / -1; }
 }

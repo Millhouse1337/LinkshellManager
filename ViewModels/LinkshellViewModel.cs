@@ -115,15 +115,15 @@ public class LinkshellCustomizeViewModel
     public List<string> HiddenTodMonsters { get; set; } = new();
 
     // Built-in monster catalog for the Hide ToD Mobs picker. Mirrors the
-    // Discord Activity's TOD_BUILT_IN_MONSTER_GROUPS (which mirrors
-    // att/constants.lua) so both clients hide the same names.
+    // Discord Activity's TOD_BUILT_IN_MONSTER_GROUPS so both clients list the
+    // same names. Timed open-world spawns only — the pop-only mobs (Sky Gods,
+    // Sea NMs, HENMs; see HnmConfig.PopOnlyNms) have no repop window to track,
+    // so there is nothing about them to hide from the Tracked Windows panel.
     public static readonly IReadOnlyList<TodMonsterGroup> TodMonsterGroups = new[]
     {
         new TodMonsterGroup("HNMs", new[] { "Adamantoise", "Aspidochelone", "Behemoth", "Fafnir", "Jormungand", "King Behemoth", "Nidhogg", "Tiamat", "Vrtra" }),
-        new TodMonsterGroup("Sky NMs", new[] { "Brigandish Blade", "Byakko", "Despot", "Faust", "Genbu", "Kirin", "Mother Globe", "Olla Grande", "Seiryu", "Steam Cleaner", "Suzaku", "Ullikummi", "Zipacna" }),
-        new TodMonsterGroup("Sea NMs", new[] { "Absolute Virtue", "Ix'aern (Dark Knight)", "Ix'aern (Dragoon)", "Ix'aern (Monk)", "Jailer of Faith", "Jailer of Fortitude", "Jailer of Hope", "Jailer of Justice", "Jailer of Love", "Jailer of Prudence", "Jailer of Temperance" }),
-        new TodMonsterGroup("HENMs", new[] { "Mammet-9999", "Overlord Arthro", "Ruinous Rocs", "Sacred Scorpions", "Tonberry Sovereign", "Ultimega" }),
-        new TodMonsterGroup("Other NMs", new[] { "Bloodsucker", "King Arthro", "King Vinegarroon", "Serket", "Shikigami Weapon", "Simurgh", "Xolotl" }),
+        new TodMonsterGroup("Sky NMs", new[] { "Brigandish Blade", "Despot", "Faust", "Mother Globe", "Olla Grande", "Steam Cleaner", "Ullikummi", "Zipacna" }),
+        new TodMonsterGroup("Other NMs", new[] { "Bloodsucker", "Boroka", "Bune", "Capricious Cassie", "King Arthro", "King Vinegarroon", "Roc", "Serket", "Shikigami Weapon", "Simurgh", "Xolotl" }),
     };
 }
 

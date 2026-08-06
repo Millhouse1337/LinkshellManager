@@ -1,32 +1,9 @@
 <ng-container>
   @if (showSection('profile')) {
-  <article class="panel" aria-labelledby="profile-heading">
-    <div class="panel__header">
-      <div>
-        <p class="eyebrow eyebrow--small">Profile</p>
-        <h2 id="profile-heading">
-          @if (needsProfileSetup()) {
-            Complete setup
-          } @else {
-            Operator Profile
-          }
-        </h2>
-      </div>
-      @if (needsProfileSetup()) {
-        <span class="status-pill">Setup needed</span>
-      } @else {
-        <span class="pill">Ready</span>
-      }
-    </div>
-
-    <p class="notice">
-      @if (needsProfileSetup()) {
-        Set your character name and preferred IANA time zone so invites, Roster, and event timing render correctly.
-      } @else {
-        These settings drive your Linkshell Roster name and event time conversions across the website and Discord Activity.
-      }
-    </p>
-
+  <!-- No card header or intro blurb: the Profile tab already heads the page with
+       "Account / Your profile", and the Next Steps checklist below carries the
+       setup-needed prompt, so both only repeated themselves here. -->
+  <article class="panel" aria-label="Your profile">
     <form class="create-form create-form--compact" (ngSubmit)="submitProfile()">
       <div class="create-form__grid">
         <label>
